@@ -1,18 +1,8 @@
-(*
-
-Compiler Correctness a la: 
-
-McCarthy, J. & Painter, J. (1967) Correctness of a compiler for
-arithmetic expressions.
-
-Robin Milner & Richard Weyhrauch (1972). Proving compiler correctness
-in a mechanized logic
-
-*) 
+(* Arithmetic Expressions *)
 Require Import Arith.
 
 (* The language  *)
-Inductive expr :=
+Inductive expr : Type :=
   | const (n: nat)
   | plus (a: expr) (b: expr).
 
