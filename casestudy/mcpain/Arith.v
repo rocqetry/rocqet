@@ -35,17 +35,27 @@ Fixpoint compile (e : expr) : ir :=
   | plus e1 e2 => compile e1 ++ compile e2 ++ [add]
   end.
 
+Fixpoint compile' (e: expr) (c: ir) : ir :=
+  match e with
+  | const n => push n :: c
+  | plus x y => compile' x (compile' y (add :: c))
+  end.                         
+
+Inductive natoption : Type :=
+  | Some (n : nat)
+  | None.
+
 Definition stack := list value.
 
 (* A simple VM for the ir *)
  Fixpoint exec (instrs: ir) (s: stack): stack  := 
   match instrs, s with 
-  | [], _ => s 
-  | push n :: instrs, _ => exec instrs (n :: s)
+  | [], s => s 
+  | push n :: instrs, s => exec instrs (n :: s)
   | add :: instrs, x :: y :: s =>  exec instrs (y + x:: s)  
   | _, _ => [] (* error *)
   end.
-
+  
 Lemma app_assoc2 : forall (A : Type) (l1 l2 l3 : list A),
    (l1 ++ l2) ++ l3 = l1 ++ (l2 ++ l3).
 Proof.
@@ -59,16 +69,49 @@ Lemma app_assoc : forall (A : Type) (l1 l2 l3 : list A),
    l1 ++ l2 ++ l3 = l1 ++ (l2 ++ l3).
 Proof.
   intros A l1 l2 l3.
-  induction l1.
+  destruct l1.
   - simpl. reflexivity.
   - simpl. reflexivity.
 Qed.
 
+Lemma app_cons : forall (A : Type) (x: A) (xs ys: list A),
+    (x :: xs) ++ ys = x :: (xs ++ ys).
+Proof.  
+  intros. 
+  destruct xs.
+  - simpl. reflexivity.
+  - simpl. reflexivity.
+Qed.
+
+  
 Lemma distributivity_lemma : forall c d s, exec (c ++ d) s = exec d (exec c s).
 Proof.
-  intros c d s.
-Admitted.
 
+  Admitted.
+  (* intros c d.
+  induction c as [| c' cs' ].
+  - simpl. reflexivity.
+  -  destruct c' eqn:E. intros s.
+     (* Push *)
+     + simpl. rewrite <- IHcs'. reflexivity.
+     (* Add *)
+     + intros s. rewrite -> app_cons.
+       destruct s.
+       -- simpl *)
+       
+
+       
+(*
+
+  n : nat
+  cs', d : list instr
+  IHcs' : forall s : stack, exec (cs' ++ d) s = exec d (exec cs' s)
+  s : stack
+  ============================
+  exec (cs' ++ d) (n :: s) = exec d (exec cs' (n :: s))
+
+
+*)
 Theorem compiler_correctness 
   : forall (e : expr) (s: stack), exec (compile e) s = eval e :: s.
 Proof.
@@ -83,4 +126,16 @@ Proof.
      rewrite -> IHe2. 
      simpl.
      reflexivity.
+Qed.
+
+
+(* Another formulation of compiler correctness *)
+Theorem compiler_correctness'
+  : forall e s c, exec (compile' e c) s = exec c (eval e :: s).
+Proof.
+  intros e. 
+  induction e.
+  - simpl. reflexivity.
+  - simpl. intros c. intros s. rewrite -> IHe1.
+    rewrite -> IHe2. simpl. reflexivity.
 Qed.

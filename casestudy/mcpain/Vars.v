@@ -1,4 +1,4 @@
-(* Arithmetic Expressions + Variables *)
+(* Arith.v + Variables *)
 Require Import Arith.
 
 (* The language  *)
