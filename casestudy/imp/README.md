@@ -19,5 +19,5 @@ inherit from the base Imp compiler.
 Families include:
 1. Imp with denotational semantics (this can also be an alternate
    base family)
-2. Imp with functions and function calls 
-3. 
+2. Local variables.
+3. Imp with functions and function calls 
