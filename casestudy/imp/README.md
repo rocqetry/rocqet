@@ -4,7 +4,7 @@ A single Imp family will have:
 
   IRs: 
   1. Stack based IR
-  2. RTL (or an SSA form)
+  2. Vminus (from Vellvm)
   3. LTL (after register allocation)
   4. Mach (high level machine code)
 
