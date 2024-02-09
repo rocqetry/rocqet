@@ -19,5 +19,8 @@ inherit from the base Imp compiler.
 Families include:
 1. Imp with denotational semantics (this can also be an alternate
    base family)
-2. Local variables.
-3. Imp with functions and function calls 
+3. Imp with local variable & functions and function calls
+4. Imp with pointers
+5. Imp with arrays
+6. Imp with C types: structs, enums,
+7. 

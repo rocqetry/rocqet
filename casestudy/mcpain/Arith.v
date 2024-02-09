@@ -92,6 +92,7 @@ Proof.
   -  destruct c' eqn:E. 
      (* Push *)
      + intros d s. simpl. rewrite <- IHcs'. reflexivity.
+     + intros. 
      (* Add *)
      (* + intros d s.rewrite -> app_cons.
        destruct d.
