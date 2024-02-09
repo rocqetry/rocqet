@@ -1,4 +1,4 @@
-(* Arith.v + Variables *)
+(* Classic.v + Variables *)
 Require Import Arith.
 
 (* The language  *)

@@ -86,19 +86,23 @@ Qed.
   
 Lemma distributivity_lemma : forall c d s, exec (c ++ d) s = exec d (exec c s).
 Proof.
-
-  Admitted.
-  (* intros c d.
-  induction c as [| c' cs' ].
+  intros c.
+  induction c as [| c' cs' IHcs' ].
   - simpl. reflexivity.
-  -  destruct c' eqn:E. intros s.
+  -  destruct c' eqn:E. 
      (* Push *)
-     + simpl. rewrite <- IHcs'. reflexivity.
+     + intros d s. simpl. rewrite <- IHcs'. reflexivity.
      (* Add *)
-     + intros s. rewrite -> app_cons.
-       destruct s.
-       -- simpl *)
-       
+     (* + intros d s.rewrite -> app_cons.
+       destruct d.
+       ++ destruct s.
+          -- simpl. reflexivity.
+          -- rewrite <- app_nil_end. simpl. reflexivity.
+       ++ destruct s.
+          -- simpl. *)
+
+
+Admitted.
 
        
 (*
