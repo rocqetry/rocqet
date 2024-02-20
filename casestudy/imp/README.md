@@ -1,26 +1,29 @@
 Family of Imp
 
-A single Imp family will have:
+Each folder represents an Imp compiler which will be in the family hierarchy.
 
-  IRs: 
-  1. Stack based IR
-  2. Vminus (from Vellvm)
-  3. LTL (after register allocation)
-  4. Mach (high level machine code)
+Compilation pipleline:
+Imp -> Impsharpminor -> Impminor -> ImpminorSel -> RTL -> LTL -> Linear -> Mach -> aarch64
 
-  Optimization passes:
-  1. DCE
-  2. Constant folding/propagations
+Q:
+1. What pass is LTLin???
+2. Is this compilation pipeline too long?
+3. Type checking for the imp source language?
+4. Would it make sense to use a diffing algorithm to check the
+   difference between two inductive type in different families,
+   but representing the same "thing."
 
+
+Optimization passes:
+1. DCE
+2. Constant folding/propagations
 
 Each family will add a feature to Imp and extend each IR and
 inherit from the base Imp compiler.
 
 Families include:
-1. Imp with denotational semantics (this can also be an alternate
-   base family)
 3. Imp with local variable & functions and function calls
 4. Imp with pointers
 5. Imp with arrays
 6. Imp with C types: structs, enums,
-7. 
+7. Imp with more primitives (e.g float32 float64)

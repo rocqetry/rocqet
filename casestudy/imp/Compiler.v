@@ -73,3 +73,65 @@ Inductive transition (C: code): configuration -> configuration -> Prop :=
       code_at C pc = Some(Ibgt ofs) ->
       pc' = (if leb n1 n2 then pc + 1 else pc + 1 + ofs) ->
       transition C (pc, n2 :: n1 :: stk, s) (pc', stk, s).
+
+Definition mach_terminates (C: code) (s_init s_fin: state) :=
+  exists pc,
+  code_at C pc = Some Ihalt /\
+  star (transition C) (0, nil, s_init) (pc, nil, s_fin).
+
+Definition mach_diverges (C: code) (s_init: state) :=
+  infseq (transition C) (0, nil, s_init).
+
+Definition mach_goes_wrong (C: code) (s_init: state) :=
+  exists pc, exists stk, exists s_fin,
+  star (transition C) (0, nil, s_init) (pc, stk, s_fin)
+  /\ irred (transition C) (pc, stk, s_fin)
+  /\ (code_at C pc <> Some Ihalt \/ stk <> nil).
+
+Lemma machine_deterministic:
+  forall C config config1 config2,
+  transition C config config1 -> transition C config config2 -> config1 = config2.
+Proof.
+  intros. inversion H; subst; inversion H0; try congruence.
+  destruct (beq_nat n1 n2); congruence.
+  destruct (beq_nat n1 n2); congruence.
+  destruct (leb n1 n2); congruence.
+  destruct (leb n1 n2); congruence.
+Qed.
+
+Remark stop_irred:
+  forall C pc stk st,
+  code_at C pc = Some Ihalt -> irred (transition C) (pc, stk, st).
+Proof.
+  unfold irred; intros. unfold not; intros. inversion H0; congruence.
+Qed.
+
+Lemma terminates_unique:
+  forall C st st1 st2, mach_terminates C st st1 -> mach_terminates C st st2 -> st1 = st2.
+Proof.
+  unfold mach_terminates; intros. destruct H as (pc1 & A1 & B1), H0 as (pc2 & A2 & B2).
+  assert (((pc1, nil, st1) : configuration) = ((pc2, nil, st2) : configuration)).
+  { eapply finseq_unique; eauto using machine_deterministic, stop_irred. }
+  congruence. 
+Qed.
+
+Lemma terminates_goeswrong_exclusive:
+  forall C st st', mach_terminates C st st' -> mach_goes_wrong C st -> False.
+Proof.
+  unfold mach_terminates, mach_goes_wrong; intros.
+  destruct H as (pc1 & A1 & B1), H0 as (pc2 & stk2 & st2 & A2 & B2 & C2).
+  assert (((pc1, nil, st') : configuration) = ((pc2, stk2, st2) : configuration)).
+  { eapply finseq_unique; eauto using machine_deterministic, stop_irred. }
+  inversion H. subst pc2 stk2 st2. destruct C2; congruence.
+Qed.
+
+Lemma terminates_diverges_exclusive:
+  forall C st st', mach_terminates C st st' -> mach_diverges C st -> False.
+Proof.
+  unfold mach_terminates, mach_diverges; intros.
+  destruct H as (pc1 & A1 & B1).
+  eapply infseq_finseq_excl with (R := transition C); eauto using machine_deterministic, stop_irred.
+Qed.
+
+
+

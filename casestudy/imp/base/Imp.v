@@ -1,5 +1,3 @@
-(* The Imp language from SF *)
-
 Inductive aexp : Type :=
   | ANum : nat -> aexp
   | APlus : aexp -> aexp -> aexp
