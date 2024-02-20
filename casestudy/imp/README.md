@@ -22,8 +22,8 @@ Each family will add a feature to Imp and extend each IR and
 inherit from the base Imp compiler.
 
 Families include:
-3. Imp with local variable & functions and function calls
-4. Imp with pointers
-5. Imp with arrays
-6. Imp with C types: structs, enums,
-7. Imp with more primitives (e.g float32 float64)
+1. Imp with local variable & functions and function calls
+2. Imp with pointers
+3. Imp with arrays
+4. Imp with C types: structs, enums,
+5. Imp with more primitives (e.g float32 float64)
