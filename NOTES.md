@@ -15,6 +15,9 @@
    family polymorphism. Because in some sense that is a kind of reuse/abstraction? 
 
 Q: 
-1. In some cases, it doens't make sense to have an IR when the features are small.
-   Can a family add a new IR?
-2. Do we need a backend compiler for the casestudy? e.g Arm?
+1. What happens when two families are not too far part from each other?
+   Does it make sense to still include them in them like that? 
+
+
+Language design:
+1. It might be a goood idea to be able to override a field name in a derived family 

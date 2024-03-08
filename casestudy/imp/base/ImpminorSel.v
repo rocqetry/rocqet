@@ -1,3 +1,4 @@
+(* Includes Machine-dependent ops *)
 Inductive expr : Type :=
   | Evar : ident -> expr
   | Eop : operation -> exprlist -> expr

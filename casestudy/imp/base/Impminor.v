@@ -65,3 +65,19 @@ Inductive stmt : Type :=
   | Sexit: nat -> stmt
   | Sswitch: bool -> expr -> list (Z * nat) -> nat -> stmt
   | Sreturn: option expr -> stmt
+
+
+(*
+    Family Impminor extends MinorBase.
+       Inductive constant : Type := ...
+
+       Inductive expr : Type := ...
+
+       Inductive constats += Oaddrstack: ptrofs -> constant.
+
+       Inductive stmt += Sswitch: bool -> expr -> list (Z * nat) -> nat -> stmt
+
+    End Impminor.  
+ 
+*)
+                              
