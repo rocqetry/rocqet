@@ -89,15 +89,7 @@ Family Impzero {
              | KS_SkipWhile: forall b c k st,
                  step (State Sskip (Kwhile b c k) st)
                        (State (Swhile b c) k st)
-     }
-
-     (* Translation from Imp -> Impsharpminor *)
-     Family Impshmgen extends {
-       (* This involves mostly simplification of control structures *)
-       Family Proofs extends Impcommonproofs {
-           
-       }
-     }
+     }     
  }
        
 
@@ -196,7 +188,31 @@ Family Impzero {
                    find_label lbl f.(fn_body) (call_cont k) = Some(s', k') ->
                    step (State f (Sgoto lbl) k e le m)
                      E0 (State f s' k' e le m)
-        }
+       }
+
+     (* Translation from Imp -> Impsharpminor *)
+       Family Impshmgen extends {
+          (* This involves mostly simplification of control structures *)
+             Family Proofs extends Impcommonproofs {
+            (*
+               <<
+                                     match_states
+                    Imp.state  ----------------------- Impsharpminor.state 
+                      |                                   |
+                      |                                   | *
+                      |                                   |
+                      v                                   v
+                   Imp.state' ----------------------- Impsharpminor.state'
+                                     match_states 
+             *)
+
+              Inductive match_states : Imp.Semantics.cont -> [self].Semantics.cont -> Prop :=
+                 |
+                 
+              Inductive match_states : Imp.Semantics.state -> [self].Semantics.state -> Prop :=
+                 | match_state
+           }
+       }
 
     }
 
