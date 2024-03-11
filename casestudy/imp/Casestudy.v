@@ -54,7 +54,12 @@ Family Imp1.0 {
             Operational semantics.
             This is a small-step semenatics with big steps evaluation for
             booleans.
-         *)
+          *)
+         Inductive cont : Type :=
+           | Kstop : cont
+           | Kseq : statement -> cont -> cont
+           | Kwhile : expression -> statement -> cont -> cont
+         
          Inductive step : (statement * state) -> (statement * state) -> Prop :=
              | Step_Ass : forall st i a n,
                  aeval st a = n ->
