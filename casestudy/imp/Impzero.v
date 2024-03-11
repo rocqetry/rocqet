@@ -1,43 +1,51 @@
 Family Impzero {
-   Family Frontend {
-       Family Imp {
-          Inductive binary_operation : Type :=
-             | Binplus
-             | Binminus
-             | Binmult.
+   Family Impcommon { }
 
-          Inductive expression : Type :=
-             | Evar : ident -> expr 
-             | Econst : value -> expr
-             | Ebinop : binary_operation -> expr -> expr -> expr.
+   Family ImpcommonProofs {   
+     (* extensible semantic preservation proofs *)
+     Family SP {                         
+       Family A extends Impcommon { }
+       Family B extends Impcommon { }
+     }
+   }      
+           
+   Family Imp extends Impcommom {
+     Inductive binary_operation : Type :=
+        | Binplus
+        | Binminus
+        | Binmult.
 
-         Inductive statement : Type :=
-             | Sassign : label -> expression -> statement
-             | Sseq    : statement -> statement -> statement
-             | Sifthenelse : expression -> statement -> statement -> statement
-             | Swhile  : expression -> statement -> statement
-             | Sskip : statement.
+     Inductive expression : Type :=
+        | Evar : ident -> expr 
+        | Econst : value -> expr
+        | Ebinop : binary_operation -> expr -> expr -> expr.
 
-         (* How do we encode this in a family hierarchy?
+     Inductive statement : Type :=
+        | Sassign : label -> expression -> statement
+        | Sseq    : statement -> statement -> statement
+        | Sifthenelse : expression -> statement -> statement -> statement
+        | Swhile  : expression -> statement -> statement
+        | Sskip : statement.
 
-           What about families that don't have functions? 
+       (* How do we encode this in a family hierarchy?
 
-           Record function : Type := mkfunction {
-               fn_sig: signature;
-               fn_params: list ident;
-               fn_vars: list (ident * Z);
-               fn_temps: list ident;
-               fn_body: stmt
-           }.
+       What about families that don't have functions? 
 
-           Definition fundef := AST.fundef function.
+       Record function : Type := mkfunction {
+             fn_sig: signature;
+             fn_params: list ident;
+             fn_vars: list (ident * Z);
+             fn_temps: list ident;
+             fn_body: stmt
+         }.
 
-           Definition program : Type := AST.program fundef unit. *)
-         (* A toplevel program *)
-         Family Program { }
-       }
+       Definition fundef := AST.fundef function.
 
-       Family Sematics {
+       Definition program : Type := AST.program fundef unit. *)
+       (* A toplevel program *)
+     Family Program { }
+
+     Family Semantics {
          Definition env = total_map nat (* From Maps.v *)
 
          (* Continuations *)                                    
@@ -51,14 +59,14 @@ Family Impzero {
              | State: forall (s: statement) (k: cont) (e: env), state
 
          Inductive step : state -> state -> Prop :=             
-             | KS_Ass : forall st i a k n,            (**r Computation for assignments *)
+             | KS_Ass : forall st i a k n,            
                  aeval st a = n ->
                  step (State (Sassign i a) k st)
                        (State Sskip k (t_update st i n))           
-             | KS_Seq : forall st c1 c2 k,  (**r Focusing on the left part of a sequence *)
+             | KS_Seq : forall st c1 c2 k,  
                  step (State (Sseq c1 c2) k st)
                        (State c1 (Kseq c2 k) st)                             
-             | KS_IfTrue : forall st b c1 c2 k,  (**r Computation for conditionals *)
+             | KS_IfTrue : forall st b c1 c2 k,
                  beval st b = true ->
                  step (State (Sifthenelse b c1 c2) k st)
                        (State c1 k st)                   
@@ -66,7 +74,7 @@ Family Impzero {
                  beval st b = false ->
                  step (State (Sifthenelse b c1 c2) k st)
                        (State c2 k st)          
-             | KS_WhileTrue : forall st b c k,  (**r Computation and focusing for loops *)
+             | KS_WhileTrue : forall st b c k,
                  beval st b = true ->
                  step (State (Swhile b c) k st)
                        (State c (Kwhile b c k) st)
@@ -74,38 +82,22 @@ Family Impzero {
                  beval st b = false ->
                  step (State (Swhile b c) k st)
                        (State Sskip k st)                              
-             | KS_SkipSeq: forall c k st,  (**r Resumption on [SKIP] *)
+             | KS_SkipSeq: forall c k st,
                  step (State Sskip (Kseq c k) st)
                        (State c k st)                   
              | KS_SkipWhile: forall b c k st,
                  step (State Sskip (Kwhile b c k) st)
                        (State (Swhile b c) k st)
-
-       }
+     }
+}       
 
        (* Translation from Imp -> Impsharpminor *)
        Family Impshmgen {
          (* This involves mostly simplification of control structures *)
          
        }
-   }
 
-   Family FrontendProofs {   
-       Family SP {
-            Lemma compile_com_correct_terminating: forall C st c st',
-                c / st \\ st' ->
-                forall stk pc,
-                codeseq_at C pc (compile_com c) -> star (transition C) {
-                    intros.
-                    
-                }
-             
-           Family A extends Frontend { } 
-           Family B extends Frontend { }
-       }
-   }
-
-   Family Impsharpminor extends Frontend {
+ Family Impsharpminor extends Impcommon {
      Inductive constant : Type :=
         | Ointconst: int -> constant       
         | Ofloatconst: float -> constant   
@@ -138,7 +130,16 @@ Family Impzero {
            | LScons: option Z -> stmt -> lbl_stmt -> lbl_stmt.
 
 
-        Family Semantics { 
+     Family Semantics {
+         Inductive cont: Type :=
+            | Kstop: cont
+            | Kseq: stmt -> cont -> cont
+            | Kblock: cont -> cont      
+
+         (* States *)
+         Inductive state: Type :=
+             | State: forall (s: statement) (k: cont) (e: env), state
+                                                            
             Inductive step: state -> trace -> state -> Prop :=
                  | step_skip_seq: forall f s k e le m,
                      step (State f Sskip (Kseq s k) e le m)
