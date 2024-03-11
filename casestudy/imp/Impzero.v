@@ -6,7 +6,7 @@
   extensible bisimulation proofs
 *)
 
-Family Imp1.0 {
+Family Impzero {
    Family Frontend {
        Family Imp {
           Inductive binary_operation : Type :=
@@ -46,38 +46,48 @@ Family Imp1.0 {
        }
 
        Family Sematics {
-         Definition state = total_map nat (* From Maps.v *)
+         Definition env = total_map nat (* From Maps.v *)
 
-         Reserved Notation " c '/' st '==>' c' '/' st' " (at level 40, st at level 39, c' at level 39)
-
-         (*
-            Operational semantics.
-            This is a small-step semenatics with big steps evaluation for
-            booleans.
-          *)
+         (* Continuations *)                                    
          Inductive cont : Type :=
            | Kstop : cont
            | Kseq : statement -> cont -> cont
            | Kwhile : expression -> statement -> cont -> cont
-         
-         Inductive step : (statement * state) -> (statement * state) -> Prop :=
-             | Step_Ass : forall st i a n,
+
+         (* States *)
+         Inductive state: Type :=
+             | State: forall (s: statement) (k: cont) (e: env), state
+
+         Inductive step : state -> state -> Prop :=             
+             | KS_Ass : forall st i a k n,            (**r Computation for assignments *)
                  aeval st a = n ->
-                 Sassign (i, a) / st ==> Sskip / (state_update st i n)
-             | Step_SeqStep : forall st c1 c1' st' c2,
-                 c1 / st ==> c1' / st' ->
-                 Sseq (c1, c2) / st ==> Sseq (c1', c2) / st'
-             | Step_SeqFinish : forall st c2,
-                 Sseq (Sskip, c2) / st ==> c2 / st
-             | Step_IfTrue : forall st b c1 c2,
-                 beval st b = true -> (* TODO: fix this *)
-                 Sifthenelse (b, c1, c2) / st ==> c1 / st
-             | Step_IfFalse : forall st b c1 c2,
-                 beval st b = false -> (* TODO: fix this *)
-                 Sifthenelse (b, c1, c2) / st ==> c2 / st
-             | Step_While : forall st b c1,
-                 Swhile (b, c1) / st ==> Sifthenelse (b, Sseq(c1, Swhile (b, c1)), Sskip) / st
-         where " c '/' st '==>' c' '/' st' " := (step (c,st) (c',st'))
+                 kstep (<{ i := a }>, k, st) (CSkip, k, t_update st i n)
+           
+             | KS_Seq : forall st c1 c2 k,  (**r Focusing on the left part of a sequence *)
+                 kstep (<{ c1 ; c2 }>, k, st) (c1, Kseq c2 k, st)
+           
+             | KS_IfTrue : forall st b c1 c2 k,  (**r Computation for conditionals *)
+                 beval st b = true ->
+                 kstep (<{ if b then c1 else c2 end }>, k, st) (c1, k, st)
+             | KS_IfFalse : forall st b c1 c2 k,
+                 beval st b = false ->
+                 kstep (<{ if b then c1 else c2 end }>, k, st) (c2, k, st)
+           
+             | KS_WhileTrue : forall st b c k,  (**r Computation and focusing for loops *)
+                 beval st b = true ->
+                 kstep (<{ while b do c end }>, k, st) (c, Kwhile b c k, st)
+             | KS_WhileFalse : forall st b c k,
+                 beval st b = false ->
+                 kstep (<{ while b do c end}>, k, st) (CSkip, k, st)
+           
+             | KS_SkipSeq: forall c k st,  (**r Resumption on [SKIP] *)
+                 kstep (CSkip, Kseq c k, st) (c, k, st)
+             | KS_SkipWhile: forall b c k st,
+                 kstep (CSkip, Kwhile b c k, st) (<{ while b do c end }>, k, st).
+           
+
+
+
        }
 
        (* Translation from Imp -> Impsharpminor *)
