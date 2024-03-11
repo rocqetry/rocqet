@@ -53,32 +53,33 @@ Family Impzero {
          Inductive step : state -> state -> Prop :=             
              | KS_Ass : forall st i a k n,            (**r Computation for assignments *)
                  aeval st a = n ->
-                 kstep (<{ i := a }>, k, st) (CSkip, k, t_update st i n)
-           
+                 step (State (Sassign i a) k st)
+                       (State Sskip k (t_update st i n))           
              | KS_Seq : forall st c1 c2 k,  (**r Focusing on the left part of a sequence *)
-                 kstep (<{ c1 ; c2 }>, k, st) (c1, Kseq c2 k, st)
-           
+                 step (State (Sseq c1 c2) k st)
+                       (State c1 (Kseq c2 k) st)                             
              | KS_IfTrue : forall st b c1 c2 k,  (**r Computation for conditionals *)
                  beval st b = true ->
-                 kstep (<{ if b then c1 else c2 end }>, k, st) (c1, k, st)
+                 step (State (Sifthenelse b c1 c2) k st)
+                       (State c1 k st)                   
              | KS_IfFalse : forall st b c1 c2 k,
                  beval st b = false ->
-                 kstep (<{ if b then c1 else c2 end }>, k, st) (c2, k, st)
-           
+                 step (State (Sifthenelse b c1 c2) k st)
+                       (State c2 k st)          
              | KS_WhileTrue : forall st b c k,  (**r Computation and focusing for loops *)
                  beval st b = true ->
-                 kstep (<{ while b do c end }>, k, st) (c, Kwhile b c k, st)
+                 step (State (Swhile b c) k st)
+                       (State c (Kwhile b c k) st)
              | KS_WhileFalse : forall st b c k,
                  beval st b = false ->
-                 kstep (<{ while b do c end}>, k, st) (CSkip, k, st)
-           
+                 step (State (Swhile b c) k st)
+                       (State Sskip k st)                              
              | KS_SkipSeq: forall c k st,  (**r Resumption on [SKIP] *)
-                 kstep (CSkip, Kseq c k, st) (c, k, st)
+                 step (State Sskip (Kseq c k) st)
+                       (State c k st)                   
              | KS_SkipWhile: forall b c k st,
-                 kstep (CSkip, Kwhile b c k, st) (<{ while b do c end }>, k, st).
-           
-
-
+                 step (State Sskip (Kwhile b c k) st)
+                       (State (Swhile b c) k st)
 
        }
 
