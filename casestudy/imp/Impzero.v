@@ -1,4 +1,5 @@
 Family Impzero {
+   (* A base family for Imp frontend languages *)
    Family Impcommon { }
 
    Family ImpcommonProofs {   
@@ -89,13 +90,16 @@ Family Impzero {
                  step (State Sskip (Kwhile b c k) st)
                        (State (Swhile b c) k st)
      }
-}       
 
-       (* Translation from Imp -> Impsharpminor *)
-       Family Impshmgen {
-         (* This involves mostly simplification of control structures *)
-         
+     (* Translation from Imp -> Impsharpminor *)
+     Family Impshmgen extends {
+       (* This involves mostly simplification of control structures *)
+       Family Proofs extends Impcommonproofs {
+           
        }
+     }
+ }
+       
 
  Family Impsharpminor extends Impcommon {
      Inductive constant : Type :=
