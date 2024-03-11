@@ -1,4 +1,3 @@
-
 (*
   I think we can have very high level passes that desugars the semingly valid
   source languge into a the Compcert IRs
@@ -9,8 +8,8 @@
 
 (*
 Family Imp1.0 {
-   Family Frontend
-       Family Imp
+   Family Frontend {
+       Family Imp {
           Inductive binary_operation : Type :=
              | Binplus
              | Binminus
@@ -34,9 +33,7 @@ Family Imp1.0 {
        Family Sematics {
               
        }       
-       
-
-   End Frontend
+   }
 
    Family FrontendProofs {       
        Family SP {
@@ -119,6 +116,9 @@ Family Imploops extends Imp1.0 { }
 Family Impmemory extends Imp1.0 { }
 
 Family Impfunctions extends Imp1.0 { }
+
+(* Imp w different integer and float sizes *)
+Family Impnumbers extends Imp1.0 { }
 
 (* Mixin with various features *)
 Family Imp2.0 { }
