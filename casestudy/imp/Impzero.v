@@ -206,7 +206,7 @@ Family Impzero {
                                      match_states 
              *)
 
-              Inductive match_states : Imp.Semantics.cont -> [self].Semantics.cont -> Prop :=
+              Inductive match_cont : Imp.Semantics.cont -> [self].Semantics.cont -> Prop :=
                  |
                  
               Inductive match_states : Imp.Semantics.state -> [self].Semantics.state -> Prop :=
