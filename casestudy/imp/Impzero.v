@@ -207,7 +207,7 @@ Family Impzero {
              *)
 
               Inductive match_cont : Imp.Semantics.cont -> [self].Semantics.cont -> Prop :=
-                 |
+                 |  
                  
               Inductive match_states : Imp.Semantics.state -> [self].Semantics.state -> Prop :=
                  | match_state
@@ -253,35 +253,4 @@ Family Impzero {
    }
 }
 
-(* Imp with pairs *) 
-Family Imppairs extends Imp1.0 { }
-
-(* Imp w while loops *)
-Family Impwwhile extends Imp1.0 { }
-
-(* Add continue to Imp *)
-Family Impwcontinue extends Imp1.0 { }
-
-(* Add breaks to Imp *)
-Family Impwbreak extends Imp1.0 { }
-
-(* Imp with for loops *)
-Family Impfor extends Imp1.0 { }
-
-(* Imp with labels and goto *)
-Family Impgoto extends Imp1.0 { }
-
-(* Imploops is a mixins of all loop features *)
-Family Imploops extends Imp1.0 { }
-
-(* Imp w memory extensions *)
-Family Impmemory extends Imp1.0 { }
-
-Family Impfunctions extends Imp1.0 { }
-
-(* Imp w different integer and float sizes *)
-Family Impnumbers extends Imp1.0 { }
-
-(* Mixin with various features *)
-Family Imp2.0 { }
 
