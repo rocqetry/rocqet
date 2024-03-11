@@ -1,11 +1,3 @@
-(*
-  I think we can have very high level passes that desugars the semingly valid
-  source languge into a the Compcert IRs
-
-  extensible semantic preservation forward simulation proofs
-  extensible bisimulation proofs
-*)
-
 Family Impzero {
    Family Frontend {
        Family Imp {
