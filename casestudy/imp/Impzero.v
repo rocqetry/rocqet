@@ -194,7 +194,15 @@ Family Impzero {
              *)
 
               Inductive match_cont : Imp.Semantics.cont -> [self].Semantics.cont -> Prop :=
-                 |  
+                 | match_Kstop: forall ce tyret nbrk ncnt,
+                        match_cont tyret ce nbrk ncnt Imp.Semantics.Kstop Kstop
+                 | match_Kseq: forall ce tyret nbrk ncnt s k ts tk,
+                       transl_statement ce tyret nbrk ncnt s = OK ts ->
+                       match_cont ce tyret nbrk ncnt k tk ->
+                       match_cont ce tyret nbrk ncnt
+                                  (Imp.Semantics.Kseq s k)
+                                  (Kseq ts tk)
+                  | match_Kwhile 
                  
               Inductive match_states : Imp.Semantics.state -> [self].Semantics.state -> Prop :=
                  | match_state
