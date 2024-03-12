@@ -22,4 +22,4 @@ Ideas list for families:
 5. Imp with more primitives (e.g float32, float64)
 6. Imp with a different semantics style (e.g denotational semantics)
 
-*aarch64: A small subset of aarch64
+*aarch64: A tiny subset of aarch64
