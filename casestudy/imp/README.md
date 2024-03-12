@@ -20,6 +20,6 @@ Ideas list for families:
 3. Imp with C-style arrays
 4. Imp with C-style structs (this is basically "pairs")
 5. Imp with more primitives (e.g float32, float64)
-6. Imp with a different semantics style (e.g denotational semantics)
+6. Imp with a different semantics style (e.g denotational semantics with itrees)
 
 *aarch64: A tiny subset of aarch64
