@@ -219,23 +219,19 @@ Family Impzero {
 
    }
 
-   Family LTL {
+   Family LTL { }
 
-   }
+   Family RTL { }
 
-   Family RTL {
-
-   }
-
-   Family Backend {
+   Family Linearcommon {
        Family Semantics { }
    }
 
-   Family Linear extends Backend {
+   Family Linear extends Linearcommon {
           
    }
 
-   Family Mach extends Backend {
+   Family Mach extends Linearcommon {
 
    }
 
