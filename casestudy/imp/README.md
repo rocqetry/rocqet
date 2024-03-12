@@ -5,24 +5,21 @@ can be used for extensible certified compilers. We showcase this by developing
 families of the Imp certified compiler.
 
 We have the base Imp compiler, which has all the details. We can extend the
-base compiler with very small features (e.g Imp w pairs), and then we can
+base compiler with very small features (e.g Imp with pairs), and then we can
 compose all of these small features to create an Imp 2.0 with a lot more
 feaures. Note that each of these small features compiler extends the whole
 base family of the Imp compiler.
 
-The base Imp compiler has the following compiler pipeline: 
-Imp -> Impsharpminor -> Impminor -> ImpminorSel -> RTL -> LTL -> Linear -> Mach -> "native code"
+Compiler pipeline:
+Imp -> Impshpminor -> Impminor -> ImpminorSel -> RTL -> LTL -> Linear -> Mach -> *aarch64
 
-Optimization passes:
-1. DCE
-2. Constant folding/propagations
+Ideas list for families:
+1. Imp with functions, local, & function calls
+2. Imp with pointers and memory-related operations
+3. Imp with more control flow operators (e.g break, continue)
+3. Imp with C-style arrays
+4. Imp with C-style structs (this is basically "pairs")
+5. Imp with more primitives (e.g float32, float64)
+6. Imp with a different semantics style (e.g denotational semantics)
 
-Each family will add a feature to Imp and extend each IR and
-inherit from the base Imp compiler.
-
-Families include:
-1. Imp with local variable & functions and function calls
-2. Imp with pointers
-3. Imp with arrays
-4. Imp with C types: structs, enums,
-5. Imp with more primitives (e.g float32 float64)
+*aarch64: A small subset of aarch64
