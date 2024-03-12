@@ -211,11 +211,11 @@ Family Impzero {
 
     }
 
-   Family Impminor extends Frontend {
+   Family Impminor extends Impcommon {
 
    }
 
-   Family ImppminorSel extends Frontend {
+   Family ImppminorSel extends Impcommon {
 
    }
 
