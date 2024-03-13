@@ -15,12 +15,41 @@ family Impzero.Impcommon {
 family Impzero.Impcommon {
     (* Top level programs *)
     family Program { }
-}    
+}
 
-(* A base family for extensible semantic preservation proofs *)                         
-family Impzero.ImpcommonProofs {
+(* Correctness of the translation A -> B *)                         
+family Impzero.ImpcommonProofs {  
   family A extends Impcommon { }
   family B extends Impcommon { }
+
+  (* Correctness of B construction functions *)
+
+  (* Basic preservation invariants *)
+  Lemma symbols_preserved:
+  forall s, Genv.find_symbol tge s = Genv.find_symbol ge s.
+  Proof (Genv.find_symbol_match TRANSL).
+
+  (* Matching between environments *)
+  Record match_env (e: A.Semantics.env) (te: B.Semantics.env) : Prop :=
+    mk_match_env { ... }
+  
+  Lemma transl_vars_names:
+       forall ce vars tvars,
+       mmap (transl_var ce) vars = OK tvars ->
+       map fst tvars = var_names vars.
+  Proof.
+    ...
+   Qed.
+
+  (* Semantic preservation for expressions *)
+  Lemma translate_expr_correct:
+      forall a v,
+      A.Semantics.eval_expr ge e le m a v ->
+      forall ta, transl_expr cunit.(prog_comp_env) a = OK ta ->
+      B.Semantics.eval_expr tge te le m ta v.
+  Proof.
+    ...
+  Qed.
 
   (*              
                                         match_states
@@ -38,7 +67,7 @@ family Impzero.ImpcommonProofs {
                  
    Inductive match_states : A.Semantics.state -> B.Semantics.state -> Prop := ...
 
-
+  
    (* simulation proofs all have the same structure,
       you just have to fill in some lemmas, which are like holes
       for families which extend this proof *)
@@ -80,7 +109,7 @@ family Impzero.ImpcommonProofs {
      eexact translate_initial_states.
      eexact translate_final_states.
      eexact translate_step.
-   Qed
+   Qed.
 }                         
 
  (* How do we encode this in a family hierarchy?
