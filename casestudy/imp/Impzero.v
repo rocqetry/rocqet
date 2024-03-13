@@ -1,15 +1,31 @@
 (* A base family for Imp frontend languages *)
 family Impzero.Impcommon { }
+
+(* A base family for extensible semantic preservation proofs *)                         
+family Impzero.ImpcommonProofs {
+  family A extends Impcommon { }
+  family B extends Impcommon { }
+}                         
+
+ (* How do we encode this in a family hierarchy?
+
+What about families that don't have functions? 
+ Record function : Type := mkfunction {
+       fn_sig: signature;
+       fn_params: list ident;
+       fn_vars: list (ident * Z);
+       fn_temps: list ident;
+       fn_body: stmt
+ }.
+
+Definition fundef := AST.fundef function.
+
+Definition program : Type := AST.program fundef unit. *)
                          
-family Impzero {
-   family ImpcommonProofs {   
-     (* extensible semantic preservation proofs *)
-     family SP {                         
-       family A extends Impcommon { }
-       family B extends Impcommon { }
-     }
-   }      
-           
+(* A toplevel program *)
+family Impzero.Imp.Program { }                         
+                         
+family Impzero {           
    family Imp extends Impcommom {
      Inductive binary_operation : Type :=
         | Binplus
@@ -26,25 +42,7 @@ family Impzero {
         | Sseq    : statement -> statement -> statement
         | Sifthenelse : expression -> statement -> statement -> statement
         (* | Swhile  : expression -> statement -> statement *)
-        | Sskip : statement.
-
-       (* How do we encode this in a family hierarchy?
-
-       What about families that don't have functions? 
-
-       Record function : Type := mkfunction {
-             fn_sig: signature;
-             fn_params: list ident;
-             fn_vars: list (ident * Z);
-             fn_temps: list ident;
-             fn_body: stmt
-         }.
-
-       Definition fundef := AST.fundef function.
-
-       Definition program : Type := AST.program fundef unit. *)
-       (* A toplevel program *)
-     family Program { }
+        | Sskip : statement.      
 
      family Semantics {
          Definition env = total_map nat (* From Maps.v *)
