@@ -1,12 +1,12 @@
 (* Conventional small-step semantics for Imp *)
-Family Impsmallstep extends Imp1.0 {
-   Family Frontend {
-       Family Imp {
+family Impsmallstep extends Imp1.0 {
+   family Frontend {
+       family Imp {
            (* We inherit all the inductive types, and
               we don't need to change them. We only
               want to change the semantics *)
          
-       Family Sematics {
+       family Sematics {
          (*
             Operational semantics.
             This is a small-step semenatics with big steps evaluation for
@@ -33,18 +33,18 @@ Family Impsmallstep extends Imp1.0 {
        }
 
        (* Imp -> Impsharpminor *)
-       Family Impshmgen { (* Nothing to do here! *) }
+       family Impshmgen { (* Nothing to do here! *) }
    }
 
-   Family FrontendProofs {   
-       Family SP {             
-           Family A extends Frontend { } 
-           Family B extends Frontend { }
+   family FrontendProofs {   
+       family SP {             
+           family A extends Frontend { } 
+           family B extends Frontend { }
        }
    }
 
-   Family Impsharpminor extends Frontend {     
-        Family Semantics { 
+   family Impsharpminor extends Frontend {     
+        family Semantics { 
             Inductive step: state -> trace -> state -> Prop :=
                  | step_skip_seq: forall f s k e le m,
                      step (State f Sskip (Kseq s k) e le m)
@@ -101,27 +101,27 @@ Family Impsmallstep extends Imp1.0 {
 
     }
 
-   Family Impminor extends Frontend { }
+   family Impminor extends Frontend { }
 
-   Family ImppminorSel extends Frontend { }
+   family ImppminorSel extends Frontend { }
 
-   Family LTL { }
+   family LTL { }
 
-   Family RTL { }
+   family RTL { }
 
-   Family Backend {
-       Family Semantics { }
+   family Backend {
+       family Semantics { }
    }
 
-   Family Linear extends Backend { }
+   family Linear extends Backend { }
 
-   Family Mach extends Backend { }
+   family Mach extends Backend { }
 
-   Family Processor {
-      Family Op { }      
+   family Processor {
+      family Op { }      
    } 
 
-   Family Aarch64 extends Processor {
-      Family Op { }
+   family Aarch64 extends Processor {
+      family Op { }
    }
 }

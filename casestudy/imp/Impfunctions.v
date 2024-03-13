@@ -1,2 +1,2 @@
 (* Imp with function calls *)
-Family Impfunctions extends Impzero { }
+family Impfunctions extends Impzero { }

@@ -1,12 +1,12 @@
-Family Impwhile extends Impzero { }
+family Impwhile extends Impzero { }
 
-Family Impcontinue extends Impzero { }
+family Impcontinue extends Impzero { }
 
-Family Impbreak extends Impzero { }
+family Impbreak extends Impzero { }
 
-Family Impfor extends Impzero { }
+family Impfor extends Impzero { }
 
-Family Impgoto extends Impzero { }
+family Impgoto extends Impzero { }
 
 (* Imp control is Impwhile + Impgoto + Impfor + Impcontinue + Impbreak *)
-Family Impcontrol extends Impzero with Impwhile, Impcontinue, Impbreak, Impfor, Impgoto { }
+family Impcontrol extends Impzero with Impwhile, Impcontinue, Impbreak, Impfor, Impgoto { }

@@ -1,2 +1,2 @@
 (* Imp with pairs *) 
-Family Imppairs extends Impzero { }
+family Imppairs extends Impzero { }
