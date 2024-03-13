@@ -14,14 +14,14 @@ family Impzero.ImpcommonProofs {
   family B extends Impcommon { }
 
   (*              
-                                     match_states
+                                        match_states
                 A.Semantics.state  ----------------------- B.Semantics.state 
                       |                                        |
                       |                                        | *
                       |                                        |
                       v                                        v
                    A.Semantics.state' ----------------------- B.Semantics.state'
-                                     match_states 
+                                          match_states 
    *)
   
    Inductive match_cont : A.Semantics.cont -> B.Semantics.cont -> Prop :=
