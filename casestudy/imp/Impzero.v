@@ -1,12 +1,21 @@
 (* A base family for Imp frontend languages *)
 family Impzero.Impcommon {
     (* The semantics of the language *)
-    family Semantics {
+    family Semantics {        
         Inductive state : Type := ...
+        Definition initial_state := ...
+        Definition final_state := ...
+        
         Inductive cont : Type := ...
         Inductive step : [self].state -> [self].state -> Prop := ...
+        Definition semantics := ...
     }
 }
+
+family Impzero.Impcommon {
+    (* Top level programs *)
+    family Program { }
+}    
 
 (* A base family for extensible semantic preservation proofs *)                         
 family Impzero.ImpcommonProofs {
@@ -29,6 +38,51 @@ family Impzero.ImpcommonProofs {
                  
    Inductive match_states : A.Semantics.state -> B.Semantics.state -> Prop := ...
 
+
+   (* simulation proofs all have the same structure,
+      you just have to fill in some lemmas which are like holes
+      for families which extend this proof *)
+  (* The simulation proofs *)
+
+
+   Lemma translate_step:
+       forall S1 S2, A.Semantics.step S1 S2 ->
+       forall T1, match_states S1 T1 ->
+       exists T2, plus B.Semantics.step T1 T2 /\ match_states S2 T2.
+   Proof.
+     induction 1; intros. 
+
+     Case step_assign := ...
+
+     Case step_seq := ...
+
+     ...
+   Qed.
+
+
+   Lemma translate_initial_states: forall prog tprog,
+         forall S, A.Semantics.initial_state prog S ->
+         exists R, B.Semantics.initial_state tprog R /\ match_states S R.
+   Proof.
+     ...
+   Qed.
+  
+   Lemma translate_final_states:
+         forall S R r,
+         match_states S R -> A.Semantics.final_state S r -> B.Semantics.final_state R r.
+   Proof.
+       intros. inv H0. inv H. inv MK. constructor.
+   Qed. 
+  
+   Theorem translate_program_correct : forall (prog: A.Program.program) (tprog : B.Program.program),
+       forward_simulation (A.Semantics.semantics prog) (B.Semantics.semantics tprog).
+   Proof.
+     eapply forward_simulation_plus.
+     apply senv_preserved.
+     eexact translate_initial_states.
+     eexact translate_final_states.
+     eexact translate_step.
+   Qed
 }                         
 
  (* How do we encode this in a family hierarchy?
