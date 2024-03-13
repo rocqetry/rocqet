@@ -1,5 +1,12 @@
 (* A base family for Imp frontend languages *)
-family Impzero.Impcommon { }
+family Impzero.Impcommon {
+    (* The semantics of the language *)
+    family Semantics {
+        Inductive state : Type := ...
+        Inductive cont : Type := ...
+        Inductive step : [self].state -> [self].state -> Prop := ...
+    }
+}
 
 (* A base family for extensible semantic preservation proofs *)                         
 family Impzero.ImpcommonProofs {
