@@ -25,7 +25,7 @@ Family Impzero {
         | Sassign : label -> expression -> statement
         | Sseq    : statement -> statement -> statement
         | Sifthenelse : expression -> statement -> statement -> statement
-        | Swhile  : expression -> statement -> statement
+        (* | Swhile  : expression -> statement -> statement *)
         | Sskip : statement.
 
        (* How do we encode this in a family hierarchy?
@@ -75,20 +75,20 @@ Family Impzero {
                  beval st b = false ->
                  step (State (Sifthenelse b c1 c2) k st)
                        (State c2 k st)          
-             | KS_WhileTrue : forall st b c k,
+             (* | KS_WhileTrue : forall st b c k,
                  beval st b = true ->
                  step (State (Swhile b c) k st)
                        (State c (Kwhile b c k) st)
              | KS_WhileFalse : forall st b c k,
                  beval st b = false ->
                  step (State (Swhile b c) k st)
-                       (State Sskip k st)                              
+                       (State Sskip k st) *)
              | KS_SkipSeq: forall c k st,
                  step (State Sskip (Kseq c k) st)
                        (State c k st)                   
-             | KS_SkipWhile: forall b c k st,
+             (* | KS_SkipWhile: forall b c k st,
                  step (State Sskip (Kwhile b c k) st)
-                       (State (Swhile b c) k st)
+                       (State (Swhile b c) k st) *)
      }     
  }
        
@@ -179,10 +179,16 @@ Family Impzero {
 
      (* Translation from Imp -> Impsharpminor *)
        Family Impshmgen extends {
-          (* This involves mostly simplification of control structures *)
+         (* This involves mostly simplification of control structures *)
+             Fixpoint translate_expression := ...
+
+         
+             Fixpoint translate_statment := ...
+
+                                       
+         
              Family Proofs extends Impcommonproofs {
-            (*
-               <<
+                (*              
                                      match_states
                     Imp.state  ----------------------- Impsharpminor.state 
                       |                                   |
@@ -191,23 +197,25 @@ Family Impzero {
                       v                                   v
                    Imp.state' ----------------------- Impsharpminor.state'
                                      match_states 
-             *)
-
+                 *)
               Inductive match_cont : Imp.Semantics.cont -> [self].Semantics.cont -> Prop :=
-                 | match_Kstop: forall ce tyret nbrk ncnt,
-                        match_cont tyret ce nbrk ncnt Imp.Semantics.Kstop Kstop
+                 | match_Kstop: match_cont Imp.Semantics.Kstop Kstop
                  | match_Kseq: forall ce tyret nbrk ncnt s k ts tk,
-                       transl_statement ce tyret nbrk ncnt s = OK ts ->
-                       match_cont ce tyret nbrk ncnt k tk ->
-                       match_cont ce tyret nbrk ncnt
-                                  (Imp.Semantics.Kseq s k)
-                                  (Kseq ts tk)
-                  | match_Kwhile 
+                       transl_statement s = OK ts ->
+                       match_cont k tk ->
+                       match_cont (Imp.Semantics.Kseq s k) (Kseq ts tk)
+                 (* | match_Kwhile *)
                  
               Inductive match_states : Imp.Semantics.state -> [self].Semantics.state -> Prop :=
-                 | match_state
+                 | match_state:
+                     forall f nbrk ncnt s k e le m tf ts tk te ts' tk' cu,                         
+                         (TR: translate_statement cu.(prog_comp_env) nbrk ncnt s = OK ts)
+                         (MTR: match_transl ts tk ts' tk')
+                         (MK: match_cont k tk),
+                                match_states (Imp.Semantics.State s k e)
+                                             ([self].Semantics.State tf ts' tk' te le m)
            }
-       }
+
 
     }
 
