@@ -1,20 +1,61 @@
 (* A base family for Imp frontend languages *)
 family Impzero.Impcommon {
-    (* The semantics of the language *)
-    family Semantics {        
-        Inductive state : Type := ...
-        Definition initial_state := ...
-        Definition final_state := ...
-        
-        Inductive cont : Type := ...
-        Inductive step : [self].state -> [self].state -> Prop := ...
-        Definition semantics := ...
-    }
-}
+    Inductive binary_operation : Type :=
+        | Binplus
+        | Binminus
+        | Binmult.
 
-family Impzero.Impcommon {
+     Inductive expression : Type :=
+        | Evar : ident -> expr 
+        | Econst : value -> expr
+        | Ebinop : binary_operation -> expr -> expr -> expr.
+
+     Inductive statement : Type :=
+        | Sassign : label -> expression -> statement
+        | Sseq    : statement -> statement -> statement
+        | Sifthenelse : expression -> statement -> statement -> statement        
+        | Sskip : statement.      
+
     (* Top level programs *)
     family Program { }
+}
+
+(* The semantics of the language *)                         
+family Impzero.Impcommon {
+    family Semantics {                                        
+        Inductive cont : Type :=
+           | Kstop : cont
+           | Kseq : statement -> cont -> cont
+           | Kwhile : expression -> statement -> cont -> cont
+
+        Inductive state: Type :=
+           | State: forall (s: statement) (k: cont) (e: env), state
+        
+        Inductive step : [self].state -> [self].state -> Prop :=
+             | step_assign : forall st i a k n,            
+                 aeval st a = n ->
+                 step (State (Sassign i a) k st)
+                      (State Sskip k (t_update st i n))           
+             | step_seq : forall st c1 c2 k,  
+                 step (State (Sseq c1 c2) k st)
+                       (State c1 (Kseq c2 k) st)                             
+             | step_iftrue : forall st b c1 c2 k,
+                 beval st b = true ->
+                 step (State (Sifthenelse b c1 c2) k st)
+                       (State c1 k st)                   
+             | step_iffalse : forall st b c1 c2 k,
+                 beval st b = false ->
+                 step (State (Sifthenelse b c1 c2) k st)
+                       (State c2 k st)             
+             | step_skipseq: forall c k st,
+                 step (State Sskip (Kseq c k) st)
+                      (State c k st)                               
+        
+        (* Definitions *)
+        Definition semantics := ...
+        Definition initial_state := ...
+        Definition final_state := ...
+    }
 }
 
 (* Correctness of the translation A -> B *)                         
@@ -112,86 +153,37 @@ family Impzero.ImpcommonProofs {
    Qed.
 }                         
 
- (* How do we encode this in a family hierarchy?
-
-What about families that don't have functions? 
- Record function : Type := mkfunction {
-       fn_sig: signature;
-       fn_params: list ident;
-       fn_vars: list (ident * Z);
-       fn_temps: list ident;
-       fn_body: stmt
- }.
-
-Definition fundef := AST.fundef function.
-
-Definition program : Type := AST.program fundef unit. *)
                          
 (* A toplevel program *)
 family Impzero.Imp.Program { }                         
                          
 family Impzero {           
    family Imp extends Impcommom {
-     Inductive binary_operation : Type :=
-        | Binplus
-        | Binminus
-        | Binmult.
-
-     Inductive expression : Type :=
-        | Evar : ident -> expr 
-        | Econst : value -> expr
-        | Ebinop : binary_operation -> expr -> expr -> expr.
-
-     Inductive statement : Type :=
-        | Sassign : label -> expression -> statement
-        | Sseq    : statement -> statement -> statement
-        | Sifthenelse : expression -> statement -> statement -> statement
-        (* | Swhile  : expression -> statement -> statement *)
-        | Sskip : statement.      
+     (* Inherits expressions, binary_operaion, and statements *)
+       
+     Inductive statement : Type +=      
+        | Swhile  : expression -> statement -> statement
 
      family Semantics {
-         Definition env = total_map nat (* From Maps.v *)
-
-         (* Continuations *)                                    
-         Inductive cont : Type :=
-           | Kstop : cont
-           | Kseq : statement -> cont -> cont
+         (* Inherits env *)
+         
+         Inductive cont : Type +=           
            | Kwhile : expression -> statement -> cont -> cont
+        
+         (* Inherits state *)
 
-         (* States *)
-         Inductive state: Type :=
-             | State: forall (s: statement) (k: cont) (e: env), state
-
-         Inductive step : state -> state -> Prop :=             
-             | KS_Ass : forall st i a k n,            
-                 aeval st a = n ->
-                 step (State (Sassign i a) k st)
-                       (State Sskip k (t_update st i n))           
-             | KS_Seq : forall st c1 c2 k,  
-                 step (State (Sseq c1 c2) k st)
-                       (State c1 (Kseq c2 k) st)                             
-             | KS_IfTrue : forall st b c1 c2 k,
-                 beval st b = true ->
-                 step (State (Sifthenelse b c1 c2) k st)
-                       (State c1 k st)                   
-             | KS_IfFalse : forall st b c1 c2 k,
-                 beval st b = false ->
-                 step (State (Sifthenelse b c1 c2) k st)
-                       (State c2 k st)          
-             (* | KS_WhileTrue : forall st b c k,
+         Inductive step : [self].state -> [self].state -> Prop +=             
+             | KS_WhileTrue : forall st b c k,
                  beval st b = true ->
                  step (State (Swhile b c) k st)
                        (State c (Kwhile b c k) st)
              | KS_WhileFalse : forall st b c k,
                  beval st b = false ->
                  step (State (Swhile b c) k st)
-                       (State Sskip k st) *)
-             | KS_SkipSeq: forall c k st,
-                 step (State Sskip (Kseq c k) st)
-                       (State c k st)                   
-             (* | KS_SkipWhile: forall b c k st,
+                       (State Sskip k st)
+             | KS_SkipWhile: forall b c k st,
                  step (State Sskip (Kwhile b c k) st)
-                       (State (Swhile b c) k st) *)
+                       (State (Swhile b c) k st)
      }     
  }
        
