@@ -12,6 +12,23 @@ family Impzero.Impcommon {
 family Impzero.ImpcommonProofs {
   family A extends Impcommon { }
   family B extends Impcommon { }
+
+  (*              
+                                     match_states
+                A.Semantics.state  ----------------------- B.Semantics.state 
+                      |                                        |
+                      |                                        | *
+                      |                                        |
+                      v                                        v
+                   A.Semantics.state' ----------------------- B.Semantics.state'
+                                     match_states 
+   *)
+  
+   Inductive match_cont : A.Semantics.cont -> B.Semantics.cont -> Prop :=
+     | match_Kstop: match_cont Imp.Semantics.Kstop Kstop                 
+                 
+   Inductive match_states : A.Semantics.state -> B.Semantics.state -> Prop := ...
+
 }                         
 
  (* How do we encode this in a family hierarchy?
