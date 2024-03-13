@@ -1,16 +1,16 @@
-Family Impzero {
-   (* A base family for Imp frontend languages *)
-   Family Impcommon { }
-
-   Family ImpcommonProofs {   
+(* A base family for Imp frontend languages *)
+family Impzero.Impcommon { }
+                         
+family Impzero {
+   family ImpcommonProofs {   
      (* extensible semantic preservation proofs *)
-     Family SP {                         
-       Family A extends Impcommon { }
-       Family B extends Impcommon { }
+     family SP {                         
+       family A extends Impcommon { }
+       family B extends Impcommon { }
      }
    }      
            
-   Family Imp extends Impcommom {
+   family Imp extends Impcommom {
      Inductive binary_operation : Type :=
         | Binplus
         | Binminus
@@ -44,9 +44,9 @@ Family Impzero {
 
        Definition program : Type := AST.program fundef unit. *)
        (* A toplevel program *)
-     Family Program { }
+     family Program { }
 
-     Family Semantics {
+     family Semantics {
          Definition env = total_map nat (* From Maps.v *)
 
          (* Continuations *)                                    
@@ -93,7 +93,7 @@ Family Impzero {
  }
        
 
- Family Impsharpminor extends Impcommon {
+ family Impsharpminor extends Impcommon {
      Inductive constant : Type :=
         | Ointconst: int -> constant       
         | Ofloatconst: float -> constant   
@@ -123,7 +123,7 @@ Family Impzero {
            | LScons: option Z -> stmt -> lbl_stmt -> lbl_stmt.
 
 
-     Family Semantics {
+     family Semantics {
          Inductive cont: Type :=
             | Kstop: cont
             | Kseq: stmt -> cont -> cont
@@ -178,7 +178,7 @@ Family Impzero {
        }
 
      (* Translation from Imp -> Impsharpminor *)
-       Family Impshmgen extends {
+       family Impshmgen extends {
          (* This involves mostly simplification of control structures *)
              Fixpoint translate_expression := ...
 
@@ -187,7 +187,7 @@ Family Impzero {
 
                                        
          
-             Family Proofs extends Impcommonproofs {
+             family Proofs extends Impcommonproofs {
                 (*              
                                      match_states
                     Imp.state  ----------------------- Impsharpminor.state 
@@ -219,36 +219,36 @@ Family Impzero {
 
     }
 
-   Family Impminor extends Impcommon {
+   family Impminor extends Impcommon {
 
    }
 
-   Family ImppminorSel extends Impcommon {
+   family ImppminorSel extends Impcommon {
 
    }
 
-   Family LTL { }
+   family LTL { }
 
-   Family RTL { }
+   family RTL { }
 
-   Family Linearcommon {
-       Family Semantics { }
+   family Linearcommon {
+       family Semantics { }
    }
 
-   Family Linear extends Linearcommon {
+   family Linear extends Linearcommon {
           
    }
 
-   Family Mach extends Linearcommon {
+   family Mach extends Linearcommon {
 
    }
 
-   Family Processor {
-      Family Op { }      
+   family Processor {
+      family Op { }      
    } 
 
-   Family Aarch64 extends Processor {
-      Family Op { }
+   family Aarch64 extends Processor {
+      family Op { }
    }
 }
 
