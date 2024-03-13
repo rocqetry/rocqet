@@ -40,11 +40,9 @@ family Impzero.ImpcommonProofs {
 
 
    (* simulation proofs all have the same structure,
-      you just have to fill in some lemmas which are like holes
+      you just have to fill in some lemmas, which are like holes
       for families which extend this proof *)
-  (* The simulation proofs *)
-
-
+  (* The simulation proof *)
    Lemma translate_step:
        forall S1 S2, A.Semantics.step S1 S2 ->
        forall T1, match_states S1 T1 ->
