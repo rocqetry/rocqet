@@ -22,22 +22,47 @@ family Impzero.Impcommon {
         | Sskip : statement.      
 
     (* Top level programs *)
-    family Program { }
-}
-
+     family Program {
+         Definition program := list statement
+   
 (* The semantics of the language *)                         
 family Impzero.Impcommon {
     family Semantics {                                        
+        family Values {
+            Inductive value: Type :=
+              | Vint: int -> val              
+        }
+
         Inductive cont : Type :=
            | Kstop : cont
            | Kseq : statement -> cont -> cont           
 
         Inductive state: Type :=
-           | State: forall (s: statement) (k: cont) (e: env), state
+           | State: forall (s: statement) (k: cont) (e: env), state        
 
-        Inductive eval_expr: expr -> val -> Prop := ...
-                                                                
-        Inductive eval_exprlist: list expr -> list val -> Prop := ...
+        Inductive eval_expr: expression -> Value.value -> Prop :=
+            | eval_Evar: forall id v,
+                le!id = Some v ->
+                eval_expr (Evar id) v           
+            | eval_Econst: forall cst v,
+                eval_constant cst = Some v ->
+                eval_expr (Econst cst) v
+            | eval_Eunop: forall op a1 v1 v,
+                eval_expr a1 v1 ->
+                eval_unop op v1 = Some v ->
+                eval_expr (Eunop op a1) v
+            | eval_Ebinop: forall op a1 a2 v1 v2 v,
+                eval_expr a1 v1 ->
+                eval_expr a2 v2 ->
+                eval_binop op v1 v2 m = Some v ->
+                eval_expr (Ebinop op a1 a2) v            
+        
+        Inductive eval_exprlist: list expression -> list Values.value -> Prop :=
+          | eval_Enil:
+              eval_exprlist nil nil
+          | eval_Econs: forall a1 al v1 vl,
+              eval_expr a1 v1 -> eval_exprlist al vl ->
+              eval_exprlist (a1 :: al) (v1 :: vl).
 
         (* A common small step continuation-based semantics for frontned languages *)
         Inductive step : [self].state -> [self].state -> Prop :=
