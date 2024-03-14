@@ -40,7 +40,8 @@ family Impzero.Impcommon {
         Inductive state: Type :=
            | State: forall (s: statement) (k: cont) (e: env), state        
 
-        Inductive eval_expr: expression -> Value.value -> Prop :=
+         Definition eval_binop := ... 
+         Inductive eval_expr: expression -> Values.value -> Prop :=
             | eval_Evar: forall id v,
                 le!id = Some v ->
                 eval_expr (Evar id) v           
@@ -135,11 +136,11 @@ family Impzero.Impgen.Proofs {
    Qed.
 
   (* Semantic preservation for expressions *)
-  Lemma translate_expr_correct:
+  Lemma translate_expressionx_correct:
       forall a v,
-      Source.Semantics.eval_expr ge e le m a v ->
-      forall ta, transl_expr cunit.(prog_comp_env) a = OK ta ->
-      Target.Semantics.eval_expr tge te le m ta v.
+      Source.Semantics.eval_expr a v ->
+      forall ta, translate_expr a  = OK ta ->
+      Target.Semantics.eval_expr ta v.
   Proof.
     ...
   Qed.
