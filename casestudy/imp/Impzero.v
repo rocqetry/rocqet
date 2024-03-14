@@ -35,6 +35,10 @@ family Impzero.Impcommon {
         Inductive state: Type :=
            | State: forall (s: statement) (k: cont) (e: env), state
 
+        Inductive eval_expr: expr -> val -> Prop := ...
+                                                                
+        Inductive eval_exprlist: list expr -> list val -> Prop := ...
+
         (* A common small step continuation-based semantics for frontned languages *)
         Inductive step : [self].state -> [self].state -> Prop :=
              | step_assign : forall st i a k n,            
@@ -65,13 +69,23 @@ family Impzero.Impcommon {
                  step (State Sskip (Kseq c k) st)
                       (State c k st)                               
         
-        (* Definitions *)
-        Definition semantics := ...
+        (* Definitions *)        
         Definition initial_state := ...
         Definition final_state := ...
+        Definition semantics := ...
     }
 }
 
+(* Translation from A -> B *)
+family Impzero.Implowering {
+  family A extends Impcommon { }
+  family B extends Impcommon { }
+
+  family Proofs {
+    (* Semantics preservation of compilation proofs *)
+  }
+}
+    
 (* Correctness of the translation A -> B *)                         
 family Impzero.ImpcommonProofs {  
   family A extends Impcommon { }
@@ -220,25 +234,25 @@ family Impzero.Impsharpminor extends Impcommon {
             | Kblock: cont -> cont         
                                                             
          Inductive step: state -> state -> Prop +=                
-               | step_skip_block: forall k e,
-                     step (State Sskip (Kblock k) e)
-                          (State Sskip k e)                               
-               | step_loop: forall s k e le m,
-                     step (State (Sloop s) k e)
-                          (State s (Kseq (Sloop s) k) e)
-                | step_block: forall f s k e,
-                     step (State (Sblock s) k e)
-                          (State s (Kblock k) e)               
-                | step_exit_seq: forall n s k e,
-                    step (State (Sexit n) (Kseq s k) e)
-                         (State (Sexit n) k e)
-                | step_exit_block_0: forall k e,
-                    step (State (Sexit O) (Kblock k) e)
-                         (State Sskip k e)
-                | step_exit_block_S: forall f n k e,
-                    step (State (Sexit (S n)) (Kblock k) e)
-                         (State (Sexit n) k e)              
-                | step_switch: forall islong a cases k e m v n,
+             | step_skip_block: forall k e,
+                   step (State Sskip (Kblock k) e)
+                        (State Sskip k e)                               
+             | step_loop: forall s k e le m,
+                   step (State (Sloop s) k e)
+                        (State s (Kseq (Sloop s) k) e)
+              | step_block: forall f s k e,
+                   step (State (Sblock s) k e)
+                        (State s (Kblock k) e)               
+              | step_exit_seq: forall n s k e,
+                  step (State (Sexit n) (Kseq s k) e)
+                       (State (Sexit n) k e)
+              | step_exit_block_0: forall k e,
+                  step (State (Sexit O) (Kblock k) e)
+                       (State Sskip k e)
+              | step_exit_block_S: forall f n k e,
+                  step (State (Sexit (S n)) (Kblock k) e)
+                       (State (Sexit n) k e)              
+              | step_switch: forall islong a cases k e m v n,
                     eval_expr e le m a v ->
                     switch_argument islong v n -> (* TODO: evalutaion *)
                     step (State (Sswitch islong a cases) k e)
@@ -283,14 +297,58 @@ family Impzero.Impshmgen {
                                      ([self].Semantics.State tf ts' tk' te le m)
 }
 
+family Impzero.Impminor extends Impcommon {
+  Inductive expression : Type +=                        
+     | Eunop : unary_operation -> expression -> expression
+
+  Inductive stmt : Type +=                                
+     | Sblock: stmt -> stmt
+     | Sexit: nat -> stmt
+     | Sswitch: bool -> expr -> lbl_stmt -> stmt
+     | Sloop: stmt -> stmt
+
+  family Semantics {                        
+    Inductive cont: Type +=            
+      | Kblock: cont -> cont
+
+     (* This is basically the same as Impzero.Impsharpminor *)
+     Inductive step: state -> state -> Prop +=                
+             | step_skip_block: forall k e,
+                   step (State Sskip (Kblock k) e)
+                        (State Sskip k e)                               
+             | step_loop: forall s k e le m,
+                   step (State (Sloop s) k e)
+                        (State s (Kseq (Sloop s) k) e)
+              | step_block: forall f s k e,
+                   step (State (Sblock s) k e)
+                        (State s (Kblock k) e)               
+              | step_exit_seq: forall n s k e,
+                  step (State (Sexit n) (Kseq s k) e)
+                       (State (Sexit n) k e)
+              | step_exit_block_0: forall k e,
+                  step (State (Sexit O) (Kblock k) e)
+                       (State Sskip k e)
+              | step_exit_block_S: forall f n k e,
+                  step (State (Sexit (S n)) (Kblock k) e)
+                       (State (Sexit n) k e)              
+              | step_switch: forall islong a cases k e m v n,
+                    eval_expr e le m a v ->
+                    switch_argument islong v n -> (* TODO: evalutaion *)
+                    step (State (Sswitch islong a cases) k e)
+                         (State (seq_of_lbl_stmt (select_switch n cases)) k e)            
+                | step_label: forall lbl s k e,
+                   step (State (Slabel lbl s) k e)
+                        (State s k e)
+    }
+}
+
+(* Translation from Impsharpminor -> Impminor *)
+family Impzero.Impminorgen extends Implowering {
+  
+}
 
   
 family Impzero {
-  
-   family Impminor extends Impcommon {
-
-   }
-
    family ImppminorSel extends Impcommon {
 
    }
