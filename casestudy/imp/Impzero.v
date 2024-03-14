@@ -76,21 +76,20 @@ family Impzero.Impcommon {
     }
 }
 
-(* Translation from A -> B *)
-family Impzero.Implowering {
-  family A extends Impcommon { }
-  family B extends Impcommon { }
 
-  family Proofs {
-    (* Semantics preservation of compilation proofs *)
-  }
+(* What happens when Source is extended in a derived family? *)
+(* What happens when Target is extended in a derived family? *)
+(* Generating Imp-like IRs / translation from Source -> Target *)
+family Impzero.Impgen {
+  family Source extends Impcommon { }
+  family Target extends Impcommon { }
+
+  (* Semantics preservation of compilation proofs *)
+  family Proofs { }
 }
     
-(* Correctness of the translation A -> B *)                         
-family Impzero.ImpcommonProofs {  
-  family A extends Impcommon { }
-  family B extends Impcommon { }
-
+(* Correctness of the translation Source -> Target *)                         
+family Impzero.Impgen.Proofs {  
   (* Correctness of B construction functions *)
 
   (* Basic preservation invariants *)
@@ -99,7 +98,7 @@ family Impzero.ImpcommonProofs {
   Proof (Genv.find_symbol_match TRANSL).
 
   (* Matching between environments *)
-  Record match_env (e: A.Semantics.env) (te: B.Semantics.env) : Prop :=
+  Record match_env (e: Source.Semantics.env) (te: Target.Semantics.env) : Prop :=
     mk_match_env { ... }
   
   Lemma transl_vars_names:
@@ -113,9 +112,9 @@ family Impzero.ImpcommonProofs {
   (* Semantic preservation for expressions *)
   Lemma translate_expr_correct:
       forall a v,
-      A.Semantics.eval_expr ge e le m a v ->
+      Source.Semantics.eval_expr ge e le m a v ->
       forall ta, transl_expr cunit.(prog_comp_env) a = OK ta ->
-      B.Semantics.eval_expr tge te le m ta v.
+      Target.Semantics.eval_expr tge te le m ta v.
   Proof.
     ...
   Qed.
@@ -131,15 +130,15 @@ family Impzero.ImpcommonProofs {
                                           match_states 
    *)
   
-   Inductive match_cont : A.Semantics.cont -> B.Semantics.cont -> Prop :=
+   Inductive match_cont : Source.Semantics.cont -> Target.Semantics.cont -> Prop :=
      | match_Kstop: match_cont Imp.Semantics.Kstop Kstop                 
      | match_Kseq: forall ce tyret nbrk ncnt s k ts tk,
                transl_statement s = OK ts ->
                match_cont k tk ->
-               match_cont (A.Semantics.Kseq s k) (B.Semantics.Kseq ts tk)
+               match_cont (Source.Semantics.Kseq s k) (Target.Semantics.Kseq ts tk)
 
                                
-   Inductive match_states : A.Semantics.state -> B.Semantics.state -> Prop := ...
+   Inductive match_states : Source.Semantics.state -> Target.Semantics.state -> Prop := ...
 
   
    (* simulation proofs all have the same structure,
@@ -147,9 +146,9 @@ family Impzero.ImpcommonProofs {
       for families which extend this proof *)
   (* The simulation proof *)
    Lemma translate_step:
-       forall S1 S2, A.Semantics.step S1 S2 ->
+       forall S1 S2, Source.Semantics.step S1 S2 ->
        forall T1, match_states S1 T1 ->
-       exists T2, plus B.Semantics.step T1 T2 /\ match_states S2 T2.
+       exists T2, plus Target.Semantics.step T1 T2 /\ match_states S2 T2.
    Proof.
      induction 1; intros. 
 
@@ -162,21 +161,23 @@ family Impzero.ImpcommonProofs {
 
 
    Lemma translate_initial_states: forall prog tprog,
-         forall S, A.Semantics.initial_state prog S ->
-         exists R, B.Semantics.initial_state tprog R /\ match_states S R.
+         forall S, Source.Semantics.initial_state prog S ->
+         exists R, Target.Semantics.initial_state tprog R /\ match_states S R.
    Proof.
      ...
    Qed.
   
    Lemma translate_final_states:
          forall S R r,
-         match_states S R -> A.Semantics.final_state S r -> B.Semantics.final_state R r.
+         match_states S R -> Source.Semantics.final_state S r -> Target.Semantics.final_state R r.
    Proof.
        intros. inv H0. inv H. inv MK. constructor.
    Qed. 
   
-   Theorem translate_program_correct : forall (prog: A.Program.program) (tprog : B.Program.program),
-       forward_simulation (A.Semantics.semantics prog) (B.Semantics.semantics tprog).
+   Theorem translate_program_correct :
+     forall (prog  : Source.Program.program)
+            (tprog : Target.Program.program),
+       forward_simulation (Source.Semantics.semantics prog) (Target.Semantics.semantics tprog).
    Proof.
      eapply forward_simulation_plus.
      apply senv_preserved.
@@ -264,16 +265,18 @@ family Impzero.Impsharpminor extends Impcommon {
 }
 
 (* Translation from Imp -> Impsharpminor *)
-family Impzero.Impshmgen {
+family Impzero.Impshmgen extends Impgen {
+   family Source extends Imp { }
+   family Target extends Impsharpminor { }       
+  
    (* This involves mostly simplification of control structures *)
-    Fixpoint translate_expression := ...
-
+    Fixpoint translate_expression := ... 
          
     Fixpoint translate_statment := ...
 
                                        
    (* Correctness proofs for Imp -> Impsharpminor *)      
-   family Proofs extends Impcommonproofs {
+   family Proofs {
          (*              
                            match_states
            Imp.state  ----------------------- Impsharpminor.state 
@@ -343,8 +346,14 @@ family Impzero.Impminor extends Impcommon {
 }
 
 (* Translation from Impsharpminor -> Impminor *)
-family Impzero.Impminorgen extends Implowering {
-  
+family Impzero.Impminorgen extends Impgen {
+  (* In this case the translation is the identity function *)
+  Definition translate_constant += ...
+  Fixpoint translate_expr += ...
+  Fixpoint translate_statement += ...
+
+  family Source extends Impsharpminor { }
+  family Target extends Impminor { }      
 }
 
   
