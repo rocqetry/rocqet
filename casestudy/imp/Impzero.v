@@ -1,4 +1,4 @@
-(* A base family for Imp frontend languages *)
+(* A base family for Imp frontend IRs *)
 family Impzero.Impcommon {
     Inductive constant : Type :=
         | Ointconst: int -> constant
@@ -11,20 +11,31 @@ family Impzero.Impcommon {
         | Binmult.
 
      Inductive expression : Type :=
-        | Evar : ident -> expr 
-        | Econst : constant -> expr
+        | Evar : ident -> expression
+        | Econst : constant -> expression
+        | Eunop : unary_operation -> expression -> expression
         | Ebinop : binary_operation -> expr -> expr -> expr.
 
      Inductive statement : Type :=
         | Sassign : label -> expression -> statement
         | Sseq    : statement -> statement -> statement
         | Sifthenelse : expression -> statement -> statement -> statement        
-        | Sskip : statement.      
+        | Sskip : statement
+        | Sblock: statement -> statement
+        | Sexit: nat -> statement
+        | Sswitch: bool -> expr -> lbl_statement -> statement
+        | Sloop: statement -> statement
 
-    (* Top level programs *)
-     family Program {
-         Definition program := list statement
-   
+     with lbl_statement : Type :=
+           | LSnil: lbl_statement
+           | LScons: option Z -> statement -> lbl_statement -> lbl_statement
+                           
+
+     (* Top level programs *)
+     Inductive program : Type :=
+        | Program : list statement (* -> [[list function]]*) -> program
+}
+       
 (* The semantics of the language *)                         
 family Impzero.Impcommon {
     family Semantics {                                        
@@ -35,12 +46,14 @@ family Impzero.Impcommon {
 
         Inductive cont : Type :=
            | Kstop : cont
-           | Kseq : statement -> cont -> cont           
+           | Kseq : statement -> cont -> cont
+           | Kblock: cont -> cont                                               
 
-        Inductive state: Type :=
+         Inductive state: Type :=
            | State: forall (s: statement) (k: cont) (e: env), state        
 
          Definition eval_binop := ... 
+
          Inductive eval_expr: expression -> Values.value -> Prop :=
             | eval_Evar: forall id v,
                 le!id = Some v ->
@@ -56,7 +69,33 @@ family Impzero.Impcommon {
                 eval_expr a1 v1 ->
                 eval_expr a2 v2 ->
                 eval_binop op v1 v2 m = Some v ->
-                eval_expr (Ebinop op a1 a2) v            
+                eval_expr (Ebinop op a1 a2) v
+            | step_skip_block: forall k e,
+                   step (State Sskip (Kblock k) e)
+                        (State Sskip k e)                               
+            | step_loop: forall s k e le m,
+                   step (State (Sloop s) k e)
+                        (State s (Kseq (Sloop s) k) e)
+            | step_block: forall f s k e,
+                   step (State (Sblock s) k e)
+                        (State s (Kblock k) e)               
+            | step_exit_seq: forall n s k e,
+                  step (State (Sexit n) (Kseq s k) e)
+                       (State (Sexit n) k e)
+            | step_exit_block_0: forall k e,
+                  step (State (Sexit O) (Kblock k) e)
+                       (State Sskip k e)
+            | step_exit_block_S: forall f n k e,
+                  step (State (Sexit (S n)) (Kblock k) e)
+                       (State (Sexit n) k e)              
+            | step_switch: forall islong a cases k e m v n,
+                    eval_expr e le m a v ->
+                    switch_argument islong v n -> (* TODO: evalutaion *)
+                    step (State (Sswitch islong a cases) k e)
+                         (State (seq_of_lbl_statement (select_switch n cases)) k e)            
+            | step_label: forall lbl s k e,
+                   step (State (Slabel lbl s) k e)
+                        (State s k e)
         
         Inductive eval_exprlist: list expression -> list Values.value -> Prop :=
           | eval_Enil:
@@ -197,7 +236,7 @@ family Impzero.Impgen.Proofs {
          forall S R r,
          match_states S R -> Source.Semantics.final_state S r -> Target.Semantics.final_state R r.
    Proof.
-       intros. inv H0. inv H. inv MK. constructor.
+       ....
    Qed. 
   
    Theorem translate_program_correct :
@@ -214,85 +253,85 @@ family Impzero.Impgen.Proofs {
 }                        
 
 (* Imp source language *)
-family Impzero.Imp extends Impcommom {        
-    Inductive statement : Type +=      
-        | Swhile  : expression -> statement -> statement
-
-    family Semantics {            
-      Inductive cont : Type +=           
-        | Kwhile : expression -> statement -> cont -> cont              
-
-      Inductive step : [self].state -> [self].state -> Prop +=             
-        | KS_WhileTrue : forall st b c k,
-            beval st b = true ->
-            step (State (Swhile b c) k st)
-                  (State c (Kwhile b c k) st)
-        | KS_WhileFalse : forall st b c k,
-            beval st b = false ->
-            step (State (Swhile b c) k st)
-                  (State Sskip k st)
-        | KS_SkipWhile: forall b c k st,
-            step (State Sskip (Kwhile b c k) st)
-                  (State (Swhile b c) k st)
-    }
-}                   
-                         
 family Impzero.Imp {
-   family Program { }
+    Inductive expression : Type :=
+      | Var : ident -> expression
+      | Lit : nat -> expression 
+      | Plus : expression -> expression -> expression
+      | Minus : expression -> expression -> expression
+      | Mult : expression -> expression -> expression
+
+    Inductive statement : Type :=
+      | Assign (x : ident) (e : expression)       (* x = e *)
+      | Seq    (a b : statement)                  (* a ; b *)
+      | If     (i : expression) (t e : statement) (* if (i) then { t } else { e } *)
+      | While  (t : expression) (b : statement)   (* while (t) { b } *)
+      | Skip                                      (* ; *)
+    
+    family Semantics {            
+      Inductive cont : Type :=
+        | Kstop : cont
+        | Kseq : statement -> cont -> cont
+        | Kwhile : expression -> statement -> cont -> cont      
+
+      Inductive step : state -> state -> Prop = ...                                           
+    }
+
+    Inductive program := ...
+}
+
+(* Implight IR *)
+family Impzero.Implight extends Impcommon {
+  Inductive expression : Type += ...
+
+  Inductive statement : Type += ...                                   
+
+  family Semantics {
+      Inductive cont : Type += ...
+
+      Inductive step : Type += ...
+  }  
+}
+
+(* Simplify Expression *)
+(* Translation from Imp -> Implight *)
+family Impzero.ImpgenSimplExpr {
+   family Source extends Imp { }
+   family Target extends Implight { }
+     
+    Definition translate_constant := ...
+    Fixpoint translate_expression := ...
+    Fixpoint translate_statement := ...
+   
+   family Proofs {
+     Inductive match_cont := ...
+
+     Inductive match_states := ...
+
+     Lemma translate_initial_states : ...
+
+     Lemma translate_final_states: ...
+
+     Theorem translate_program_correct : ...
+   }
 }
 
 (* Impsharpminor frontend IR *)
 family Impzero.Impsharpminor extends Impcommon {  
-     Inductive expression : Type +=                        
-        | Eunop : unary_operation -> expression -> expression
+     Inductive expression : Type +=  ...        
 
-     Inductive stmt : Type +=                                
-        | Sblock: stmt -> stmt
-        | Sexit: nat -> stmt
-        | Sswitch: bool -> expr -> lbl_stmt -> stmt
-        | Sloop: stmt -> stmt
-
-        with lbl_stmt : Type :=
-           | LSnil: lbl_stmt
-           | LScons: option Z -> stmt -> lbl_stmt -> lbl_stmt
+     Inductive statement : Type += ...                
 
      family Semantics {
-         Inductive cont: Type +=            
-            | Kblock: cont -> cont         
+       Inductive cont: Type += ...            
                                                             
-         Inductive step: state -> state -> Prop +=                
-             | step_skip_block: forall k e,
-                   step (State Sskip (Kblock k) e)
-                        (State Sskip k e)                               
-             | step_loop: forall s k e le m,
-                   step (State (Sloop s) k e)
-                        (State s (Kseq (Sloop s) k) e)
-              | step_block: forall f s k e,
-                   step (State (Sblock s) k e)
-                        (State s (Kblock k) e)               
-              | step_exit_seq: forall n s k e,
-                  step (State (Sexit n) (Kseq s k) e)
-                       (State (Sexit n) k e)
-              | step_exit_block_0: forall k e,
-                  step (State (Sexit O) (Kblock k) e)
-                       (State Sskip k e)
-              | step_exit_block_S: forall f n k e,
-                  step (State (Sexit (S n)) (Kblock k) e)
-                       (State (Sexit n) k e)              
-              | step_switch: forall islong a cases k e m v n,
-                    eval_expr e le m a v ->
-                    switch_argument islong v n -> (* TODO: evalutaion *)
-                    step (State (Sswitch islong a cases) k e)
-                         (State (seq_of_lbl_stmt (select_switch n cases)) k e)            
-                | step_label: forall lbl s k e,
-                   step (State (Slabel lbl s) k e)
-                        (State s k e)               
-       }     
+       Inductive step: state -> state -> Prop += ...
+     }     
 }
 
 (* Translation from Imp -> Impsharpminor *)
 family Impzero.Impshmgen extends Impgen {
-   family Source extends Imp { }
+   family Source extends Implight { }
    family Target extends Impsharpminor { }       
   
    (* This involves mostly simplification of control structures *)
@@ -330,11 +369,11 @@ family Impzero.Impminor extends Impcommon {
   Inductive expression : Type +=                        
      | Eunop : unary_operation -> expression -> expression
 
-  Inductive stmt : Type +=                                
-     | Sblock: stmt -> stmt
-     | Sexit: nat -> stmt
-     | Sswitch: bool -> expr -> lbl_stmt -> stmt
-     | Sloop: stmt -> stmt
+  Inductive statement : Type +=                                
+     | Sblock: statement -> statement
+     | Sexit: nat -> statement
+     | Sswitch: bool -> expr -> lbl_statement -> statement
+     | Sloop: statement -> statement
 
   family Semantics {                        
     Inductive cont: Type +=            
@@ -364,7 +403,7 @@ family Impzero.Impminor extends Impcommon {
                     eval_expr e le m a v ->
                     switch_argument islong v n -> (* TODO: evalutaion *)
                     step (State (Sswitch islong a cases) k e)
-                         (State (seq_of_lbl_stmt (select_switch n cases)) k e)            
+                         (State (seq_of_lbl_statement (select_switch n cases)) k e)            
                 | step_label: forall lbl s k e,
                    step (State (Slabel lbl s) k e)
                         (State s k e)
@@ -375,13 +414,11 @@ family Impzero.Impminor extends Impcommon {
 family Impzero.Impminorgen extends Impgen {
   (* In this case the translation is the identity function *)
   Definition translate_constant += ...
-  Fixpoint translate_expr += ...
+  Fixpoint translate_expression += ...
   Fixpoint translate_statement += ...
 
   family Source extends Impsharpminor { }
-  family Target extends Impminor { }      
-  
-
+  family Target extends Impminor { }  
 }
 
 family Impzero.Impminorgen {
@@ -413,12 +450,76 @@ family Impzero.Impminorgen {
       *)
   }
 }
+
+family Impzero.Asm {  
+  (* This is a parameter *)  
+  family Op extends {
+      Inductive operation := ...
+
+      Inductive condition := ...
+  }
+}
+
+family Impzero.ImppminorSel extends Impcommon {         
+  Inductive expression : Type +=
+    | Eop : Asm.Op.operation -> exprlist -> expression                        
+    | Econdition : condexpr -> expr -> expr -> expr
+    | Elet : expr -> expr -> expr
+    | Eletvar : nat -> expr
+
+  with exprlist : Type :=
+   | Enil: exprlist
+   | Econs: expr -> exprlist -> exprlist
+                                 
+  with condexpr : Type :=
+    | CEcond : Asm.Op.condition -> exprlist -> condexpr
+    | CEcondition : condexpr -> condexpr -> condexpr -> condexpr
+    | CElet: expression -> condexpr -> condexpr.
+
+
+  Inductive exitexpr : Type :=
+     | XEexit: nat -> exitexpr
+     | XEjumptable: expr -> list nat -> exitexpr
+     | XEcondition: condexpr -> exitexpr -> exitexpr -> exitexpr
+     | XElet: expr -> exitexpr -> exitexpr
+
+  (* Overriding some constructors here *)
+  Inductive statement : Type +=
+     | Sswitch: exitexpr -> statement
+     | Sifthenelse: condexpr -> statement -> statement -> statement
+                              
+  family Semantics {
+    Inductive eval_expr: letenv -> expr -> val -> Prop := ...
+
+    with eval_exprlist: letenv -> exprlist -> list val -> Prop := ...
+
+    with eval_condexpr: letenv -> condexpr -> bool -> Prop :=  ...
+
+    Inductive eval_exitexpr: letenv -> exitexpr -> nat -> Prop := ...
+
+    Inductive step: state -> trace -> state -> Prop := ...
+  }
+}
+
+(* Instruction Selection *)
+(* Translation from Impminor -> ImpminorSel *)
+family Impzero.ImpSelection extends Impgen {
+  family Source extends Impminor { }
+  family Target extends ImpminorSel { }
+
+  family Proofs {
+    Inductive match_cont := ...
+
+    Theorem translate_program_correct: forall prog tprog,
+        forward_simulation (Source.semantics prog) (Target.semantics tprog).
+    Proof.
+      ...
+    Qed.
+  }
+}
+
   
 family Impzero {
-   family ImppminorSel extends Impcommon {
-
-   }
-
    family LTL { }
 
    family RTL { }

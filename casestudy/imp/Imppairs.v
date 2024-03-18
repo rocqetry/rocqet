@@ -11,6 +11,9 @@ family Imppairs.Impcommon {
         Inductive value: Type +=
           | Vpair: value -> value -> value
     }
+
+    (* Print TODOs. A command to print a list of things to be handled based on
+       the change to the inductive types *)
 }    
 
 family Imppairs.Impcommon {
