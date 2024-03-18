@@ -11,7 +11,7 @@ feaures. Note that each of these small features compiler extends the whole
 base family of the Imp compiler.
 
 Compiler pipeline:
-Imp -> Impshpminor -> Impminor -> ImpminorSel -> RTL -> LTL -> Linear -> Mach -> *aarch64
+Imp -> Implight -> Impshpminor -> Impminor -> ImpminorSel -> RTL -> LTL -> Linear -> Mach -> Asm
 
 Ideas list for families:
 1. Imp with functions, local, & function calls
