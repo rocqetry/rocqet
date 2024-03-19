@@ -1,5 +1,7 @@
 (* A base family for Imp frontend IRs *)
 family Impzero.Impcommon {
+    Definition ident := ...
+    
     Inductive constant : Type :=
         | Ointconst: int -> constant
 
@@ -31,9 +33,25 @@ family Impzero.Impcommon {
            | LScons: option Z -> statement -> lbl_statement -> lbl_statement
                            
 
-     (* Top level programs *)
-     Inductive program : Type :=
-        | Program : list statement (* -> [[list function]]*) -> program
+     family Program {
+        Record function : Type := mkfunction {   
+           fn_params: list ident;
+           fn_vars: list ident;
+           fn_temps: list ident;
+           fn_body: statement
+        }
+
+        Inductive fundef : Type :=
+          | Internal: function -> fundef          
+        
+        Inductive globdef : Type :=
+          | Gfun (f: fundef)          
+
+        Record program : Type := mkprogram {
+           prog_defs: list (ident * globdef);           
+           prog_main: ident
+        }
+     }     
 }
        
 (* The semantics of the language *)                         
@@ -135,8 +153,8 @@ family Impzero.Impcommon {
                       (State c k st)                               
         
         (* Definitions *)        
-        Definition initial_state := ...
-        Definition final_state := ...
-        Definition semantics := ...
+        Inductive initial_state := ...
+        Inductive final_state := ...
+        Field semantics := ...
     }
 }
