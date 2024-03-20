@@ -1,6 +1,11 @@
 (* Imp with function calls *)
 family Impfunctions extends Impzero { }
 
+(* *)
+family Impfunctions.Imp {
+  
+}
+
 family Impfunctions.Impcommon {
    Inductive statement : Type +=
      | Scall: option ident -> expression -> list expression -> statement

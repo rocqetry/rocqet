@@ -10,15 +10,13 @@ family Impzero.Imp {
     Inductive statement : Type :=
       | Assign (x : ident) (e : expression)       (* x = e *)
       | Seq    (a b : statement)                  (* a ; b *)
-      | If     (i : expression) (t e : statement) (* if (i) then { t } else { e } *)
-      | While  (t : expression) (b : statement)   (* while (t) { b } *)
+      | If     (i : expression) (t e : statement) (* if (i) then { t } else { e } *)      
       | Skip                                      (* ; *)
     
     family Semantics {            
       Inductive cont : Type :=
         | Kstop : cont
-        | Kseq : statement -> cont -> cont
-        | Kwhile : expression -> statement -> cont -> cont      
+        | Kseq : statement -> cont -> cont        
 
       Inductive step : state -> state -> Prop = ...                                           
     }
