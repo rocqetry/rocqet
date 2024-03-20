@@ -1,4 +1,4 @@
-family Impzero.Impminor extends Impcommon {
+family Impzero.Impminor extends Impfrontend {
   Inductive expression : Type += ...     
 
   Inductive statement : Type += ...
@@ -11,7 +11,7 @@ family Impzero.Impminor extends Impcommon {
 }
 
 (* Translation from Impsharpminor -> Impminor *)
-family Impzero.Impminorgen extends Impgen {
+family Impzero.Impminorgen extends ImpfrontendTransform {
   (* In this case the translation is the identity function *)
   Definition translate_constant += ...
   Fixpoint translate_expression += ...

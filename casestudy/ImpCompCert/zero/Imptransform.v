@@ -1,13 +1,14 @@
-family Impzero.Impgen {
-  family Source extends Impcommon { }
-  family Target extends Impcommon { }
+(* Source -> Target transformation *)
+family Impzero.ImpfrontendTransform {
+  family Source extends Impfrontend { }
+  family Target extends Impfrontend { }
 
   (* Semantics preservation of compilation proofs *)
-  family Proofs { }
+  family CorrectnessProof { }
 }
     
 (* Correctness of the translation Source -> Target *)                         
-family Impzero.Impgen.Proofs {  
+family Impzero.Impgen.CorrectnessProof {  
   (* Correctness of B construction functions *)
 
   (* Basic preservation invariants *)
@@ -103,4 +104,13 @@ family Impzero.Impgen.Proofs {
      eexact translate_final_states.
      eexact translate_step.
    Qed.
+}
+
+family Impzero.ImpbackendTransform {
+    (* Translation from Source -> Target *)
+    family Source Impbackend { }
+    family Target Impbackend { }
+    
+    (* Correctness of translation *)
+    family CorrectnessProof { }
 }

@@ -1,5 +1,5 @@
 (* Implight IR *)
-family Impzero.Implight extends Impcommon {
+family Impzero.Implight extends Impfrontend {
   Inductive expression : Type += ...
 
   Inductive statement : Type += ...                                   

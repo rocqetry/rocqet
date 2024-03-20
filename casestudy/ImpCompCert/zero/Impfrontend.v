@@ -1,5 +1,5 @@
 (* A base family for Imp frontend IRs *)
-family Impzero.Impcommon {
+family Impzero.Impfrontend {
     Definition ident := ...
     
     Inductive constant : Type :=
@@ -55,7 +55,7 @@ family Impzero.Impcommon {
 }
        
 (* The semantics of the language *)                         
-family Impzero.Impcommon {
+family Impzero.Impfrontend {
     family Semantics {                                        
         family Values {
             Inductive value: Type :=

@@ -1,5 +1,5 @@
 (* Impsharpminor frontend IR *)
-family Impzero.Impsharpminor extends Impcommon {  
+family Impzero.Impsharpminor extends Impfrontend {  
      Inductive expression : Type +=  ...        
 
      Inductive statement : Type += ...                
@@ -12,7 +12,7 @@ family Impzero.Impsharpminor extends Impcommon {
 }
 
 (* Translation from Imp -> Impsharpminor *)
-family Impzero.Impshmgen extends Impgen {
+family Impzero.Impshmgen extends ImpfrontendTransform {
    family Source extends Implight { }
    family Target extends Impsharpminor { }       
   

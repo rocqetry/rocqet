@@ -7,7 +7,7 @@ family Impzero.Asm {
   }
 }
 
-family Impzero.ImppminorSel extends Impcommon {         
+family Impzero.ImppminorSel extends Impfrontend {         
   Inductive expression : Type +=
     | Eop : Asm.Op.operation -> exprlist -> expression                        
     | Econdition : condexpr -> expr -> expr -> expr
@@ -50,7 +50,7 @@ family Impzero.ImppminorSel extends Impcommon {
 
 (* Instruction Selection *)
 (* Translation from Impminor -> ImpminorSel *)
-family Impzero.ImpSelection extends Impgen {
+family Impzero.ImpSelection extends ImpfrontendTransform {
   family Source extends Impminor { }
   family Target extends ImpminorSel { }
 
