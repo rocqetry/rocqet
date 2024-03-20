@@ -1,0 +1,1 @@
+Includes documents which describe/explain the family hierarchy in `ImpCompCert`.
