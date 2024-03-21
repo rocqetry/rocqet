@@ -74,30 +74,9 @@ family Impzero.LTL {
                     (ls: locset),             (**r location state *)                    
              state
    }
-}   
-
-       
-(* Sharing between LTL and RTL *)       
-family Impzero.TransferLanguge {
 }
 
 family Impzero {
-   family LTL { }
-
-   family RTL { }
-
-   family Linearcommon {
-       family Semantics { }
-   }
-
-   family Linear extends Linearcommon {
-          
-   }
-
-   family Mach extends Linearcommon {
-
-   }
-
    family Processor {
       family Op { }      
    } 
