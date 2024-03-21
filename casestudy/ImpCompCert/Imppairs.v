@@ -4,6 +4,8 @@ family Imppairs extends Impzero { }
 family Imppairs.Impcommon {                 
   Inductive expression : Type +=
      | Epair : expression -> expression -> expression.  
+     | Eleftproj : expression -> expression
+     | Erightproj : expression -> expression 
 }
 
 family Imppairs.Impcommon {

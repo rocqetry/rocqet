@@ -66,9 +66,9 @@ family Impfunctions.Impcommon {
   
 }
 
-family Impfunctions.Impgen { }
+family Impfunctions.ImpfrontendTransform { }
 
-family Impfunctions.Impgen.Proofs { 
+family Impfunctions.ImpfrontendTransform.CorrectnessProof {
   Inductive match_cont : Source.Semantics.cont -> Target.Semantics.cont -> Prop += 
         | match_Kcall: forall optid fn e le k tfn sp te tk lo hi cs sz cenv',
          transl_funbody cenv sz fn = OK tfn ->
@@ -92,8 +92,8 @@ family Impfunctions.Impgen.Proofs {
                      (Target.SemanticsReturnstate res tk m).
 }
 
-family Impfunctions.Impgen {    
-    family Proofs {
+family Impfunctions.ImpfrontendTransform {    
+    family CorrectnessProof {
        Lemma translate_step:
           forall S1 S2, Source.Semantics.step S1 S2 ->
           forall T1, match_states S1 T1 ->
@@ -104,6 +104,8 @@ family Impfunctions.Impgen {
        Qed.
     }
 }
+
+family Impfunctions.ImpbackendTransform { }
 
 (* They get the proof for free *)
 family Impfunctions.Impshmgen { }

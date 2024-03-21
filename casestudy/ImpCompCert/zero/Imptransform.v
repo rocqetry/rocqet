@@ -109,8 +109,42 @@ family Impzero.Impgen.CorrectnessProof {
 family Impzero.ImpbackendTransform {
     (* Translation from Source -> Target *)
     family Source Impbackend { }
-    family Target Impbackend { }
+    family Target Impbackend { }        
+    
+    Definition transform_function := ...
+
+    Definition transform_fundef := ...
+    
+    Definition tranform_program := ...
     
     (* Correctness of translation *)
-    family CorrectnessProof { }
+    family CorrectnessProof { 
+       (* There should be a parameter about the forward simulation
+          This parameter should be denote if it is a `star` for `plus` 
+          forward simulation  *)
+       Inductive match_stackframes: Source.Semantics.stackframe -> Target.Semantics.stackframe -> Prop := ...          
+       Inductive match_states : Source.Semantics.state -> Target.Semantics.state -> Prop :=  ...
+
+       Theorem transf_step_correct:
+           forall s1 t s2, Source.Semantics.step ge s1 t s2 ->
+           forall (WTS: wt_state s1) s1' (MS: match_states s1 s1'),
+           exists s2', plus step tge s1' t s2' /\ match_states s2 s2'.
+       Proof.
+         ...
+       Qed.
+       
+       Lemma transf_initial_states:
+           forall st1, Source.Semantics.initial_state prog st1 ->
+           exists st2, Source.Semantics.initial_state tprog st2 /\ match_states st1 st2.
+      Proof.
+        ...
+      Qed.
+       
+
+       Theorem transf_program_correct: forall prog tprog,
+          forward_simulation (Source.Semantics.semantics prog) (Source.Semantics.semantics tprog).
+       Proof.
+         ...
+       Qed.
+    }
 }
