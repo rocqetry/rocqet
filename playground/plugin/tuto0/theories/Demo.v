@@ -10,4 +10,4 @@ Abort.
 
 HelloWarning.
 
-HelloError.
+(* HelloError. *)
