@@ -1,3 +1,46 @@
 DECLARE PLUGIN "tuto0.plugin"
 
+{
+  open Pp
+  open Ltac_plugin
+
+  (* let cat = CWarnings.create_category ~name:"tuto0-cat" () *)
+  let tuto0_warn = CWarnings.create ~name:"name" ~category:"tuto0-cat"
+                                    (fun _ -> strbrk Lib.message)
+}
+
+VERNAC COMMAND EXTEND HelloWorld CLASSIFIED AS QUERY
+| [ "HelloWorld" ] -> { Feedback.msg_notice (strbrk Lib.message) }
+END
+
+TACTIC EXTEND hello_world_tactic
+| [ "hello_world" ] ->
+  { let _ = Feedback.msg_notice (str Lib.message) in
+    Tacticals.tclIDTAC }
+END
+
+VERNAC COMMAND EXTEND HelloWarning CLASSIFIED AS QUERY
+| [ "HelloWarning" ] ->
+   {
+     tuto0_warn ()
+   }
+END
+
+TACTIC EXTEND hello_warning_tactic
+| [ "hello_warning" ] ->
+   {
+     let _ = tuto0_warn () in
+     Tacticals.tclIDTAC
+   }
+END
+
+VERNAC COMMAND EXTEND HelloError CLASSIFIED AS QUERY
+| [ "HelloError" ] -> { CErrors.user_err (str Lib.message) }
+END
+
+TACTIC EXTEND hello_error_tactic
+| [ "hello_error" ] ->
+  { let _ = CErrors.user_err (str Lib.message) in
+    Tacticals.tclIDTAC }
+END
 
