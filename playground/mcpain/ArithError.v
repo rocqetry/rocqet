@@ -105,3 +105,63 @@ Proof.
     simpl.
     reflexivity.
 Qed.
+
+Module Reuse.
+
+Inductive value := 
+  | VInt : nat -> value.
+
+Inductive expr :=
+  | EAdd : expr -> expr -> expr
+  | EMul : expr -> expr -> expr
+  | EInt : nat -> expr.
+
+Fixpoint eval (e: expr) : value := 
+  match e with 
+  | EInt (i) => VInt i
+  | EAdd e1 e2 => 
+      match eval e1, eval e2 with 
+      | VInt v1, VInt v2  => VInt (v1 + v2)
+      end
+  | EMul e1 e2 => 
+      match eval e1, eval e2 with 
+      | VInt v1, VInt v2  => VInt (v1 * v2)
+      end
+   end.
+
+  Definition opt_id (e: expr) : expr := 
+    match e with 
+    | EInt (i) => EInt i
+    | EAdd e1 e2 => EAdd e1 e2
+    | EMul e1 e2 =>  EMul e1 e2
+    end.
+  
+  Theorem opt_id_preserves_semantics : forall e,
+      eval (opt_id e) = eval e.
+  Proof.
+    intros.
+    induction e.
+    - (* add *) simpl. destruct (eval e1). destruct (eval e2). reflexivity.
+    - reflexivity.
+    - reflexivity.
+   Qed.
+
+   Definition opt_add_0 (e: expr) : expr := 
+      match e with 
+      | EInt (i) => EInt i
+      | EAdd e1 (EInt 0) => e1
+      | EAdd e1 e2 => EAdd e1 e2
+      | EMul e1 e2 =>  EMul e1 e2
+      end.
+   
+   Theorem opt_add_0_preserves_semantics : forall e,
+      eval (opt_add_0 e) = eval e.
+   Proof.
+    intros.
+    induction e.
+    -  
+
+simpl. destruct e2.
+      + (* a + 0 case *) destruct (eval e1). destruct (eval (EAdd e2_1 e2_2)).
+        simpl. destruct (eval e1). destruct (eval e2_1). destruct (eval e2_2).
+        simpl.
