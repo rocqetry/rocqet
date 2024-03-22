@@ -25,7 +25,7 @@ family Impzero.Impfrontend {
         | Sskip : statement
         | Sblock: statement -> statement
         | Sexit: nat -> statement
-        | Sswitch: bool -> expr -> lbl_statement -> statement
+        | Sswitch: expr -> lbl_statement -> statement
         | Sloop: statement -> statement
 
      with lbl_statement : Type :=
