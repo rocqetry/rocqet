@@ -1,0 +1,2 @@
+-R _build/default/theories Tuto0
+-I _build/default/src
