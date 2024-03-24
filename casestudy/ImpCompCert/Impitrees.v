@@ -52,6 +52,8 @@ Q: How can we display this in an intuitive way?
 Q: How does this list change once we start filling things up 
    in a family with a higher hierarchy? (e.g in Impfrontend)
 
+Q: What happens when you try to form a mixin with `Impitrees` and 
+   a family from the classic `Impzero` hierarchy? 
 *)
 
 family Impitrees.Impshmgen *overrides* { }
