@@ -1,1 +1,1 @@
-Nested family polymorphism for extensible certified compilers.
+Nested family polymorphism for extensible verified compilers.
