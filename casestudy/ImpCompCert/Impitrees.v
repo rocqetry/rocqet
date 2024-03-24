@@ -4,9 +4,9 @@
 family Impitrees extends Impzero { }
 
 family Impitrees.Impfrontend {
-    family Semantics *overrides* {
+   family Semantics *overrides* {
       (* We want to change the semantics entirely *)
-
+      
       Context {eff : Type -> Type}.
       Context {HasImpState : ImpState -< eff}.  
     
@@ -35,11 +35,14 @@ family Impitrees.Impfrontend {
          
              | Skip => ret tt
              end.
-    }    
+    }
+
+    Holes family self.super { }
+    Holes family self { }
 }
 
 (* This prints the things that are broken becuase of the change just made to a family *)
-Holes family Impitrees { }.
+Holes family Impitrees { }
 
 (* 
 Q: In this case, what is broken? 
