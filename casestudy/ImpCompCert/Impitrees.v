@@ -39,7 +39,8 @@ family Impitrees.Impfrontend {
 }
 
 (* This prints the things that are broken becuase of the change just made to a family *)
-Print Holes family Impitrees { }. 
+Holes family Impitrees { }.
+
 (* 
 Q: In this case, what is broken? 
 1. Simulation proofs 
