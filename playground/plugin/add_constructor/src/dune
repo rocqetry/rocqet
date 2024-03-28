@@ -1,0 +1,29 @@
+(library
+ (name add_constructor)                       ; This is the name you will use in
+                                    ; Coq's `Declare ML Module`, and
+                                    ; the name of the main OCaml
+                                    ; module of your plugin.
+
+ (public_name add_constructor.plugin)         ; This makes the plugin
+                                    ; installable; recommended, must
+                                    ; match opam package name.
+
+ (synopsis "Add constructor plugin")     ; Synopsis, used in META generation.
+
+ (flags :standard -rectypes -w -27) ; Coq requires the `-rectypes`
+                                    ; flag; CoqPP generated code
+                                    ; requires to disable warning 27
+                                    ; often.
+
+ (libraries                         ; OCaml Libraries we want to link
+                                    ; with, your choice here.
+
+   coq-core.vernac                  ; Needed for vernac extend.
+   coq-core.plugins.ltac))          ; Needed for tactic extend. 
+
+; This will let Dune know about Coq's .mlg grammar files.
+(coq.pp (modules g_add_constructor))
+
+(env
+  (dev
+    (flags (:standard -w -27))))
