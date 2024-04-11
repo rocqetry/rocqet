@@ -54,6 +54,7 @@ realistic compiler with a CompCert-like architecture.
    compiler is CompCert-like:
    
    McPain -----------------------> Imp -----------------------> * -----------------------> CompCert
+
              Add statements               Add functions                Add Memory Model
 
 3. If there is case in a simulation proof that follows directly from the 
