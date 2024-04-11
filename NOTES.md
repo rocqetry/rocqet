@@ -38,11 +38,9 @@ realistic compiler with a CompCert-like architecture.
 
  * Extensible matching state relations 
  * Extensible IR 
- * Extensible (operational) semantics
+ * Extensible operational semantics
 
-
-
-### Obervations 
+### Obervations
 
 1. We can generalize the correctness property using a star simulation 
    and a measure. i.e all simulation diagrams can have a proof statement 
@@ -50,9 +48,10 @@ realistic compiler with a CompCert-like architecture.
    diagrams subsume other simulation diagrams (i.e lock-step simulation and 
    plus simulation)
 
-2. Our case study will be informed by the historical example of a verified compiler,
-   from John McCarthy and James Painter (the McPainter compiler), and show extensiblity 
-   by incrementally adding features until the compiler is CompCert-like.
+2. Our case study will be informed by the historical example of a verified 
+   compiler, from John McCarthy and James Painter (the McPainter compiler), 
+   and show extensiblity by incrementally adding features until the compiler 
+   is CompCert-like:
    
    McPainter -----------------------> Imp -----------------------> * -----------------------> CompCert
                 Add statements               Add functions                Add Memory Model
@@ -61,10 +60,19 @@ realistic compiler with a CompCert-like architecture.
    inductive hypothesis or from other assumptions, then the proof of 
    such a case can be inherited from a proof of the identity translation.
 
-4. Determinate and Receptiveness (we have to prove backward simulation using a forward simulation)
+4. Determinate and Receptiveness (we have to prove backward simulation using
+    a forward simulation)
+    * Can this be reused somehow? 
 
-5. There seem to be a few CompCert extensions (e.g CompCert JIT, CompCert for secure compilation)
+5. There seem to be a few CompCert extensions (e.g CompCert JIT, CompCert for 
+   secure compilation)
    * In some sense this is a "realistic" extension of CompCert
    * Can our architecture be used to create such extension? 
 
-6. Xavier Leroy seems to be concered about extensible verified code generators for CompCert
+6. Xavier Leroy seems to be concered about extensible verified code generators
+   for CompCert
+
+7. "Advice on structuring compilers and proving them correct" 
+    https://dl.acm.org/doi/10.1145/512927.512941
+    * This paper seems to have the first proof architecture of something that 
+      resembles a simulation diagram
