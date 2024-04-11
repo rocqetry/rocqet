@@ -3,6 +3,16 @@ From MetaCoq.Template Require Import All.
 
 Import MCMonadNotation.
 
+Check tInd.
+
+Check inductive.
+
+Print inductive.
+
+Print Ast.term.
+
+Print inductive.
+
 Class TslIdent := { tsl_ident : ident -> ident }.
 
 Print TslIdent.
@@ -79,6 +89,8 @@ Polymorphic Definition add_ctor (mind : mutual_inductive_body) (ind0 : inductive
             ind_projs := ind.(ind_projs);
             ind_relevance := ind.(ind_relevance) |})
             mind.(ind_bodies) |}.
+
+(* Check inductive_mind. *)
 
 Polymorphic Definition add_constructor (tm : Ast.term)
             (idc : ident) (type : Ast.term)

@@ -1,23 +1,63 @@
+# A Proof Language for Scalable Extensibility in Verified Compilers
+
+## Scalable Extensibility
+
+The term _scalable extensibility_ in software engineering means that an
+extension to a piece of code should require addition of code which is 
+proportional to the size of the extension. In the content of proof 
+engineering, scalable extensibility means that in addition to the size 
+of the code being added to implement a new feature, the proof of correctness
+of said feature should be proportional in size to the change. 
+
+Compilers are the hallmark of software complexity. Even more so, verified 
+compilers. Compilers are usually structured in _passes_ which modify a 
+few nodes of the abstract syntax tree. The proof for a compiler pass is 
+usually structured as a simulation proof. Basically, given the translation 
+from a source language S to a target language T, if we have a semantics 
+for S and a semantics for T, then a simulation proof ensures that each step 
+that the source program can takes is matched by one or more steps in the 
+target program. A simulation proof is usually an induction on the derivation 
+of the execution of the source program. Extesnsibility can be achived from a 
+key observation about compiler intermediate representations (IR). The IRs 
+which are relatively close in the compiler pipeline have similar features. 
+This means that they share a large portion of their syntax and semantics. 
 
 
-1. Create the data pipeline for the compiler architecture
-   The pipeline is similar to the pipeline in CompCert.
-   We compile to Cminor (ImpMinor) -> CSel (ImpSel) -> RTL (ImpRTL) -> LTL (ImpLTL)
-   We can create all the inductive types and figure out how reuse with nested family
-   polymorphism will work.
-2. We want to have a syntax-directed algorithm (like [| e |]) for compiling nested
-   family polymorphism to vanilla Coq terms/modules. The problem is that we might
-   need to prove that this algorithm is correct... or we can say "This is just a
-   demonstration of the algorithm" - I'd personally prefer if we could prove this.
-   In some sense, proving this algorithm would be the equivalent of writing the
-   implementation in MetaCoq and proving the actual compilation algorithm correct.
-3. I think the processor-dependent style of types can be a good room to show case
-   family polymorphism. Because in some sense that is a kind of reuse/abstraction? 
-
-Q: 
-1. What happens when two families are not too far part from each other?
-   Does it make sense to still include them in them like that? 
 
 
-Language design:
-1. It might be a goood idea to be able to override a field name in a derived family 
+
+## A Family of Extensible Verified Compilers
+This example shows how to develop an extensible certified compiler using 
+a proof language equipped with nested family polymorphism. This example 
+shows how we incrementally add features to the first verified compiler by 
+McCarthy, and scale it up to a toy language like Imp and eventually to a 
+realistic compiler with a CompCert-like architecture.
+
+
+### Extensible Simulation Diagrams
+
+ * Extensible matching state relations 
+ * Extensible IR 
+ * Extensible (operational) semantics
+
+
+
+### Obervations 
+
+1. We can generalize the correctness property using a star simulation 
+   and a measure
+
+2. Historical Example of a Verified Compiler: 
+   McPainter -----------------------> Imp -----------------------> * -----------------------> CompCert
+                Add statements               Add functions                Add Memory Model
+
+3. If there is case in a simulation proof that follows directly from the 
+   inductive hypothesis or from other assumptions, then said case is redundant.
+
+4. Determinate and Receptiveness (we have to prove backward simulation using a forward simulation)
+
+5. There seem to be a few CompCert extensions (e.g CompCert JIT, CompCert for secure compilation)
+   * In some sense this is a "realistic" extension of CompCert
+   * Can our architecture be used to create such extension? 
+
+6. Xavier Leroy seems to be concered about extensible verified code generators for CompCert

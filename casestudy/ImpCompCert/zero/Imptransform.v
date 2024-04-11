@@ -1,32 +1,40 @@
+family Impzero.SimulationDiagram { 
+    family Source extends L { }
+    family Target extends { }
+
+    (* This is used to prevennt anti-stuttering in the source language's 
+       transistion *)
+    (* We need to have a default value for plus or lock-step state relation, 
+       because we don't need a measure for that to work.  *)
+    (* family Measure {
+      
+    }*)
+    Field compute_measure : Source.state -> Source.state -> Prop := ...
+    
+    (* Relation Between the state of S and T *)
+    family Relation {
+        
+    } 
+
+    Lemma translate_step:
+       forall S1 S2, Source.Semantics.step S1 S2 ->
+       forall T1, match_states S1 T1 ->
+       exists T2, star Target.Semantics.step T1 T2 /\ match_states S2 T2 /\ compute_measure s1 s2.
+    Proof.
+}
+
+
 (* Source -> Target transformation *)
-family Impzero.ImpfrontendTransform {
+family Impzero.ImpfrontendTransform  extends SimulationDiagram {
   family Source extends Impfrontend { }
   family Target extends Impfrontend { }
-
-  (* Semantics preservation of compilation proofs *)
-  family CorrectnessProof { }
 }
     
-(* Correctness of the translation Source -> Target *)                         
-family Impzero.Impgen.CorrectnessProof {  
-  (* Correctness of B construction functions *)
-
-  (* Basic preservation invariants *)
-  Lemma symbols_preserved:
-  forall s, Genv.find_symbol tge s = Genv.find_symbol ge s.
-  Proof (Genv.find_symbol_match TRANSL).
-
-  (* Matching between environments *)
+(* Simulation proof of the translation Source -> Target *)                         
+family Impzero.Impgen.CorrectnessProof extends SimulationDiagram {
+  (* Matching between environments *)  
   Record match_env (e: Source.Semantics.env) (te: Target.Semantics.env) : Prop :=
-    mk_match_env { ... }
-  
-  Lemma transl_vars_names:
-       forall ce vars tvars,
-       mmap (transl_var ce) vars = OK tvars ->
-       map fst tvars = var_names vars.
-  Proof.
-    ...
-   Qed.
+    mk_match_env { ... }  
 
   (* Semantic preservation for expressions *)
   Lemma translate_expressionx_correct:

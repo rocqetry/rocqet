@@ -78,3 +78,154 @@ family Impitrees.Impshmgen.CorrectnessProofs {
       ...
     Qed.
 }
+
+family Impitrees.Impfrontend {
+    family Semantics {
+        Fixpoint denote_unary (op : unary_operation) (e : expression) : itree eff Values.value := ...
+        Fixpoint denote_binary (op : binary_operation) 
+                               (a : expression) (b : expression)
+                                 : itree eff Values.value := ... 
+        match op with 
+        | Binplus => l <- denote_expr a ;; r <- denote_expr b ;; ret (l + r) 
+        ...
+        end.
+        Fixpoint denote_expression (e : expression) : itree eff Values.value :=
+           match e with
+           | Evar v     => trigger (GetVar v)
+           | Econst n     => ret n
+           | Eunop op n => denote_unary op n 
+           | Ebinop op a b => denote_binary op a b           
+           end.
+        
+         Definition loop (step : itree eff (unit + unit)) : itree eff unit :=
+            iter (C := Kleisli (itree eff)) (fun _ => step) tt.
+       
+        Fixpoint denote_statement (s : statement) : itree eff unit := 
+          match s with 
+          | Sassign x e =>  v <- denote_expression e ;; trigger (SetVar x v) 
+          | Sseq a b =>  denote_imp a ;; denote_imp b
+          | Sifthenelsle i t e   =>
+               v <- denote_expr i ;;
+               if is_true v then denote_imp t else denote_imp e
+          (* | Sloop s => loop ( result <- denote_stateme b ;; ret (inl result)) *)
+          | Sskip s => ...
+          | Ssblock s => denote_statement s                              
+          end.        
+    }
+}
+
+family Impitrees.Imptransformfrontend {
+    family Source extends Impfrontend { }
+    family Target extends Impfrontend { }
+    
+    family CorrectnessProof {
+        Lemma compile_expr_correct : forall {E} e s ts l n,
+           Renv g_imp g_asm ->
+           @eutt E _ _ (sim_rel l n)
+                 (Source.interp (denote_expr e) s)
+                 (Target.interp (denote_list (compile_expr n e)) ts l).
+         Proof. 
+           ...
+         Qed. 
+
+        Theorem compile_correct {E} {HasExit : Exit -< E} (s : statement) :
+          equivalent (E := E) s (compile s).
+        Proof.
+            induction s. 
+            Case Sassign := ...
+            Case Sseq := ...
+            Case Sifthenelse := ...
+            Case Sskip := ...
+            Case Sblock := ...
+            Case Sexit := ...
+        Qed.
+    }
+}
+
+(* The frontend languges different forms of switch statements *)
+
+family Impitrees.Implight.Semantics {    
+   Fixpoint denote_statement (s : statement) : itree eff unit := 
+      match s with 
+      | Sswitch ... => ...
+}
+
+family Impitrees.Impsharpminor.Semantics { 
+  Fixpoint denote_statement (s : statement) : itree eff unit := 
+      match s with 
+      | Sswitch ... => ...
+}
+
+family Impitrees.Impshmgen { 
+  family Source extends Implight { }
+  family Target extends Impsharpminor { }
+  
+  (* This transformation simplifies implight switch statements *)
+  Fixpoint compile (s : Source.statement) : Target.statement =       
+      | Sswitch ... => ...
+
+  family CorrectnessProof {
+      Theorem compile_correct {E} {HasExit : Exit -< E} (s : statement) :
+          equivalent (E := E) s (compile s).
+       Proof.
+         Case Sswitch := ...
+       Qed.
+  }                      
+}
+
+family Impitrees.Imppminor.Semantics { 
+    Fixpoint denote_statement (s : statement) : itree eff unit := 
+      match s with 
+      | Sswitch ... => ...
+}
+
+family Impitrees.Impminorgen { 
+  family Source extends Impsharpminor { }
+  family Target extends Impminor { }
+    
+  Fixpoint compile (s : Source.statement) : Target.statement =       
+      | Sswitch ... => ...
+
+  family CorrectnessProof {
+      Theorem compile_correct {E} {HasExit : Exit -< E} (s : statement) :
+          equivalent (E := E) s (compile s).
+       Proof.
+         Case Sswitch := ...
+       Qed.
+  }                      
+}
+
+(* Add some machine dependent operation *)
+family Impitrees.Impminorsel.Semantics {
+    (* New kinds of expressions *)
+    Fixpoint denote_expression (e : expression) : itree eff Values.value :=
+       match e with
+       | Econdition ... => ...
+       | Elet ... => ...
+       | Eletvar ... => ...
+       end.
+
+    Fixpoint denote_exitexpr (s : exitexpr) : itree eff unit := ...
+
+    Fixpoint denote_condexpr (s : exitexpr) : itree eff unit := ...                                                                
+    
+    Fixpoint denote_statement (s : statement) : itree eff unit := 
+      match s with 
+      | Sswitch ... => ...
+}
+
+family Impitrees.Impselection { 
+  family Source extends Impsharpminor { }
+  family Target extends Impminor { }
+    
+  Fixpoint compile (s : Source.statement) : Target.statement =       
+      | Sswitch ... => ...
+
+  family CorrectnessProof {
+      Theorem compile_correct {E} {HasExit : Exit -< E} (s : statement) :
+          equivalent (E := E) s (compile s).
+       Proof.
+         Case Sswitch := ...
+       Qed.
+  }                      
+}

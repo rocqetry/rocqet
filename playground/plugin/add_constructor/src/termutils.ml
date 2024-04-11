@@ -55,17 +55,20 @@ val declare_mutual_inductive_with_eliminations
   -> Names.MutInd.t
 *)
 
-
-
 let _g (f: Entries.mutual_inductive_entry) = failwith ""
 
 let _g = DeclareInd.declare_mutual_inductive_with_eliminations
 
 let _a = Term.decompose_prod_assum
-let _b = Termops.decompose_app_vect
+let _b : Vernacexpr.inductive_expr = failwith ""
 
-let transform_name_prime name =
-  Names.Id.to_string name ^ "'" |> Names.Id.of_string
+(* (Vernacexpr.inductive_expr * Vernacexpr.decl_notation list) list *)
+
+let _g something = Vernacexpr.(VernacInductive (Inductive_kw, something))
+
+let compile = Vernacinterp.interp
+
+let transform_name name = Nameops.add_suffix name "'"
 
 let analyze_reference gref = 
   let open Declarations in
@@ -79,7 +82,7 @@ let analyze_reference gref =
          |> Array.mapi (fun i ind -> 
                 { ind with 
                     mind_typename = 
-                      transform_name_prime ind.mind_typename})
+                      transform_name ind.mind_typename})
                     
      }     
   | _ -> failwith "expected and inductive reference"

@@ -1,6 +1,7 @@
 (* A base family for Imp frontend IRs *)
 family Impzero.Impfrontend {
-    Definition ident := ...
+    family Switch { ...  } 
+    Definition ident := string
     
     Inductive constant : Type :=
         | Ointconst: int -> constant
@@ -25,19 +26,20 @@ family Impzero.Impfrontend {
         | Sskip : statement
         | Sblock: statement -> statement
         | Sexit: nat -> statement
-        | Sswitch: expr -> lbl_statement -> statement
-        | Sloop: statement -> statement
+        | Sswitch : Switch.switch
+        (* | Sswitch: expr -> lbl_statement -> statement *)
+        (* | Sloop: statement -> statement *)
 
-     with lbl_statement : Type :=
+     (* with lbl_statement : Type :=
            | LSnil: lbl_statement
-           | LScons: option Z -> statement -> lbl_statement -> lbl_statement
+           | LScons: option Z -> statement -> lbl_statement -> lbl_statement *)
                            
 
      family Program {
         Record function : Type := mkfunction {   
-           fn_params: list ident;
+           (* fn_params: list ident;
            fn_vars: list ident;
-           fn_temps: list ident;
+           fn_temps: list ident; *)
            fn_body: statement
         }
 
@@ -45,13 +47,14 @@ family Impzero.Impfrontend {
           | Internal: function -> fundef          
         
         Inductive globdef : Type :=
-          | Gfun (f: fundef)          
+          | Gfun (f: fundef)
 
         Record program : Type := mkprogram {
            prog_defs: list (ident * globdef);           
            prog_main: ident
         }
-     }     
+       (* Inductive program : Type := Program (ident * globaldef) *)
+     }    
 }
        
 (* The semantics of the language *)                         
@@ -59,7 +62,7 @@ family Impzero.Impfrontend {
     family Semantics {                                        
         family Values {
             Inductive value: Type :=
-              | Vint: int -> val              
+              | Vint: int -> val
         }
 
         Inductive cont : Type :=
@@ -87,33 +90,7 @@ family Impzero.Impfrontend {
                 eval_expr a1 v1 ->
                 eval_expr a2 v2 ->
                 eval_binop op v1 v2 m = Some v ->
-                eval_expr (Ebinop op a1 a2) v
-            | step_skip_block: forall k e,
-                   step (State Sskip (Kblock k) e)
-                        (State Sskip k e)                               
-            | step_loop: forall s k e le m,
-                   step (State (Sloop s) k e)
-                        (State s (Kseq (Sloop s) k) e)
-            | step_block: forall f s k e,
-                   step (State (Sblock s) k e)
-                        (State s (Kblock k) e)               
-            | step_exit_seq: forall n s k e,
-                  step (State (Sexit n) (Kseq s k) e)
-                       (State (Sexit n) k e)
-            | step_exit_block_0: forall k e,
-                  step (State (Sexit O) (Kblock k) e)
-                       (State Sskip k e)
-            | step_exit_block_S: forall f n k e,
-                  step (State (Sexit (S n)) (Kblock k) e)
-                       (State (Sexit n) k e)              
-            | step_switch: forall islong a cases k e m v n,
-                    eval_expr e le m a v ->
-                    switch_argument islong v n -> (* TODO: evalutaion *)
-                    step (State (Sswitch islong a cases) k e)
-                         (State (seq_of_lbl_statement (select_switch n cases)) k e)            
-            | step_label: forall lbl s k e,
-                   step (State (Slabel lbl s) k e)
-                        (State s k e)
+                eval_expr (Ebinop op a1 a2) v            
         
         Inductive eval_exprlist: list expression -> list Values.value -> Prop :=
           | eval_Enil:
@@ -121,40 +98,54 @@ family Impzero.Impfrontend {
           | eval_Econs: forall a1 al v1 vl,
               eval_expr a1 v1 -> eval_exprlist al vl ->
               eval_exprlist (a1 :: al) (v1 :: vl).
-
-        (* A common small step continuation-based semantics for frontned languages *)
-        Inductive step : [self].state -> [self].state -> Prop :=
+        
+        Inductive step : state -> state -> Prop :=
              | step_assign : forall st i a k n,            
                  aeval st a = n ->
                  step (State (Sassign i a) k st)
-                   (State Sskip k (t_update st i n))
-             (* | step_set: forall f id a k e le m v,
-                     eval_expr e le m a v -> (* TODO : fix this *)
-                     step (State (Sset id a) k e)
-                          (State Sskip k (PTree.set id v e)) *)                                    
+                   (State Sskip k (t_update st i n))             
              | step_seq : forall st c1 c2 k,  
                  step (State (Sseq c1 c2) k st)
-                       (State c1 (Kseq c2 k) st)                             
-             | step_iftrue : forall st b c1 c2 k,
-                 beval st b = true ->
-                 step (State (Sifthenelse b c1 c2) k st)
-                       (State c1 k st)                   
-             | step_iffalse : forall st b c1 c2 k,
-                 beval st b = false ->
-                 step (State (Sifthenelse b c1 c2) k st)
-                   (State c2 k st)
-             (* | step_ifthenelse: forall a s1 s2 k e le m v b,
-                     eval_expr e le m a v ->
-                     Val.bool_of_val v b -> (* TODO: fix this *)
-                     step (State (Sifthenelse a s1 s2) k e)
-                          (State (if b then s1 else s2) k e) *)
+                       (State c1 (Kseq c2 k) st)             
              | step_skip_seq: forall c k st,
                  step (State Sskip (Kseq c k) st)
                       (State c k st)                               
-        
-        (* Definitions *)        
-        Inductive initial_state := ...
+             | step_skip_block: forall f k e le m,
+                 step (State f Sskip (Kblock k) e le m)
+                      (State f Sskip k e le m)
+             | step_ifthenelse: forall f a s1 s2 k e le m v b,
+                  eval_expr e le m a v ->
+                  Val.bool_of_val v b ->
+                  step (State f (Sifthenelse a s1 s2) k e le m)
+                       (State f (if b then s1 else s2) k e le m)
+             | step_block: forall f s k e le m,
+                  step (State f (Sblock s) k e le m)
+                       (State f s (Kblock k) e le m)
+             | step_exit_seq: forall f n s k e le m,
+                 step (State f (Sexit n) (Kseq s k) e le m)
+                       (State f (Sexit n) k e le m)
+             | step_exit_block_0: forall f k e le m,
+                 step (State f (Sexit O) (Kblock k) e le m)
+                      (State f Sskip k e le m)
+             | step_exit_block_S: forall f n k e le m,
+                 step (State f (Sexit (S n)) (Kblock k) e le m)
+                      (State f (Sexit n) k e le m)
+             | step_switch: forall f islong a cases k e le m v n,
+                  eval_expr e le m a v ->
+                  switch_argument islong v n ->
+                  step (State f (Sswitch islong a cases) k e le m)
+                       (State f (seq_of_lbl_stmt (select_switch n cases)) k e le m)
+             | step_label: forall f lbl s k e le m,
+                   step (State f (Slabel lbl s) k e le m)
+                        (State f s k e le m)
+                              
+        (* (c, Kstop, st) *)
+        Inductive initial_state (p: program): state -> Prop := ...           
         Inductive final_state := ...
         Field semantics := ...
     }
+}
+
+family Impzero.MinorIR {
+    
 }

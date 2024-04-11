@@ -85,3 +85,13 @@ family Impzero.Impbackend.Semantics {
    Inductive final_states := ...
    Field semantics := ...
 }
+
+
+family Impzero.ControlFlowGraphIR extends Impbackend {
+
+
+}
+
+family Impzero.LinearIR extends Impbackend { 
+  
+}
