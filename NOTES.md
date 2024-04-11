@@ -55,7 +55,7 @@ realistic compiler with a CompCert-like architecture.
 
 ```   
    McPain -----------------------> Imp -----------------------> * -----------------------> CompCert
-             Add statements               Add functions                Add Memory Model
+             Add statements               Add functions                Add memory model
 ```
 
 3. If there is case in a simulation proof that follows directly from the 
@@ -77,10 +77,10 @@ realistic compiler with a CompCert-like architecture.
 6. Xavier Leroy seems to be concered about extensible verified code generators
    for CompCert
 
-7. "Advice on structuring compilers and proving them correct" [1]
+7. "Advice on structuring compilers and proving them correct" [3]
     * This paper seems to have the first proof architecture of something that 
       resembles a simulation diagram
     
     + Also interesting that it was published at the first ever POPL
 
-    [1]: https://dl.acm.org/doi/10.1145/512927.512941
+    [3]: https://dl.acm.org/doi/10.1145/512927.512941
