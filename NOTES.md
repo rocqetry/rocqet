@@ -51,8 +51,8 @@ realistic compiler with a CompCert-like architecture.
    plus simulation)
 
 2. Our case study will be informed by the historical example of a verified compiler,
-   and show extensiblity by incrementally adding features until the compiler is 
-   CompCert-like.
+   from John McCarthy and James Painter (the McPainter compiler), and show extensiblity 
+   by incrementally adding features until the compiler is CompCert-like.
    
    McPainter -----------------------> Imp -----------------------> * -----------------------> CompCert
                 Add statements               Add functions                Add Memory Model
