@@ -52,7 +52,8 @@ realistic compiler with a CompCert-like architecture.
                 Add statements               Add functions                Add Memory Model
 
 3. If there is case in a simulation proof that follows directly from the 
-   inductive hypothesis or from other assumptions, then said case is redundant.
+   inductive hypothesis or from other assumptions, then the proof can be inherited 
+   from a proof of the identity translation.
 
 4. Determinate and Receptiveness (we have to prove backward simulation using a forward simulation)
 
