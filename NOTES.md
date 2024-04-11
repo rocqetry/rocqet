@@ -40,7 +40,7 @@ realistic compiler with a CompCert-like architecture.
  * Extensible IR 
  * Extensible operational semantics
 
-### Obervations
+### Observations
 
 1. We can generalize the correctness property using a star simulation 
    and a measure. i.e all simulation diagrams can have a proof statement 
