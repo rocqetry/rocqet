@@ -40,7 +40,7 @@ realistic compiler with a CompCert-like architecture.
  * Extensible IR 
  * Extensible operational semantics
 
-### Observations
+### Observations / Ideas
 
 1. We can generalize the correctness property using a star simulation 
    and a measure. i.e all simulation diagrams can have a proof statement 
@@ -50,8 +50,8 @@ realistic compiler with a CompCert-like architecture.
 
 2. Our case study will be informed by the historical example of a verified 
    compiler, from John McCarthy and James Painter (the McPain compiler), 
-   and show extensiblity by incrementally adding features until the compiler 
-   is CompCert-like:
+   and show extensiblity by incrementally adding features until the resulting 
+   compiler is CompCert-like:
    
    McPain -----------------------> Imp -----------------------> * -----------------------> CompCert
              Add statements               Add functions                Add Memory Model
