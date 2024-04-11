@@ -64,15 +64,21 @@ realistic compiler with a CompCert-like architecture.
     a forward simulation)
     * Can this be reused somehow? 
 
-5. There seem to be a few CompCert extensions (e.g CompCert JIT, CompCert for 
-   secure compilation)
-   * In some sense this is a "realistic" extension of CompCert
-   * Can our architecture be used to create such extension? 
+5. There seem to be a few CompCert extensions (e.g CompCert JIT [1], CompCert 
+   for secure compilation [2])
+     * In some sense this is a "realistic" extension of CompCert
+     * Can our architecture be used to create such extension? 
+   
+     [1]: https://dl.acm.org/doi/abs/10.1145/3571202
+     [2]: https://dl.acm.org/doi/10.1145/3371075
 
 6. Xavier Leroy seems to be concered about extensible verified code generators
    for CompCert
 
-7. "Advice on structuring compilers and proving them correct" 
-    https://dl.acm.org/doi/10.1145/512927.512941
+7. "Advice on structuring compilers and proving them correct" [1]
     * This paper seems to have the first proof architecture of something that 
       resembles a simulation diagram
+    
+    + Also interesting that it was published at the first ever POPL
+
+    [1]: https://dl.acm.org/doi/10.1145/512927.512941
