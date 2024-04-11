@@ -62,7 +62,7 @@ realistic compiler with a CompCert-like architecture.
 
 4. Determinate and Receptiveness (we have to prove backward simulation using
     a forward simulation)
-    * Can this be reused somehow? 
+    * Can the proofs be reused somehow? 
 
 5. There seem to be a few CompCert extensions (e.g CompCert JIT [1], CompCert 
    for secure compilation [2])
