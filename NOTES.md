@@ -44,8 +44,8 @@ realistic compiler with a CompCert-like architecture.
 
 1. We can generalize the correctness property using a star simulation 
    and a measure. i.e all simulation diagrams can have a proof statement 
-   of a star simulation equipped with a measure, becuase they star similation 
-   diagrams subsume other simulation diagrams (i.e lock-step simulation and 
+   of a star simulation equipped with a measure, becuase star similation 
+   diagrams _subsume_ other simulation diagrams (i.e lock-step simulation and 
    plus simulation)
 
 2. Our case study will be informed by the historical example of a verified 
