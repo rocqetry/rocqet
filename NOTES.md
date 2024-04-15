@@ -85,6 +85,9 @@ realistic compiler with a CompCert-like architecture.
      * Stack-Aware CompCert - Composes several CompCert extensions 
        and compiles to machine code [11]
      * Compositional CompCert - CompCert for separate compilation [12]
+     * CompCertS - CompCert with a richer semantics for pointer arithmetic [13]
+     * Quantitative CompCert - CompCert for preserving quantitative 
+       properties [14]
      
      [1]: https://dl.acm.org/doi/abs/10.1145/3571202
      [2]: https://dl.acm.org/doi/10.1145/3371075
@@ -98,6 +101,8 @@ realistic compiler with a CompCert-like architecture.
      [10]: https://certicompil.gricad-pages.univ-grenoble-alpes.fr/compcert-kvx/
      [11]: https://dl.acm.org/doi/10.1145/3290375
      [12]: https://dl.acm.org/doi/10.1145/2775051.2676985
+     [13]: https://link.springer.com/chapter/10.1007/978-3-319-66107-0_6
+     [14]: https://dl.acm.org/doi/10.1145/2594291.2594301
 
 6. Xavier Leroy seems to be concered about extensible verified code generators
    for CompCert
