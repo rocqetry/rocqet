@@ -82,6 +82,9 @@ realistic compiler with a CompCert-like architecture.
      * CompCertSSA - CompCert with SSA [8]
      * CompCertO - CompCert for composing certified components [9]
      * CompCertKVX - CompCert with a KVX backend [10]
+     * Stack-Aware CompCert - Composes several CompCert extensions 
+       and compiles to machine code [11]
+     * Compositional CompCert - CompCert for separate compilation [12]
      
      [1]: https://dl.acm.org/doi/abs/10.1145/3571202
      [2]: https://dl.acm.org/doi/10.1145/3371075
@@ -93,6 +96,8 @@ realistic compiler with a CompCert-like architecture.
      [8]: https://dl.acm.org/doi/10.1145/2579080
      [9]: https://dl.acm.org/doi/abs/10.1145/3453483.3454097
      [10]: https://certicompil.gricad-pages.univ-grenoble-alpes.fr/compcert-kvx/
+     [11]: https://dl.acm.org/doi/10.1145/3290375
+     [12]: https://dl.acm.org/doi/10.1145/2775051.2676985
 
 6. Xavier Leroy seems to be concered about extensible verified code generators
    for CompCert
