@@ -71,7 +71,7 @@ realistic compiler with a CompCert-like architecture.
      * Can our language design/case study architecture enable 
        such extensions?
 
-     ### Extension of CompCert
+     #### Extension of CompCert
      * CompCert used in a JIT [1]
      * CompCert for Cryptographic Constant-Time Preservation [2]
      * CompCertTSO - CompCert for a relaxed memory model [3]
@@ -97,10 +97,10 @@ realistic compiler with a CompCert-like architecture.
 6. Xavier Leroy seems to be concered about extensible verified code generators
    for CompCert
 
-7. "Advice on structuring compilers and proving them correct" [10]
+7. "Advice on structuring compilers and proving them correct" [20]
     * This paper seems to have the first proof architecture of something that 
       resembles a simulation diagram
     
     + Also interesting that it was published at the first ever POPL
 
-    [10]: https://dl.acm.org/doi/10.1145/512927.512941
+    [20]: https://dl.acm.org/doi/10.1145/512927.512941
