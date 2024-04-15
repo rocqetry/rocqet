@@ -53,7 +53,7 @@ realistic compiler with a CompCert-like architecture.
    and show extensiblity by incrementally adding features until the resulting 
    compiler is CompCert-like:
 
-```   
+```
    McPain -----------------------> Imp -----------------------> * -----------------------> CompCert
              Add statements               Add functions                Add memory model
 ```
@@ -62,25 +62,45 @@ realistic compiler with a CompCert-like architecture.
    inductive hypothesis or from other assumptions, then the proof of 
    such a case can be inherited from a proof of the identity translation.
 
-4. Determinate and Receptiveness (we have to prove backward simulation using
+4. Determinate-ness and Receptive-ness (we have to prove backward simulation using
     a forward simulation)
     * Can the proofs be reused somehow? 
 
-5. There seem to be a few CompCert extensions (e.g CompCert JIT [1], CompCert 
-   for secure compilation [2])
-     * In some sense this is a "realistic" extension of CompCert
-     * Can our architecture be used to create such extension? 
-   
+5. There seem to be a few CompCert extensions
+     * In some sense, these are "realistic" extensions of CompCert
+     * Can our language design/case study architecture enable 
+       such extensions?
+
+     ### Extension of CompCert
+     * CompCert used in a JIT [1]
+     * CompCert for Cryptographic Constant-Time Preservation [2]
+     * CompCertTSO - CompCert for a relaxed memory model [3]
+     * ProbCompCert - CompCert for PPL [4]
+     * L2C - CompCert extension for a Lustre-like language [5]
+     * Velus - Compcert extension for Lustre [6]
+     * Vericert - CompCert for high-level synthesis [7]
+     * CompCertSSA - CompCert with SSA [8]
+     * CompCertO - CompCert for composing certified components [9]
+     * CompCertKVX - CompCert with a KVX backend [10]
+     
      [1]: https://dl.acm.org/doi/abs/10.1145/3571202
      [2]: https://dl.acm.org/doi/10.1145/3371075
+     [3]: https://dl.acm.org/doi/10.1145/1925844.1926393
+     [4]: https://dl.acm.org/doi/abs/10.1145/3591245
+     [5]: https://github.com/l2ctsinghua/l2c
+     [6]: https://github.com/INRIA/velus
+     [7]: https://dl.acm.org/doi/10.1145/3485494
+     [8]: https://dl.acm.org/doi/10.1145/2579080
+     [9]: https://dl.acm.org/doi/abs/10.1145/3453483.3454097
+     [10]: https://certicompil.gricad-pages.univ-grenoble-alpes.fr/compcert-kvx/
 
 6. Xavier Leroy seems to be concered about extensible verified code generators
    for CompCert
 
-7. "Advice on structuring compilers and proving them correct" [3]
+7. "Advice on structuring compilers and proving them correct" [10]
     * This paper seems to have the first proof architecture of something that 
       resembles a simulation diagram
     
     + Also interesting that it was published at the first ever POPL
 
-    [3]: https://dl.acm.org/doi/10.1145/512927.512941
+    [10]: https://dl.acm.org/doi/10.1145/512927.512941
