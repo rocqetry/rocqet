@@ -72,7 +72,7 @@ realistic compiler with a CompCert-like architecture.
        such extensions?
 
      #### Extension of CompCert
-     * CompCert used in a JIT [1]
+     * CompCert used in a JIT [1, 15]
      * CompCert for Cryptographic Constant-Time Preservation [2]
      * CompCertTSO - CompCert for a relaxed memory model [3]
      * ProbCompCert - CompCert for PPL [4]
@@ -103,6 +103,7 @@ realistic compiler with a CompCert-like architecture.
      [12]: https://dl.acm.org/doi/10.1145/2775051.2676985
      [13]: https://link.springer.com/chapter/10.1007/978-3-319-66107-0_6
      [14]: https://dl.acm.org/doi/10.1145/2594291.2594301
+     [15]: https://dl.acm.org/doi/10.1145/3434327
 
 6. Xavier Leroy seems to be concered about extensible verified code generators
    for CompCert
