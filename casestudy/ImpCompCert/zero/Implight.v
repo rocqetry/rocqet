@@ -1,14 +1,14 @@
 (* Implight IR *)
-family Impzero.Implight extends Impfrontend {
+family Impzero.Implight extends SourceLanguage {
   Inductive expression : Type += ...
 
-  Inductive statement : Type += ...                                   
+  Inductive statement : Type += ... 
 
   family Semantics {
       Inductive cont : Type += ...
 
       Inductive step : Type += ...
-  }  
+  }
 }
 
 (* Simplify Expression *)

@@ -10,8 +10,15 @@ compose all of these small features to create an Imp 2.0 with a lot more
 feaures. Note that each of these small features compiler extends the whole
 base family of the Imp compiler.
 
-Compiler pipeline:
-Imp -> Implight -> Impshpminor -> Impminor -> ImpminorSel -> RTL -> LTL -> Linear -> Mach -> Asm
+The grouping represent intermediate representation (IR) families 
+that share a base family. The idea is to have nanopasses between 
+this groups.
+
+Compiler Pipeline:
+```
+{Imp, Implight} -> {Impshpminor, Impminor, ImpminorSel} -> RTL -> {LTL, Linear, Mach} -> Asm
+```
+
 
 Ideas list for families:
 1. Imp with functions, local, & function calls

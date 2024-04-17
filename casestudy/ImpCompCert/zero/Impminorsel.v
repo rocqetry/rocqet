@@ -7,7 +7,7 @@ family Impzero.Asm {
   }
 }
 
-family Impzero.ImppminorSel extends Impfrontend {         
+family Impzero.ImpMinorSel extends MinorLanguage {         
   Inductive expression : Type +=
     | Eop : Asm.Op.operation -> exprlist -> expression                        
     | Econdition : condexpr -> expr -> expr -> expr

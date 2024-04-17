@@ -1,5 +1,4 @@
-(* Impsharpminor frontend IR *)
-family Impzero.Impsharpminor extends Impfrontend {  
+family Impzero.ImpSharpMinor extends MinorLanguage {  
      Inductive expression : Type +=  ...        
 
      Inductive statement : Type += ...                

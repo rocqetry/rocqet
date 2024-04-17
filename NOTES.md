@@ -88,6 +88,9 @@ realistic compiler with a CompCert-like architecture.
      * CompCertS - CompCert with a richer semantics for pointer arithmetic [13]
      * Quantitative CompCert - CompCert for preserving quantitative 
        properties [14]
+     * SepCompCert - CompCert for lightweight verification of separate 
+       compilation [16]
+     * CompCert SIMD - CompCert with x86 SIMD instructions [17]
      
      [1]: https://dl.acm.org/doi/abs/10.1145/3571202
      [2]: https://dl.acm.org/doi/10.1145/3371075
@@ -104,6 +107,8 @@ realistic compiler with a CompCert-like architecture.
      [13]: https://link.springer.com/chapter/10.1007/978-3-319-66107-0_6
      [14]: https://dl.acm.org/doi/10.1145/2594291.2594301
      [15]: https://dl.acm.org/doi/10.1145/3434327
+     [16]: https://dl.acm.org/doi/10.1145/2837614.2837642
+     [17]: https://github.com/haslab/ccomp-simd
 
 6. Xavier Leroy seems to be concered about extensible verified code generators
    for CompCert
