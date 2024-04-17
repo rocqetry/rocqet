@@ -1,15 +1,16 @@
 
 family Impzero.LTL extends Impbackend {
-    Definition node := positive
+    
+    Inductive instruction: Type :=
+       | Lgetstack (sl: slot) (ofs: Z) (ty: typ) (dst: mreg)
+       | Lsetstack (src: mreg) (sl: slot) (ofs: Z) (ty: typ)       
+       | Lop (op: operation) (args: list mreg) (res: mreg)       
+       | Lbranch (s: node)
+       | Lcond (cond: condition) (args: list mreg) (s1 s2: node)
+       | Ljumptable (arg: mreg) (tbl: list node)
 
-    Inductive instruction += 
-      | Lbranch (s: node)
+    family Semantics { }
+      
 }
 
-family Impzero.LTL.Semantics {
-  Inductive step : state -> state -> Prop += 
-     | exec_Lbranch: forall s f sp pc bb rs m,
-         step (Block s f sp (Lbranch pc :: bb) rs m)
-              (State s f sp pc rs m)
-}
 
