@@ -19,7 +19,6 @@ Compiler Pipeline:
 {Imp, Implight} -> {Impshpminor, Impminor, ImpminorSel} -> RTL -> {LTL, Linear, Mach} -> Asm
 ```
 
-
 Ideas list for families:
 1. Imp with functions, local, & function calls
 2. Imp with pointers and memory-related operations
@@ -29,4 +28,3 @@ Ideas list for families:
 5. Imp with more primitives (e.g float32, float64)
 6. Imp with a different semantics style (e.g denotational semantics with itrees)
 
-*aarch64: A tiny subset of aarch64
