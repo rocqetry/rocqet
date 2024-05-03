@@ -61,9 +61,11 @@ module type BaseComp_STLC (self : BaseComp_STLC_Ctx) {
   module STLC : sig      
      include BaseComp_STLC_Exp/Val_Ctx
      include BaseComp_STLC_Exp/Val
-  end 
+  end
 }
 
+
+(* IL *)
 module type BaseComp_IL_Ctx {
   include BaseComp_STLC_Ctx 
   include BaseComp_STLC
@@ -108,6 +110,8 @@ module type BaseComp_IL (self : BaseComp_IL_Ctx) {
     include BaseComp_IL_Exp
   end 
 }
+
+(* ILK *)
 
 module type BaseComp_ILK_Ctx {
   include BaseComp_IL_Ctx 
@@ -187,44 +191,49 @@ module type BaseComp_ILC_Exp (self : BaseComp_ILC_Exp_Ctx) {
   Axiom EUnpack : string -> string -> Val -> Exp -> Exp 
 }
 
-(* The self here is redundant *)
 module type BaseComp_ILC (self : BaseComp_ILC_Ctx) {
-  module ILK : sig
+  module ILC : sig
     include BaseComp_ILC_Exp_Ctx
     include BaseComp_ILC_Exp
   end
 }
 
-(* Pros/Cons of this translation? *)
-
 (* On completion of the family *)
 module BaseComp {
     module STLC {
-        ...
+        Inductive Ty := TyUnit | TNat | TArr (t1 t2 : Ty)        
+        Inductive Exp := EVal (v : Val) | EApp(e1 e2 : Exp)
+        with Val := Unit | Var (x : string) | Lam (x : string) (e : Exp)
     }
 
     module IL { 
-        ...
+        Inductive Ty := TUnit | TCont (ts : list Ty)
+        Inductive Val := Unit | Var (x : string)
+        Inductive Exp := 
+          | ELet (x : string) (v : Val) (e : Exp)
+          | EApp (v : Val) (vs : list Val) 
+          | EHalt (v : Val)
     }
     
     module ILK { 
-        ...
+        Inductive Ty := TUnit | TCont (ts : list Ty)
+        Inductive Val := Unit | Var (x : string) | Lam (x : list string) (e : Exp)
+        Inductive Exp := 
+          | ELet (x : string) (v : Val) (e : Exp)
+          | EApp (v : Val) (vs : list Val) 
+          | EHalt (v : Val)
     }
 
     module ILC { 
-      ...
+        Inductive Ty := TUnit | TCont (ts : list Ty) | TVar (s : string) | TExist (x : string) (t : Ty)
+        Inductive Val := Unit | Var (x : string) | Pack (t : Ty) (v : Val) | Name (n : string)
+        Inductive Exp := 
+          | ELet (x : string) (v : Val) (e : Exp)
+          | EApp (v : Val) (vs : list Val) 
+          | EHalt (v : Val)
+          | EUnpack(a : string) (x : string) (v : Val) (e : Exp)
     }
 }
-
-
-
-
-(* 
-  
-*)
-
-
-
 
 module type IfExt_STLC_Ctx { }
 
@@ -244,30 +253,144 @@ module type IfExt_STLC_Exp/Val (self : If_STLC_Exp/Val_Ctx) {
 }
 
 module type IfExt_STLC (self : IfExt_STLC_Ctx) {
-  (* include BaseComp_STLC (
-      self, 
-      IfExt_STLC_Ty, 
-      IfExt_STLC_Exp/Val
-  )
-  *)
-  module STLC : sig 
+  module STLC : sig
     include IfExt_STLC_Exp/Val_Ctx                  
     include IfExt_STLC_Exp/Val
   end
 }
 
-
-module type STLC_Exp (self: STLC_Exp_Ctx) {
-  Axiom Exp : Set 
-  Axiom EVal :               
+module type IfExt_IL_Ctx { 
+  include IFExt_STLC_Ctx 
+  include IfExt_STLC
 }
 
-module type STLC_Sig (self: STLC_Ctx) { 
-      
+module type IfExt_IL_Ty_Ctx { 
+  include IfExt_IL_Ctx
 }
 
-module type STLC_Family (self: STLC_Ctx) { 
-  
-  module STLC : STLC_Sig (self)
+module type IfExt_IL_Ty (self: IfExt_IL_Ty_Ctx) { 
+  include BaseComp_IL_Ty(self) 
+  Axiom TBool : Ty
+}
 
+module type IfExt_IL_Val_Ctx { 
+  include IfExt_IL_Ty_Ctx
+  include IfExt_IL_Ty
+}
+
+module type IfExt_IL_Val (self : IfExt_IL_Val_Ctx) {
+  include BaseComp_IL_Val(self)
+  Axiom Bool : bool -> Val
+}
+
+module type IfExt_IL_Exp_Ctx { 
+  include IfExt_IL_Val_Ctx
+  include IfExt_IL_Val
+}
+
+module type IfExt_IL_Exp (self : IfExt_IL_Exp_Ctx) {
+  include BaseComp_IL_Exp(self)
+  Axiom EIf : Val -> Exp -> Exp -> Exp
+}
+
+module type IfExt_IL (self : IfExt_IL_Ctx) { 
+  module IL : sig 
+    include IfExt_IL_Exp_Ctx
+    include IfExt_IL_Exp                
+  end                 
+}
+
+module type IfExt_ILK_Ctx {
+  include IfExt_IL_Ctx 
+  include IfExt_IL 
+}
+
+module type IfExt_ILK_Ty_Ctx {
+  include IfExt_ILK_Ctx
+}
+
+module type IfExt_ILK_Ty (self : IfExt_ILK_Ty_Ctx) {  
+  include BaseComp_ILK_Ty(self)
+  include IfExt_IL_Ty(self)          
+}
+
+module type IfExt_ILK_Val_Ctx {
+  include IfExt_ILK_Ty_Ctx 
+  include IfExt_ILK_Ty
+}
+
+module type BaseComp_ILK_Val (self : IfExt_ILK_Val_Ctx) {
+  include BaseComp_ILK_Val(self)
+  include IfExt_IL_Val(self)
+}
+
+module type IfExt_ILK_Exp_Ctx {
+  include IfExt_ILK_Val_Ctx 
+  include IfExt_ILK_Val
+}
+
+module type IfExt_ILK_Exp (self : IfExt_ILK_Exp_Ctx) {
+  include BaseComp_ILK_Exp(self)
+  include IfExt_IL_Exp(self)
+}
+
+module type IfExt_ILK (self : IfExt_ILK_Ctx) { 
+  module ILC : sig 
+    include IfExt_ILK_Exp_Ctx
+    include IfExt_ILK_Exp                
+  end                 
+}
+
+
+(* ILC *)
+module type IfExt_ILC_Ctx {
+  include IfExt_ILK_Ctx 
+  include IfExt_ILK 
+}
+
+module type IfExt_ILC_Ty_Ctx {
+  include IfExt_ILC_Ctx
+}
+
+module type IfExt_ILC_Ty (self : IfExt_ILC_Ty_Ctx) {  
+  include BaseComp_ILC_Ty(self)
+  include IfExt_IL_Ty(self)          
+}
+
+module type IfExt_ILC_Val_Ctx {
+  include IfExt_ILC_Ty_Ctx 
+  include IfExt_ILC_Ty
+}
+
+module type BaseComp_ILC_Val (self : IfExt_ILC_Val_Ctx) {
+  include BaseComp_ILC_Val(self)
+  include IfExt_IL_Val(self)
+}
+
+module type IfExt_ILC_Exp_Ctx {
+  include IfExt_ILC_Val_Ctx 
+  include IfExt_ILC_Val
+}
+
+module type IfExt_ILC_Exp (self : IfExt_ILC_Exp_Ctx) {
+  include BaseComp_ILC_Exp(self)
+  include IfExt_IL_Exp(self)
+}
+
+module type IfExt_ILC (self : IfExt_ILC_Ctx) { 
+  module ILC : sig 
+    include IfExt_ILC_Exp_Ctx
+    include IfExt_ILC_Exp                
+  end                 
+}
+
+(* On completion of the family *)
+module IfExt { 
+  module STLC { } 
+
+  module IL { }
+
+  module ILK { }
+
+  module ILC { }
 }
