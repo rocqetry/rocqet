@@ -34,11 +34,15 @@ McCarthy, and scale it up to a toy language like Imp and eventually to a
 realistic compiler with a CompCert-like architecture.
 
 
-### Extensible Simulation Diagrams
+### A Recipe for Building Extensible Simulations
 
  * Extensible matching state relations 
  * Extensible IR 
  * Extensible operational semantics
+
+### Design patterns for using nested family polymorphism in proofs 
+Based on our experience porting CompCert - we present general
+guidelines for using our language to design new proof developments
 
 ### Observations / Ideas
 
@@ -120,3 +124,50 @@ realistic compiler with a CompCert-like architecture.
     + Also interesting that it was published at the first ever POPL
 
     [20]: https://dl.acm.org/doi/10.1145/512927.512941
+
+
+8. Before we have our language implementation, I can hand compile 
+   the proof to show reuse. It will be ugly, but it is a nice way 
+   to show that the idea works
+
+9. Extensible constructor fields is too ugly to be used in practice.
+   Is there an elegant design? 
+
+10. https://dl.acm.org/doi/10.1145/359104.359106
+    An interesting CACM paper from 1979 which argues that proofs 
+    won't be very useful for verifying program becuase programs 
+    change and the proof breaks - basically proofs are not extensible
+11. Begining to identify nanopasses between CompCert IRs 
+    * Clight -> Csharpminor 
+       + SimplExpr 
+       + SimplSwitch
+       + 
+       +  
+    * Csharpminor -> Cminor 
+       + SimplSwitch 
+       + StackAlloc 
+    * Cminor -> CminorSel 
+       + SelectAdd
+       + SelectMul 
+       + SelectDiv 
+       + 
+    * CminorSel -> RTL
+       + CfgGen 
+    * RTL -> LTL 
+       + RegAlloc 
+       + Tunneling 
+    * LTL -> Linear 
+       + Linearization 
+    * Linear -> Mach 
+       + ExplicitParam
+       + Stacking
+12. Currently we have two major ways of reuse 
+    * Simulation Diagrams
+    * Sparse optimization / self passes
+    
+
+Focus 
+1. Hand compiling a small use case of nested family polymophism 
+2. Work on case study
+3. Hand compiling of extensible constructors 
+4. Learning about verified compilers / CompCert
