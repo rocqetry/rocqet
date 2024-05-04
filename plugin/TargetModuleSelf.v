@@ -42,19 +42,34 @@ module type STLCIf_Exp/Val (self : STLCIf_Exp/Val_Ctx) {
 
 module type BaseComp_STLC_Ctx { }
 
-module type BaseComp_STLC_Ty_Ctx { }
+module type BaseComp_STLC_Ty_Ctx (self[BaseComp]: BaseComp_STLC_Ctx) { }
 
-module type BaseComp_STLC_Ty 
-   (self[BaseComp]: BaseComp_STLC_Ctx) 
-   (self[STLC] : BaseComp_STLC_Ty_Ctx) (* We can make self an alias for self[STLC] *)
+module type BaseComp_STLC_Ty   
+   (self[BaseComp]: BaseComp_STLC_Ctx)
+   (self[STLC] : BaseComp_STLC_Ty_Ctx(self[BaseComp]))
 {
   include STLCBase_Ty(self[STLC])
 }
 
+module type BaseComp_STLC_Exp/Val_Ctx 
+    (self[BaseComp]: BaseComp_STLC_Ctx) 
+{ 
+  include BaseComp_STLC_Ty_Ctx
+  include BaseComp_STLC_Ty(self[BaseComp])
+}
+
+module type BaseComp_STLC_Exp/Val 
+           (self[BaseComp] : BaseComp_STLC_Ctx)
+           (self[STLC] : BaseComp_STLC_Exp/Val_Ctx(self[BaseComp]))           
+{ 
+  include STLCBase_Exp/Val(self[STLC])
+}
+
+
 module type BaseComp_STLC (self[BaseComp] : BaseComp_STLC_Ctx) { 
-  module STLC : sig 
-    include BaseComp_STLC_Ty_Ctx (* <-- This is self[STLC] *)                  
-    include BaseComp_STLC_Ty(self[BaseComp])
+  module STLC : sig
+    include BaseComp_STLC_Exp/Val_Ctx(self[BaseComp])
+    include BaseComp_STLC_Exp/Val(self[BaseComp])
   end 
 }
 
