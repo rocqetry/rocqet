@@ -43,7 +43,8 @@ module type BaseComp_STLC_Ctx { }
 
 module type BaseComp_STLC_Ty_Ctx {
   include BaseComp_STLC_Ctx
- }
+}
+
 module type BaseComp_STLC_Ty (self : BaseComp_STLC_Ty_Ctx) {
   include STLCBase_Ty(self)
 }
