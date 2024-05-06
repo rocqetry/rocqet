@@ -6,7 +6,8 @@ family STLCBase {
 
 family STLCIf extends STLCBase { 
     Inductive Ty += TBool
-    Inductive Val += EIf (e e1 e2 : Exp)              
+    Inductive Val += VTrue | VFalse
+    Inductive Exp += EIf (e e1 e2 : Exp) 
 }
 
 family BaseComp {
@@ -41,4 +42,3 @@ family IfExt extends BaseComp {
        Inductive Exp += EIf (v : Val) (e1 e2 : Exp)
      }     
 }
-(* Compilation *)

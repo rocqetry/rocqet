@@ -26,7 +26,7 @@ module type STLCIf_Ty_Ctx { }
 
 module type STLCIf_Ty (self : STLCIf_Ty_Ctx) {
   include include STLCBase_Ty(self)
-  Axiom TBool : Ty
+  Axiom TBool : Ty    
 }
 
 module type STLCIf_Exp/Val_Ctx {
@@ -36,7 +36,9 @@ module type STLCIf_Exp/Val_Ctx {
 
 module type STLCIf_Exp/Val (self : STLCIf_Exp/Val_Ctx) {
   include STLCBase_Exp/Val(self) 
-  Axiom EIf : Exp -> Exp -> Exp -> Val
+  Axiom VTrue : Val  
+  Axiom VFalse : Val          
+  Axiom EIf : Exp -> Exp -> Exp -> Exp
 }
 
 module type BaseComp_STLC_Ctx { }
@@ -385,13 +387,45 @@ module type IfExt_ILC (self : IfExt_ILC_Ctx) {
   end                 
 }
 
-(* On completion of the family *)
+(* On completion of the IfExt family *)
 module IfExt { 
-  module STLC { } 
+   module STLC { 
+      Inductive Ty := TyUnit | TNat | TArr (t1 t2 : Ty) | TBool 
+      Inductive Exp := EVal (v : Val) | EApp(e1 e2 : Exp) | EIf (e e1 e2 : Exp)
+      with Val := 
+        | Unit
+        | Var (x : string)
+        | Lam (x : string) (e : Exp)
+        | VTrue
+        | VFalse
+   }
 
-  module IL { }
+   module IL { 
+     Inductive Ty := TUnit | TCont (ts : list Ty) | TBool
+     Inductive Val := Unit | Var (x : string) | Bool (b : bool)
+     Inductive Exp := 
+       | ELet (x : string) (v : Val) (e : Exp)
+       | EApp (v : Val) (vs : list Val) 
+       | EHalt (v : Val)
+       | EIf (v : Val) (e1 e2 : Exp)
+    }
 
-  module ILK { }
+    module ILK { 
+        Inductive Ty := TUnit | TCont (ts : list Ty)
+        Inductive Val := Unit | Var (x : string) | Lam (x : list string) (e : Exp)
+        Inductive Exp := 
+          | ELet (x : string) (v : Val) (e : Exp)
+          | EApp (v : Val) (vs : list Val) 
+          | EHalt (v : Val)
+    }
 
-  module ILC { }
+    module ILC { 
+        Inductive Ty := TUnit | TCont (ts : list Ty) | TVar (s : string) | TExist (x : string) (t : Ty)
+        Inductive Val := Unit | Var (x : string) | Pack (t : Ty) (v : Val) | Name (n : string)
+        Inductive Exp := 
+          | ELet (x : string) (v : Val) (e : Exp)
+          | EApp (v : Val) (vs : list Val) 
+          | EHalt (v : Val)
+          | EUnpack(a : string) (x : string) (v : Val) (e : Exp)
+   }  
 }
