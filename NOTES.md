@@ -166,8 +166,22 @@ guidelines for using our language to design new proof developments
     * Sparse optimization / self passes
     
 
-Focus 
-1. Hand compiling a small use case of nested family polymophism 
-2. Work on case study
-3. Hand compiling of extensible constructors 
-4. Learning about verified compilers / CompCert
+Title: A proof language for extensible certified compilers
+Abstract: Certified compilers underpin correct software systems, as compiler 
+bugs invalidate application-level correctness guarantees.  We observe, in 
+existing certified compilers, a frustrating proliferation of largely identical
+code and proofs in each compiler stage including front ends, intermediate 
+representations, semantics, lowering passes, back ends, and simulation proofs.  
+The redundancy is antithetical to modular software engineering and contributes to 
+the high cost of crafting certified compilers.  At the core of this problem is
+a lack of linguistic features in proof languages that facilitate scalable 
+extensibility and reuse. Our response is a novel language design that 
+retrofits a proof assistant with an extensibility mechanism known as nested 
+family polymorphism. To show what nested family polymorphism in a proof
+assistant affords proof engineers, we present a case study showing how to scale
+John McCarthy and James Painter's first-ever certified compiler to a real world 
+compiler like Xavier Leroy's CompCert.
+
+
+
+
