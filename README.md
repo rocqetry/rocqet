@@ -1,1 +1,1 @@
-Nested family polymorphism for extensible verified compilers.
+Nested family polymorphism in a proof language.
