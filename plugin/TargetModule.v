@@ -1,3 +1,4 @@
+(* Based on the case study from https://dl.acm.org/doi/10.1145/3649836 *)
 module type STLCBase_Ty_Ctx { }
 
 module type STLCBase_Ty (self: STLC_Ty_Ctx) {

@@ -19,7 +19,7 @@ module type STLCBase_Exp/Val (self: STLCBase_Exp/Val_Ctx) {
   Axiom EVal : Val -> Exp 
   Axiom EApp : Exp -> Exp -> Exp 
   Axiom Unit : Val
-  <Axiom Var : string -> Val 
+  Axiom Var : string -> Val 
   Axiom Lam : string -> Exp -> Val                 
 }
 
