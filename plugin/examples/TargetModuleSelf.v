@@ -1,4 +1,5 @@
 (* Compiling with paramenterized self hierachies *)
+(* https://stackoverflow.com/questions/48837996/import-module-vs-include-module-in-coq-module-system/49717951 *)
 
 Definition ident := nat.
 
@@ -126,35 +127,34 @@ End BaseComp_STLC_Ty.
 
 (* ^ Do we parameterize or just include it 
     directly?  *)
-Module Type A.
- Axiom T : Set.
-End A.
-
-Module A_Impl <: A.
-  Axiom T : Set.
-End A_Impl.
 
 Module BaseComp_STLC_Ctx_Impl.
+  Include BaseComp_STLC_Ctx.
 End BaseComp_STLC_Ctx_Impl.
 
 Module BaseComp_STLC_Ty_Ctx_Impl.
+  Include BaseComp_STLC_Ty_Ctx.
 End BaseComp_STLC_Ty_Ctx_Impl.
 
-Module Type B := BaseComp_STLC_Ctx <+ BaseComp_STLC_Ty_Ctx_Impl.
-
 Module Type BaseComp_STLC_ExpVal_Ctx.  
+  Include BaseComp_STLC_Ctx. 
   Include BaseComp_STLC_Ty (BaseComp_STLC_Ctx_Impl) (BaseComp_STLC_Ty_Ctx_Impl).
 End BaseComp_STLC_ExpVal_Ctx.
 
 Module Type BaseComp_STLC_ExpVal 
     (self__BaseComp : BaseComp_STLC_Ctx)
-    (self__STLC : BaseComp_STLC_ExpVal_Ctx(self__BaseComp)).
+    (self__STLC : BaseComp_STLC_ExpVal_Ctx).
   Include STLCBase_ExpVal(self__STLC).
 End BaseComp_STLC_ExpVal.
 
-Module Type BaseComp_STLC_Sig_Helper (self__BaseComp : BaseComp_STLC_Ctx).
-  Include BaseComp_STLC_ExpVal_Ctx(self__BaseComp).
-  Include BaseComp_STLC_ExpVal(self__BaseComp).  
+Module BaseComp_STLC_ExpVal_Ctx_Impl.
+  Include BaseComp_STLC_ExpVal_Ctx.
+End BaseComp_STLC_ExpVal_Ctx_Impl.
+
+Module Type BaseComp_STLC_Sig_Helper (self__BaseComp : BaseComp_STLC_Ctx).  
+  Include BaseComp_STLC_ExpVal
+    (self__BaseComp) 
+    (BaseComp_STLC_ExpVal_Ctx_Impl).  
 End BaseComp_STLC_Sig_Helper.
 
 Module Type BaseComp_STLC_Sig (self__BaseComp : BaseComp_STLC_Ctx).
@@ -193,24 +193,310 @@ Module BaseComp_STLC_Impl (self__BaseComp : BaseComp_STLC_Ctx)
 End BaseComp_STLC_Impl.
 
 Module Type BaseComp_IL_Ctx.
-  Include BaseComp_STLC_Sig.
+  Include BaseComp_STLC_Ctx.
+  Include BaseComp_STLC_Sig (BaseComp_STLC_Ctx_Impl).
 End BaseComp_IL_Ctx.
 
-Module Type BaseComp_IL_Ty_Ctx (self__BaseComp : BaseComp_IL_Ctx).
+Module Type BaseComp_IL_Ty_Ctx.
 End BaseComp_IL_Ty_Ctx.
 
 Module Type BaseComp_IL_Ty 
   (self__BaseComp : BaseComp_IL_Ctx)
-  (self__IL : BaseComp_IL_Ty_Ctx(self__BaseComp)).  
+  (self__IL : BaseComp_IL_Ty_Ctx).  
   Axiom Ty : Set.
   Axiom TUnit : Ty.
   Axiom TCont : list Ty -> Ty.
 End BaseComp_IL_Ty.
 
-Module Type BaseComp_IL_Val_Ctx (self__BaseComp : BaseComp_IL_Ctx).
+Module BaseComp_IL_Ctx_Impl.
+  Include BaseComp_IL_Ctx.
+End BaseComp_IL_Ctx_Impl.
+
+Module BaseComp_IL_Ty_Ctx_Impl.
   Include BaseComp_IL_Ty_Ctx.
+End BaseComp_IL_Ty_Ctx_Impl.
+  
+Module Type BaseComp_IL_Val_Ctx.
+  Include BaseComp_IL_Ty_Ctx.
+  Include BaseComp_IL_Ty (BaseComp_IL_Ctx_Impl) (BaseComp_IL_Ty_Ctx_Impl).
 End BaseComp_IL_Val_Ctx.
 
+Module Type BaseComp_IL_Val 
+  (self__BaseComp : BaseComp_IL_Ctx)
+  (self__IL : BaseComp_IL_Val_Ctx).
+  Axiom Val : Set.
+  Axiom Unit : Val.
+  Axiom Var : ident -> Val.
+End BaseComp_IL_Val.
+
+Module BaseComp_IL_Val_Ctx_Impl.
+  Include BaseComp_IL_Val_Ctx.
+End BaseComp_IL_Val_Ctx_Impl.
+
+Module Type BaseComp_IL_Exp_Ctx.
+  Include BaseComp_IL_Val_Ctx.
+  Include BaseComp_IL_Val (BaseComp_IL_Ctx_Impl) (BaseComp_IL_Val_Ctx_Impl). 
+End BaseComp_IL_Exp_Ctx.
+
+Module Type BaseComp_IL_Exp 
+  (self__BaseComp : BaseComp_IL_Ctx)  
+  (self__IL : BaseComp_IL_Exp_Ctx).
+  Axiom Exp : Set.
+  Axiom ELet : ident -> self__IL.Val -> Exp -> Exp.
+  Axiom EApp : self__IL.Val -> list self__IL.Val -> Exp.
+  Axiom EHalt : self__IL.Val -> Exp.  
+  (* Axiom compile : self__BaseComp.STLC.Exp -> Exp. *)
+End BaseComp_IL_Exp.
+
+Module BaseComp_IL_Exp_Ctx_Impl. 
+  Include BaseComp_IL_Exp_Ctx.
+End BaseComp_IL_Exp_Ctx_Impl.
+
+Module Type BaseComp_IL_Sig_Helper (self__BaseComp : BaseComp_IL_Ctx).
+  Include BaseComp_IL_Exp_Ctx.
+  Include BaseComp_IL_Exp (self__BaseComp) (*BaseComp_IL_Exp_Ctx_Impl*).
+End BaseComp_IL_Sig_Helper.
+
+Module Type BaseComp_IL_Sig (self__BaseComp : BaseComp_IL_Ctx).
+  Declare Module IL : BaseComp_IL_Sig_Helper (self__BaseComp).
+End BaseComp_IL_Sig.
+
+(* Instantiate BaseComp.IL *)
+Module BaseComp_IL_Impl (self__BaseComp : BaseComp_IL_Ctx)
+     <: BaseComp_IL_Sig (self__BaseComp).
+    Module IL.
+    Inductive Ty' := TUnit' | TCont' (ts : list Ty').
+    Definition Ty := Ty'.
+    Definition TUnit := TUnit'.
+    Definition TCont := TCont'.
+
+    Inductive Val' := Unit' | Var' (x : ident).
+    Definition Val := Val'.
+    Definition Unit := Unit'.
+    Definition Var := Var'.
+
+    Inductive Exp' := 
+      | ELet' (x : ident) (v : Val) (e : Exp')
+      | EApp' (v : Val) (vs : list Val) 
+      | EHalt' (v : Val).
+    Definition Exp := Exp'.
+    Definition ELet := ELet'.
+    Definition EApp := EApp'.
+    Definition EHalt := EHalt'.    
+  End IL.
+End BaseComp_IL_Impl.
+
+
+(* ILK *)
+
+Module Type BaseComp_ILK_Ctx.
+  Include BaseComp_IL_Ctx.
+  Include BaseComp_IL_Sig (BaseComp_IL_Ctx_Impl).
+End BaseComp_ILK_Ctx.
+
+Module Type BaseComp_ILK_Ty_Ctx.
+End BaseComp_ILK_Ty_Ctx.
+
+Module Type BaseComp_ILK_Ty 
+  (self__BaseComp : BaseComp_ILK_Ctx)
+  (self__ILK : BaseComp_ILK_Ty_Ctx).  
+  Include BaseComp_IL_Ty (self__BaseComp) (self__ILK).
+End BaseComp_ILK_Ty.
+
+Module BaseComp_ILK_Ctx_Impl.
+  Include BaseComp_ILK_Ctx.
+End BaseComp_ILK_Ctx_Impl.
+
+Module BaseComp_ILK_Ty_Ctx_Impl.
+  Include BaseComp_ILK_Ty_Ctx.
+End BaseComp_ILK_Ty_Ctx_Impl.
+  
+Module Type BaseComp_ILK_Val_Ctx.
+  Include BaseComp_ILK_Ty_Ctx.
+  Include BaseComp_ILK_Ty (BaseComp_ILK_Ctx_Impl) (BaseComp_ILK_Ty_Ctx_Impl).
+End BaseComp_ILK_Val_Ctx.
+
+Module Type BaseComp_ILK_Val 
+  (self__BaseComp : BaseComp_ILK_Ctx)
+  (self__ILK : BaseComp_ILK_Val_Ctx).
+  Include BaseComp_IL_Val (self__BaseComp) (self__ILK).
+  (* Axiom Lam : list ident -> self.Exp -> Val. *)
+End BaseComp_ILK_Val.
+
+Module BaseComp_ILK_Val_Ctx_Impl.
+  Include BaseComp_ILK_Val_Ctx.
+End BaseComp_ILK_Val_Ctx_Impl.
+
+Module Type BaseComp_ILK_Exp_Ctx.
+  Include BaseComp_ILK_Val_Ctx.
+  Include BaseComp_ILK_Val (BaseComp_ILK_Ctx_Impl) (BaseComp_ILK_Val_Ctx_Impl). 
+End BaseComp_ILK_Exp_Ctx.
+
+Module Type BaseComp_ILK_Exp 
+  (self__BaseComp : BaseComp_ILK_Ctx)  
+  (self__ILK : BaseComp_ILK_Exp_Ctx).
+  Include BaseComp_IL_Exp (self__BaseComp) (self__ILK).
+End BaseComp_ILK_Exp.
+
+Module BaseComp_ILK_Exp_Ctx_Impl. 
+  Include BaseComp_ILK_Exp_Ctx.
+End BaseComp_ILK_Exp_Ctx_Impl.
+
+Module Type BaseComp_ILK_Sig_Helper (self__BaseComp : BaseComp_ILK_Ctx).
+  Include BaseComp_ILK_Exp_Ctx.
+  Include BaseComp_ILK_Exp (self__BaseComp) (* BaseComp_ILK_Exp_Ctx_Impl *).
+End BaseComp_ILK_Sig_Helper.
+
+Module Type BaseComp_ILK_Sig (self__BaseComp : BaseComp_ILK_Ctx).
+  Declare Module ILK : BaseComp_ILK_Sig_Helper (self__BaseComp).
+End BaseComp_ILK_Sig.
+
+(* Instantiate BaseComp.ILK *)
+Module BaseComp_ILK_Impl (self__BaseComp : BaseComp_ILK_Ctx)
+        <: BaseComp_ILK_Sig (self__BaseComp).
+  Module ILK.    
+   Inductive Ty' := TUnit' | TCont' (ts : list Ty').
+    Definition Ty := Ty'.
+    Definition TUnit := TUnit'.
+    Definition TCont := TCont'.
+
+    Inductive Val' := Unit' | Var' (x : ident).
+    (* Lam (x : list string) (e : Exp) *)
+    Definition Val := Val'.
+    Definition Unit := Unit'.
+    Definition Var := Var'.
+
+    Inductive Exp' := 
+      | ELet' (x : ident) (v : Val) (e : Exp')
+      | EApp' (v : Val) (vs : list Val) 
+      | EHalt' (v : Val).
+    Definition Exp := Exp'.
+    Definition ELet := ELet'.
+    Definition EApp := EApp'.
+    Definition EHalt := EHalt'.    
+  End ILK.
+  (* Definition f := self.IL.Unit. 
+  Check f.*)
+End BaseComp_ILK_Impl.
+
+(* ILC *)
+
+Module Type BaseComp_ILC_Ctx.
+  Include BaseComp_ILK_Ctx.
+  Include BaseComp_ILK_Sig (BaseComp_ILK_Ctx_Impl).
+End BaseComp_ILC_Ctx.
+
+Module Type BaseComp_ILC_Ty_Ctx.
+End BaseComp_ILC_Ty_Ctx.
+
+Module Type BaseComp_ILC_Ty 
+  (self__BaseComp : BaseComp_ILC_Ctx)
+  (self__ILC : BaseComp_ILC_Ty_Ctx).  
+  Include BaseComp_IL_Ty (self__BaseComp) (self__ILC).
+  Axiom TVar : ident -> Ty.
+  Axiom TExist : ident -> Ty -> Ty.
+End BaseComp_ILC_Ty.
+
+Module BaseComp_ILC_Ctx_Impl.
+  Include BaseComp_ILC_Ctx.
+End BaseComp_ILC_Ctx_Impl.
+
+Module BaseComp_ILC_Ty_Ctx_Impl.
+  Include BaseComp_ILC_Ty_Ctx.
+End BaseComp_ILC_Ty_Ctx_Impl.
+  
+Module Type BaseComp_ILC_Val_Ctx.
+  Include BaseComp_ILC_Ty_Ctx.
+  Include BaseComp_ILC_Ty (BaseComp_ILC_Ctx_Impl) (BaseComp_ILC_Ty_Ctx_Impl).
+End BaseComp_ILC_Val_Ctx.
+
+Module Type BaseComp_ILC_Val 
+  (self__BaseComp : BaseComp_ILC_Ctx)
+  (self__ILC : BaseComp_ILC_Val_Ctx).
+  Include BaseComp_IL_Val (self__BaseComp) (self__ILC).
+  (* Axiom Lam : list ident -> self.Exp -> Val. *)
+  Axiom Pack : self__ILC.Ty -> Val -> Val.
+  Axiom Name : ident -> Val.
+End BaseComp_ILC_Val.
+
+Module BaseComp_ILC_Val_Ctx_Impl.
+  Include BaseComp_ILC_Val_Ctx.
+End BaseComp_ILC_Val_Ctx_Impl.
+
+Module Type BaseComp_ILC_Exp_Ctx.
+  Include BaseComp_ILC_Val_Ctx.
+  Include BaseComp_ILC_Val (BaseComp_ILC_Ctx_Impl) (* BaseComp_ILC_Val_Ctx_Impl *). 
+End BaseComp_ILC_Exp_Ctx.
+
+Module Type BaseComp_ILC_Exp 
+  (self__BaseComp : BaseComp_ILC_Ctx)  
+  (self__ILC : BaseComp_ILC_Exp_Ctx).
+  Include BaseComp_IL_Exp (self__BaseComp) (self__ILC).
+  Axiom EUnpack : ident -> ident -> self__ILC.Val -> Exp -> Exp.
+End BaseComp_ILC_Exp.
+
+Module BaseComp_ILC_Exp_Ctx_Impl. 
+  Include BaseComp_ILC_Exp_Ctx.
+End BaseComp_ILC_Exp_Ctx_Impl.
+
+Module Type BaseComp_ILC_Sig_Helper (self__BaseComp : BaseComp_ILC_Ctx).
+  Include BaseComp_ILC_Exp_Ctx.
+  Include BaseComp_ILC_Exp (self__BaseComp) (* BaseComp_ILK_Exp_Ctx_Impl *).
+End BaseComp_ILC_Sig_Helper.
+
+Module Type BaseComp_ILC_Sig (self__BaseComp : BaseComp_ILC_Ctx).
+  Declare Module ILC : BaseComp_ILC_Sig_Helper (self__BaseComp).
+End BaseComp_ILC_Sig.
+
+(* Instantiate BaseComp.ILC *)
+Module BaseComp_ILC_Impl (self__BaseComp : BaseComp_ILC_Ctx)
+        <: BaseComp_ILC_Sig (self__BaseComp).
+   Module ILC.
+    Inductive Ty' := 
+      | TUnit' | TCont' (ts : list Ty')
+      | TVar' (s : ident) | TExist' (x : ident) (t : Ty').
+    Definition Ty := Ty'.
+    Definition TUnit := TUnit'.
+    Definition TCont := TCont'.
+    Definition TVar := TVar'.
+    Definition TExist := TExist'.
+    
+    Inductive Val' := 
+      | Unit' | Var' (x : ident)
+      | Pack' (t : Ty) (v : Val') | Name' (n : ident).
+    (* Lam (x : list string) (e : Exp) *)
+    Definition Val := Val'.
+    Definition Unit := Unit'.
+    Definition Var := Var'.
+    Definition Pack := Pack'.
+    Definition Name := Name'.
+
+    Inductive Exp' := 
+      | ELet' (x : ident) (v : Val) (e : Exp')
+      | EApp' (v : Val) (vs : list Val) 
+      | EHalt' (v : Val)
+      | EUnpack' (a : ident) (x : ident) (v : Val) (e : Exp').
+    Definition Exp := Exp'.
+    Definition ELet := ELet'.
+    Definition EApp := EApp'.
+    Definition EHalt := EHalt'.    
+    Definition EUnpack := EUnpack'.
+  End ILC.
+End BaseComp_ILC_Impl.
+
+(* Instantiate BaseComp *)
+Module BaseComp.
+  Include BaseComp_STLC_Impl.
+  
+  Include BaseComp_IL_Impl.
+  
+  Include BaseComp_ILK_Impl.
+
+  Include BaseComp_ILC_Impl.
+End BaseComp.
+
+
+Check BaseComp.IL.Ty.
 
 
 
