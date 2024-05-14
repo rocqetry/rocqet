@@ -4,12 +4,36 @@ Module Type S.
    Axiom Ty : Set.
 End S.
 
+Module Type T.
+  Axiom Exp : Set.
+End T.
+
+Module Type ST. 
+  Include S.
+  Include T.
+End ST.
+
 Module S_Impl <: S.
   Inductive Ty' := TyNat.
   Definition Ty := Ty'.
 End S_Impl.
-  
 
+Module T_Impl <: T.
+  Inductive Exp' := ENat.
+  Definition Exp := Exp'.
+End T_Impl.
+
+Module A (X : ST). 
+End A.
+
+Module U.
+  Include S_Impl.
+  Include T_Impl.
+  
+  Include A.
+End U.
+
+ 
 Definition ident := nat.
 
 Module Type STLCBase_Ty_Ctx.
@@ -39,18 +63,31 @@ End STLCBase_ExpVal.
 
 (* Generate a concerete module for STLCBase *)
 Module STLCBase.
-   Inductive Ty : Set := 
-     | TyUnit : Ty 
-     | TNat : Ty 
-     | TArr : Ty -> Ty -> Ty.
+   Inductive Ty' : Set := 
+     | TyUnit' : Ty'
+     | TNat' : Ty' 
+     | TArr' : Ty' -> Ty' -> Ty'.
+   Definition Ty := Ty'.
+   Definition TyUnit := TyUnit'.
+   Definition TNat := TNat'.
+   Definition TArr := TArr'.
    
-   Inductive Val : Set := 
-     | Unit : Val
-     | Var : ident -> Val
-     | Lam : ident -> Exp -> Val 
-    with Exp : Set := 
-      | EVal : Val -> Exp 
-      | EApp : Exp -> Exp -> Exp.
+   Inductive Val' : Set := 
+     | Unit' : Val'
+     | Var' : ident -> Val'
+     | Lam' : ident -> Exp' -> Val' 
+    with Exp' : Set := 
+      | EVal' : Val' -> Exp' 
+      | EApp' : Exp' -> Exp' -> Exp'.
+   
+   Definition Val := Val'.
+   Definition Unit := Unit'.
+   Definition Var := Var'.
+   Definition Lam := Lam'.
+   Definition Exp := Exp'.
+   Definition EVal := EVal'.
+   Definition EApp := EApp'.
+
 End STLCBase.
 
 
@@ -75,21 +112,39 @@ End STLCIf_ExpVal.
 
 (* Instantiate STLCIf *)
 Module STLCIf.
-   Inductive Ty : Set := 
-     | TyUnit : Ty 
-     | TNat : Ty 
-     | TArr : Ty -> Ty -> Ty.
+  Inductive Ty' : Set := 
+     | TyUnit' : Ty'
+     | TNat' : Ty' 
+     | TArr' : Ty' -> Ty' -> Ty'
+     | TBool' : Ty'.
+   Definition Ty := Ty'.
+   Definition TyUnit := TyUnit'.
+   Definition TNat := TNat'.
+   Definition TArr := TArr'.
+   Definition TBool := TBool'.
    
-   Inductive Val : Set := 
-     | Unit : Val
-     | Var : ident -> Val
-     | Lam : ident -> Exp -> Val 
-     | VTrue : Val 
-     | VFalse : Val 
-    with Exp : Set := 
-      | EVal : Val -> Exp 
-      | EApp : Exp -> Exp -> Exp
-      | EIf : Exp -> Exp -> Exp -> Exp.
+   Inductive Val' : Set := 
+     | Unit' : Val'
+     | Var' : ident -> Val'
+     | Lam' : ident -> Exp' -> Val'
+     | VTrue' : Val'
+     | VFalse' : Val'
+    with Exp' : Set := 
+      | EVal' : Val' -> Exp' 
+      | EApp' : Exp' -> Exp' -> Exp'
+      | EIf' : Exp' -> Exp' -> Exp' -> Exp'.
+   
+   Definition Val := Val'.
+   Definition Unit := Unit'.
+   Definition Var := Var'.
+   Definition Lam := Lam'.
+   Definition Exp := Exp'.
+   Definition EVal := EVal'.
+   Definition EApp := EApp'.
+   Definition VTrue := VTrue'.
+   Definition VFalse := VFalse'.
+ 
+
 End STLCIf.
 
 
@@ -125,18 +180,30 @@ End BaseComp_STLC.
 (* Instantiate BaseComp.STLC *)
 Module BaseComp_STLC_Impl (self : BaseComp_STLC_Ctx) <: BaseComp_STLC(self).
   Module STLC.
-    Inductive Ty : Set := 
-     | TyUnit : Ty 
-     | TNat : Ty 
-     | TArr : Ty -> Ty -> Ty.
+       Inductive Ty' : Set := 
+     | TyUnit' : Ty'
+     | TNat' : Ty' 
+     | TArr' : Ty' -> Ty' -> Ty'.
+   Definition Ty := Ty'.
+   Definition TyUnit := TyUnit'.
+   Definition TNat := TNat'.
+   Definition TArr := TArr'.
    
-   Inductive Val : Set := 
-     | Unit : Val
-     | Var : ident -> Val
-     | Lam : ident -> Exp -> Val 
-    with Exp : Set := 
-      | EVal : Val -> Exp 
-      | EApp : Exp -> Exp -> Exp.
+   Inductive Val' : Set := 
+     | Unit' : Val'
+     | Var' : ident -> Val'
+     | Lam' : ident -> Exp' -> Val' 
+    with Exp' : Set := 
+      | EVal' : Val' -> Exp' 
+      | EApp' : Exp' -> Exp' -> Exp'.
+   
+   Definition Val := Val'.
+   Definition Unit := Unit'.
+   Definition Var := Var'.
+   Definition Lam := Lam'.
+   Definition Exp := Exp'.
+   Definition EVal := EVal'.
+   Definition EApp := EApp'.
   End STLC.
 End BaseComp_STLC_Impl.
 
@@ -172,16 +239,30 @@ Module Type BaseComp_IL_Exp_Ctx.
   Include BaseComp_IL_Val.
 End BaseComp_IL_Exp_Ctx.
 
+Module Mt. End Mt.
+
+Module Ctx.
+  Declare Module STLC : BaseComp_STLC_sig(Mt).
+  Axiom Ty : Set.
+  Axiom TUnit : Ty.
+  Axiom TCont : list Ty -> Ty.
+  Axiom Val : Set.
+  Axiom Unit : Val.
+  Axiom Var : ident -> Val.
+End Ctx.
+
 Module Type BaseComp_IL_Exp (self : BaseComp_IL_Exp_Ctx).
   Axiom Exp : Set.
   Axiom ELet : ident -> self.Val -> Exp -> Exp.
   Axiom EApp : self.Val -> list self.Val -> Exp.
-  Axiom EHalt : self.Val -> Exp.
+  Axiom EHalt : self.Val -> Exp.  
 End BaseComp_IL_Exp.
 
 Module Type BaseComp_IL_sig (self : BaseComp_IL_Ctx).
-  Include BaseComp_IL_Exp_Ctx.
-  Include BaseComp_IL_Exp.
+   (* Include BaseComp_IL_Exp_Ctx.*)
+  (* ^ This should not be included, it should  
+     be applied  *)
+  Include BaseComp_IL_Exp(Ctx).
 End BaseComp_IL_sig.
 
 Module Type BaseComp_IL (self : BaseComp_IL_Ctx).
@@ -191,12 +272,24 @@ End BaseComp_IL.
 (* Instantiate BaseComp.IL *)
 Module BaseComp_IL_Impl (self : BaseComp_IL_Ctx).
   Module IL.
-    Inductive Ty := TUnit | TCont (ts : list Ty).
-    Inductive Val := Unit | Var (x : ident).
-    Inductive Exp := 
-      | ELet (x : ident) (v : Val) (e : Exp)
-      | EApp (v : Val) (vs : list Val) 
-      | EHalt (v : Val).
+    Inductive Ty' := TUnit' | TCont' (ts : list Ty').
+    Definition Ty := Ty'.
+    Definition TUnit := TUnit'.
+    Definition TCont := TCont'.
+
+    Inductive Val' := Unit' | Var' (x : ident).
+    Definition Val := Val'.
+    Definition Unit := Unit'.
+    Definition Var := Var'.
+
+    Inductive Exp' := 
+      | ELet' (x : ident) (v : Val) (e : Exp')
+      | EApp' (v : Val) (vs : list Val) 
+      | EHalt' (v : Val).
+    Definition Exp := Exp'.
+    Definition ELet := ELet'.
+    Definition EApp := EApp'.
+    Definition EHalt := EHalt'.    
   End IL.
   (* Module s := self.STLC. *)
 End BaseComp_IL_Impl.
@@ -208,6 +301,8 @@ Module Type BaseComp_ILK_Ctx.
   Include BaseComp_IL_Ctx.
   Include BaseComp_IL.
 End BaseComp_ILK_Ctx.
+
+
 
 Module Type BaseComp_ILK_Ty_Ctx. 
   Include BaseComp_ILK_Ctx.
@@ -247,19 +342,29 @@ End BaseComp_ILK.
 
 (* Instantiate BaseComp.ILK *)
 Module BaseComp_ILK_Impl (self : BaseComp_ILK_Ctx).
-  Module ILK.
-    Inductive Ty := TUnit | TCont (ts : list Ty).
-    Inductive Val := 
-      | Unit 
-      | Var (x : ident).
-      (* Lam (x : list string) (e : Exp) *)
-    Inductive Exp := 
-      | ELet (x : ident) (v : Val) (e : Exp)
-      | EApp (v : Val) (vs : list Val) 
-      | EHalt (v : Val).
+  Module ILK.    
+   Inductive Ty' := TUnit' | TCont' (ts : list Ty').
+    Definition Ty := Ty'.
+    Definition TUnit := TUnit'.
+    Definition TCont := TCont'.
+
+    Inductive Val' := Unit' | Var' (x : ident).
+    (* Lam (x : list string) (e : Exp) *)
+    Definition Val := Val'.
+    Definition Unit := Unit'.
+    Definition Var := Var'.
+
+    Inductive Exp' := 
+      | ELet' (x : ident) (v : Val) (e : Exp')
+      | EApp' (v : Val) (vs : list Val) 
+      | EHalt' (v : Val).
+    Definition Exp := Exp'.
+    Definition ELet := ELet'.
+    Definition EApp := EApp'.
+    Definition EHalt := EHalt'.    
   End ILK.
-  Definition f := self.IL.Unit.
-  Check f.
+  (* Definition f := self.IL.Unit. 
+  Check f.*)
 End BaseComp_ILK_Impl.
 
 (* ILC *)
@@ -312,20 +417,35 @@ End BaseComp_ILC.
 (* Instantiate BaseComp.ILC *)
 Module BaseComp_ILC_Impl (self : BaseComp_ILC_Ctx).
   Module ILC.
-    Inductive Ty := 
-      | TUnit 
-      | TCont (ts : list Ty)
-      | TVar (s : ident) | TExist (x : ident) (t : Ty).
-    Inductive Val := 
-      | Unit 
-      | Var (x : ident)
-      (* Lam (x : list string) (e : Exp) *)
-      | Pack (t : Ty) (v : Val) | Name (n : ident).
-    Inductive Exp := 
-      | ELet (x : ident) (v : Val) (e : Exp)
-      | EApp (v : Val) (vs : list Val) 
-      | EHalt (v : Val)
-      | EUnpack(a : ident) (x : ident) (v : Val) (e : Exp).
+    Inductive Ty' := 
+      | TUnit' | TCont' (ts : list Ty')
+      | TVar' (s : ident) | TExist' (x : ident) (t : Ty').
+    Definition Ty := Ty'.
+    Definition TUnit := TUnit'.
+    Definition TCont := TCont'.
+    Definition TVar := TVar'.
+    Definition TExist := TExist'.
+    
+    Inductive Val' := 
+      | Unit' | Var' (x : ident)
+      | Pack' (t : Ty) (v : Val') | Name' (n : ident).
+    (* Lam (x : list string) (e : Exp) *)
+    Definition Val := Val'.
+    Definition Unit := Unit'.
+    Definition Var := Var'.
+    Definition Pack := Pack'.
+    Definition Name := Name'.
+
+    Inductive Exp' := 
+      | ELet' (x : ident) (v : Val) (e : Exp')
+      | EApp' (v : Val) (vs : list Val) 
+      | EHalt' (v : Val)
+      | EUnpack' (a : ident) (x : ident) (v : Val) (e : Exp').
+    Definition Exp := Exp'.
+    Definition ELet := ELet'.
+    Definition EApp := EApp'.
+    Definition EHalt := EHalt'.    
+    Definition EUnpack := EUnpack'.
   End ILC.
   
 End BaseComp_ILC_Impl.
@@ -334,6 +454,11 @@ Module BaseComp.
   Include BaseComp_STLC_Impl.
   
   Include BaseComp_IL_Impl.
+  
+  Include BaseComp_ILK_Impl.
+
+  Include BaseComp_ILC_Impl.
+End BaseComp.
 
 (* On completion of the family *)
 module BaseComp {
