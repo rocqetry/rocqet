@@ -214,6 +214,8 @@ Module Type BaseComp_IL_Ctx.
 End BaseComp_IL_Ctx.
 
 Module Type BaseComp_IL_Ty_Ctx.
+  (* This basically means STLC is included 
+     as a module in IL *)
   Include BaseComp_IL_Ctx.
 End BaseComp_IL_Ty_Ctx.
 
@@ -239,18 +241,6 @@ Module Type BaseComp_IL_Exp_Ctx.
   Include BaseComp_IL_Val.
 End BaseComp_IL_Exp_Ctx.
 
-Module Mt. End Mt.
-
-Module Ctx.
-  Declare Module STLC : BaseComp_STLC_sig(Mt).
-  Axiom Ty : Set.
-  Axiom TUnit : Ty.
-  Axiom TCont : list Ty -> Ty.
-  Axiom Val : Set.
-  Axiom Unit : Val.
-  Axiom Var : ident -> Val.
-End Ctx.
-
 Module Type BaseComp_IL_Exp (self : BaseComp_IL_Exp_Ctx).
   Axiom Exp : Set.
   Axiom ELet : ident -> self.Val -> Exp -> Exp.
@@ -258,11 +248,15 @@ Module Type BaseComp_IL_Exp (self : BaseComp_IL_Exp_Ctx).
   Axiom EHalt : self.Val -> Exp.  
 End BaseComp_IL_Exp.
 
+Module BaseComp_IL_Exp_Ctx_Impl.
+  Include BaseComp_IL_Exp_Ctx.
+End BaseComp_IL_Exp_Ctx_Impl.
+
 Module Type BaseComp_IL_sig (self : BaseComp_IL_Ctx).
-   (* Include BaseComp_IL_Exp_Ctx.*)
+   Include BaseComp_IL_Exp_Ctx.
   (* ^ This should not be included, it should  
      be applied  *)
-  Include BaseComp_IL_Exp(Ctx).
+  Include BaseComp_IL_Exp.
 End BaseComp_IL_sig.
 
 Module Type BaseComp_IL (self : BaseComp_IL_Ctx).

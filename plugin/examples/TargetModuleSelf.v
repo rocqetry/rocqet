@@ -495,8 +495,10 @@ Module BaseComp.
   Include BaseComp_ILC_Impl.
 End BaseComp.
 
-
 Check BaseComp.IL.Ty.
+
+Check BaseComp.STLC.Exp.
+
 
 
 
