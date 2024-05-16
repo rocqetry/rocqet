@@ -10,6 +10,37 @@ family STLCIf extends STLCBase {
     Inductive Exp += EIf (e e1 e2 : Exp) 
 }
 
+(* *)
+
+family BaseComp {
+
+    ...
+
+    family IL {        
+        Inductive Ty := TUnit | TCont (ts : list Ty)
+        Inductive Val := Unit | Var (x : string)
+        Inductive Exp := 
+          | ELet (x : string) (v : Val) (e : Exp)
+          | EApp (v : Val) (vs : list Val) 
+          | EHalt (v : Val)
+    }
+
+    ... 
+              
+}
+
+Module BaseComp_IL_Impl (self__BaseComp : BaseComp_IL_Ctx).     
+  Module IL.
+    Inductive Ty := TUnit | TCont (ts : list Ty).    
+    Inductive Exp := 
+      | ELet (x : ident) (v : Val) (e : Exp)
+      | EApp (v : Val) (vs : list Val) 
+      | EHalt (v : Val).    
+  End IL.
+End BaseComp_IL_Impl.
+
+(* *)
+
 family BaseComp {
     family STLC extends STLCBase { }
 

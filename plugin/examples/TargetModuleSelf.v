@@ -1,4 +1,4 @@
-(* Compiling with paramenterized self hierachies *)
+(* Compiling with paramenterized self hierarchies *)
 (* https://stackoverflow.com/questions/48837996/import-module-vs-include-module-in-coq-module-system/49717951 *)
 
 Definition ident := nat.
@@ -245,7 +245,6 @@ Module Type BaseComp_IL_Exp
   Axiom ELet : ident -> self__IL.Val -> Exp -> Exp.
   Axiom EApp : self__IL.Val -> list self__IL.Val -> Exp.
   Axiom EHalt : self__IL.Val -> Exp.  
-  (* Axiom compile : self__BaseComp.STLC.Exp -> Exp. *)
 End BaseComp_IL_Exp.
 
 Module BaseComp_IL_Exp_Ctx_Impl. 
