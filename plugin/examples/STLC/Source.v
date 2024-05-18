@@ -10,49 +10,29 @@ family STLCIf extends STLCBase {
     Inductive Exp += EIf (e e1 e2 : Exp) 
 }
 
-(* *)
-
-family BaseComp {
-    family IL {        
-        Inductive Ty := TUnit | TCont (ts : list Ty)
-        Inductive Val := Unit | Var (x : string)
-        Inductive Exp := 
-          | ELet (x : string) (v : Val) (e : Exp)
-          | EApp (v : Val) (vs : list Val) 
-          | EHalt (v : Val)
-    }                  
-}
-
-Module BaseComp_IL_Impl (self__BaseComp : BaseComp_IL_Ctx).     
-  Module IL.
-    Inductive Ty := TUnit | TCont (ts : list Ty).    
-    Inductive Exp := 
-      | ELet (x : ident) (v : Val) (e : Exp)
-      | EApp (v : Val) (vs : list Val) 
-      | EHalt (v : Val).    
-  End IL.
-End BaseComp_IL_Impl.
 
 family BaseComp {
     family STLC extends STLCBase { }
+    
+    Definition Ident := nat
 
-    family IL {        
+    family IL {
         Inductive Ty := TUnit | TCont (ts : list Ty)
-        Inductive Val := Unit | Var (x : string)
+        Inductive Val := Unit | Var (x : Ident)
         Inductive Exp := 
-          | ELet (x : string) (v : Val) (e : Exp)
+          | ELet (x : Ident) (v : Val) (e : Exp)
           | EApp (v : Val) (vs : list Val) 
           | EHalt (v : Val)
     }
 
     family ILK extends IL { 
-        Inductive Val += Lam (x : list string) (e : Exp)
+        Inductive Val += Lam (x : list Ident) (e : Exp)
     }
 
     family ILC extends IL { 
-        Inductive Ty += TVar (s : string) | TExist (x : string) (t : Ty)
-        Inductive Val += Pack (t : Ty) (v : Val) | Name (n : string)
-        Inductive Exp += EUnpack(a : string) (x : string) (v : Val) (e : Exp)        
+        Inductive Ty += TVar (s : Ident) | TExist (x : Ident) (t : Ty)
+        Inductive Val += Pack (t : Ty) (v : Val) | Name (n : Ident)
+        Inductive Exp += EUnpack(a : string) (x : Ident) (v : Val) (e : Exp)        
     }
 }
 
