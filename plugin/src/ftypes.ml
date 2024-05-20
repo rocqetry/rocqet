@@ -1,3 +1,4 @@
+(* Contains only type definitions used around the plugins *)
 module VernacInductive = struct 
   type t = (Vernacexpr.inductive_expr * Vernacexpr.decl_notation list) list
 end
