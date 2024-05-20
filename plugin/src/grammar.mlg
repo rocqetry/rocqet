@@ -2,10 +2,15 @@ DECLARE PLUGIN "nfpop.plugin"
 
 {
   open Stdarg  
-  (* open Pvernac.Vernac_ *)
+  (* open Pvernac.Vernac_
+  open Pcoq.Constr
+  open Pcoq.Prim*)
   (* open Ltac_plugin *)
   let wit_mutind_defs : (Ftypes.VernacInductive.t, Util.Empty.t, Util.Empty.t) Genarg.genarg_type =
-        Genarg.create_arg "coq_ind_sig"
+    Genarg.create_arg "coq_ind_sig"
+
+  let mutind_defs : Ftypes.VernacInductive.t Pcoq.Entry.t =
+     Pcoq.create_generic_entry2 "mutind_defs" (Genarg.rawwit wit_mutind_defs)
 }
 
 
