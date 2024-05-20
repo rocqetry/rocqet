@@ -22,7 +22,7 @@
    coq-core.plugins.ltac))          ; Needed for tactic extend. 
 
 ; This will let Dune know about Coq's .mlg grammar files.
-(coq.pp (modules grammar))
+(coq.pp (modules fgrammar))
 
 (env
   (dev
