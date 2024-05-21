@@ -2,12 +2,14 @@ DECLARE PLUGIN "nfpop.plugin"
 
 {
   open Stdarg  
-  (* open Pvernac.Vernac_
+  open Pvernac.Vernac_
   open Pcoq.Constr
-  open Pcoq.Prim*)
-  (* open Ltac_plugin *)
+  open Pcoq.Prim
+  (* open Ltac_plugin
+  open Ltac_plugin.Tacarg *)  
+
   let wit_mutind_defs : (Ftypes.VernacInductive.t, Util.Empty.t, Util.Empty.t) Genarg.genarg_type =
-    Genarg.create_arg "coq_ind_sig"
+  Genarg.create_arg "coq_ind_sig"
 
 let wit_list1ident : (Names.Id.t list, Util.Empty.t, Util.Empty.t) Genarg.genarg_type =
   Genarg.create_arg "list1ident_ty"
@@ -18,9 +20,14 @@ let wit_reference_ip : (Libnames.qualid, Util.Empty.t, Util.Empty.t) Genarg.gena
 let wit_llconstr_ip : (Constrexpr.constr_expr, Genintern.glob_constr_and_expr, EConstr.t) Genarg.genarg_type =
   Genarg.create_arg "llconstr_ip"
 
+(* type thmbinderprop_info = (name * Constrexpr.constr_expr) list
 
-  let mutind_defs : Ftypes.VernacInductive.t Pcoq.Entry.t =
-     Pcoq.create_generic_entry2 "mutind_defs" (Genarg.rawwit wit_mutind_defs)
+let wit_thmbinders :  (thmbinderprop_info, Util.Empty.t, Util.Empty.t) Genarg.genarg_type =
+  Genarg.create_arg "thmbinders" *)
+
+
+let mutind_defs : Ftypes.VernacInductive.t Pcoq.Entry.t =
+  Pcoq.create_generic_entry2 "mutind_defs" (Genarg.rawwit wit_mutind_defs)
 
 let list1ident : Names.Id.t list Pcoq.Entry.t =
   Pcoq.create_generic_entry2 "list1ident" (Genarg.rawwit wit_list1ident)
@@ -28,8 +35,15 @@ let list1ident : Names.Id.t list Pcoq.Entry.t =
 let reference_ip : Libnames.qualid Pcoq.Entry.t = 
   Pcoq.create_generic_entry2 "reference_ip" (Genarg.rawwit wit_reference_ip)
 
+(* llconstr_ip is basically lconstr but it will try to add proper family prefix 
+    called llconstr_infer_prefix   
+*)
 let llconstr_ip : Constrexpr.constr_expr Pcoq.Entry.t =
   Pcoq.create_generic_entry2 "llconstr_ip" (Genarg.rawwit wit_llconstr_ip)
+
+(* let thmbinders : thmbinderprop_info Pcoq.Entry.t =
+  Pcoq.create_generic_entry2 "thmbinders" (Genarg.rawwit wit_thmbinders) *)
+
 }
 
 GRAMMAR EXTEND Gram
@@ -39,13 +53,12 @@ GLOBAL: mutind_defs llconstr_ip (*thmbinders*) gallina_ext list1ident reference_
   mutind_defs :
     [[ indl = LIST1 inductive_definition SEP "with" -> { indl } ]];
   llconstr_ip : 
-    [[ c = lconstr -> { attach_self_prefix c } ]];
+    [[ c = lconstr -> { (* attach_self_prefix *) c } ]];
   reference_ip :
-    [[ r = reference -> { attach_self_prefix_qualid r } ]];  
+    [[ r = reference -> { (* attach_self_prefix_qualid*) r } ]];  
   gallina_ext : TOP
     [[  ]];
 END
-
 
 VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "Family" ident(derived) "extends" ident(base)] ->  { Fentry.family_extends ~derived ~base }
