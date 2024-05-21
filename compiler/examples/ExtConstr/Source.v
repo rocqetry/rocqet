@@ -1,12 +1,29 @@
 (* Take 1 *)
 family STLC {
-  Inductive Ty : Set := TUnit : Ty | TNat : Ty | TTuple : Ty -> Ty 
+  Inductive Ty : Set := 
+    | TUnit : Ty 
+    | TNat : Ty 
+    | TTuple : Ty -> Ty 
+  Definition sample_tuple := TTuple TNat                                                                  
 }
-
+            
 family PairExt { 
   Inductive Ty : Set += TTuple : Ty -> Ty -> Ty
   Default TTuple TUnit.
+  =====Inherited=======
+  Definition sample_tuple := TTuple TNat TUnit
+  ====Inherited========
 }
+
+family LamExt {
+  Inductive Ty : Set += 
+    | TArr : Ty -> Ty -> Ty                     
+}  
+
+Check (STLC.Ty : STLC.Ty -> STLC.Ty)
+Check (PairExt.TTuple : PairExt.Ty -> PairExt.Ty -> PairExt.Ty)
+
+
 
 
 (* Take 2 *)
@@ -15,7 +32,7 @@ family STLC {
     FInductive ty: Set :=
      | ty_unit : ty
      | ty_arrow : ty -> ty -> ty.
-
+     
    FInductive tm : Set :=
      | tm_var : ident -> tm    
      | tm_abs : ident -> tm -> tm
