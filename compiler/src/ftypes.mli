@@ -63,7 +63,8 @@ and InhJudgement : sig
   type t = 
     { base : FamilyType.t; 
       derived : FamilyType.t; 
-      body : (Names.Id.t * InhElement.t) list; }
+      body : (Names.Id.t * InhElement.t) list;
+      ctx: FamilyContext.t; }
   val empty : base:FamilyType.t -> derived:FamilyType.t -> t
 end
 

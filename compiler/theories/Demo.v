@@ -1,5 +1,7 @@
 From NFPOP Require Import Loader.
 
+(* FInductive step : Set := exec_label. *)
+
 Family Cminorvariant.
     Family Semantics.
     FEnd Semantics.
@@ -7,7 +9,7 @@ FEnd Cminorvariant.
 
 Family Cminor extends Cminorvariant.
     Family Semantics.
-       FInductive name := exec_step. 
+       FInductive name := exec_step | exec_skip. 
     FEnd Semantics.
 FEnd Cminor.
 

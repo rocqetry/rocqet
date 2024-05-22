@@ -23,7 +23,12 @@ module PluginScopes = struct
     | [] -> None (* The caller should know how to handle this *)
     | { Ftypes.PluginCmdScope.name; _ } as scope :: scopes when name = scope_name -> Some scope
     | _  ->  Ferror.report ~error:Ferror.ClosingWrongScope 
-    
+  
+  let ensure_in_scope ~scope = 
+    match peek () with 
+    | Some { Ftypes.PluginCmdScope.command; _ } when command = scope -> ()
+    | Some _ | None -> Ferror.fail ~info:"Expected to be in a different scope"
+       
 end
 
 module InhJudgements = struct 
@@ -32,7 +37,20 @@ module InhJudgements = struct
       ~name:"InhJudgements" 
       ([] : (Names.Id.t * Ftypes.InhJudgement.t) list)
  
- let push ~name ~judgement = judgements := (name, judgement) :: !judgements   
+ let push ~name ~judgement = judgements := (name, judgement) :: !judgements
+
+ let ensure_open_judgememt () = 
+   if not (List.length !judgements > 0) then 
+     Ferror.fail ~info:"Need to have a judgement present to add stuff to"
+ 
+ let current_output_ctx () = 
+   let open Ftypes in
+   match !judgements with 
+   | [] -> FamilyContext.FamCtx []
+   | (name, judgement) :: _ -> 
+      let InhJudgement.{ derived; ctx; _ } = judgement in 
+      let FamilyContext.FamCtx ctx = ctx in 
+      FamilyContext.FamCtx ((name, derived) :: ctx)      
 end
 
 

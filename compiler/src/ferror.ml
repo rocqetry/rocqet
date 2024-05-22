@@ -10,3 +10,5 @@ exception NestedCommand
 exception ClosingWrongScope
 
 let report ~error = raise error
+
+let fail ~info = failwith info
