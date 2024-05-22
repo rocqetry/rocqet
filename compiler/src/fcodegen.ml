@@ -25,9 +25,131 @@ let _define name body sigma =
 let _internalize env trm sigma =
   Constrintern.interp_constr_evars env sigma trm
 
-
 (* Interface for what a codegen backend should be *)
-module type S = sig
+(* module type S = sig
+  type t 
   val define_module : Names.Id.t -> unit
   val dump_output : string -> unit
+end *)
+
+(* Referencing the name of a module *)
+module ModuleTerm = struct 
+  type t = Libnames.qualid
 end
+
+(* Referencing a module type *)
+module ModuleType = struct
+  type t = Libnames.qualid
+end
+
+module VernacWriter = struct 
+  type expr = 
+    | Original of Vernacexpr.vernac_expr
+    | TrySilent of Vernacexpr.vernac_expr
+    | Thunk of (unit -> expr list)
+
+  type 'a t = expr list * 'a
+
+  let emit_vernac_expr ~silence (orgexpr : Vernacexpr.vernac_expr) : unit =
+    let () = Feedback.msg_notice @@ 
+      let open Pp in 
+      (Ppvernac.pr_vernac_expr orgexpr) ++ (str ".") 
+    in 
+    let open Vernacexpr in 
+    let expr = {control = []; attrs = []; expr = orgexpr} in 
+    let expr = CAst.make expr in 
+    let backtrace = Printexc.raw_backtrace_to_string @@ Printexc.get_callstack 5 in 
+    let dummyst = Vernacstate.freeze_interp_state ~marshallable:false in 
+    try 
+      let _ = Vernacinterp.interp ~st:dummyst expr in () 
+    with reraise ->
+      let info = "Exception Info: " ^ Printexc.to_string reraise ^ "\n" ^ (Pp.string_of_ppcmds @@ CErrors.print reraise) ^ "\n\n" in 
+        let ver_exc = "Error happened during translation\n   " ^ (Pp.string_of_ppcmds @@  Ppvernac.pr_vernac_expr orgexpr) ^ "\n" in         
+        if not silence then
+           Ferror.fail ~info:(info ^ ver_exc ^ "Stack Trace \n" ^ backtrace ^ "\n") 
+
+  let rec emit = function
+    | Original e -> emit_vernac_expr ~silence:false e 
+    | TrySilent e -> emit_vernac_expr ~silence:true e 
+    | Thunk f -> f () |> emit_list
+  and emit_list exprs = exprs |> List.iter emit
+
+
+  let vernac_ expr : unit t = ([Original expr], ())
+  let vernacs_ exprs : unit t = List.map (fun x -> Original x) exprs, ()
+  let try_ expr : unit t = List.map (fun x -> TrySilent x) expr, ()
+  let thunk (e : unit -> unit t) : unit t = [Thunk (fun () -> fst @@ e ())], ()
+
+   let bind (x : 'a t) (f : 'a -> 'b t) : 'b t =
+    let x_data, x' = x in 
+    let y_data, y = f x' in 
+    (x_data @ y_data, y) 
+   
+  let (let*) x f = bind x f
+
+  let (>>) x y = bind x (fun _-> y)
+  
+  let return (x : 'a) : 'a t = ([], x)
+
+  let rec flatmap xs : unit t =
+    match xs with 
+    | [] -> return ()
+    | h::t -> h >> (flatmap t)
+
+  let run (computation: 'a t) : 'a =    
+    let expr, result = computation in 
+    emit_list expr;
+    result
+
+  let define_module 
+    ~(module_name : Names.Id.t) 
+    ~(parameters : (Names.Id.t * Constrexpr.module_ast) list)
+    ~(body : ModuleTerm.t list -> unit t) : ModuleTerm.t t = 
+    let open Vernacexpr in
+    let modname_ = CAst.make module_name in 
+    let parameters_ = 
+      List.map 
+        (fun (n,m) -> 
+          (None, [CAst.make n], (m, Declaremods.DefaultInline))) parameters in 
+    
+    let inner_parameter =
+      List.map 
+        (fun (n,m) ->
+          Libnames.qualid_of_ident n) parameters in 
+    let* _ = vernac_ (VernacDefineModule (None, modname_ , parameters_ , Declaremods.Check [], []) ) in 
+    let* _ = body inner_parameter in 
+    let* _ = vernac_ (VernacEndSegment modname_) in 
+      return @@ Libnames.qualid_of_ident module_name
+  
+  let define_moduletype 
+    ~(module_name : Names.Id.t)
+    ~(parameters : (Names.Id.t * Constrexpr.module_ast) list) 
+    ~(body : ModuleTerm.t list -> unit t) : ModuleType.t t = 
+    let open Vernacexpr in 
+    let modname_ = CAst.make module_name in 
+    let parameters_ = 
+      List.map 
+        (fun (n,m) -> 
+          (None, [CAst.make n], (m, Declaremods.DefaultInline))) parameters in 
+    
+    let inner_parameter =
+      List.map 
+        (fun (n,m) ->
+          Libnames.qualid_of_ident n) parameters in 
+    let* _ = vernac_ (VernacDeclareModuleType (modname_ , parameters_ , [], []) ) in 
+    let* _ = body inner_parameter in 
+    let* _ = vernac_ (VernacEndSegment modname_) in 
+      return @@ Libnames.qualid_of_ident module_name  
+
+  let assume_parameter
+    ~(name : Names.Id.t) 
+    ~(expr : Constrexpr.constr_expr) : unit t = 
+    let open Vernacexpr in
+    let fname_ = (CAst.make @@ name, None)  in 
+      vernac_ (VernacAssumption (
+                  (NoDischarge, Decls.Definitional), 
+                  Declaremods.NoInline , [(false , ([ fname_ ], expr))]))
+end
+
+
+

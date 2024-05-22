@@ -17,7 +17,7 @@ end
 
 module CompiledModule : sig
   type t = Libnames.qualid
-end 
+end
 
 module rec FamilyTypeElem : sig 
    type t = 

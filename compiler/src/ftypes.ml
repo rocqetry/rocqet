@@ -58,9 +58,10 @@ module FamilyName = struct
   type t = { name: Names.Id.t; id: FamilyId.t }
 end
 
+(* The name of a module that has been compiled *)
 module CompiledModule = struct 
   type t = Libnames.qualid
-end 
+end
 
 module rec FamilyTypeElem : sig 
    type t = 

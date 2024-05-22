@@ -11,6 +11,7 @@ let add_new_family name =
 let inductive_to_famtype 
    ~(ind_def : Ftypes.VernacInductive.t)
    ~(ctx : Ftypes.FamilyContext.t) : Ftypes.CompiledModule.t = 
+  
   failwith ""
 
 let inductive_to_famterm_and_recursor_type
