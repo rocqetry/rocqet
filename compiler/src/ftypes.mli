@@ -25,17 +25,18 @@ module rec FamilyTypeElem : sig
          { original_inductive : VernacInductive.t; 
            constructor_names : Names.Id.t list;
            compiled_signature : CompiledModule.t; 
-           complied_impl : CompiledModule.t }
+           compiled_impl : CompiledModule.t }
 end
 
 and FamilyType : sig
   type t =
     { name : FamilyName.t; 
-      body : (Names.Id.t * FamilyTypeElem.t) list; }
+      body : (Names.Id.t * FamilyTypeElem.t) list; }  
+  val extend : name: Names.Id.t -> elem:FamilyTypeElem.t -> t -> t
 end
 
 and FamilyContext : sig
-  type t = FamCtx of (Names.Id.t * FamilyType.t) list
+  type t = FamCtx of (Names.Id.t * FamilyType.t) list  
 end
 
 module rec FamilyRef : sig

@@ -7,6 +7,8 @@ end
 
 module InhJudgements : sig
   val push : name:Names.Id.t -> judgement:Ftypes.InhJudgement.t -> unit
+  val pop : unit -> (Names.Id.t * Ftypes.InhJudgement.t) option
   val ensure_open_judgememt : unit -> unit
   val current_output_ctx : unit -> Ftypes.FamilyContext.t
 end
+

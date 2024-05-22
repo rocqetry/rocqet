@@ -68,21 +68,33 @@ module rec FamilyTypeElem : sig
          { original_inductive : VernacInductive.t; 
            constructor_names : Names.Id.t list;
            compiled_signature : CompiledModule.t; 
-           complied_impl : CompiledModule.t }
+           compiled_impl : CompiledModule.t }
 end = FamilyTypeElem
 
 and FamilyType : sig
   type t =
     { name : FamilyName.t; 
       body : (Names.Id.t * FamilyTypeElem.t) list; }
-end = FamilyType
+
+  val extend : name: Names.Id.t -> elem:FamilyTypeElem.t -> t -> t
+end = struct 
+  type t =
+    { name : FamilyName.t; 
+      body : (Names.Id.t * FamilyTypeElem.t) list; }
+
+  let extend ~name ~elem family_type = 
+    let { body; _ } = family_type in
+    { family_type with body = (name, elem) :: body }
+end
 
 (* The family context, binding names to their respective types *)
 (* I suspect this is a list because we need to have nested families, 
    so the pair at the head of the list will be the current context *)
 and FamilyContext : sig
+  type t = FamCtx of (Names.Id.t * FamilyType.t) list  
+end = struct 
   type t = FamCtx of (Names.Id.t * FamilyType.t) list
-end = FamilyContext
+end
 
 module rec FamilyRef : sig
   type t = ToplevelRef of Names.Id.t 

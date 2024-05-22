@@ -32,12 +32,21 @@ module PluginScopes = struct
 end
 
 module InhJudgements = struct
+  (* The name in the pair is the name of the family in the current 
+     inheritance context. i.e the family we're currenlty adding fields to *)
   let judgements =
     Summary.ref
       ~name:"InhJudgements"
       ([] : (Names.Id.t * Ftypes.InhJudgement.t) list)
  
  let push ~name ~judgement = judgements := (name, judgement) :: !judgements
+
+ let pop () = 
+   match !judgements with 
+   | [] -> None 
+   | judgement :: js -> 
+      judgements := js; 
+      Some judgement
 
  let ensure_open_judgememt () =
    if not (List.length !judgements > 0) then
