@@ -68,7 +68,6 @@ and InhJudgement : sig
   val empty : base:FamilyType.t -> derived:FamilyType.t -> t
 end
 
-(* A single plugin command *)
 module PluginCmd : sig  
   type t = Family
 end 
@@ -77,6 +76,5 @@ module PluginCmdScope : sig
   type t = 
       { command : PluginCmd.t; 
         name : Names.Id.t; 
-        (* A generic handle that is called to close the scope *)
         close: unit -> unit; }
 end 

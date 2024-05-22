@@ -21,48 +21,36 @@ module PluginScopes = struct
   let pop scope_name = 
     match !scopes with 
     | [] -> None (* The caller should know how to handle this *)
-    | { Ftypes.PluginCmdScope.name; _ } as scope :: scopes when name = scope_name -> Some scope
-    | _  ->  Ferror.report ~error:Ferror.ClosingWrongScope 
+    | { Ftypes.PluginCmdScope.name; _ } as scope :: scopes 
+         when name = scope_name -> Some scope
+    | _  ->  Ferror.report ~error:Ferror.ClosingWrongScope
   
   let ensure_in_scope ~scope = 
     match peek () with 
     | Some { Ftypes.PluginCmdScope.command; _ } when command = scope -> ()
-    | Some _ | None -> Ferror.fail ~info:"Expected to be in a different scope"
-       
+    | Some _ | None -> Ferror.fail ~info:"Expected to be in a different scope"       
 end
 
-module InhJudgements = struct 
+module InhJudgements = struct
   let judgements =
     Summary.ref
-      ~name:"InhJudgements" 
+      ~name:"InhJudgements"
       ([] : (Names.Id.t * Ftypes.InhJudgement.t) list)
  
  let push ~name ~judgement = judgements := (name, judgement) :: !judgements
 
- let ensure_open_judgememt () = 
-   if not (List.length !judgements > 0) then 
+ let ensure_open_judgememt () =
+   if not (List.length !judgements > 0) then
      Ferror.fail ~info:"Need to have a judgement present to add stuff to"
- 
+
+ (* This means that the current context is gotten from the current Inh judgement *)
  let current_output_ctx () = 
    let open Ftypes in
    match !judgements with 
    | [] -> FamilyContext.FamCtx []
    | (name, judgement) :: _ -> 
       let InhJudgement.{ derived; ctx; _ } = judgement in 
-      let FamilyContext.FamCtx ctx = ctx in 
+      let FamilyContext.FamCtx ctx = ctx in
       FamilyContext.FamCtx ((name, derived) :: ctx)      
 end
 
-
-(* 
-   This means that the current context is gotten from the current Inh judgement
-   
-*)
-(* 
-let currentinh_output_ctx () : family_ctxtype =
-   match !inhcontentref with 
-   | [] -> FamCtx []
-   | content :: _ ->
-     let fname, (((inp, oup) , FamCtx ctx), current_inh) = content in 
-     FamCtx ((fname, oup)::ctx)  
-*)

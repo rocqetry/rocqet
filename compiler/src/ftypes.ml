@@ -1,4 +1,3 @@
-(* Contains only type definitions used around the plugins *)
 module VernacInductive = struct 
   type t = (Vernacexpr.inductive_expr * Vernacexpr.decl_notation list) list
   
@@ -59,12 +58,10 @@ module FamilyName = struct
   type t = { name: Names.Id.t; id: FamilyId.t }
 end
 
-(* A module we have compiled *)
 module CompiledModule = struct 
   type t = Libnames.qualid
 end 
 
-(* The type of an "element" in a family type *)
 module rec FamilyTypeElem : sig 
    type t = 
      | FInductive of 
@@ -74,7 +71,6 @@ module rec FamilyTypeElem : sig
            complied_impl : CompiledModule.t }
 end = FamilyTypeElem
 
-(* The type of a family *)
 and FamilyType : sig
   type t =
     { name : FamilyName.t; 
