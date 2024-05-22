@@ -25,6 +25,20 @@ let _define name body sigma =
 let _internalize env trm sigma =
   Constrintern.interp_constr_evars env sigma trm
 
+
+let unique_id =
+  let counter = ref 0 in 
+  fun () -> 
+  counter := !counter + 1;
+  !counter
+
+let fresh_name ~prefix =
+   let prefix = Names.Id.to_string prefix in
+   let time_stamp = string_of_int @@ unique_id () in     
+   Names.Id.of_string (prefix ^ "回" ^ time_stamp)    
+
+
+
 (* Interface for what a codegen backend should be *)
 (* module type S = sig
   type t 
@@ -143,12 +157,12 @@ module VernacWriter = struct
 
   let assume_parameter
     ~(name : Names.Id.t) 
-    ~(expr : Constrexpr.constr_expr) : unit t = 
+    ~(ty : Constrexpr.constr_expr) : unit t = 
     let open Vernacexpr in
     let fname_ = (CAst.make @@ name, None)  in 
       vernac_ (VernacAssumption (
                   (NoDischarge, Decls.Definitional), 
-                  Declaremods.NoInline , [(false , ([ fname_ ], expr))]))
+                  Declaremods.NoInline , [(false , ([ fname_ ], ty))]))
 end
 
 

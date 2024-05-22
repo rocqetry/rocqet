@@ -93,9 +93,7 @@ end
    so the pair at the head of the list will be the current context *)
 and FamilyContext : sig
   type t = FamCtx of (Names.Id.t * FamilyType.t) list  
-end = struct 
-  type t = FamCtx of (Names.Id.t * FamilyType.t) list
-end
+end = FamilyContext
 
 module rec FamilyRef : sig
   type t = ToplevelRef of Names.Id.t 

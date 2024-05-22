@@ -1,6 +1,11 @@
 module VernacInductive : sig 
   type t = (Vernacexpr.inductive_expr * Vernacexpr.decl_notation list) list
   
+  val extract_type_and_cstrs : Vernacexpr.inductive_expr -> 
+        (* inductive type name * sort/kind  *)
+        (Names.Id.t * Constrexpr.constr_expr option) *
+         (* constr name * constructor type *)
+        (Names.Id.t * Constrexpr.constr_expr) list
   val extract_all_ident : t -> Names.Id.t list  
   val extract_type_ident : t -> Names.Id.t list
   val extract_cstrs_ident : t -> Names.Id.t list

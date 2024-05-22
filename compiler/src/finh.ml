@@ -7,12 +7,43 @@ let add_new_family name =
   let judgement = InhJudgement.empty ~base:family_type ~derived:family_type in
   Fenv.InhJudgements.push ~name ~judgement
 
+(* Essentially, this needs to compile the context modules *)
+let famctx_to_parameters
+      ~(ctx : Ftypes.FamilyContext.t)
+    : (Names.Id.t * Constrexpr.module_ast) list =
+  failwith ""
+  
 
 let inductive_to_famtype 
    ~(ind_def : Ftypes.VernacInductive.t)
    ~(ctx : Ftypes.FamilyContext.t) : Ftypes.CompiledModule.t = 
+  let open Ftypes in 
+  let ind_cstrs = 
+    ind_def 
+    |> List.map (fun ind -> ind |> fst |> VernacInductive.extract_type_and_cstrs)
+    |> List.map (fun ((ind_name, ty), cstrs) -> (ind_name, Option.get ty), cstrs)
+  in
+  let type_decls = ind_cstrs |> List.map fst in
+  let module_name = Fcodegen.fresh_name ~prefix:(type_decls |> List.hd |> fst) in
+  let constr_decls = List.concat_map snd ind_cstrs in
+  let open Fcodegen in 
+  let declare_typedecls =
+    List.map (fun (name, ty) -> VernacWriter.assume_parameter ~name ~ty) type_decls
+  in 
+  let declare_csts_decls =
+    List.map (fun (name, ty) -> VernacWriter.assume_parameter ~name ~ty) constr_decls
+  in 
+  let all_decls = declare_typedecls @ declare_csts_decls in
+  let open VernacWriter in 
+  run @@
+    define_moduletype
+      ~module_name
+      ~parameters:(famctx_to_parameters ~ctx)
+      ~body:(fun _ ->
+        let* () = flatmap all_decls in
+        return ())
   
-  failwith ""
+  
 
 let inductive_to_famterm_and_recursor_type
    ~(ind_def : Ftypes.VernacInductive.t)
