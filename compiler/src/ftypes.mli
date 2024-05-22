@@ -1,5 +1,9 @@
 module VernacInductive : sig 
   type t = (Vernacexpr.inductive_expr * Vernacexpr.decl_notation list) list
+  
+  val extract_all_ident : t -> Names.Id.t list  
+  val extract_type_ident : t -> Names.Id.t list
+  val extract_cstrs_ident : t -> Names.Id.t list
 end
 
 module FamilyId : sig

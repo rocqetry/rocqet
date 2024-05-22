@@ -1,6 +1,51 @@
 (* Contains only type definitions used around the plugins *)
 module VernacInductive = struct 
   type t = (Vernacexpr.inductive_expr * Vernacexpr.decl_notation list) list
+  
+  (* This returns (inductive type name, inductive type sort) and 
+                  (constructor name * consructor type)  list*)
+  let extract_type_and_cstrs (inductive : Vernacexpr.inductive_expr)  =
+    let (ind_type_name, ind_params, indtype, cstrlist) = inductive in 
+    (* assert_cerror ~einfo:"Doesn't Support Inductive Parameter yet" 
+       (fun _ -> fst ind_params = [] && snd ind_params = None); *)    
+    let _, (ind_type_name, _) = ind_type_name in
+    let ind_type_name = CAst.with_val (fun x -> x) ind_type_name in 
+    let each_constr ((_, (cname, cty)) : Vernacexpr.constructor_expr) =
+      let cname = CAst.with_val (fun x -> x) cname in (cname , cty) in 
+    match cstrlist with
+    | Vernacexpr.Constructors cstrlist -> (ind_type_name, indtype), (List.map each_constr cstrlist)
+    | Vernacexpr.RecordDecl _ ->
+       (* cerror ~einfo:"Incorrect Inductive Signature" () *) 
+       failwith "Records not yet supported"
+  
+  let extract_all_ident ind_def =     
+    let all_names = 
+      ind_def 
+      |> List.map (fun (ind_expr, _) -> ind_expr |> extract_type_and_cstrs)
+    in 
+    let type_names = all_names |> List.map (fun x -> x |> fst |> fst) in
+    let cstr_names = 
+      all_names 
+      |> List.concat_map snd
+      |> List.map fst 
+    in 
+    type_names @ cstr_names
+  
+  (* Get the name of an inductive definition *)
+  let extract_type_ident ind_def =
+    ind_def
+    |> List.map @@ fun (ind_expr, _) -> 
+        ind_expr 
+        |> extract_type_and_cstrs
+        |> fst (* get the type name, type sort *) 
+        |> fst (* get just the type name *)
+        
+  
+  (* Get the constructors in an inductive definition *)
+  let extract_cstrs_ident ind_def =    
+     ind_def
+     |> List.map (fun (ind_expr, _) -> ind_expr |> extract_type_and_cstrs)
+     |> List.concat_map (fun (_, cstrs) -> cstrs |> List.map fst)
 end
 
 module FamilyId = struct 
