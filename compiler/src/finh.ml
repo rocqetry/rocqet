@@ -12,7 +12,6 @@ let famctx_to_parameters
       ~(ctx : Ftypes.FamilyContext.t)
     : (Names.Id.t * Constrexpr.module_ast) list =
   failwith ""
-  
 
 let inductive_to_famtype 
    ~(ind_def : Ftypes.VernacInductive.t)
@@ -28,13 +27,13 @@ let inductive_to_famtype
   let constr_decls = List.concat_map snd ind_cstrs in
   let open Fcodegen in 
   let declare_typedecls =
-    List.map (fun (name, ty) -> VernacWriter.assume_parameter ~name ~ty) type_decls
+    List.map (fun (name, ty) -> VernacBackend.assume_parameter ~name ~ty) type_decls
   in 
   let declare_csts_decls =
-    List.map (fun (name, ty) -> VernacWriter.assume_parameter ~name ~ty) constr_decls
+    List.map (fun (name, ty) -> VernacBackend.assume_parameter ~name ~ty) constr_decls
   in 
   let all_decls = declare_typedecls @ declare_csts_decls in
-  let open VernacWriter in 
+  let open VernacBackend in 
   run @@
     define_moduletype
       ~module_name
@@ -50,11 +49,6 @@ let inductive_to_famterm_and_recursor_type
    ~(ctx : Ftypes.FamilyContext.t) : Ftypes.CompiledModule.t = 
   failwith ""
 
-(* we want to compile an inductive definition *)
-(* We take in the current judgement *)
-(* The name of the inductive type *)
-(* The inductive definition itself *)
-(* We also take the current context *)
 let compile_inductive_definition 
   ~(judgement : Ftypes.InhJudgement.t) 
   ~(ind_def_name : Names.Id.t) 

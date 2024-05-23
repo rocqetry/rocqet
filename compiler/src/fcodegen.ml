@@ -9,14 +9,11 @@ let _global_env () =
 let _push_local (n, t) env =
   EConstr.push_rel Context.Rel.Declaration.(LocalAssum (n, t)) env
 
-(** Declare a toplevel binding *)
-let _define name body sigma =
-  let udecl = UState.default_univ_decl in
-  let scope = Locality.Global Locality.ImportDefaultBehavior in
-  let kind = Decls.(IsDefinition Definition) in
-  let cinfo = Declare.CInfo.make ~name ~typ:None () in
-  let info = Declare.Info.make ~scope ~kind  ~udecl ~poly:false () in
-  Declare.declare_definition ~info ~cinfo ~opaque:false ~body sigma |> ignore
+let _define_module name body (path : Names.ModPath.t)=
+  let _stuff = Declaremods.declare_module name in
+  let _g = Declaremods.start_module in
+  let _i = Declaremods.start_modtype in  
+  ()
 
 
 (** When you first start using a plugin, if you want to manipulate terms
@@ -56,7 +53,34 @@ module ModuleType = struct
   type t = Libnames.qualid
 end
 
-module VernacWriter = struct 
+(* The interface for a code generation backend *)
+module type S = sig
+  val assume_parameter:
+    name:Names.Id.t ->
+    ty:Constrexpr.constr_expr ->
+    unit
+  
+  val define_moduletype:
+        name:Names.Id.t ->
+        parameters:(Names.Id.t * Constrexpr.module_ast) list ->
+        body:(ModuleTerm.t list -> unit) ->
+        Names.ModPath.t
+end
+
+(** Code generation backend by mutating internal state with declarations *)
+module DeclareBackend = struct
+  (** Declare a toplevel binding *)
+  let define name body sigma =
+    let udecl = UState.default_univ_decl in
+    let scope = Locality.Global Locality.ImportDefaultBehavior in
+    let kind = Decls.(IsDefinition Definition) in
+    let cinfo = Declare.CInfo.make ~name ~typ:None () in
+    let info = Declare.Info.make ~scope ~kind  ~udecl ~poly:false () in
+    Declare.declare_definition ~info ~cinfo ~opaque:false ~body sigma |> ignore
+end
+
+(** Code generation backend by writing and interpreting Vernacular commands explicitly *)
+module VernacBackend = struct 
   type expr = 
     | Original of Vernacexpr.vernac_expr
     | TrySilent of Vernacexpr.vernac_expr
@@ -70,7 +94,7 @@ module VernacWriter = struct
       (Ppvernac.pr_vernac_expr orgexpr) ++ (str ".") 
     in 
     let open Vernacexpr in 
-    let expr = {control = []; attrs = []; expr = orgexpr} in 
+    let expr = { control = []; attrs = []; expr = orgexpr } in 
     let expr = CAst.make expr in 
     let backtrace = Printexc.raw_backtrace_to_string @@ Printexc.get_callstack 5 in 
     let dummyst = Vernacstate.freeze_interp_state ~marshallable:false in 
