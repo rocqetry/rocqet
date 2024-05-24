@@ -11,4 +11,3 @@ module InhJudgements : sig
   val ensure_open_judgememt : unit -> unit
   val current_output_ctx : unit -> Ftypes.FamilyContext.t
 end
-

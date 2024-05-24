@@ -1,139 +1,142 @@
-module VernacInductive = struct 
-  type t = (Vernacexpr.inductive_expr * Vernacexpr.notation_declaration list) list
-  
-  (* This returns (inductive type name, inductive type sort) and 
+module VernacInductive = struct
+  type t =
+    (Vernacexpr.inductive_expr * Vernacexpr.notation_declaration list) list
+
+  (* This returns (inductive type name, inductive type sort) and
                   (constructor name * consructor type)  list*)
-  let extract_type_and_cstrs (inductive : Vernacexpr.inductive_expr)  =
-    let (ind_type_name, ind_params, indtype, cstrlist) = inductive in 
-    (* assert_cerror ~einfo:"Doesn't Support Inductive Parameter yet" 
-       (fun _ -> fst ind_params = [] && snd ind_params = None); *)    
+  let extract_type_and_cstrs (inductive : Vernacexpr.inductive_expr) =
+    let ind_type_name, ind_params, indtype, cstrlist = inductive in
+    (* assert_cerror ~einfo:"Doesn't Support Inductive Parameter yet"
+       (fun _ -> fst ind_params = [] && snd ind_params = None); *)
     let _, (ind_type_name, _) = ind_type_name in
-    let ind_type_name = CAst.with_val (fun x -> x) ind_type_name in 
+    let ind_type_name = CAst.with_val (fun x -> x) ind_type_name in
     let each_constr ((_, (cname, cty)) : Vernacexpr.constructor_expr) =
-      let cname = CAst.with_val (fun x -> x) cname in (cname , cty) in 
+      let cname = CAst.with_val (fun x -> x) cname in
+      (cname, cty)
+    in
     match cstrlist with
-    | Vernacexpr.Constructors cstrlist -> (ind_type_name, indtype), (List.map each_constr cstrlist)
+    | Vernacexpr.Constructors cstrlist ->
+        ((ind_type_name, indtype), List.map each_constr cstrlist)
     | Vernacexpr.RecordDecl _ ->
-       (* cerror ~einfo:"Incorrect Inductive Signature" () *) 
-       failwith "Records not yet supported"
-  
-  let extract_all_ident ind_def =     
-    let all_names = 
-      ind_def 
+        (* cerror ~einfo:"Incorrect Inductive Signature" () *)
+        failwith "Records not yet supported"
+
+  let extract_all_ident ind_def =
+    let all_names =
+      ind_def
       |> List.map (fun (ind_expr, _) -> ind_expr |> extract_type_and_cstrs)
-    in 
+    in
     let type_names = all_names |> List.map (fun x -> x |> fst |> fst) in
-    let cstr_names = 
-      all_names 
-      |> List.concat_map snd
-      |> List.map fst 
-    in 
+    let cstr_names = all_names |> List.concat_map snd |> List.map fst in
     type_names @ cstr_names
-  
+
   (* Get the name of an inductive definition *)
   let extract_type_ident ind_def =
     ind_def
-    |> List.map @@ fun (ind_expr, _) -> 
-        ind_expr 
-        |> extract_type_and_cstrs
-        |> fst (* get the type name, type sort *) 
-        |> fst (* get just the type name *)
-        
-  
+    |> List.map @@ fun (ind_expr, _) ->
+       ind_expr |> extract_type_and_cstrs
+       |> fst (* get the type name, type sort *)
+       |> fst (* get just the type name *)
+
   (* Get the constructors in an inductive definition *)
-  let extract_cstrs_ident ind_def =    
-     ind_def
-     |> List.map (fun (ind_expr, _) -> ind_expr |> extract_type_and_cstrs)
-     |> List.concat_map (fun (_, cstrs) -> cstrs |> List.map fst)
+  let extract_cstrs_ident ind_def =
+    ind_def
+    |> List.map (fun (ind_expr, _) -> ind_expr |> extract_type_and_cstrs)
+    |> List.concat_map (fun (_, cstrs) -> cstrs |> List.map fst)
 end
 
-module FamilyId = struct 
+module FamilyId = struct
   type t = int
+
   let fresh =
     let store = ref 0 in
-    fun () -> incr store; !store    
+    fun () ->
+      incr store;
+      !store
 end
 
-module FamilyName = struct 
-  type t = { name: Names.Id.t; id: FamilyId.t }
+module FamilyName = struct
+  type t = { name : Names.Id.t; id : FamilyId.t }
 end
 
 (* Module naming *)
 (* This should really be Names.ModPath.t *)
-module CompiledModule = struct 
+module CompiledModule = struct
   type t = Libnames.qualid
 end
 
-module CompiledModuleType = struct 
+module CompiledModuleType = struct
   type t = Libnames.qualid
 end
 
-module rec FamilyTypeElem : sig 
-   type t = 
-     | FInductive of 
-         { original_inductive : VernacInductive.t; 
-           constructor_names : Names.Id.t list;
-           compiled_signature : CompiledModuleType.t;
-           compiled_impl : CompiledModule.t }
-end = FamilyTypeElem
+module rec FamilyTypeElem : sig
+  type t =
+    | FInductive of {
+        original_inductive : VernacInductive.t;
+        constructor_names : Names.Id.t list;
+        compiled_signature : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
+      }
+end =
+  FamilyTypeElem
 
 and FamilyType : sig
-  type t =
-    { name : FamilyName.t; 
-      body : (Names.Id.t * FamilyTypeElem.t) list; }
+  type t = { name : FamilyName.t; body : (Names.Id.t * FamilyTypeElem.t) list }
 
-  val extend : name: Names.Id.t -> elem:FamilyTypeElem.t -> t -> t
-end = struct 
-  type t =
-    { name : FamilyName.t; 
-      body : (Names.Id.t * FamilyTypeElem.t) list; }
+  val extend : name:Names.Id.t -> elem:FamilyTypeElem.t -> t -> t
+end = struct
+  type t = { name : FamilyName.t; body : (Names.Id.t * FamilyTypeElem.t) list }
 
-  let extend ~name ~elem family_type = 
+  let extend ~name ~elem family_type =
     let { body; _ } = family_type in
     { family_type with body = (name, elem) :: body }
 end
 
 (* The family context, binding names to their respective types *)
-(* I suspect this is a list because we need to have nested families, 
+(* I suspect this is a list because we need to have nested families,
    so the pair at the head of the list will be the current context *)
 and FamilyContext : sig
-  type t = FamCtx of (Names.Id.t * FamilyType.t) list  
-end = FamilyContext
+  type t = FamCtx of (Names.Id.t * FamilyType.t) list
+end =
+  FamilyContext
 
 module rec FamilyRef : sig
-  type t = ToplevelRef of Names.Id.t 
-end = FamilyRef
+  type t = ToplevelRef of Names.Id.t
+end =
+  FamilyRef
 
-and FamilyTermElem : sig 
-  type t =    
-    | CompiledDefinition of CompiledModule.t
-end = FamilyTermElem
+and FamilyTermElem : sig
+  type t = CompiledDefinition of CompiledModule.t
+end =
+  FamilyTermElem
 
-and FamilyTerm : sig 
-  type t = 
-    { name : Names.Id.t; 
-      body : (Names.Id.t * FamilyTermElem.t) list }
-end = FamilyTerm
+and FamilyTerm : sig
+  type t = { name : Names.Id.t; body : (Names.Id.t * FamilyTermElem.t) list }
+end =
+  FamilyTerm
 
-and InhElement : sig 
-  type t = 
-    | CInhNew of CompiledModule.t
-    | CInhExtendInh of InhJudgement.t
-end = InhElement
+and InhElement : sig
+  type t = CInhNew of CompiledModule.t | CInhExtendInh of InhJudgement.t
+end =
+  InhElement
 
-and InhJudgement : sig 
-  type t = 
-    { base : FamilyType.t; 
-      derived : FamilyType.t; 
-      body : (Names.Id.t * InhElement.t) list;
-      ctx: FamilyContext.t; } 
+and InhJudgement : sig
+  type t = {
+    base : FamilyType.t;
+    derived : FamilyType.t;
+    body : (Names.Id.t * InhElement.t) list;
+    ctx : FamilyContext.t;
+  }
+
   val empty : base:FamilyType.t -> derived:FamilyType.t -> t
-end = struct   
-  type t = 
-    { base : FamilyType.t; 
-      derived : FamilyType.t; 
-      body : (Names.Id.t * InhElement.t) list;
-      ctx: FamilyContext.t; }
+end = struct
+  type t = {
+    base : FamilyType.t;
+    derived : FamilyType.t;
+    body : (Names.Id.t * InhElement.t) list;
+    ctx : FamilyContext.t;
+  }
+
   (* The empty family context here is not really right
      becuase once we have an inheritnce judgement, we can't
      have an empty family context. We can have a context which
@@ -144,17 +147,14 @@ end
 
 (* A single plugin command *)
 (* e.g Family A. ... *)
-module PluginCmd = struct 
+module PluginCmd = struct
   type t = Family
 end
 
 (* A scope is a plugin command enriched with a name and a "closing" handler *)
 (* `close` is a generic handle that is called to close the scope *)
-module PluginCmdScope = struct 
-  type t = 
-      { command : PluginCmd.t; 
-        name : Names.Id.t;        
-        close: unit -> unit; }
+module PluginCmdScope = struct
+  type t = { command : PluginCmd.t; name : Names.Id.t; close : unit -> unit }
 end
 
 (*

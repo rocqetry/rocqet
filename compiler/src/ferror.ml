@@ -1,7 +1,5 @@
-
-
 (* A nested command that is not a family *)
-(* e.g 
+(* e.g
    FRecursions ...
       FRecursion ....
 *)
@@ -10,7 +8,6 @@ exception NestedCommand
 exception ClosingWrongScope
 
 let report ~error = raise error
-
 let fail ~info = failwith info
 
 (* TODO: Add functions for asserts *)
