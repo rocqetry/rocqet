@@ -36,7 +36,7 @@ GLOBAL: mutind_defs llconstr_ip gallina_ext list1ident reference_ip;
   list1ident : 
     [[ listid = LIST1 ident -> { listid }]];
   mutind_defs :
-    [[ indl = LIST1 inductive_definition SEP "with" -> { indl } ]];
+    [[ indl = LIST1 inductive_or_record_definition SEP "with" -> { indl } ]];
   llconstr_ip : 
     [[ c = lconstr -> { (* attach_self_prefix *) c } ]];
   reference_ip :

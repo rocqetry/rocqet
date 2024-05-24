@@ -98,7 +98,7 @@ module VernacBackend = struct
     let expr = { control = []; attrs = []; expr = orgexpr } in 
     let expr = CAst.make expr in 
     let backtrace = Printexc.raw_backtrace_to_string @@ Printexc.get_callstack 5 in 
-    let dummyst = Vernacstate.freeze_interp_state ~marshallable:false in 
+    let dummyst = Vernacstate.freeze_full_state () in 
     try 
       let _ = Vernacinterp.interp ~st:dummyst expr in () 
     with reraise ->
@@ -155,9 +155,9 @@ module VernacBackend = struct
       List.map 
         (fun (n,m) ->
           Libnames.qualid_of_ident n) parameters in 
-    let* _ = vernac_ (VernacDefineModule (None, modname_ , parameters_ , Declaremods.Check [], []) ) in 
+    let* _ = vernac_ (VernacSynterp (VernacDefineModule (None, modname_ , parameters_ , Declaremods.Check [], []) )) in 
     let* _ = body inner_parameter in 
-    let* _ = vernac_ (VernacEndSegment modname_) in 
+    let* _ = vernac_ (VernacSynterp (VernacEndSegment modname_)) in 
       return @@ Libnames.qualid_of_ident module_name
   
   let define_moduletype 
@@ -175,22 +175,22 @@ module VernacBackend = struct
       List.map 
         (fun (n,m) ->
           Libnames.qualid_of_ident n) parameters in 
-    let* _ = vernac_ (VernacDeclareModuleType (modname_ , parameters_ , [], []) ) in 
+    let* _ = vernac_ (VernacSynterp (VernacDeclareModuleType (modname_ , parameters_ , [], []) )) in 
     let* _ = body inner_parameter in 
-    let* _ = vernac_ (VernacEndSegment modname_) in 
+    let* _ = vernac_ (VernacSynterp (VernacEndSegment modname_)) in 
       return @@ Libnames.qualid_of_ident module_name  
 
    let include_module ~(module_expr : Constrexpr.module_ast) : unit t =      
-      vernac_ (VernacInclude [(module_expr ,Declaremods.DefaultInline )])
+      vernac_ (VernacSynterp (VernacInclude [(module_expr ,Declaremods.DefaultInline )]))
   
   let assume_parameter
     ~(name : Names.Id.t) 
     ~(ty : Constrexpr.constr_expr) : unit t = 
     let open Vernacexpr in
     let fname_ = (CAst.make @@ name, None)  in 
-      vernac_ (VernacAssumption (
+      vernac_ (VernacSynPure (VernacAssumption (
                   (NoDischarge, Decls.Definitional), 
-                  Declaremods.NoInline , [(false , ([ fname_ ], ty))]))
+                  Declaremods.NoInline , [(NoCoercion , ([ fname_ ], ty))])))
 end
 
 

@@ -1,5 +1,5 @@
 module VernacInductive : sig 
-  type t = (Vernacexpr.inductive_expr * Vernacexpr.decl_notation list) list
+  type t = (Vernacexpr.inductive_expr * Vernacexpr.notation_declaration list) list
   
   val extract_type_and_cstrs : Vernacexpr.inductive_expr -> 
         (* inductive type name * sort/kind  *)

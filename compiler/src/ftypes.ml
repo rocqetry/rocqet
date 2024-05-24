@@ -1,5 +1,5 @@
 module VernacInductive = struct 
-  type t = (Vernacexpr.inductive_expr * Vernacexpr.decl_notation list) list
+  type t = (Vernacexpr.inductive_expr * Vernacexpr.notation_declaration list) list
   
   (* This returns (inductive type name, inductive type sort) and 
                   (constructor name * consructor type)  list*)

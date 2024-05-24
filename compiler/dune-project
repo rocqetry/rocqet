@@ -1,5 +1,7 @@
-(lang dune 3.0)
-(using coq 0.1)
+(lang dune 3.15)
+
+(using coq 0.8)
+
 (name nfpop)
 
 (generate_opam_files true)

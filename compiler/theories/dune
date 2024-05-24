@@ -7,7 +7,7 @@
  (package nfpop)                  ; Adding this line will make your
                                    ; library installable in the opam package
 
- (libraries nfpop.plugin)) ; Here you should declare all
+ (plugins nfpop.plugin)) ; Here you should declare all
                                    ; OCaml plugin dependencies
                                    ; for your Coq files.
 

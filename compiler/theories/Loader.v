@@ -1,1 +1,1 @@
-Declare ML Module "nfpop".
+Declare ML Module "nfpop:nfpop.plugin".
