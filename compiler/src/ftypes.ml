@@ -90,6 +90,9 @@ end = struct
     { family_type with body = (name, elem) :: body }
 end
 
+(* The family context, binding names to their respective types *)
+(* I suspect this is a list because we need to have nested families,
+   so the pair at the head of the list will be the current context *)
 and FamilyContext : sig
   type t = Toplevel of Names.Id.t * FamilyType.t
 end =
