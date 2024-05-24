@@ -17,9 +17,7 @@ module VernacInductive = struct
     match cstrlist with
     | Vernacexpr.Constructors cstrlist ->
         ((ind_type_name, indtype), List.map each_constr cstrlist)
-    | Vernacexpr.RecordDecl _ ->
-        (* cerror ~einfo:"Incorrect Inductive Signature" () *)
-        failwith "Records not yet supported"
+    | Vernacexpr.RecordDecl _ -> Ferror.fail ~info:"Records not yet supported"
 
   let extract_all_ident ind_def =
     let all_names =
@@ -96,7 +94,7 @@ end
 (* I suspect this is a list because we need to have nested families,
    so the pair at the head of the list will be the current context *)
 and FamilyContext : sig
-  type t = FamCtx of (Names.Id.t * FamilyType.t) list
+  type t = Toplevel of Names.Id.t * FamilyType.t
 end =
   FamilyContext
 
@@ -125,7 +123,6 @@ and InhJudgement : sig
     base : FamilyType.t;
     derived : FamilyType.t;
     body : (Names.Id.t * InhElement.t) list;
-    ctx : FamilyContext.t;
   }
 
   val empty : base:FamilyType.t -> derived:FamilyType.t -> t
@@ -134,14 +131,13 @@ end = struct
     base : FamilyType.t;
     derived : FamilyType.t;
     body : (Names.Id.t * InhElement.t) list;
-    ctx : FamilyContext.t;
   }
 
   (* The empty family context here is not really right
      becuase once we have an inheritnce judgement, we can't
      have an empty family context. We can have a context which
      the family type contains no field though. *)
-  let empty ~base ~derived = { base; derived; ctx = FamCtx []; body = [] }
+  let empty ~base ~derived = { base; derived; body = [] }
 end
 (* InhJudgement and FamilyContext should be merged into one type really *)
 

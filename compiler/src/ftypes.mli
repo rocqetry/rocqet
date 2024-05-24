@@ -49,7 +49,7 @@ and FamilyType : sig
 end
 
 and FamilyContext : sig
-  type t = FamCtx of (Names.Id.t * FamilyType.t) list
+  type t = Toplevel of Names.Id.t * FamilyType.t
 end
 
 module rec FamilyRef : sig
@@ -72,8 +72,7 @@ and InhJudgement : sig
   type t = {
     base : FamilyType.t;
     derived : FamilyType.t;
-    body : (Names.Id.t * InhElement.t) list;
-    ctx : FamilyContext.t;
+    body : (Names.Id.t * InhElement.t) list; (* ctx : FamilyContext.t; *)
   }
 
   val empty : base:FamilyType.t -> derived:FamilyType.t -> t

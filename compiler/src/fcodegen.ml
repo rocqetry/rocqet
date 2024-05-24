@@ -1,41 +1,14 @@
 (* From https://github.com/tlringer/plugin-tutorial/blob/main/src/termutils.ml *)
 
-(** Get the global environment *)
-let _global_env () =
-  let env = Global.env () in
-  (Evd.from_env env, env)
-
-(** Push a local binding to an environment *)
-let _push_local (n, t) env =
-  EConstr.push_rel Context.Rel.Declaration.(LocalAssum (n, t)) env
-
-let _define_module name body (path : Names.ModPath.t) =
-  let _stuff = Declaremods.declare_module name in
-  let _g = Declaremods.start_module in
-  let _i = Declaremods.start_modtype in
-  ()
-
-(** When you first start using a plugin, if you want to manipulate terms
- in an interesting way, you need to move from the external representation
- of terms to the internal representation of terms. This does that for you. *)
-let _internalize env trm sigma = Constrintern.interp_constr_evars env sigma trm
-
 let unique_id =
   let counter = ref 0 in
   fun () ->
-    counter := !counter + 1;
+    incr counter;
     !counter
 
 let fresh_name ~prefix =
   let time_stamp = string_of_int @@ unique_id () in
   Names.Id.of_string (prefix ^ "回" ^ time_stamp)
-
-(* Interface for what a codegen backend should be *)
-(* module type S = sig
-     type t
-     val define_module : Names.Id.t -> unit
-     val dump_output : string -> unit
-   end *)
 
 (* Referencing the name of a module *)
 module ModuleTerm = struct
@@ -67,8 +40,11 @@ module DeclareBackend = struct
     let kind = Decls.(IsDefinition Definition) in
     let cinfo = Declare.CInfo.make ~name ~typ:None () in
     let info = Declare.Info.make ~scope ~kind ~udecl ~poly:false () in
-    (* let a = DeclareInd.declare_mutual_inductive_with_eliminations in*)
     Declare.declare_definition ~info ~cinfo ~opaque:false ~body sigma |> ignore
+
+  (** Push a local binding to an environment *)
+  let push_local (n, t) env =
+    EConstr.push_rel Context.Rel.Declaration.(LocalAssum (n, t)) env
 end
 
 (** Code generation backend by writing and interpreting Vernacular commands explicitly *)

@@ -14,25 +14,22 @@ let add_new_family name =
 let rec famctx_to_parameters ~(ctx : Ftypes.FamilyContext.t) :
     (Names.Id.t * Constrexpr.module_ast) list =
   let open Ftypes in
-  let (FamilyContext.FamCtx ctx) = ctx in
   match ctx with
-  | [] -> []
-  | (family_name, family_type) :: rest_ctx ->
-      (* This is only needed for nested families *)
-      (* let prior = famctx_to_parameters (ov_exposed, all_exposed, (FamCtx t)) in *)
-      let current_family =
+  | FamilyContext.Toplevel (family_name, family_type) ->
+      let compiled_family_name =
         famty_to_modsig
           ~current_path:(family_name |> Libnames.qualid_of_ident)
-          ~family_type ~ctx:(FamilyContext.FamCtx rest_ctx)
+          ~family_type
       in
-      let current_family = CAst.make (Constrexpr.CMident current_family) in
-      [ (family_name, current_family) ]
+      let family_module_expr =
+        Ftermutils.ident_to_module_expr compiled_family_name
+      in
+      [ (family_name, family_module_expr) ]
 
 (** This function is responsible for the "includes"
  which is the main logic of the compilation *)
 and famty_to_modsig ~(current_path : Ftypes.CompiledModuleType.t)
-    ~(family_type : Ftypes.FamilyType.t) ~(ctx : Ftypes.FamilyContext.t) :
-    Ftypes.CompiledModuleType.t =
+    ~(family_type : Ftypes.FamilyType.t) : Ftypes.CompiledModuleType.t =
   let open Ftypes in
   match family_type with
   | FamilyType.{ body = []; _ } ->
@@ -49,7 +46,7 @@ and famty_to_modsig ~(current_path : Ftypes.CompiledModuleType.t)
           in
           (* The context for this finductive type *)
           let finductive_ctx =
-            famty_to_modsig ~current_path ~ctx
+            famty_to_modsig ~current_path
               ~family_type:FamilyType.{ name = family_name; body = body_rest }
           in
           let finductive_ctx_expr =
@@ -143,19 +140,15 @@ let add_inductive_definition ind_def =
   (* let _ = inductive_to_famterm_and_recursor_type ([ind_def], current_ctx) in *)
   match Fenv.InhJudgements.pop () with
   | None -> Ferror.fail ~info:"Expected a non empty inh context"
-  | Some (family_name, judgement) -> 
-     let judgement = 
-       compile_inductive_definition 
-         ~judgement ~ind_def_name ~ind_def ~ctx
-     in
-     Fenv.InhJudgements.push ~name:family_name ~judgement
-    
+  | Some (family_name, judgement) ->
+      let judgement =
+        compile_inductive_definition ~judgement ~ind_def_name ~ind_def ~ctx
+      in
+      Fenv.InhJudgements.push ~name:family_name ~judgement
 
 (* TODO:
-1. Compile output to a file
-2. Remove nested contexts since we don't yet have nested families 
-3. Do we *really* need to define the compilation by memoized mutual recursion?
-4. Test
-5. Closing families *) 
-
-
+   1. Compile output to a file
+   2. Remove nested contexts since we don't yet have nested families
+   3. Do we *really* need to define the compilation by memoized mutual recursion?
+   4. Test
+   5. Closing families *)

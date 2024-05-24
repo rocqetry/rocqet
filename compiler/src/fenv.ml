@@ -32,28 +32,33 @@ module InhJudgements = struct
      inheritance context. i.e the family we're currenlty adding fields to *)
   let judgements =
     Summary.ref ~name:"InhJudgements"
-      ([] : (Names.Id.t * Ftypes.InhJudgement.t) list)
+      (None : (Names.Id.t * Ftypes.InhJudgement.t) option)
 
-  let push ~name ~judgement = judgements := (name, judgement) :: !judgements
+  let push ~name ~judgement = judgements := Some (name, judgement)
 
   let pop () =
     match !judgements with
-    | [] -> None
-    | judgement :: js ->
-        judgements := js;
+    | None -> None
+    | Some judgement ->
+        judgements := None;
         Some judgement
 
   let ensure_open_judgememt () =
-    if not (List.length !judgements > 0) then
-      Ferror.fail ~info:"Need to have a judgement present to add stuff to"
+    match !judgements with
+    | None ->
+        Ferror.fail ~info:"Need to have a judgement present to add stuff to"
+    | Some _ -> ()
 
   (* This means that the current context is gotten from the current Inh judgement *)
   let current_output_ctx () =
     let open Ftypes in
     match !judgements with
-    | [] -> FamilyContext.FamCtx []
-    | (name, judgement) :: _ ->
-        let InhJudgement.{ derived; ctx; _ } = judgement in
-        let (FamilyContext.FamCtx ctx) = ctx in
-        FamilyContext.FamCtx ((name, derived) :: ctx)
+    | None ->
+        Ferror.fail
+          ~info:
+            "Ensure you are in a judgement before trying to get the family \
+             context"
+    | Some (name, judgement) ->
+        let InhJudgement.{ derived; _ } = judgement in
+        FamilyContext.Toplevel (name, derived)
 end
