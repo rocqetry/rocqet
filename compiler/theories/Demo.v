@@ -9,7 +9,7 @@ FEnd Cminorvariant.
 
 Family Cminor extends Cminorvariant.
     Family Semantics.
-       FInductive name := exec_step | exec_skip.
+       FInductive name : Set := exec_step | exec_skip. 
     FEnd Semantics.
 FEnd Cminor.
 

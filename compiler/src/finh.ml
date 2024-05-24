@@ -143,8 +143,19 @@ let add_inductive_definition ind_def =
   (* let _ = inductive_to_famterm_and_recursor_type ([ind_def], current_ctx) in *)
   match Fenv.InhJudgements.pop () with
   | None -> Ferror.fail ~info:"Expected a non empty inh context"
-  | Some (family_name, judgement) ->
-      let judgement =
-        compile_inductive_definition ~judgement ~ind_def_name ~ind_def ~ctx
-      in
-      Fenv.InhJudgements.push ~name:family_name ~judgement
+  | Some (family_name, judgement) -> 
+     let judgement = 
+       compile_inductive_definition 
+         ~judgement ~ind_def_name ~ind_def ~ctx
+     in
+     Fenv.InhJudgements.push ~name:family_name ~judgement
+    
+
+(* TODO:
+1. Compile output to a file
+2. Remove nested contexts since we don't yet have nested families 
+3. Do we *really* need to define the compilation by memoized mutual recursion?
+4. Test
+5. Closing families *) 
+
+
