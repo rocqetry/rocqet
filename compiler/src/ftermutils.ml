@@ -1,0 +1,11 @@
+(** Get the global environment *)
+let global_env () =
+  let env = Global.env () in
+  (Evd.from_env env, env)
+
+(** When you first start using a plugin, if you want to manipulate terms
+ in an interesting way, you need to move from the external representation
+ of terms to the internal representation of terms. This does that for you. *)
+let internalize env trm sigma = Constrintern.interp_constr_evars env sigma trm
+
+let ident_to_module_expr ident = CAst.make (Constrexpr.CMident ident)
