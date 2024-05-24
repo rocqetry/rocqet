@@ -10,7 +10,7 @@ let add_new_family name =
 (* `famctx_to_parameters` and `famty_to_modsig` functions work in lock-step to
    produce an algorithm for the compilation of "context" modules *)
 
-(** This function is the entry point to the compilation *)
+(** This function is the entry point to the compilation of contexts *)
 let rec famctx_to_parameters ~(ctx : Ftypes.FamilyContext.t) :
     (Names.Id.t * Constrexpr.module_ast) list =
   let open Ftypes in
@@ -29,8 +29,8 @@ let rec famctx_to_parameters ~(ctx : Ftypes.FamilyContext.t) :
       in
       [ (self__family_name, family_module_expr) ]
 
-(** This function is responsible for the "includes"
- which is the main logic of the compilation *)
+(** This function is responsible for compiling the body of the context module,
+    which contains the appriopiate "Include ..." *)
 and famty_to_modsig ~(current_path : Ftypes.CompiledModuleType.t)
     ~(family_type : Ftypes.FamilyType.t) : Ftypes.CompiledModuleType.t =
   let open Ftypes in
@@ -150,8 +150,8 @@ let add_inductive_definition ind_def =
       Fenv.InhJudgements.push ~name:family_name ~judgement
 
 (* TODO:
-   1. Compile output to a file
-   2. Remove nested contexts since we don't yet have nested families
+   1. Compile output to a file   
+   2. Compiling recursors
    3. Do we *really* need to define the compilation by memoized mutual recursion?
    4. Test
    5. Closing families *)

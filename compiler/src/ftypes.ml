@@ -90,9 +90,7 @@ end = struct
     { family_type with body = (name, elem) :: body }
 end
 
-(* The family context, binding names to their respective types *)
-(* I suspect this is a list because we need to have nested families,
-   so the pair at the head of the list will be the current context *)
+(* `FamilyContext.t` is a "focused" view of `InhJudgemen.t`*)
 and FamilyContext : sig
   type t = Toplevel of Names.Id.t * FamilyType.t
 end =
@@ -121,8 +119,11 @@ end =
 and InhJudgement : sig
   type t = {
     base : FamilyType.t;
+        (** This is the family that is being extended -- This is our "input" *)
     derived : FamilyType.t;
+        (** This is the resulting family of that extension -- This is our "output" *)
     body : (Names.Id.t * InhElement.t) list;
+        (** More about `derived` extends particular fields in `base` *)
   }
 
   val empty : base:FamilyType.t -> derived:FamilyType.t -> t
