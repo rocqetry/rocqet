@@ -7,7 +7,9 @@ let add_new_family name =
   let judgement = InhJudgement.empty ~base:family_type ~derived:family_type in
   Fenv.InhJudgements.push ~name ~judgement
 
-(* Essentially, this needs to compile the context modules *)
+(** These two functions work in lock-step to produce an algorithm for the
+ compilation of "context" modules *)
+(** This function is the entry point to the compilation *)
 let rec famctx_to_parameters
       ~(ctx : Ftypes.FamilyContext.t)
     : (Names.Id.t * Constrexpr.module_ast) list =
@@ -27,6 +29,8 @@ let rec famctx_to_parameters
      let current_family = CAst.make (Constrexpr.CMident current_family) in
      [(family_name, current_family)]
 
+(** This function is responsible for the "includes"
+ which is the main logic of the compilation *)
 and famty_to_modsig
     ~(current_path : Ftypes.CompiledModuleType.t)
     ~(family_type : Ftypes.FamilyType.t) 
