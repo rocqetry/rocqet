@@ -24,7 +24,10 @@ let rec famctx_to_parameters ~(ctx : Ftypes.FamilyContext.t) :
       let family_module_expr =
         Ftermutils.ident_to_module_expr compiled_family_name
       in
-      [ (family_name, family_module_expr) ]
+      let self__family_name =
+        Names.Id.of_string @@ "self__" ^ Names.Id.to_string family_name
+      in
+      [ (self__family_name, family_module_expr) ]
 
 (** This function is responsible for the "includes"
  which is the main logic of the compilation *)
