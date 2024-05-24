@@ -24,12 +24,16 @@ module CompiledModule : sig
   type t = Libnames.qualid
 end
 
+module CompiledModuleType : sig
+  type t = Libnames.qualid
+end
+
 module rec FamilyTypeElem : sig 
    type t = 
      | FInductive of 
          { original_inductive : VernacInductive.t; 
            constructor_names : Names.Id.t list;
-           compiled_signature : CompiledModule.t; 
+           compiled_signature : CompiledModuleType.t; 
            compiled_impl : CompiledModule.t }
 end
 

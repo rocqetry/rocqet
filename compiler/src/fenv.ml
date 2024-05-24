@@ -58,7 +58,7 @@ module InhJudgements = struct
    match !judgements with 
    | [] -> FamilyContext.FamCtx []
    | (name, judgement) :: _ -> 
-      let InhJudgement.{ derived; ctx; _ } = judgement in 
+      let InhJudgement.{ derived; ctx; _ } = judgement in
       let FamilyContext.FamCtx ctx = ctx in
       FamilyContext.FamCtx ((name, derived) :: ctx)      
 end

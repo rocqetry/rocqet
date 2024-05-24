@@ -29,8 +29,7 @@ let unique_id =
   counter := !counter + 1;
   !counter
 
-let fresh_name ~prefix =
-   let prefix = Names.Id.to_string prefix in
+let fresh_name ~prefix =   
    let time_stamp = string_of_int @@ unique_id () in     
    Names.Id.of_string (prefix ^ "回" ^ time_stamp)    
 
@@ -76,7 +75,9 @@ module DeclareBackend = struct
     let kind = Decls.(IsDefinition Definition) in
     let cinfo = Declare.CInfo.make ~name ~typ:None () in
     let info = Declare.Info.make ~scope ~kind  ~udecl ~poly:false () in
+    (* let a = DeclareInd.declare_mutual_inductive_with_eliminations in*)
     Declare.declare_definition ~info ~cinfo ~opaque:false ~body sigma |> ignore
+  
 end
 
 (** Code generation backend by writing and interpreting Vernacular commands explicitly *)
@@ -179,6 +180,9 @@ module VernacBackend = struct
     let* _ = vernac_ (VernacEndSegment modname_) in 
       return @@ Libnames.qualid_of_ident module_name  
 
+   let include_module ~(module_expr : Constrexpr.module_ast) : unit t =      
+      vernac_ (VernacInclude [(module_expr ,Declaremods.DefaultInline )])
+  
   let assume_parameter
     ~(name : Names.Id.t) 
     ~(ty : Constrexpr.constr_expr) : unit t = 

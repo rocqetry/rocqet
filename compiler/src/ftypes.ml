@@ -58,8 +58,13 @@ module FamilyName = struct
   type t = { name: Names.Id.t; id: FamilyId.t }
 end
 
-(* The name of a module that has been compiled *)
+(* Module naming *)
+(* This should really be Names.ModPath.t *)
 module CompiledModule = struct 
+  type t = Libnames.qualid
+end
+
+module CompiledModuleType = struct 
   type t = Libnames.qualid
 end
 
@@ -68,7 +73,7 @@ module rec FamilyTypeElem : sig
      | FInductive of 
          { original_inductive : VernacInductive.t; 
            constructor_names : Names.Id.t list;
-           compiled_signature : CompiledModule.t; 
+           compiled_signature : CompiledModuleType.t;
            compiled_impl : CompiledModule.t }
 end = FamilyTypeElem
 
@@ -128,9 +133,14 @@ end = struct
     { base : FamilyType.t; 
       derived : FamilyType.t; 
       body : (Names.Id.t * InhElement.t) list;
-      ctx: FamilyContext.t; } 
+      ctx: FamilyContext.t; }
+  (* The empty family context here is not really right
+     becuase once we have an inheritnce judgement, we can't
+     have an empty family context. We can have a context which
+     the family type contains no field though. *)
   let empty ~base ~derived = { base; derived; ctx = FamCtx []; body = [] }
 end
+(* InhJudgement and FamilyContext should be merged into one type really *)
 
 (* A single plugin command *)
 (* e.g Family A. ... *)
@@ -154,6 +164,18 @@ module NestedFamilyContext = struct
     | Level of FamilyContext.t * t
 end
 
+module F = struct
+  type t =
+    | Toplevel of Names.Id.t * FamilyType.t
+    | Nestedlevel of Names.Id.t * FamilyType.t * t
+end
+
+let name ty = match ty with
+  | F.Toplevel (name, ty) -> failwith ""
+  | F.Nestedlevel (name, ty, upper) -> failwith ""
+
+
+
 (* Field inheritance kind *)
 module FieldInheritanceKind = struct 
   type t = New | Extend
@@ -174,6 +196,5 @@ end
 (* close_current_inh_judgement *)
 (* ontopinh *)
 (* inhnewind *)
-
+type t = FamCtx of (Names.Id.t * FamilyType.t) list  
 *)
-
