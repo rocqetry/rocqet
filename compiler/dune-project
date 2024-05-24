@@ -5,3 +5,13 @@
 (name nfpop)
 
 (generate_opam_files true)
+
+(package
+ (name nfpop)
+ (depends
+  (ocaml
+   (>= 4.14.2))
+  (dune
+   (>= 3.15))
+  (coq
+   (= 18.9.1))))
