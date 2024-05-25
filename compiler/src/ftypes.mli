@@ -66,7 +66,7 @@ and FamilyTermElem : sig
 end
 
 and FamilyTerm : sig
-  type t = { name : Names.Id.t; body : (Names.Id.t * FamilyTermElem.t) list }
+  type t = { body : (Names.Id.t * FamilyTermElem.t) list }
 end
 
 and InhElement : sig
@@ -77,10 +77,13 @@ and InhJudgement : sig
   type t = {
     base : FamilyType.t;
     derived : FamilyType.t;
-    body : (Names.Id.t * InhElement.t) list; (* ctx : FamilyContext.t; *)
+    body : (Names.Id.t * InhElement.t) list;
   }
 
   val empty : base:FamilyType.t -> derived:FamilyType.t -> t
+
+  val family_type_inh_op :
+    t -> (Names.Id.t * FamilyTypeElem.t * InhElement.t) list
 end
 
 module PluginCmd : sig

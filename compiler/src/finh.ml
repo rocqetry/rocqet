@@ -1,14 +1,67 @@
+open Ftypes
+open Fenv
+
 module ScopeClosing = struct
   let inherit_all_remained () = ()
 
-  let close_current_inheritance_judgement () =
-    Fenv.InhJudgements.ensure_open_judgememt ();
+  let inh_apply_standalone ~(judgement : InhJudgement.t) : FamilyTerm.t =
+    let f (name, ty, inh) =
+      match (inh, ty) with
+      | InhElement.CInhNew compiled, FamilyTypeElem.FInductive _ ->
+          (name, FamilyTermElem.CompiledDefinition compiled)
+      | InhElement.CInhExtendInh _, _ -> Ferror.fail ~info:"Not yet implementes"
+    in
+    let family_term_body =
+      judgement |> InhJudgement.family_type_inh_op |> List.map f
+    in
+    FamilyTerm.{ body = family_term_body }
 
-    ()
+  let inh_apply_famref ~(judgement : InhJudgement.t)
+      ~(base_family : FamilyRef.t option) : FamilyTerm.t =
+    match base_family with
+    | None -> inh_apply_standalone ~judgement
+    | Some _ -> Ferror.fail ~info:"No support for extending families yet"
+
+  (* We need to know the provenance of a context *)
+  let standalone_famterm_to_mod ~(family_term : FamilyTerm.t) : CompiledModule.t
+      =
+    let open Fcodegen.VernacBackend in
+    let open Fcodegen in
+    let FamilyTerm.{ body } = family_term in
+    let rec famterm_internal_include
+        (body : (Names.Id.t * FamilyTermElem.t) list) (ctx : ModuleTerm.t list)
+        =
+      match body with
+      | [] -> return ()
+      | (name, FamilyTermElem.CompiledDefinition compiled) :: body_rest ->
+          let* _ = famterm_internal_include body_rest ctx in
+          let module_expr = Ftermutils.ident_to_module_expr compiled in
+          let* _ = include_module ~module_expr in
+          return ()
+    in
+    define_module
+      ~module_name:(Fcodegen.fresh_name ~prefix:"__")
+      ~parameters:[]
+      ~body:(famterm_internal_include body)
+    |> run
+
+  let close_current_inheritance_judgement () =
+    InhJudgements.ensure_open_judgememt ();
+    (* The `Option.get` below is safe because of the above assertion *)
+    let name, judgement = Fenv.InhJudgements.pop () |> Option.get in
+    (* I don't know if this is the right ctx *)
+    let _ctx = InhJudgements.current_output_ctx () in
+    let InhJudgement.{ derived = _; _ } = judgement in
+    let family_term = inh_apply_famref ~judgement ~base_family:None in
+    let module_instantiation = standalone_famterm_to_mod ~family_term in
+    let module_expr = Ftermutils.ident_to_module_expr module_instantiation in
+    let open Fcodegen.VernacBackend in
+    define_module ~module_name:name ~parameters:[] ~body:(fun _ ->
+        include_module ~module_expr)
+    |> run |> ignore
 end
 
 let add_new_family name =
-  let open Ftypes in
   let id = FamilyId.fresh () in
   let family_name = FamilyName.{ name; id } in
   let family_type = FamilyType.{ name = family_name; body = [] } in
@@ -123,7 +176,7 @@ let inductive_to_famterm_and_recursor_type ~(ind_def : Ftypes.VernacInductive.t)
     |> List.map (fun ((ind_name, _), _) -> ind_name)
     |> List.hd
   in
-  (* Generate a definition mapping of the inductive type and 
+  (* Generate a definition mapping of the inductive type and
      return the new inductive definition and the export of the correct names *)
   let modified_indcstrs, alias_all_name_term_type_decl =
     VernacInductive.definition_mapping ~prefix:"__internal_" ind_def

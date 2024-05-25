@@ -163,7 +163,7 @@ end =
   FamilyTermElem
 
 and FamilyTerm : sig
-  type t = { name : Names.Id.t; body : (Names.Id.t * FamilyTermElem.t) list }
+  type t = { body : (Names.Id.t * FamilyTermElem.t) list }
 end =
   FamilyTerm
 
@@ -183,6 +183,9 @@ and InhJudgement : sig
   }
 
   val empty : base:FamilyType.t -> derived:FamilyType.t -> t
+
+  val family_type_inh_op :
+    t -> (Names.Id.t * FamilyTypeElem.t * InhElement.t) list
 end = struct
   type t = {
     base : FamilyType.t;
@@ -195,6 +198,15 @@ end = struct
      have an empty family context. We can have a context which
      the family type contains no field though. *)
   let empty ~base ~derived = { base; derived; body = [] }
+
+  let family_type_inh_op judgement =
+    let { derived; body = judgement_body; _ } = judgement in
+    let FamilyType.{ body = family_type_body; _ } = derived in
+    (* Ensure that both lists are of the same length *)
+    List.combine family_type_body judgement_body
+    |> List.map (fun ((name1, family_type_elem), (name2, inh_elem)) ->
+           (* Assert that name1 == name2 *)
+           (name1, family_type_elem, inh_elem))
 end
 (* InhJudgement and FamilyContext should be merged into one type really *)
 
