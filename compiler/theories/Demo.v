@@ -6,4 +6,6 @@ Family Semantics.
    FInductive step : Set := exec_skip : step | exec_assign : step.   
 FEnd Semantics.
 
+Check Semantics.step.
+
 (* We need to make the tool accessible from the `./casestudy` directory *)

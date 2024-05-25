@@ -50,7 +50,7 @@ module ScopeClosing = struct
     (* The `Option.get` below is safe because of the above assertion *)
     let name, judgement = Fenv.InhJudgements.pop () |> Option.get in
     (* I don't know if this is the right ctx *)
-    let _ctx = InhJudgements.current_output_ctx () in
+    (* let _ctx = InhJudgements.current_output_ctx () in *)
     let InhJudgement.{ derived = _; _ } = judgement in
     let family_term = inh_apply_famref ~judgement ~base_family:None in
     let module_instantiation = standalone_famterm_to_mod ~family_term in
