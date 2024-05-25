@@ -12,6 +12,11 @@ module VernacInductive : sig
   val extract_all_ident : t -> Names.Id.t list
   val extract_type_ident : t -> Names.Id.t list
   val extract_cstrs_ident : t -> Names.Id.t list
+
+  val definition_mapping :
+    prefix:string ->
+    t ->
+    t * (Names.Id.t * Constrexpr.constr_expr * Constrexpr.constr_expr) list
 end
 
 module FamilyId : sig

@@ -1,16 +1,9 @@
 From NFPOP Require Import Loader.
 
-(* FInductive step : Set := exec_label. *)
+Family Semantics. 
+   FInductive eval_expr : Set := eval_binary : eval_expr | eval_const : eval_expr.
 
-Family Cminorvariant.
-    Family Semantics.
-    FEnd Semantics.
-FEnd Cminorvariant.
-
-Family Cminor extends Cminorvariant.
-    Family Semantics.
-       FInductive name : Set := exec_step | exec_skip. 
-    FEnd Semantics.
-FEnd Cminor.
+   FInductive step : Set := exec_skip : step | exec_assign : step.   
+FEnd Semantics.
 
 (* We need to make the tool accessible from the `./casestudy` directory *)

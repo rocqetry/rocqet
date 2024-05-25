@@ -1,3 +1,12 @@
+module ScopeClosing = struct
+  let inherit_all_remained () = ()
+
+  let close_current_inheritance_judgement () =
+    Fenv.InhJudgements.ensure_open_judgememt ();
+
+    ()
+end
+
 let add_new_family name =
   let open Ftypes in
   let id = FamilyId.fresh () in
@@ -53,10 +62,10 @@ and famty_to_modsig ~(current_path : Ftypes.CompiledModuleType.t)
               ~family_type:FamilyType.{ name = family_name; body = body_rest }
           in
           let finductive_ctx_expr =
-            CAst.make (Constrexpr.CMident finductive_ctx)
+            Ftermutils.ident_to_module_expr finductive_ctx
           in
           let finductive_signature_expr =
-            CAst.make (Constrexpr.CMident compiled_signature)
+            Ftermutils.ident_to_module_expr compiled_signature
           in
           let module Backend = Fcodegen.VernacBackend in
           let open Backend in
@@ -87,10 +96,10 @@ let inductive_to_famtype ~(ind_def : Ftypes.VernacInductive.t)
   let constr_decls = List.concat_map snd ind_cstrs in
   let module Backend = Fcodegen.VernacBackend in
   let declare_typedecls =
-    List.map (fun (name, ty) -> Backend.assume_parameter ~name ~ty) type_decls
+    List.map (fun (name, ty) -> Backend.postulate_axiom ~name ~ty) type_decls
   in
   let declare_csts_decls =
-    List.map (fun (name, ty) -> Backend.assume_parameter ~name ~ty) constr_decls
+    List.map (fun (name, ty) -> Backend.postulate_axiom ~name ~ty) constr_decls
   in
   let all_decls = declare_typedecls @ declare_csts_decls in
   let open Backend in
@@ -100,9 +109,45 @@ let inductive_to_famtype ~(ind_def : Ftypes.VernacInductive.t)
          let* () = flatmap all_decls in
          return ())
 
+(* This is the instantiation of an inductive type and it's recursors *)
 let inductive_to_famterm_and_recursor_type ~(ind_def : Ftypes.VernacInductive.t)
     ~(ctx : Ftypes.FamilyContext.t) : Ftypes.CompiledModule.t =
-  failwith ""
+  let open Ftypes in
+  let all_names_with_type =
+    ind_def
+    |> List.map (fun (ind_expr, _) ->
+           VernacInductive.extract_type_and_cstrs ind_expr)
+  in
+  let original_type_name =
+    all_names_with_type
+    |> List.map (fun ((ind_name, _), _) -> ind_name)
+    |> List.hd
+  in
+  (* Generate a definition mapping of the inductive type and 
+     return the new inductive definition and the export of the correct names *)
+  let modified_indcstrs, alias_all_name_term_type_decl =
+    VernacInductive.definition_mapping ~prefix:"__internal_" ind_def
+  in
+  let module_name =
+    Fcodegen.fresh_name ~prefix:(original_type_name |> Names.Id.to_string)
+  in
+  let open Fcodegen.VernacBackend in
+  let module_name =
+    run
+    @@ define_module ~module_name ~parameters:(famctx_to_parameters ~ctx)
+         ~body:(fun _ ->
+           let* () = define_inductive modified_indcstrs in
+           (* Some stuff with the recursors here *)
+           let alias_all =
+             List.map
+               (fun (original_name, new_name, ty) ->
+                 define_term ~name:original_name ~expr:new_name ~ty)
+               alias_all_name_term_type_decl
+           in
+           let* _ = flatmap alias_all in
+           return ())
+  in
+  module_name
 
 let compile_inductive_definition ~(judgement : Ftypes.InhJudgement.t)
     ~(ind_def_name : Names.Id.t) ~(ind_def : Ftypes.VernacInductive.t)
@@ -150,8 +195,10 @@ let add_inductive_definition ind_def =
       Fenv.InhJudgements.push ~name:family_name ~judgement
 
 (* TODO:
-   1. Compile output to a file   
+   1. Compile output to a file
    2. Compiling recursors
-   3. Do we *really* need to define the compilation by memoized mutual recursion?
+   3. We need to start adding debug functions
+   (e.g Print Family Context. Print Inheritance Judgement.
+        Print Family Type <name>. )
    4. Test
    5. Closing families *)

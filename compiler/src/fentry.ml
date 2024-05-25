@@ -2,13 +2,7 @@
 
 let finductive inductive_definitions =
   Fenv.PluginScopes.ensure_in_scope ~scope:Ftypes.PluginCmd.Family;
-  let name =
-    inductive_definitions |> Ftypes.VernacInductive.extract_type_ident
-    |> List.hd
-  in
-
-  Finh.add_inductive_definition inductive_definitions;
-  Feedback.msg_info (name |> Names.Id.to_string |> Pp.str)
+  Finh.add_inductive_definition inductive_definitions
 
 let fend _scope_name = Feedback.msg_info (Pp.str "FEnd")
 
@@ -19,7 +13,10 @@ let family name =
       {
         PluginCmdScope.name;
         command = PluginCmd.Family;
-        close = (fun () -> ());
+        close =
+          (fun () ->
+            Finh.ScopeClosing.inherit_all_remained ();
+            Finh.ScopeClosing.close_current_inheritance_judgement ());
       };
 
   let message = Pp.(str "Family " ++ (name |> Names.Id.to_string |> str)) in

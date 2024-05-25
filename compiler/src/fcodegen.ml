@@ -118,6 +118,21 @@ module VernacBackend = struct
     emit_list expr;
     result
 
+  let define_inductive (ind_def : Ftypes.VernacInductive.t) : unit t =
+    let open Vernacexpr in
+    vernac_ (VernacSynPure (VernacInductive (Inductive_kw, ind_def)))
+
+  let define_term ~(name : Names.Id.t) ~(expr : Constrexpr.constr_expr)
+      ~(ty : Constrexpr.constr_expr) : unit t =
+    let open Vernacexpr in
+    let fname_ = (CAst.make @@ Names.Name.mk_name name, None) in
+    vernac_
+      (VernacSynPure
+         (VernacDefinition
+            ( (NoDischarge, Decls.Definition),
+              fname_,
+              DefineBody ([], None, expr, Some ty) )))
+
   let define_module ~(module_name : Names.Id.t)
       ~(parameters : (Names.Id.t * Constrexpr.module_ast) list)
       ~(body : ModuleTerm.t list -> unit t) : ModuleTerm.t t =
@@ -177,6 +192,17 @@ module VernacBackend = struct
       (VernacSynPure
          (VernacAssumption
             ( (NoDischarge, Decls.Definitional),
+              Declaremods.NoInline,
+              [ (NoCoercion, ([ fname_ ], ty)) ] )))
+
+  let postulate_axiom ~(name : Names.Id.t) ~(ty : Constrexpr.constr_expr) :
+      unit t =
+    let open Vernacexpr in
+    let fname_ = (CAst.make @@ name, None) in
+    vernac_
+      (VernacSynPure
+         (VernacAssumption
+            ( (NoDischarge, Decls.Logical),
               Declaremods.NoInline,
               [ (NoCoercion, ([ fname_ ], ty)) ] )))
 end

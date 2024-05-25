@@ -41,6 +41,62 @@ module VernacInductive = struct
     ind_def
     |> List.map (fun (ind_expr, _) -> ind_expr |> extract_type_and_cstrs)
     |> List.concat_map (fun (_, cstrs) -> cstrs |> List.map fst)
+
+  (* Create a "definition mapping" *)
+  let definition_mapping ~prefix ind_def =
+    let all_names_with_type =
+      ind_def |> List.map (fun (ind_expr, _) -> extract_type_and_cstrs ind_expr)
+    in
+    let prefix_with_internal (name : Names.Id.t) =
+      Nameops.add_prefix prefix name
+    in
+    let all_original_names =
+      all_names_with_type
+      |> List.concat_map (fun ((ind_name, _), cstrs) ->
+             ind_name :: List.map fst cstrs)
+    in
+    let all_new_names = List.map prefix_with_internal all_original_names in
+    let definition_mapping = List.combine all_original_names all_new_names in
+    let map_name_newname =
+      List.fold_right
+        (fun (original_name, new_name) map ->
+          Names.Id.Map.add original_name new_name map)
+        definition_mapping Names.Id.Map.empty
+    in
+    let apply_subst_expr =
+      Constrexpr_ops.replace_vars_constr_expr map_name_newname
+    in
+    (* TODO: Rename the variables in this function *)
+    let apply_subst_inductive_expr (((a, (b, c)), d, e, f), g) =
+      let b = CAst.map prefix_with_internal b in
+      let e = Option.map apply_subst_expr e in
+      match f with
+      | Vernacexpr.Constructors csts ->
+          let csts =
+            List.map
+              (fun (z, (x, y)) ->
+                (z, (CAst.map prefix_with_internal x, apply_subst_expr y)))
+              csts
+          in
+          let f = Vernacexpr.Constructors csts in
+          (((a, (b, c)), d, e, f), g)
+      | _ -> Ferror.fail ~info:"Records not yet supported"
+    in
+    (* Use option to extract the type *)
+    let all_names_with_type =
+      List.concat_map
+        (fun ((x, y), z) -> (x, Option.get y) :: z)
+        all_names_with_type
+    in
+    (* Exporting the names *)
+    let alias_all_name_term_type_decl =
+      List.map
+        (fun (name, ty) ->
+          (name, Constrexpr_ops.mkIdentC (prefix_with_internal name), ty))
+        all_names_with_type
+    in
+    let modified_ind_def = List.map apply_subst_inductive_expr ind_def in
+    (modified_ind_def, alias_all_name_term_type_decl)
 end
 
 module FamilyId = struct
