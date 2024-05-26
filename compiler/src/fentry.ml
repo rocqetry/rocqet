@@ -4,12 +4,12 @@ let finductive inductive_definitions =
   Fenv.PluginScopes.ensure_in_scope ~scope:Ftypes.PluginCmd.Family;
   Finh.add_inductive_definition inductive_definitions
 
-let fend scope_name = 
-  match Fenv.PluginScopes.pop scope_name with 
+let fend scope_name =
+  match Fenv.PluginScopes.pop scope_name with
   | None -> Ferror.fail ~info:"There is no open scope"
-  | Some scope -> 
-     let Ftypes.PluginCmdScope.{ close; _ } = scope in 
-     close ()
+  | Some scope ->
+      let Ftypes.PluginCmdScope.{ close; _ } = scope in
+      close ()
 
 let family name =
   Finh.add_new_family name;

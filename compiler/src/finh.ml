@@ -4,27 +4,33 @@ open Fenv
 module ScopeClosing = struct
   let inherit_all_remained () = ()
 
-  let inh_apply_standalone ~(judgement : InhJudgement.t) : FamilyTerm.t =
-    let f (name, ty, inh) =
+  (* Get a family term from a judgement: basically from the expected type
+     and the inheritance op, we can get the family term *)
+  (* This is for a new family which does not have a base family, so all we
+     need to generate the family term is in the judgement *)
+  let family_term_of_judgement ~(judgement : InhJudgement.t) : FamilyTerm.t =
+    let compute_family_term_elem (name, ty, inh) =
       match (inh, ty) with
       | InhElement.CInhNew compiled, FamilyTypeElem.FInductive _ ->
           (name, FamilyTermElem.CompiledDefinition compiled)
-      | InhElement.CInhExtendInh _, _ -> Ferror.fail ~info:"Not yet implementes"
+      | InhElement.CInhExtendInh _, _ -> Ferror.fail ~info:"Not yet implemented"
     in
     let family_term_body =
-      judgement |> InhJudgement.family_type_inh_op |> List.map f
+      judgement |> InhJudgement.family_type_inh_op
+      |> List.map compute_family_term_elem
     in
     FamilyTerm.{ body = family_term_body }
 
-  let inh_apply_famref ~(judgement : InhJudgement.t)
+  (* Apply the judgements in a derived family to the base family, to produce an
+     apprpriate family term *)
+  let apply_derived_judgement_to_base ~(judgement : InhJudgement.t)
       ~(base_family : FamilyRef.t option) : FamilyTerm.t =
     match base_family with
-    | None -> inh_apply_standalone ~judgement
+    | None -> family_term_of_judgement ~judgement
     | Some _ -> Ferror.fail ~info:"No support for extending families yet"
 
-  (* We need to know the provenance of a context *)
-  let standalone_famterm_to_mod ~(family_term : FamilyTerm.t) : CompiledModule.t
-      =
+  let compile_family_term_module ~(family_term : FamilyTerm.t) :
+      CompiledModule.t =
     let open Fcodegen.VernacBackend in
     let open Fcodegen in
     let FamilyTerm.{ body } = family_term in
@@ -47,13 +53,14 @@ module ScopeClosing = struct
 
   let close_current_inheritance_judgement () =
     InhJudgements.ensure_open_judgememt ();
+    let _ctx = InhJudgements.current_output_ctx () in
     (* The `Option.get` below is safe because of the above assertion *)
     let name, judgement = Fenv.InhJudgements.pop () |> Option.get in
-    (* I don't know if this is the right ctx *)
-    (* let _ctx = InhJudgements.current_output_ctx () in *)
     let InhJudgement.{ derived = _; _ } = judgement in
-    let family_term = inh_apply_famref ~judgement ~base_family:None in
-    let module_instantiation = standalone_famterm_to_mod ~family_term in
+    let family_term =
+      apply_derived_judgement_to_base ~judgement ~base_family:None
+    in
+    let module_instantiation = compile_family_term_module ~family_term in
     let module_expr = Ftermutils.ident_to_module_expr module_instantiation in
     let open Fcodegen.VernacBackend in
     define_module ~module_name:name ~parameters:[] ~body:(fun _ ->
