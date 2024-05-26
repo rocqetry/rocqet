@@ -29,7 +29,7 @@ module ScopeClosing = struct
     | None -> family_term_of_judgement ~judgement
     | Some _ -> Ferror.fail ~info:"No support for extending families yet"
 
-  let compile_family_term_module ~(family_term : FamilyTerm.t) :
+  let compile_family_term_module ~(family_term : FamilyTerm.t) ~(name: Names.Id.t):
       CompiledModule.t =
     let open Fcodegen.VernacBackend in
     let open Fcodegen in
@@ -46,7 +46,7 @@ module ScopeClosing = struct
           return ()
     in
     define_module
-      ~module_name:(Fcodegen.fresh_name ~prefix:"__")
+      ~module_name:name
       ~parameters:[]
       ~body:(famterm_internal_include body)
     |> run
@@ -60,14 +60,7 @@ module ScopeClosing = struct
     let family_term =
       apply_derived_judgement_to_base ~judgement ~base_family:None
     in
-    let module_instantiation = compile_family_term_module ~family_term in
-    let module_expr = Ftermutils.ident_to_module_expr module_instantiation in
-    let open Fcodegen.VernacBackend in
-    let () =
-      define_module ~module_name:name ~parameters:[] ~body:(fun _ ->
-          include_module ~module_expr)
-      |> run |> ignore
-    in
+    compile_family_term_module ~family_term ~name |> ignore;
     GlobalCtx.push ~family_type ~family_term
 end
 
