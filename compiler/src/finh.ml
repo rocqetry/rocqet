@@ -79,34 +79,32 @@ let add_new_family name =
 (* Compile a context *)
 let compile_context ~ctx ~module_name =
   let (FamilyContext.Toplevel (name, ty)) = ctx in
-  let FamilyType.{ body; _ } = ty in  
+  let FamilyType.{ body; _ } = ty in
   let open Fcodegen.VernacBackend in
   match body with
-  | [] ->      
+  | [] ->
       define_moduletype ~module_name:(Fcodegen.fresh_name ~prefix:"EmptySig")
-           ~parameters:[] ~body:(fun _arguments -> return ())
-      |> run 
+        ~parameters:[] ~body:(fun _arguments -> return ())
+      |> run
   | (_, FamilyTypeElem.FInductive { compiled_signature; compiled_ctx; _ }) :: _
     ->
       let module_name_ctx = Nameops.add_suffix module_name "Ctx" in
       define_moduletype ~module_name:module_name_ctx ~parameters:[]
-           ~body:(fun _arguments ->
-             let* () =
-               include_module
-                 ~module_expr:(Ftermutils.ident_to_module_expr compiled_ctx)
-             in
-             let* () =
-               include_module
-                 ~module_expr:
-                   (Ftermutils.ident_to_module_expr compiled_signature)
-             in
-             return ())
+        ~body:(fun _arguments ->
+          let* () =
+            include_module
+              ~module_expr:(Ftermutils.ident_to_module_expr compiled_ctx)
+          in
+          let* () =
+            include_module
+              ~module_expr:(Ftermutils.ident_to_module_expr compiled_signature)
+          in
+          return ())
       |> run
 
 (* Retrn the name of the compiled family field and return its compiled context's name *)
 let inductive_to_famtype ~(ind_def : Ftypes.VernacInductive.t)
-    ~(ctx : CompiledModuleType.t) :
-    CompiledModuleType.t =  
+    ~(ctx : CompiledModuleType.t) : CompiledModuleType.t =
   let ind_cstrs =
     ind_def
     |> List.map (fun ind ->
@@ -115,10 +113,9 @@ let inductive_to_famtype ~(ind_def : Ftypes.VernacInductive.t)
            ((ind_name, Option.get ty), cstrs))
   in
   let type_decls = ind_cstrs |> List.map fst in
-  let original_ind_name = type_decls |> List.hd |> fst in 
+  let original_ind_name = type_decls |> List.hd |> fst in
   let module_name =
-    Fcodegen.fresh_name
-      ~prefix:(original_ind_name |> Names.Id.to_string)
+    Fcodegen.fresh_name ~prefix:(original_ind_name |> Names.Id.to_string)
   in
   let constr_decls = List.concat_map snd ind_cstrs in
   let module Backend = Fcodegen.VernacBackend in
@@ -137,9 +134,9 @@ let inductive_to_famtype ~(ind_def : Ftypes.VernacInductive.t)
   in
   let open Backend in
   Backend.run
-    @@ Backend.define_moduletype ~module_name ~parameters ~body:(fun _ ->
-           let* () = flatmap all_decls in
-           return ())    
+  @@ Backend.define_moduletype ~module_name ~parameters ~body:(fun _ ->
+         let* () = flatmap all_decls in
+         return ())
 
 (* This is the instantiation of an inductive type and it's recursors *)
 let inductive_to_famterm_and_recursor_type ~(ind_def : Ftypes.VernacInductive.t)
@@ -163,7 +160,7 @@ let inductive_to_famterm_and_recursor_type ~(ind_def : Ftypes.VernacInductive.t)
   let module_name =
     Fcodegen.fresh_name ~prefix:(original_type_name |> Names.Id.to_string)
   in
-  let open Fcodegen.VernacBackend in  
+  let open Fcodegen.VernacBackend in
   let parameters =
     [
       ( Nameops.add_prefix "self__" original_type_name,
@@ -191,7 +188,7 @@ let compile_inductive_definition ~(judgement : Ftypes.InhJudgement.t)
     ~(ctx : Ftypes.FamilyContext.t) : Ftypes.InhJudgement.t =
   let open Ftypes in
   let InhJudgement.{ derived; body; _ } = judgement in
-  let all_fields = VernacInductive.extract_all_ident ind_def in  
+  let all_fields = VernacInductive.extract_all_ident ind_def in
   let ind_cstrs =
     ind_def
     |> List.map (fun ind ->
@@ -203,7 +200,9 @@ let compile_inductive_definition ~(judgement : Ftypes.InhJudgement.t)
   let original_ind_name = type_decls |> List.hd |> fst in
   let compiled_ctx = compile_context ~ctx ~module_name:original_ind_name in
   let compiled_signature = inductive_to_famtype ~ind_def ~ctx:compiled_ctx in
-  let compiled_impl = inductive_to_famterm_and_recursor_type ~ind_def ~ctx:compiled_ctx in
+  let compiled_impl =
+    inductive_to_famterm_and_recursor_type ~ind_def ~ctx:compiled_ctx
+  in
   let ctx_elem =
     FamilyTypeElem.FInductive
       {
