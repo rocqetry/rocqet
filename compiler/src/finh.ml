@@ -188,17 +188,8 @@ let compile_inductive_definition ~(judgement : Ftypes.InhJudgement.t)
     ~(ctx : Ftypes.FamilyContext.t) : Ftypes.InhJudgement.t =
   let open Ftypes in
   let InhJudgement.{ derived; body; _ } = judgement in
-  let all_fields = VernacInductive.extract_all_ident ind_def in
-  let ind_cstrs =
-    ind_def
-    |> List.map (fun ind ->
-           ind |> fst |> VernacInductive.extract_type_and_cstrs)
-    |> List.map (fun ((ind_name, ty), cstrs) ->
-           ((ind_name, Option.get ty), cstrs))
-  in
-  let type_decls = ind_cstrs |> List.map fst in
-  let original_ind_name = type_decls |> List.hd |> fst in
-  let compiled_ctx = compile_context ~ctx ~module_name:original_ind_name in
+  let all_fields = VernacInductive.extract_all_ident ind_def in  
+  let compiled_ctx = compile_context ~ctx ~module_name:ind_def_name in
   let compiled_signature = inductive_to_famtype ~ind_def ~ctx:compiled_ctx in
   let compiled_impl =
     inductive_to_famterm_and_recursor_type ~ind_def ~ctx:compiled_ctx
