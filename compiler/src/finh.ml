@@ -29,8 +29,8 @@ module ScopeClosing = struct
     | None -> family_term_of_judgement ~judgement
     | Some _ -> Ferror.fail ~info:"No support for extending families yet"
 
-  let compile_family_term_module ~(family_term : FamilyTerm.t) ~(name: Names.Id.t):
-      CompiledModule.t =
+  let compile_family_term_module ~(family_term : FamilyTerm.t)
+      ~(name : Names.Id.t) : CompiledModule.t =
     let open Fcodegen.VernacBackend in
     let open Fcodegen in
     let FamilyTerm.{ body } = family_term in
@@ -45,9 +45,7 @@ module ScopeClosing = struct
           let* _ = include_module ~module_expr in
           return ()
     in
-    define_module
-      ~module_name:name
-      ~parameters:[]
+    define_module ~module_name:name ~parameters:[]
       ~body:(famterm_internal_include body)
     |> run
 
@@ -77,14 +75,14 @@ let compile_context ~ctx ~module_name =
   let (FamilyContext.Toplevel (name, ty)) = ctx in
   let FamilyType.{ body; _ } = ty in
   let open Fcodegen.VernacBackend in
+  let module_name_ctx = Nameops.add_suffix module_name "Ctx" in
   match body with
   | [] ->
-      define_moduletype ~module_name:(Fcodegen.fresh_name ~prefix:"EmptySig")
-        ~parameters:[] ~body:(fun _arguments -> return ())
+      define_moduletype ~module_name:module_name_ctx ~parameters:[] ~body:(fun _arguments ->
+          return ())
       |> run
   | (_, FamilyTypeElem.FInductive { compiled_signature; compiled_ctx; _ }) :: _
     ->
-      let module_name_ctx = Nameops.add_suffix module_name "Ctx" in
       define_moduletype ~module_name:module_name_ctx ~parameters:[]
         ~body:(fun _arguments ->
           let* () =
