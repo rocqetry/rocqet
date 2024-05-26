@@ -130,6 +130,7 @@ module rec FamilyTypeElem : sig
         constructor_names : Names.Id.t list;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
+        compiled_ctx : CompiledModuleType.t;
       }
 end =
   FamilyTypeElem
