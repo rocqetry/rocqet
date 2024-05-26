@@ -1,13 +1,21 @@
+open Ftypes
+
 module PluginScopes : sig
-  val peek : unit -> Ftypes.PluginCmdScope.t option
-  val push : Ftypes.PluginCmdScope.t -> unit
-  val pop : Names.Id.t -> Ftypes.PluginCmdScope.t option
-  val ensure_in_scope : scope:Ftypes.PluginCmd.t -> unit
+  val peek : unit -> PluginCmdScope.t option
+  val push : PluginCmdScope.t -> unit
+  val pop : Names.Id.t -> PluginCmdScope.t option
+  val ensure_in_scope : scope:PluginCmd.t -> unit
 end
 
 module InhJudgements : sig
-  val push : name:Names.Id.t -> judgement:Ftypes.InhJudgement.t -> unit
-  val pop : unit -> (Names.Id.t * Ftypes.InhJudgement.t) option
+  val push : name:Names.Id.t -> judgement:InhJudgement.t -> unit
+  val pop : unit -> (Names.Id.t * InhJudgement.t) option
   val ensure_open_judgememt : unit -> unit
-  val current_output_ctx : unit -> Ftypes.FamilyContext.t
+  val current_output_ctx : unit -> FamilyContext.t
+end
+
+module GlobalCtx : sig
+  type t = { family_term : FamilyTerm.t; family_type : FamilyType.t }
+
+  val push : family_term:FamilyTerm.t -> family_type:FamilyType.t -> unit
 end

@@ -56,16 +56,19 @@ module ScopeClosing = struct
     let _ctx = InhJudgements.current_output_ctx () in
     (* The `Option.get` below is safe because of the above assertion *)
     let name, judgement = Fenv.InhJudgements.pop () |> Option.get in
-    let InhJudgement.{ derived = _; _ } = judgement in
+    let InhJudgement.{ derived = family_type; _ } = judgement in
     let family_term =
       apply_derived_judgement_to_base ~judgement ~base_family:None
     in
     let module_instantiation = compile_family_term_module ~family_term in
     let module_expr = Ftermutils.ident_to_module_expr module_instantiation in
     let open Fcodegen.VernacBackend in
-    define_module ~module_name:name ~parameters:[] ~body:(fun _ ->
-        include_module ~module_expr)
-    |> run |> ignore
+    let () =
+      define_module ~module_name:name ~parameters:[] ~body:(fun _ ->
+          include_module ~module_expr)
+      |> run |> ignore
+    in
+    GlobalCtx.push ~family_type ~family_term
 end
 
 let add_new_family name =
@@ -186,9 +189,8 @@ let inductive_to_famterm_and_recursor_type ~(ind_def : Ftypes.VernacInductive.t)
 let compile_inductive_definition ~(judgement : Ftypes.InhJudgement.t)
     ~(ind_def_name : Names.Id.t) ~(ind_def : Ftypes.VernacInductive.t)
     ~(ctx : Ftypes.FamilyContext.t) : Ftypes.InhJudgement.t =
-  let open Ftypes in
   let InhJudgement.{ derived; body; _ } = judgement in
-  let all_fields = VernacInductive.extract_all_ident ind_def in  
+  let constructor_names = VernacInductive.extract_all_ident ind_def in
   let compiled_ctx = compile_context ~ctx ~module_name:ind_def_name in
   let compiled_signature = inductive_to_famtype ~ind_def ~ctx:compiled_ctx in
   let compiled_impl =
@@ -198,7 +200,7 @@ let compile_inductive_definition ~(judgement : Ftypes.InhJudgement.t)
     FamilyTypeElem.FInductive
       {
         original_inductive = ind_def;
-        constructor_names = all_fields;
+        constructor_names;
         compiled_signature;
         compiled_impl;
         compiled_ctx;

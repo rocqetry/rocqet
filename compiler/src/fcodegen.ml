@@ -1,5 +1,3 @@
-(* From https://github.com/tlringer/plugin-tutorial/blob/main/src/termutils.ml *)
-
 let unique_id =
   let counter = ref 0 in
   fun () ->

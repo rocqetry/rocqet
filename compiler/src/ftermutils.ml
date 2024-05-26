@@ -1,3 +1,5 @@
+(* From https://github.com/tlringer/plugin-tutorial/blob/main/src/termutils.ml *)
+
 (** Get the global environment *)
 let global_env () =
   let env = Global.env () in
