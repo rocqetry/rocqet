@@ -154,7 +154,7 @@ end =
   FamilyContext
 
 module rec FamilyRef : sig
-  type t = ToplevelRef of Names.Id.t
+  type t = ToplevelRef of Names.Id.t * FamilyTerm.t * FamilyType.t
 end =
   FamilyRef
 

@@ -58,8 +58,8 @@ and FamilyContext : sig
   type t = Toplevel of Names.Id.t * FamilyType.t
 end
 
-module rec FamilyRef : sig
-  type t = ToplevelRef of Names.Id.t
+module rec FamilyRef : sig  
+  type t = ToplevelRef of Names.Id.t * FamilyTerm.t * FamilyType.t
 end
 
 and FamilyTermElem : sig

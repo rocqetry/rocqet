@@ -58,8 +58,9 @@ module ScopeClosing = struct
     let family_term =
       apply_derived_judgement_to_base ~judgement ~base_family:None
     in
-    compile_family_term_module ~family_term ~name |> ignore;
-    GlobalCtx.push ~family_type ~family_term
+    compile_family_term_module ~family_term ~name |> ignore;    
+    let name = family_type.FamilyType.name.FamilyName.name in
+    GlobalCtx.push ~name ~family_type ~family_term
 end
 
 let add_new_family name =

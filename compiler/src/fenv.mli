@@ -15,7 +15,5 @@ module InhJudgements : sig
 end
 
 module GlobalCtx : sig
-  type t = { family_term : FamilyTerm.t; family_type : FamilyType.t }
-
-  val push : family_term:FamilyTerm.t -> family_type:FamilyType.t -> unit
+  val push : name:Names.Id.t -> family_term:FamilyTerm.t -> family_type:FamilyType.t -> unit
 end

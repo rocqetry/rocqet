@@ -1,6 +1,6 @@
 (* The entry point to the plugin's functionalities *)
 
-let finductive inductive_definitions =
+let finductive inductive_definitions =  
   Fenv.PluginScopes.ensure_in_scope ~scope:Ftypes.PluginCmd.Family;
   Finh.add_inductive_definition inductive_definitions
 

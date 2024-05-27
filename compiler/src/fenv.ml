@@ -65,11 +65,9 @@ end
 
 (* This stores the toplevel families that have been closed *)
 module GlobalCtx = struct
-  type t = { family_term : FamilyTerm.t; family_type : FamilyType.t }
+  let store = Summary.ref ~name:"GlobalCtx" ([] : FamilyRef.t list)
 
-  let store = Summary.ref ~name:"GlobalCtx" ([] : t list)
-
-  let push ~family_term ~family_type =
-    let ctx_elem = { family_term; family_type } in
-    store := ctx_elem :: !store
+  let push ~name ~family_term ~family_type =
+    let family_ref = FamilyRef.ToplevelRef (name, family_term, family_type) in    
+    store := family_ref :: !store
 end
