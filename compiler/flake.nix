@@ -12,6 +12,7 @@
         pkgs = import nixpkgs { inherit system; overlays = [ ]; };
         ocamlDeps = with pkgs.ocaml-ng.ocamlPackages_5_1; [
           ocaml          
+          findlib
           dune_3
           ocamlformat_0_26_1
           pkgs.coq
