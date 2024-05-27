@@ -107,7 +107,8 @@ family Base.Linear extends Impbackend {
 }
 
 (* LTL -> Linear translation *)
-family Impzero.Implinearize extends ImpbackendTransform {  
+
+family Impzero.Implinearize extends BackendTransform {  
   family Source extends Impltl { }
   family Target extends Implinear { }
 

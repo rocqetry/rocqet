@@ -188,8 +188,16 @@ family Impzero.Implight extends SourceLanguage {
   }
 }
 
-(* Simplify Expression *)
 (* Translation from Imp -> Implight *)
+(* We use a nanopass approach between compiler IRs *)
+(* 
+1. Translate binary and unary type-dependent operators
+2. Translate struct/union field accesses to field offsets 
+3. Translation of switch to simpler control structures 
+4. Translation of loop/break/continue to loop/block/exit constructs
+*)
+
+
 family Impzero.ImpgenSimplExpr {
    family Source extends Imp { }
    family Target extends Implight { }

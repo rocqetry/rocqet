@@ -1,38 +1,11 @@
-(* Common IR for Impbackend languages *)
+family Cbackend {
+   Inductive instruction :=
+      | Lop (op: operation) (args: list mreg) (res: mreg)        
+      | Lgetstack (sl: slot) (ofs: Z) (ty: typ) (dst: mreg) (* for local variables *)
+      | Lsetstack (src: mreg) (sl: slot) (ofs: Z) (ty: typ)        
+      | Lcond (cond: condition) (args: list mreg) (s1 s2: node)                
 
-family Base.Impbackend {
-    Inductive instruction :=
-        | Lop (op: operation) (args: list mreg) (res: mreg)        
-        | Lgetstack (sl: slot) (ofs: Z) (ty: typ) (dst: mreg) (* for local variables *)
-        | Lsetstack (src: mreg) (sl: slot) (ofs: Z) (ty: typ)        
-        | Lcond (cond: condition) (args: list mreg) (s1 s2: node)                
-
-    family Semantics { }
-
-    family Program { 
-      (* Definition bblock := list instruction.
-         Definition code: Type := PTree.t bblock. *)
-       Field code := ... 
-      
-       Record function : Type := mkfunction {          
-          fn_stacksize: Z;
-          fn_code: code
-       }
-
-       Inductive fundef : Type :=
-          | Internal: function -> fundef          
-        
-        Inductive globdef : Type :=
-          | Gfun (f: fundef)          
-
-        Record program : Type := mkprogram {
-           prog_defs: list (ident * globdef);           
-           prog_main: ident
-        }
-    }
-}
-
-family Base.Impbackend.Semantics {
+   family Semantics { 
      Inductive stackframe: Type :=
         | Stackframe:
             forall (f: function)         (**r calling function *)
@@ -80,18 +53,28 @@ family Base.Impbackend.Semantics {
              rs' = undef_regs (destroyed_by_cond cond) rs ->
              step (State s f sp (Lcond cond args lbl :: b) rs m)
                   (State s f sp b rs' m)
+   }
 
-   Inductive initial_state := ...
-   Inductive final_states := ...
-   Field semantics := ...
+   family Program {       
+       Record function : Type := mkfunction {          
+          fn_stacksize: Z;
+          fn_code: code
+       }
+
+       Inductive fundef : Type :=
+          | Internal: function -> fundef          
+        
+        Inductive globdef : Type :=
+          | Gfun (f: fundef)          
+
+        Record program : Type := mkprogram {
+           prog_defs: list (ident * globdef);           
+           prog_main: ident
+        }
+    }
 }
 
+family CFGLike extends Cbackend { }
+family LinearLike extends Cbackend { }
 
-family Base.ControlFlowGraphIR extends Impbackend {
 
-
-}
-
-family Base.LinearIR extends Impbackend { 
-  
-}

@@ -3,7 +3,7 @@
    an abstract stack slot. *)
 (* I think maybe the stack slot should be a parameter 
    of the `Impbackend` family *)
-family Base.Mach extends Impbackend {
+family Mach {
     Definition label := positive
     
     Inductive instruction: Type :=

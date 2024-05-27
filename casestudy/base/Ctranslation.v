@@ -1,28 +1,69 @@
-(* Generic simulation diagrams *)
-family Base.SimulationDiagram { 
-    family Source extends L { }
-    family Target extends { }
-
-    (* This is used to prevennt anti-stuttering in the source language's 
-       transistion *)
-    (* We need to have a default value for plus or lock-step state relation, 
-       because we don't need a measure for that to work.  *)
-    (* family Measure {
+family Frontendtranslation {
+    family Source extends Cfrontend { }
+    family Target extends Cfrontend { }
       
-    }*)
-    Field compute_measure : Source.state -> Source.state -> Prop := ...
-    
-    (* Relation Between the state of S and T *)
-    family Relation {
-        
-    } 
 
-    Lemma translate_step:
-       forall S1 S2, Source.Semantics.step S1 S2 ->
-       forall T1, match_states S1 T1 ->
-       exists T2, star Target.Semantics.step T1 T2 /\ match_states S2 T2 /\ compute_measure s1 s2.
-    Proof.
+    family SimulationDiagram {                      
+       (* This is used to prevennt anti-stuttering in the source language's 
+          transistion *)
+       (* We need to have a default value for plus or lock-step state relation, 
+          because we don't need a measure for that to work.  *)
+       (* family Measure {
+         
+       }*)
+       Field compute_measure : Source.state -> Source.state -> Prop := ...
+       
+       (* Relation Between the state of S and T *)
+       family Relation {
+           
+       } 
+
+       Lemma translate_step:
+          forall S1 S2, Source.Semantics.step S1 S2 ->
+          forall T1, match_states S1 T1 ->
+          exists T2, star Target.Semantics.step T1 T2 /\ match_states S2 T2 /\ compute_measure s1 s2.
+       Proof.
+    }
 }
+
+family Backendtranslation { 
+    family Source extends Cfrontend { }
+    family Target extends Cfrontend { }
+
+    family SimulationDiagram { }
+}
+
+(* All self -> self / self -> next transformations *)
+
+(* frontend *)
+family SimplExpr extends Frontendtranslation { }
+family SimplLocals extends Frontendtranslation { }
+family Cshmgen extends Frontendtranslation { }
+family Cminorgen extends Frontendtranslation { }
+family Selection extends Frontendtranslation { }
+
+(* translation to RTL *)
+
+(* optimizations *)
+family RTLtranslation extends Backendtranslation { }
+family Tailcall extends RTLtranslation { }
+family Inlining extends RTLtranslation { }
+family Renumber extends RTLtranslation { }
+family Constprop extends RTLtranslation { }
+family CSE extends RTLtranslation { }
+family Deadcode extends RTLtranslation { }
+family Unusedglob extends RTLtranslation { }
+
+(* Register Allocation *)
+family Regalloc extends Backendtranslation { }
+
+family Tunneling extends Backendtranslation { }
+family Linearize extends Backendtranslation { }
+family CleanupLabels extends Backendtranslation { }
+family Debugvar extends Backendtranslation { }
+family Stacking extends Backendtranslation { }
+
+(* Asmgen *)
 
 
 (* Source -> Target transformation *)

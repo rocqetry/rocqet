@@ -1,4 +1,4 @@
-family Base.LTL extends Impbackend {
+family LTL extends Cbackend {
     Definition node := positive
     
     Inductive instruction: Type :=
@@ -94,4 +94,6 @@ family Base.LTL extends Impbackend {
       
 }
 
-
+family RegisterAllocation extends Translation { 
+    
+}

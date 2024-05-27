@@ -1,4 +1,4 @@
-family Base.Imp extends SourceLanguage {
+family C extends Cfrontend {
     Inductive expression : Type :=
        | Evar : ident -> expression (* reading a temporary variable *)
        | Econst : constant -> expression (* constants *)       
@@ -11,5 +11,9 @@ family Base.Imp extends SourceLanguage {
         | Sifthenelse: expr -> statement -> statement -> statement
         | Swhile : expr -> statement -> statement
     
-    family Semantics { }    
+    family Semantics { 
+      
+    }    
 }
+
+

@@ -1,4 +1,4 @@
-# A Proof Language for Scalable Extensibility in Verified Compilers
+# A Proof Language for Scalable Extensibility in Proof Engineering
 
 ## Scalable Extensibility
 
@@ -8,6 +8,7 @@ proportional to the size of the extension. In the content of proof
 engineering, scalable extensibility means that in addition to the size 
 of the code being added to implement a new feature, the proof of correctness
 of said feature should be proportional in size to the change. 
+
 
 Compilers are the hallmark of software complexity. Even more so, verified 
 compilers. Compilers are usually structured in _passes_ which modify a 
@@ -78,6 +79,7 @@ guidelines for using our language to design new proof developments
      #### Extension of CompCert
      * CompCert used in a JIT [1, 15]
      * CompCert for Cryptographic Constant-Time Preservation [2]
+
      * CompCertTSO - CompCert for a relaxed memory model [3]
      * ProbCompCert - CompCert for PPL [4]
      * L2C - CompCert extension for a Lustre-like language [5]
@@ -164,7 +166,8 @@ guidelines for using our language to design new proof developments
 12. Currently we have two major ways of reuse 
     * Simulation Diagrams
     * Sparse optimization / self passes
-    
+13. Compiler verification: a bibliography 
+    https://dl.acm.org/doi/10.1145/966221.966235    
 
 Title: A proof language for extensible certified compilers
 

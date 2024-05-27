@@ -231,6 +231,14 @@ family Impzero.ImpMinorSel extends MinorLanguage {
 
 (* Instruction Selection *)
 (* Translation from Impminor -> ImpminorSel *)
+(* Nanopasses: *)
+(* 
+1. Selection of binary/unary operators
+2. Translation of if statements
+3. Translation of switch
+*)
+
+
 family Impzero.ImpSelection extends ImpfrontendTransform {
   family Source extends Impminor { }
   family Target extends ImpminorSel { }

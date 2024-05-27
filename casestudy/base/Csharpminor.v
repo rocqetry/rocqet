@@ -1,10 +1,4 @@
-family Impzero.ImpSharpMinor extends MinorLanguage {       
-     Inductive expression : Type :=
-       | Evar : ident -> expression (* reading a temporary variable *)
-       | Econst : constant -> expression (* constants *)
-       | Eunop : unary_operation -> expression -> expression (* unary operation *)
-       | Ebinop : binary_operation -> expression -> expression -> expression (* binary operation *)
-      
+family Csharpminor extends ClightVariant {        
      Inductive statement : Type :=
         | Sskip: statement
         | Sset : ident -> expr -> statement                
@@ -187,3 +181,6 @@ family Impzero.Impshmgen extends ImpfrontendTransform {
                         match_states (Imp.Semantics.State s k e)
                                      ([self].Semantics.State tf ts' tk' te le m)
 }
+
+
+
