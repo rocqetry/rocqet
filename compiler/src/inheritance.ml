@@ -1,6 +1,11 @@
 open Types
 open Env
 
+(* Does this family have a base family? *)
+let judgement_has_base judgement =
+  let InhJudgement.{ base; derived; _ } = judgement in
+  Names.Id.equal base.name derived.name |> not
+
 let top_uninherited_fields judgement =
   let InhJudgement.{ base; derived; _ } = judgement in
   (* we need to reverse base and derived because they are backward lists *)
@@ -113,8 +118,8 @@ let close_current_inheritance_judgement () =
     judgement
   in
   let base_family =
-    if Names.Id.equal base_family_type.name derived_family_type.name then None
-    else GlobalCtx.lookup base_family_type.name
+    if judgement_has_base judgement then GlobalCtx.lookup base_family_type.name
+    else None
   in
   let derived_family_term =
     apply_derived_judgement_to_base ~judgement ~base_family
@@ -142,3 +147,22 @@ let open_derived_inheritance_judgement ~base ~derived =
     InhJudgement.empty ~base:base_family_type ~derived:family_type
   in
   InhJudgements.push ~name:derived ~judgement
+
+let infer_field_inh_kind name =
+  InhJudgements.ensure_open_judgememt ();
+  let _, judgement = InhJudgements.peek () |> Option.get in
+  if judgement_has_base judgement then
+    let base_name = judgement.base.name in
+    match GlobalCtx.lookup base_name with
+    | None ->
+        Errors.fail ~info:("Unbound family name " ^ Names.Id.to_string base_name)
+    | Some (FamilyRef.ToplevelRef (_, _, family_type)) -> (
+        let base_field =
+          family_type.body
+          |> List.find_opt (fun (found_name, _) ->
+                 Names.Id.equal name found_name)
+        in
+        match base_field with
+        | None -> FieldInhKind.New
+        | Some (_, elem) -> FieldInhKind.Extend elem)
+  else FieldInhKind.New

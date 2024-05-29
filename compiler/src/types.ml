@@ -222,6 +222,11 @@ module PluginCmdScope = struct
   type t = { command : PluginCmd.t; name : Names.Id.t; close : unit -> unit }
 end
 
+(* Does a field exends a field in the base family? *)
+module FieldInhKind = struct
+  type t = New | Extend of FamilyTypeElem.t
+end
+
 (*
 module NestedFamilyContext = struct 
   type t = 
@@ -242,24 +247,10 @@ let name ty = match ty with
 
 
 (* Field inheritance kind *)
-module FieldInheritanceKind = struct 
-  type t = New | Extend
-end
+
 
 module FamilyDefinitionContext = struct 
   type t =
     | InitialInhBase of Family.Ref.t option (* A toplevel family *)
 end
-
-
-(* Try to integrate Logs library for logging *)
-(* Log to file, Log to output *)
-
-
-
-(* inherits_all_remained *)
-(* close_current_inh_judgement *)
-(* ontopinh *)
-(* inhnewind *)
-type t = FamCtx of (Names.Id.t * FamilyType.t) list  
 *)

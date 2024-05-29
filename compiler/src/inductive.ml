@@ -143,15 +143,8 @@ let compile_inductive_definition ~(judgement : InhJudgement.t)
     body = (ind_def_name, inh_elem) :: body;
   }
 
-let add_inductive_definition ind_def =
-  InhJudgements.ensure_open_judgememt ();
-  let all_names = VernacInductive.extract_all_ident ind_def in
-  let ind_def_name = List.hd all_names in
+let add_new_inductive_definition ~ind_def_name ~ind_def =
   let ctx = InhJudgements.current_output_ctx () in
-
-  (* Type checking of the inductive definition: *)
-  (* let _ = inductive_to_famtype ([ind_def], current_ctx) in *)
-  (* let _ = inductive_to_famterm_and_recursor_type ([ind_def], current_ctx) in *)
   match InhJudgements.pop () with
   | None -> Errors.fail ~info:"Expected a non empty inh context"
   | Some (family_name, judgement) ->
@@ -159,3 +152,18 @@ let add_inductive_definition ind_def =
         compile_inductive_definition ~judgement ~ind_def_name ~ind_def ~ctx
       in
       InhJudgements.push ~name:family_name ~judgement
+
+let extend_inductive_definition ~ind_def_name ~ind_def =
+  Errors.fail ~info:"Extensible inductive types not yet implemented"
+
+let add_inductive_definition ind_def =
+  InhJudgements.ensure_open_judgememt ();
+  let all_names = VernacInductive.extract_all_ident ind_def in
+  let ind_def_name = List.hd all_names in
+  (* Type checking of the inductive definition: *)
+  (* let _ = inductive_to_famtype ([ind_def], current_ctx) in *)
+  (* let _ = inductive_to_famterm_and_recursor_type ([ind_def], current_ctx) in *)
+  match Inheritance.infer_field_inh_kind ind_def_name with
+  | FieldInhKind.New -> add_new_inductive_definition ~ind_def_name ~ind_def
+  | FieldInhKind.Extend elem ->
+      extend_inductive_definition ~ind_def_name ~ind_def

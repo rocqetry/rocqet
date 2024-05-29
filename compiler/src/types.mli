@@ -93,3 +93,7 @@ end
 module PluginCmdScope : sig
   type t = { command : PluginCmd.t; name : Names.Id.t; close : unit -> unit }
 end
+
+module FieldInhKind : sig
+  type t = New | Extend of FamilyTypeElem.t
+end

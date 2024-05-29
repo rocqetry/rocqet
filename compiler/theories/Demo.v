@@ -10,6 +10,8 @@ FEnd Semantics.
 
 Family BSemantics extends Semantics.
    (* FInductive call_state : Set := ReturnState : self__BSemantics.eval_expr -> call_state. *)
+   FInductive eval_expr : Set := eval_unop : eval_expr.
+
 FEnd BSemantics.
 
 Check Semantics.step.
