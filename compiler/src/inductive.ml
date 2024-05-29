@@ -67,8 +67,7 @@ let inductive_to_famtype ~(ind_def : VernacInductive.t)
 
 (* This is the instantiation of an inductive type and it's recursors *)
 let inductive_to_famterm_and_recursor_type ~(ind_def : VernacInductive.t)
-    ~(ctx : CompiledModuleType.t) ~family_name : CompiledModule.t
-    =  
+    ~(ctx : CompiledModuleType.t) ~family_name : CompiledModule.t =
   let all_names_with_type =
     ind_def
     |> List.map (fun (ind_expr, _) ->

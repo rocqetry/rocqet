@@ -1,5 +1,5 @@
 open Types
-open Env 
+open Env
 (* The entry point to the plugin's functionalities *)
 
 let finductive inductive_definitions =
@@ -20,9 +20,7 @@ let family name =
       {
         name;
         command = PluginCmd.Family;
-        close =
-          (fun () ->            
-            Inheritance.close_current_inheritance_judgement ());
+        close = (fun () -> Inheritance.close_current_inheritance_judgement ());
       };
 
   let message = Pp.(str "Family " ++ (name |> Names.Id.to_string |> str)) in

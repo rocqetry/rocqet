@@ -59,7 +59,6 @@ let family_term_of_judgement ~(judgement : InhJudgement.t) : FamilyTerm.t =
 let apply_judgement_to_family_term ~(judgement : InhJudgement.t)
     ~(family_term : FamilyTerm.t) : FamilyTerm.t =
   let compute_family_term_elem (name, type_elem, inh_elem) =
-    Printf.printf "N: %s\n" (Names.Id.to_string name);
     (* This is O(n^2) *)
     let _term_elem =
       family_term.body |> List.map fst |> List.find_opt (Names.Id.equal name)

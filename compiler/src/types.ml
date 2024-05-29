@@ -202,11 +202,6 @@ end = struct
   let family_type_inh_op judgement =
     let { derived; body = judgement_body; _ } = judgement in
     let FamilyType.{ body = family_type_body; _ } = derived in
-    Printf.printf "Judgement length: %d\n" (List.length judgement_body);
-    Printf.printf "Family type length: %d\n" (List.length family_type_body);
-    family_type_body
-    |> List.iter (fun (name, _) ->
-           Printf.printf "%s\n" (Names.Id.to_string name));
     let family_type_inh_op = List.combine family_type_body judgement_body in
     family_type_inh_op
     |> List.map (fun ((name1, family_type_elem), (name2, inh_elem)) ->
