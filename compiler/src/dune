@@ -1,29 +1,31 @@
 (library
- (name nfpop)                       ; This is the name you will use in
-                                    ; Coq's `Declare ML Module`, and
-                                    ; the name of the main OCaml
-                                    ; module of your plugin.
-
- (public_name nfpop.plugin)         ; This makes the plugin
-                                    ; installable; recommended, must
-                                    ; match opam package name.
-
- (synopsis "Nested family polymorphism for a proof assistant")     ; Synopsis, used in META generation.
-
+ (name nfpop) ; This is the name you will use in
+              ; Coq's `Declare ML Module`, and
+              ; the name of the main OCaml
+              ; module of your plugin.
+ (public_name nfpop.plugin) ; This makes the plugin
+                            ; installable; recommended, must
+                            ; match opam package name.
+ (synopsis "Nested family polymorphism for a proof assistant") ; Synopsis, used in META generation.
  (flags :standard -rectypes -w -27) ; Coq requires the `-rectypes`
                                     ; flag; CoqPP generated code
                                     ; requires to disable warning 27
                                     ; often.
+ (libraries ; OCaml Libraries we want to link
+            ; with, your choice here.
+  coq-core.vernac ; Needed for vernac extend.
+  coq-core.plugins.ltac))
 
- (libraries                         ; OCaml Libraries we want to link
-                                    ; with, your choice here.
-
-   coq-core.vernac                  ; Needed for vernac extend.
-   coq-core.plugins.ltac))          ; Needed for tactic extend. 
+; Needed for tactic extend. 
 
 ; This will let Dune know about Coq's .mlg grammar files.
-(coq.pp (modules fgrammar))
+
+(coq.pp
+ (modules grammar))
+
+(include_subdirs unqualified)
 
 (env
-  (dev
-    (flags (:standard -w -27))))
+ (dev
+  (flags
+   (:standard -w -27))))
