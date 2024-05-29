@@ -97,7 +97,7 @@ let compile_family_term_module ~(family_term : FamilyTerm.t)
     | [] -> return ()
     | (name, FamilyTermElem.CompiledDefinition compiled) :: body_rest ->
         let* _ = famterm_internal_include body_rest ctx in
-        let module_expr = Ftermutils.ident_to_module_expr compiled in
+        let module_expr = Termutils.ident_to_module_expr compiled in
         let* _ = include_module ~module_expr in
         return ()
   in

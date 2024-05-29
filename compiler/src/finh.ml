@@ -17,11 +17,11 @@ let compile_context ~ctx ~module_name =
         ~body:(fun _arguments ->
           let* () =
             include_module
-              ~module_expr:(Ftermutils.ident_to_module_expr compiled_ctx)
+              ~module_expr:(Termutils.ident_to_module_expr compiled_ctx)
           in
           let* () =
             include_module
-              ~module_expr:(Ftermutils.ident_to_module_expr compiled_signature)
+              ~module_expr:(Termutils.ident_to_module_expr compiled_signature)
           in
           return ())
       |> run
@@ -53,7 +53,7 @@ let inductive_to_famtype ~(ind_def : VernacInductive.t)
   let parameters =
     [
       ( Nameops.add_prefix "self__" family_name,
-        Ftermutils.ident_to_module_expr ctx );
+        Termutils.ident_to_module_expr ctx );
     ]
   in
   let open Backend in
@@ -88,7 +88,7 @@ let inductive_to_famterm_and_recursor_type ~(ind_def : VernacInductive.t)
   let parameters =
     [
       ( Nameops.add_prefix "self__" family_name,
-        Ftermutils.ident_to_module_expr ctx );
+        Termutils.ident_to_module_expr ctx );
     ]
   in
   let module_name =
