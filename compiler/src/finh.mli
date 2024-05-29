@@ -1,3 +1,3 @@
+open Types
 
-
-val add_inductive_definition : Ftypes.VernacInductive.t -> unit
+val add_inductive_definition : VernacInductive.t -> unit

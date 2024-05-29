@@ -1,3 +1,5 @@
+open Types
+
 let unique_id =
   let counter = ref 0 in
   fun () ->
@@ -116,7 +118,7 @@ module VernacBackend = struct
     emit_list expr;
     result
 
-  let define_inductive (ind_def : Ftypes.VernacInductive.t) : unit t =
+  let define_inductive (ind_def : VernacInductive.t) : unit t =
     let open Vernacexpr in
     vernac_ (VernacSynPure (VernacInductive (Inductive_kw, ind_def)))
 

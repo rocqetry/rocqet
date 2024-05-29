@@ -6,7 +6,7 @@ DECLARE PLUGIN "nfpop.plugin"
   open Pcoq.Constr
   open Pcoq.Prim
 
-  let wit_mutind_defs : (Ftypes.VernacInductive.t, Util.Empty.t, Util.Empty.t) Genarg.genarg_type =
+  let wit_mutind_defs : (Types.VernacInductive.t, Util.Empty.t, Util.Empty.t) Genarg.genarg_type =
     Genarg.create_arg "coq_ind_sig"
 
   let wit_list1ident : (Names.Id.t list, Util.Empty.t, Util.Empty.t) Genarg.genarg_type =
@@ -18,7 +18,7 @@ DECLARE PLUGIN "nfpop.plugin"
   let wit_llconstr_ip : (Constrexpr.constr_expr, Genintern.glob_constr_and_expr, EConstr.t) Genarg.genarg_type =
     Genarg.create_arg "llconstr_ip"
   
-  let mutind_defs : Ftypes.VernacInductive.t Pcoq.Entry.t =
+  let mutind_defs : Types.VernacInductive.t Pcoq.Entry.t =
     Pcoq.create_generic_entry2 "mutind_defs" (Genarg.rawwit wit_mutind_defs)
   
   let list1ident : Names.Id.t list Pcoq.Entry.t =

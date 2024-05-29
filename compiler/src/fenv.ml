@@ -1,4 +1,4 @@
-open Ftypes
+open Types
 
 module PluginScopes = struct
   (* This is basically a stack of scopes *)
@@ -24,7 +24,7 @@ module PluginScopes = struct
 
   let ensure_in_scope ~scope =
     match peek () with
-    | Some { Ftypes.PluginCmdScope.command; _ } when command = scope -> ()
+    | Some { PluginCmdScope.command; _ } when command = scope -> ()
     | Some _ | None -> Ferror.fail ~info:"Expected to be in a different scope"
 end
 

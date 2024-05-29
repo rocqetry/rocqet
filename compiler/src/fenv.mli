@@ -1,4 +1,4 @@
-open Ftypes
+open Types
 
 module PluginScopes : sig
   val peek : unit -> PluginCmdScope.t option
