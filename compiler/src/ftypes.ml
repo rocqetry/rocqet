@@ -109,10 +109,6 @@ module FamilyId = struct
       !store
 end
 
-module FamilyName = struct
-  type t = { name : Names.Id.t; id : FamilyId.t }
-end
-
 (* Module naming *)
 (* This should really be Names.ModPath.t *)
 module CompiledModule = struct
@@ -136,11 +132,11 @@ end =
   FamilyTypeElem
 
 and FamilyType : sig
-  type t = { name : FamilyName.t; body : (Names.Id.t * FamilyTypeElem.t) list }
+  type t = { name : Names.Id.t; body : (Names.Id.t * FamilyTypeElem.t) list }
 
   val extend : name:Names.Id.t -> elem:FamilyTypeElem.t -> t -> t
 end = struct
-  type t = { name : FamilyName.t; body : (Names.Id.t * FamilyTypeElem.t) list }
+  type t = { name : Names.Id.t; body : (Names.Id.t * FamilyTypeElem.t) list }
 
   let extend ~name ~elem family_type =
     let { body; _ } = family_type in
@@ -169,7 +165,10 @@ end =
   FamilyTerm
 
 and InhElement : sig
-  type t = CInhNew of CompiledModule.t | CInhExtendInh of InhJudgement.t
+  type t =
+    | CInhNew of CompiledModule.t
+    | CInhExtendInh of InhJudgement.t
+    | CInhInherit
 end =
   InhElement
 
@@ -203,8 +202,13 @@ end = struct
   let family_type_inh_op judgement =
     let { derived; body = judgement_body; _ } = judgement in
     let FamilyType.{ body = family_type_body; _ } = derived in
-    (* Ensure that both lists are of the same length *)
-    List.combine family_type_body judgement_body
+    Printf.printf "Judgement length: %d\n" (List.length judgement_body);
+    Printf.printf "Family type length: %d\n" (List.length family_type_body);
+    family_type_body
+    |> List.iter (fun (name, _) ->
+           Printf.printf "%s\n" (Names.Id.to_string name));
+    let family_type_inh_op = List.combine family_type_body judgement_body in
+    family_type_inh_op
     |> List.map (fun ((name1, family_type_elem), (name2, inh_elem)) ->
            (* Assert that name1 == name2 *)
            (name1, family_type_elem, inh_elem))

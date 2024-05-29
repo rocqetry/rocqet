@@ -46,7 +46,7 @@ GLOBAL: mutind_defs llconstr_ip gallina_ext list1ident reference_ip;
 END
 
 VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
-| [ "Family" ident(derived) "extends" ident(base)] ->  { Fentry.family_extends ~derived ~base }
+| [ "Family" ident(derived) "extends" ident(base) ] ->  { Fentry.family_extends ~derived ~base }
 
 | [ "Family" ident(name) ] -> { Fentry.family name }
 

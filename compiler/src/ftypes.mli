@@ -25,10 +25,6 @@ module FamilyId : sig
   val fresh : unit -> t
 end
 
-module FamilyName : sig
-  type t = { name : Names.Id.t; id : FamilyId.t }
-end
-
 module CompiledModule : sig
   type t = Libnames.qualid
 end
@@ -49,7 +45,7 @@ module rec FamilyTypeElem : sig
 end
 
 and FamilyType : sig
-  type t = { name : FamilyName.t; body : (Names.Id.t * FamilyTypeElem.t) list }
+  type t = { name : Names.Id.t; body : (Names.Id.t * FamilyTypeElem.t) list }
 
   val extend : name:Names.Id.t -> elem:FamilyTypeElem.t -> t -> t
 end
@@ -58,7 +54,7 @@ and FamilyContext : sig
   type t = Toplevel of Names.Id.t * FamilyType.t
 end
 
-module rec FamilyRef : sig  
+module rec FamilyRef : sig
   type t = ToplevelRef of Names.Id.t * FamilyTerm.t * FamilyType.t
 end
 
@@ -71,7 +67,10 @@ and FamilyTerm : sig
 end
 
 and InhElement : sig
-  type t = CInhNew of CompiledModule.t | CInhExtendInh of InhJudgement.t
+  type t =
+    | CInhNew of CompiledModule.t
+    | CInhExtendInh of InhJudgement.t
+    | CInhInherit
 end
 
 and InhJudgement : sig

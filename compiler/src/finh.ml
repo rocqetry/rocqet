@@ -1,75 +1,22 @@
 open Ftypes
-open Fenv
 
-module ScopeClosing = struct
-  let inherit_all_remained () = ()
-
-  (* Get a family term from a judgement: basically from the expected type
-     and the inheritance op, we can get the family term *)
-  (* This is for a new family which does not have a base family, so all we
-     need to generate the family term is in the judgement *)
-  let family_term_of_judgement ~(judgement : InhJudgement.t) : FamilyTerm.t =
-    let compute_family_term_elem (name, ty, inh) =
-      match (inh, ty) with
-      | InhElement.CInhNew compiled, FamilyTypeElem.FInductive _ ->
-          (name, FamilyTermElem.CompiledDefinition compiled)
-      | InhElement.CInhExtendInh _, _ -> Ferror.fail ~info:"Not yet implemented"
-    in
-    let family_term_body =
-      judgement |> InhJudgement.family_type_inh_op
-      |> List.map compute_family_term_elem
-    in
-    FamilyTerm.{ body = family_term_body }
-
-  (* Apply the judgements in a derived family to the base family, to produce an
-     apprpriate family term *)
-  let apply_derived_judgement_to_base ~(judgement : InhJudgement.t)
-      ~(base_family : FamilyRef.t option) : FamilyTerm.t =
-    match base_family with
-    | None -> family_term_of_judgement ~judgement
-    | Some _ -> Ferror.fail ~info:"No support for extending families yet"
-
-  let compile_family_term_module ~(family_term : FamilyTerm.t)
-      ~(name : Names.Id.t) : CompiledModule.t =
-    let open Fcodegen.VernacBackend in
-    let open Fcodegen in
-    let FamilyTerm.{ body } = family_term in
-    let rec famterm_internal_include
-        (body : (Names.Id.t * FamilyTermElem.t) list) (ctx : ModuleTerm.t list)
-        =
-      match body with
-      | [] -> return ()
-      | (name, FamilyTermElem.CompiledDefinition compiled) :: body_rest ->
-          let* _ = famterm_internal_include body_rest ctx in
-          let module_expr = Ftermutils.ident_to_module_expr compiled in
-          let* _ = include_module ~module_expr in
-          return ()
-    in
-    define_module ~module_name:name ~parameters:[]
-      ~body:(famterm_internal_include body)
-    |> run
-
-  let close_current_inheritance_judgement () =
-    InhJudgements.ensure_open_judgememt ();
-    let _ctx = InhJudgements.current_output_ctx () in
-    (* The `Option.get` below is safe because of the above assertion *)
-    let name, judgement = Fenv.InhJudgements.pop () |> Option.get in
-    let InhJudgement.{ derived = family_type; _ } = judgement in
-    let family_term =
-      apply_derived_judgement_to_base ~judgement ~base_family:None
-    in
-    compile_family_term_module ~family_term ~name |> ignore;    
-    let name = family_type.FamilyType.name.FamilyName.name in
-    GlobalCtx.push ~name ~family_type ~family_term
-end
-
-let add_new_family name =
-  let id = FamilyId.fresh () in
-  let family_name = FamilyName.{ name; id } in
-  let family_type = FamilyType.{ name = family_name; body = [] } in
-  (* A trvial self judgmemt *)
+let open_new_inheritance_judgement name =
+  let family_type = FamilyType.{ name; body = [] } in
   let judgement = InhJudgement.empty ~base:family_type ~derived:family_type in
   Fenv.InhJudgements.push ~name ~judgement
+
+let open_derived_inheritance_judgement ~base ~derived =
+  let family_type = FamilyType.{ name = derived; body = [] } in
+  let base_family_type =
+    match Fenv.GlobalCtx.lookup base with
+    | None ->
+        Ferror.fail ~info:("Unbound family name: " ^ Names.Id.to_string base)
+    | Some (FamilyRef.ToplevelRef (_, _, base_family_type)) -> base_family_type
+  in
+  let judgement =
+    InhJudgement.empty ~base:base_family_type ~derived:family_type
+  in
+  Fenv.InhJudgements.push ~name:derived ~judgement
 
 (* Compile a context *)
 let compile_context ~ctx ~module_name =
@@ -79,8 +26,8 @@ let compile_context ~ctx ~module_name =
   let module_name_ctx = Nameops.add_suffix module_name "Ctx" in
   match body with
   | [] ->
-      define_moduletype ~module_name:module_name_ctx ~parameters:[] ~body:(fun _arguments ->
-          return ())
+      define_moduletype ~module_name:module_name_ctx ~parameters:[]
+        ~body:(fun _arguments -> return ())
       |> run
   | (_, FamilyTypeElem.FInductive { compiled_signature; compiled_ctx; _ }) :: _
     ->
@@ -99,7 +46,7 @@ let compile_context ~ctx ~module_name =
 
 (* Retrn the name of the compiled family field and return its compiled context's name *)
 let inductive_to_famtype ~(ind_def : Ftypes.VernacInductive.t)
-    ~(ctx : CompiledModuleType.t) : CompiledModuleType.t =
+    ~(ctx : CompiledModuleType.t) ~family_name : CompiledModuleType.t =
   let ind_cstrs =
     ind_def
     |> List.map (fun ind ->
@@ -120,10 +67,10 @@ let inductive_to_famtype ~(ind_def : Ftypes.VernacInductive.t)
   let declare_csts_decls =
     List.map (fun (name, ty) -> Backend.postulate_axiom ~name ~ty) constr_decls
   in
-  let all_decls = declare_typedecls @ declare_csts_decls in
+  let all_decls = declare_typedecls @ declare_csts_decls in  
   let parameters =
     [
-      ( Nameops.add_prefix "self__" original_ind_name,
+      ( Nameops.add_prefix "self__" family_name,
         Ftermutils.ident_to_module_expr ctx );
     ]
   in
@@ -135,7 +82,7 @@ let inductive_to_famtype ~(ind_def : Ftypes.VernacInductive.t)
 
 (* This is the instantiation of an inductive type and it's recursors *)
 let inductive_to_famterm_and_recursor_type ~(ind_def : Ftypes.VernacInductive.t)
-    ~(ctx : Ftypes.CompiledModuleType.t) : Ftypes.CompiledModule.t =
+    ~(ctx : Ftypes.CompiledModuleType.t) ~family_name : Ftypes.CompiledModule.t =
   let open Ftypes in
   let all_names_with_type =
     ind_def
@@ -155,10 +102,10 @@ let inductive_to_famterm_and_recursor_type ~(ind_def : Ftypes.VernacInductive.t)
   let module_name =
     Fcodegen.fresh_name ~prefix:(original_type_name |> Names.Id.to_string)
   in
-  let open Fcodegen.VernacBackend in
+  let open Fcodegen.VernacBackend in  
   let parameters =
     [
-      ( Nameops.add_prefix "self__" original_type_name,
+      ( Nameops.add_prefix "self__" family_name,
         Ftermutils.ident_to_module_expr ctx );
     ]
   in
@@ -184,9 +131,11 @@ let compile_inductive_definition ~(judgement : Ftypes.InhJudgement.t)
   let InhJudgement.{ derived; body; _ } = judgement in
   let constructor_names = VernacInductive.extract_all_ident ind_def in
   let compiled_ctx = compile_context ~ctx ~module_name:ind_def_name in
-  let compiled_signature = inductive_to_famtype ~ind_def ~ctx:compiled_ctx in
+  let family_name = derived.name in 
+  let compiled_signature =
+    inductive_to_famtype ~ind_def ~ctx:compiled_ctx ~family_name in
   let compiled_impl =
-    inductive_to_famterm_and_recursor_type ~ind_def ~ctx:compiled_ctx
+    inductive_to_famterm_and_recursor_type ~ind_def ~ctx:compiled_ctx ~family_name
   in
   let ctx_elem =
     FamilyTypeElem.FInductive
@@ -224,12 +173,3 @@ let add_inductive_definition ind_def =
         compile_inductive_definition ~judgement ~ind_def_name ~ind_def ~ctx
       in
       Fenv.InhJudgements.push ~name:family_name ~judgement
-
-(* TODO:
-   1. Compile output to a file
-   2. Compiling recursors
-   3. We need to start adding debug functions
-   (e.g Print Family Context. Print Inheritance Judgement.
-        Print Family Type <name>. )
-   4. Test
-   5. Closing families *)

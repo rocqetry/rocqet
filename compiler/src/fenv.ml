@@ -44,6 +44,8 @@ module InhJudgements = struct
         judgements := None;
         Some judgement
 
+  let peek () = !judgements
+
   let ensure_open_judgememt () =
     match !judgements with
     | None ->
@@ -61,6 +63,11 @@ module InhJudgements = struct
     | Some (name, judgement) ->
         let InhJudgement.{ derived; _ } = judgement in
         FamilyContext.Toplevel (name, derived)
+
+  let current_family_name () =
+    match !judgements with
+    | None -> Ferror.fail ~info:"There is no current family scope"
+    | Some (name, _) -> name
 end
 
 (* This stores the toplevel families that have been closed *)
@@ -68,6 +75,11 @@ module GlobalCtx = struct
   let store = Summary.ref ~name:"GlobalCtx" ([] : FamilyRef.t list)
 
   let push ~name ~family_term ~family_type =
-    let family_ref = FamilyRef.ToplevelRef (name, family_term, family_type) in    
+    let family_ref = FamilyRef.ToplevelRef (name, family_term, family_type) in
     store := family_ref :: !store
+
+  let lookup name =
+    !store
+    |> List.find_opt (function FamilyRef.ToplevelRef (store_name, _, _) ->
+           Names.Id.equal store_name name)
 end
