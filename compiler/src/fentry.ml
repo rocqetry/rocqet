@@ -3,7 +3,7 @@ open Types
 
 let finductive inductive_definitions =
   Fenv.PluginScopes.ensure_in_scope ~scope:PluginCmd.Family;
-  Finh.add_inductive_definition inductive_definitions
+  Inductive.add_inductive_definition inductive_definitions
 
 let fend scope_name =
   match Fenv.PluginScopes.pop scope_name with
@@ -20,8 +20,7 @@ let family name =
         name;
         command = PluginCmd.Family;
         close =
-          (fun () ->
-            (* Finh.ScopeClosing.inherit_all_remained (); *)
+          (fun () ->            
             Scopes.close_current_inheritance_judgement ());
       };
 

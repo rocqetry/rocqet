@@ -1,5 +1,7 @@
 open Types
 
+(* Contains information on how to compile inductive types *)
+
 (* Compile a context *)
 let compile_context ~ctx ~module_name =
   let (FamilyContext.Toplevel (name, ty)) = ctx in
