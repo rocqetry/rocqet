@@ -1,12 +1,13 @@
 open Types
+open Env 
 (* The entry point to the plugin's functionalities *)
 
 let finductive inductive_definitions =
-  Fenv.PluginScopes.ensure_in_scope ~scope:PluginCmd.Family;
+  PluginScopes.ensure_in_scope ~scope:PluginCmd.Family;
   Inductive.add_inductive_definition inductive_definitions
 
 let fend scope_name =
-  match Fenv.PluginScopes.pop scope_name with
+  match PluginScopes.pop scope_name with
   | None -> Ferror.fail ~info:"There is no open scope"
   | Some scope ->
       let PluginCmdScope.{ close; _ } = scope in
@@ -14,7 +15,7 @@ let fend scope_name =
 
 let family name =
   Scopes.open_new_inheritance_judgement name;
-  Fenv.PluginScopes.push
+  PluginScopes.push
     PluginCmdScope.
       {
         name;
@@ -29,7 +30,7 @@ let family name =
 
 let family_extends ~derived ~base =
   Scopes.open_derived_inheritance_judgement ~derived ~base;
-  Fenv.PluginScopes.push
+  PluginScopes.push
     PluginCmdScope.
       {
         name = derived;

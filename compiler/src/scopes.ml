@@ -1,5 +1,5 @@
 open Types
-open Fenv
+open Env
 
 let top_uninherited_fields judgement =
   let InhJudgement.{ base; derived; _ } = judgement in
@@ -108,7 +108,7 @@ let compile_family_term_module ~(family_term : FamilyTerm.t)
 let close_current_inheritance_judgement () =
   let open FamilyType in
   InhJudgements.ensure_open_judgememt ();
-  let _, judgement = Fenv.InhJudgements.pop () |> Option.get in
+  let _, judgement = InhJudgements.pop () |> Option.get in
   let InhJudgement.{ base = base_family_type; derived = derived_family_type; _ }
       =
     judgement
@@ -129,12 +129,12 @@ let close_current_inheritance_judgement () =
 let open_new_inheritance_judgement name =
   let family_type = FamilyType.{ name; body = [] } in
   let judgement = InhJudgement.empty ~base:family_type ~derived:family_type in
-  Fenv.InhJudgements.push ~name ~judgement
+  InhJudgements.push ~name ~judgement
 
 let open_derived_inheritance_judgement ~base ~derived =
   let family_type = FamilyType.{ name = derived; body = [] } in
   let base_family_type =
-    match Fenv.GlobalCtx.lookup base with
+    match GlobalCtx.lookup base with
     | None ->
         Ferror.fail ~info:("Unbound family name: " ^ Names.Id.to_string base)
     | Some (FamilyRef.ToplevelRef (_, _, base_family_type)) -> base_family_type
@@ -142,4 +142,4 @@ let open_derived_inheritance_judgement ~base ~derived =
   let judgement =
     InhJudgement.empty ~base:base_family_type ~derived:family_type
   in
-  Fenv.InhJudgements.push ~name:derived ~judgement
+  InhJudgements.push ~name:derived ~judgement

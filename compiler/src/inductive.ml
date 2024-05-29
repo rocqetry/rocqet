@@ -1,4 +1,5 @@
 open Types
+open Env
 
 (* Contains information on how to compile inductive types *)
 
@@ -144,18 +145,18 @@ let compile_inductive_definition ~(judgement : InhJudgement.t)
   }
 
 let add_inductive_definition ind_def =
-  Fenv.InhJudgements.ensure_open_judgememt ();
+  InhJudgements.ensure_open_judgememt ();
   let all_names = VernacInductive.extract_all_ident ind_def in
   let ind_def_name = List.hd all_names in
-  let ctx = Fenv.InhJudgements.current_output_ctx () in
+  let ctx = InhJudgements.current_output_ctx () in
 
   (* Type checking of the inductive definition: *)
   (* let _ = inductive_to_famtype ([ind_def], current_ctx) in *)
   (* let _ = inductive_to_famterm_and_recursor_type ([ind_def], current_ctx) in *)
-  match Fenv.InhJudgements.pop () with
+  match InhJudgements.pop () with
   | None -> Ferror.fail ~info:"Expected a non empty inh context"
   | Some (family_name, judgement) ->
       let judgement =
         compile_inductive_definition ~judgement ~ind_def_name ~ind_def ~ctx
       in
-      Fenv.InhJudgements.push ~name:family_name ~judgement
+      InhJudgements.push ~name:family_name ~judgement
