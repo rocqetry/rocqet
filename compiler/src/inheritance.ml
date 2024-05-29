@@ -88,8 +88,8 @@ let apply_derived_judgement_to_base ~(judgement : InhJudgement.t)
 
 let compile_family_term_module ~(family_term : FamilyTerm.t)
     ~(name : Names.Id.t) : CompiledModule.t =
-  let open Fcodegen.VernacBackend in
-  let open Fcodegen in
+  let open Codegen.VernacBackend in
+  let open Codegen in
   let FamilyTerm.{ body } = family_term in
   let rec famterm_internal_include (body : (Names.Id.t * FamilyTermElem.t) list)
       (ctx : ModuleTerm.t list) =

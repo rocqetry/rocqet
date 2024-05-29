@@ -7,7 +7,7 @@ open Env
 let compile_context ~ctx ~module_name =
   let (FamilyContext.Toplevel (name, ty)) = ctx in
   let FamilyType.{ body; _ } = ty in
-  let open Fcodegen.VernacBackend in
+  let open Codegen.VernacBackend in
   let module_name_ctx = Nameops.add_suffix module_name "Ctx" in
   match body with
   | [] ->
@@ -42,10 +42,10 @@ let inductive_to_famtype ~(ind_def : VernacInductive.t)
   let type_decls = ind_cstrs |> List.map fst in
   let original_ind_name = type_decls |> List.hd |> fst in
   let module_name =
-    Fcodegen.fresh_name ~prefix:(original_ind_name |> Names.Id.to_string)
+    Codegen.fresh_name ~prefix:(original_ind_name |> Names.Id.to_string)
   in
   let constr_decls = List.concat_map snd ind_cstrs in
-  let module Backend = Fcodegen.VernacBackend in
+  let module Backend = Codegen.VernacBackend in
   let declare_typedecls =
     List.map (fun (name, ty) -> Backend.postulate_axiom ~name ~ty) type_decls
   in
@@ -85,9 +85,9 @@ let inductive_to_famterm_and_recursor_type ~(ind_def : VernacInductive.t)
     VernacInductive.definition_mapping ~prefix:"__internal_" ind_def
   in
   let module_name =
-    Fcodegen.fresh_name ~prefix:(original_type_name |> Names.Id.to_string)
+    Codegen.fresh_name ~prefix:(original_type_name |> Names.Id.to_string)
   in
-  let open Fcodegen.VernacBackend in
+  let open Codegen.VernacBackend in
   let parameters =
     [
       ( Nameops.add_prefix "self__" family_name,
