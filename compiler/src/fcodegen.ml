@@ -85,7 +85,7 @@ module VernacBackend = struct
         ^ "\n"
       in
       if not silence then
-        Ferror.fail ~info:(info ^ ver_exc ^ "Stack Trace \n" ^ backtrace ^ "\n")
+        Errors.fail ~info:(info ^ ver_exc ^ "Stack Trace \n" ^ backtrace ^ "\n")
 
   let rec emit = function
     | Original e -> emit_vernac_expr ~silence:false e

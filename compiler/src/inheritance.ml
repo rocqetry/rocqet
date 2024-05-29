@@ -47,8 +47,8 @@ let family_term_of_judgement ~(judgement : InhJudgement.t) : FamilyTerm.t =
     match (inh, ty) with
     | InhElement.CInhNew compiled, FamilyTypeElem.FInductive _ ->
         (name, FamilyTermElem.CompiledDefinition compiled)
-    | InhElement.CInhInherit, _ -> Ferror.fail ~info:"This doesn't inherit"
-    | InhElement.CInhExtendInh _, _ -> Ferror.fail ~info:"Not yet implemented"
+    | InhElement.CInhInherit, _ -> Errors.fail ~info:"This doesn't inherit"
+    | InhElement.CInhExtendInh _, _ -> Errors.fail ~info:"Not yet implemented"
   in
   let family_term_body =
     judgement |> InhJudgement.family_type_inh_op
@@ -69,7 +69,7 @@ let apply_judgement_to_family_term ~(judgement : InhJudgement.t)
         (name, FamilyTermElem.CompiledDefinition compiled)
     | InhElement.CInhInherit, FamilyTypeElem.FInductive { compiled_impl; _ } ->
         (name, FamilyTermElem.CompiledDefinition compiled_impl)
-    | InhElement.CInhExtendInh _, _ -> Ferror.fail ~info:"Not yet implemented"
+    | InhElement.CInhExtendInh _, _ -> Errors.fail ~info:"Not yet implemented"
   in
   let body =
     judgement |> InhJudgement.family_type_inh_op
@@ -136,7 +136,7 @@ let open_derived_inheritance_judgement ~base ~derived =
   let base_family_type =
     match GlobalCtx.lookup base with
     | None ->
-        Ferror.fail ~info:("Unbound family name: " ^ Names.Id.to_string base)
+        Errors.fail ~info:("Unbound family name: " ^ Names.Id.to_string base)
     | Some (FamilyRef.ToplevelRef (_, _, base_family_type)) -> base_family_type
   in
   let judgement =

@@ -17,7 +17,7 @@ module VernacInductive = struct
     match cstrlist with
     | Vernacexpr.Constructors cstrlist ->
         ((ind_type_name, indtype), List.map each_constr cstrlist)
-    | Vernacexpr.RecordDecl _ -> Ferror.fail ~info:"Records not yet supported"
+    | Vernacexpr.RecordDecl _ -> Errors.fail ~info:"Records not yet supported"
 
   let extract_all_ident ind_def =
     let all_names =
@@ -80,7 +80,7 @@ module VernacInductive = struct
           in
           let f = Vernacexpr.Constructors csts in
           (((a, (b, c)), d, e, f), g)
-      | _ -> Ferror.fail ~info:"Records not yet supported"
+      | _ -> Errors.fail ~info:"Records not yet supported"
     in
     (* Use option to extract the type *)
     let all_names_with_type =

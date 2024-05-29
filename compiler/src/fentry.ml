@@ -8,7 +8,7 @@ let finductive inductive_definitions =
 
 let fend scope_name =
   match PluginScopes.pop scope_name with
-  | None -> Ferror.fail ~info:"There is no open scope"
+  | None -> Errors.fail ~info:"There is no open scope"
   | Some scope ->
       let PluginCmdScope.{ close; _ } = scope in
       close ()

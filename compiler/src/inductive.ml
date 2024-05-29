@@ -154,7 +154,7 @@ let add_inductive_definition ind_def =
   (* let _ = inductive_to_famtype ([ind_def], current_ctx) in *)
   (* let _ = inductive_to_famterm_and_recursor_type ([ind_def], current_ctx) in *)
   match InhJudgements.pop () with
-  | None -> Ferror.fail ~info:"Expected a non empty inh context"
+  | None -> Errors.fail ~info:"Expected a non empty inh context"
   | Some (family_name, judgement) ->
       let judgement =
         compile_inductive_definition ~judgement ~ind_def_name ~ind_def ~ctx

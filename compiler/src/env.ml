@@ -20,12 +20,12 @@ module PluginScopes = struct
       when name = scope_name ->
         scopes := scopes_rest;
         Some scope
-    | _ -> Ferror.report ~error:Ferror.ClosingWrongScope
+    | _ -> Errors.report ~error:Errors.ClosingWrongScope
 
   let ensure_in_scope ~scope =
     match peek () with
     | Some { PluginCmdScope.command; _ } when command = scope -> ()
-    | Some _ | None -> Ferror.fail ~info:"Expected to be in a different scope"
+    | Some _ | None -> Errors.fail ~info:"Expected to be in a different scope"
 end
 
 module InhJudgements = struct
@@ -49,14 +49,14 @@ module InhJudgements = struct
   let ensure_open_judgememt () =
     match !judgements with
     | None ->
-        Ferror.fail ~info:"Need to have a judgement present to add stuff to"
+        Errors.fail ~info:"Need to have a judgement present to add stuff to"
     | Some _ -> ()
 
   (* This means that the current context is gotten from the current Inh judgement *)
   let current_output_ctx () =
     match !judgements with
     | None ->
-        Ferror.fail
+        Errors.fail
           ~info:
             "Ensure you are in a judgement before trying to get the family \
              context"
@@ -66,7 +66,7 @@ module InhJudgements = struct
 
   let current_family_name () =
     match !judgements with
-    | None -> Ferror.fail ~info:"There is no current family scope"
+    | None -> Errors.fail ~info:"There is no current family scope"
     | Some (name, _) -> name
 end
 
