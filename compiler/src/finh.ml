@@ -1,23 +1,5 @@
 open Ftypes
 
-let open_new_inheritance_judgement name =
-  let family_type = FamilyType.{ name; body = [] } in
-  let judgement = InhJudgement.empty ~base:family_type ~derived:family_type in
-  Fenv.InhJudgements.push ~name ~judgement
-
-let open_derived_inheritance_judgement ~base ~derived =
-  let family_type = FamilyType.{ name = derived; body = [] } in
-  let base_family_type =
-    match Fenv.GlobalCtx.lookup base with
-    | None ->
-        Ferror.fail ~info:("Unbound family name: " ^ Names.Id.to_string base)
-    | Some (FamilyRef.ToplevelRef (_, _, base_family_type)) -> base_family_type
-  in
-  let judgement =
-    InhJudgement.empty ~base:base_family_type ~derived:family_type
-  in
-  Fenv.InhJudgements.push ~name:derived ~judgement
-
 (* Compile a context *)
 let compile_context ~ctx ~module_name =
   let (FamilyContext.Toplevel (name, ty)) = ctx in

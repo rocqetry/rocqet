@@ -13,7 +13,7 @@ let fend scope_name =
       close ()
 
 let family name =
-  Finh.open_new_inheritance_judgement name;
+  Scopes.open_new_inheritance_judgement name;
   Fenv.PluginScopes.push
     PluginCmdScope.
       {
@@ -29,7 +29,7 @@ let family name =
   Feedback.msg_info message
 
 let family_extends ~derived ~base =
-  Finh.open_derived_inheritance_judgement ~derived ~base;
+  Scopes.open_derived_inheritance_judgement ~derived ~base;
   Fenv.PluginScopes.push
     PluginCmdScope.
       {
