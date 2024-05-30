@@ -221,14 +221,24 @@ let extend_inductive_definition
   (* Compile deps *)
   let (name, judgement) = InhJudgements.peek () |> Option.get in
   let InhJudgement.{ base;  derived; _ } = judgement in
-  let f deps (name, elem) =
-    if Names.Id.equal name ind_def_name then deps else (name, elem) :: deps
-  in
+  let exception Return of (Names.Id.t * FamilyTypeElem.t) list in 
+  let f (name, elem) deps =
+    if Names.Id.equal name ind_def_name then
+      raise (Return deps)
+    else (name, elem) :: deps
+  in  
   let deps =
-    List.fold_left f [] base.body
+    try 
+    List.fold_right f base.body []
     |> List.filter (fun (name, _) ->
-           derived.body |> List.exists (fun (name', _) -> Names.Id.equal name name') |> not)
+           derived.body
+           |> List.exists (fun (name', _) ->                  
+                  Names.Id.equal name name')
+           |> not)
+    with Return deps -> deps
   in
+  base.body |> List.iter (fun (name, _) -> Printf.printf "Base: %s\n" (Names.Id.to_string name));
+  deps |> List.iter (fun (name, _) -> Printf.printf "Dep: %s\n" (Names.Id.to_string name));
   let derived = { derived with body = deps @ derived.body } in
   let inhs = deps |> List.map (fun (name, _) -> (name, InhElement.CInhInherit)) in
   let body = inhs @ judgement.body in 

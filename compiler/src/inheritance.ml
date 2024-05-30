@@ -38,9 +38,9 @@ let inherit_all_remained () =
   in
   let derived =
     FamilyType.
-      { name = judgement.derived.name; body = judgement.derived.body @ types }
+      { name = judgement.derived.name; body = types @ judgement.derived.body}
   in
-  let body = judgement.body @ judgements in
+  let body = judgements @ judgement.body in
   let judgement = InhJudgement.{ judgement with derived; body } in
   InhJudgements.push ~name ~judgement
 
