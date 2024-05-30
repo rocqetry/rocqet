@@ -204,11 +204,13 @@ let check_extended_inductive_compatible
   let (a, b, c, newcstrs) = fst derived in 
   let childcstrs = 
       match oldcstrs, newcstrs with 
-      | Vernacexpr.Constructors a, Vernacexpr.Constructors b ->
+      | Vernacexpr.Constructors base_constr, Vernacexpr.Constructors derived_constr ->
          let base_name = Nameops.add_prefix "self__" base_name in
          let derived_name = Nameops.add_prefix "self__" derived_name in 
-         let a = Naming.rename_ind_constructors a ~base_name ~derived_name in
-        Vernacexpr.Constructors (a @ b)
+         let base_constr_renamed =
+           Naming.rename_ind_constructors base_constr ~base_name ~derived_name
+         in
+        Vernacexpr.Constructors (base_constr_renamed @ derived_constr)
       | _, _ -> Errors.fail ~info:"Record types are not yet supported"
   in
   let child_ind = (a, b, c, childcstrs) in 
