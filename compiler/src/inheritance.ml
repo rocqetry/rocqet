@@ -29,7 +29,9 @@ let inherit_all_remained () =
   InhJudgements.ensure_open_judgememt ();
   let name, judgement = InhJudgements.peek () |> Option.get in
   let inherited_fields = top_uninherited_fields judgement in
-  inherited_fields |> List.iter (fun (name, _) -> Printf.printf "N: %s\n" (Names.Id.to_string name));
+  inherited_fields
+  |> List.iter (fun (name, _) ->
+         Printf.printf "N: %s\n" (Names.Id.to_string name));
   let types, judgements =
     List.fold_left
       (fun (types, judgements) (fname, elem) ->
@@ -38,7 +40,7 @@ let inherit_all_remained () =
   in
   let derived =
     FamilyType.
-      { name = judgement.derived.name; body = types @ judgement.derived.body}
+      { name = judgement.derived.name; body = types @ judgement.derived.body }
   in
   let body = judgements @ judgement.body in
   let judgement = InhJudgement.{ judgement with derived; body } in
@@ -54,7 +56,7 @@ let family_term_of_judgement ~(judgement : InhJudgement.t) : FamilyTerm.t =
     | InhElement.CInhNew compiled, FamilyTypeElem.FInductive _ ->
         (name, FamilyTermElem.CompiledDefinition compiled)
     | InhElement.CInhInherit, _ -> Errors.fail ~info:"This doesn't inherit"
-    | InhElement.CInhExtendInd _, _ -> Errors.fail ~info:"This doesn't inherit"       
+    | InhElement.CInhExtendInd _, _ -> Errors.fail ~info:"This doesn't inherit"
   in
   let family_term_body =
     judgement |> InhJudgement.family_type_inh_op
@@ -74,8 +76,9 @@ let apply_judgement_to_family_term ~(judgement : InhJudgement.t)
         (name, FamilyTermElem.CompiledDefinition compiled)
     | InhElement.CInhInherit, FamilyTypeElem.FInductive { compiled_impl; _ } ->
         (name, FamilyTermElem.CompiledDefinition compiled_impl)
-    | InhElement.CInhExtendInd _, FamilyTypeElem.FInductive { compiled_impl; _ } ->
-       (name, FamilyTermElem.CompiledDefinition compiled_impl)
+    | InhElement.CInhExtendInd _, FamilyTypeElem.FInductive { compiled_impl; _ }
+      ->
+        (name, FamilyTermElem.CompiledDefinition compiled_impl)
   in
   let body =
     judgement |> InhJudgement.family_type_inh_op

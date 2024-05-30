@@ -167,7 +167,10 @@ end =
 and InhElement : sig
   type t =
     | CInhNew of CompiledModule.t
-    | CInhExtendInd of { parent : VernacInductive.t; increment : VernacInductive.t }
+    | CInhExtendInd of {
+        parent : VernacInductive.t;
+        increment : VernacInductive.t;
+      }
     | CInhInherit
 end =
   InhElement
