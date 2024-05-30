@@ -1,15 +1,5 @@
 open Types
 
-let unique_id =
-  let counter = ref 0 in
-  fun () ->
-    incr counter;
-    !counter
-
-let fresh_name ~prefix =
-  let time_stamp = string_of_int @@ unique_id () in
-  Names.Id.of_string (prefix ^ "回" ^ time_stamp)
-
 (* Referencing the name of a module *)
 module ModuleTerm = struct
   type t = Libnames.qualid

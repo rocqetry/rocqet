@@ -9,7 +9,7 @@ let compile_context ~ctx ~module_name =
   let FamilyType.{ body; _ } = ty in
   let open Codegen.VernacBackend in
   let module_name_ctx =
-    Codegen.fresh_name
+    Naming.fresh_name
       ~prefix:(Nameops.add_suffix module_name "Ctx" |> Names.Id.to_string)
   in
   match body with
@@ -46,7 +46,7 @@ let inductive_to_famtype ~(ind_def : VernacInductive.t)
   let original_ind_name = type_decls |> List.hd |> fst in
   let module_name =
     let name = Nameops.add_prefix (Names.Id.to_string family_name) original_ind_name in 
-    Codegen.fresh_name ~prefix:(name |> Names.Id.to_string)
+    Naming.fresh_name ~prefix:(name |> Names.Id.to_string)
   in
   let constr_decls = List.concat_map snd ind_cstrs in
   let module Backend = Codegen.VernacBackend in
@@ -83,7 +83,7 @@ let inductive_to_famtype_for_extension ~(compiled_base : CompiledModuleType.t)
   let original_ind_name = type_decls |> List.hd |> fst in  
   let module_name =
     let name = Nameops.add_prefix (Names.Id.to_string family_name) original_ind_name in 
-    Codegen.fresh_name ~prefix:(name |> Names.Id.to_string)
+    Naming.fresh_name ~prefix:(name |> Names.Id.to_string)
   in
   let constr_decls = List.concat_map snd ind_cstrs in
   let module Backend = Codegen.VernacBackend in
@@ -126,7 +126,7 @@ let inductive_to_famterm_and_recursor_type ~(ind_def : VernacInductive.t)
   in  
   let module_name =
     let name = Nameops.add_prefix (Names.Id.to_string family_name) original_ind_name in 
-    Codegen.fresh_name ~prefix:(name |> Names.Id.to_string)
+    Naming.fresh_name ~prefix:(name |> Names.Id.to_string)
   in
   let open Codegen.VernacBackend in
   let parameters =

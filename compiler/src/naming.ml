@@ -100,4 +100,14 @@ let rename_ind_constructors (constructors : Vernacexpr.constructor_expr list)
 
 let self_version name = Nameops.add_prefix "self__" name
 
+let unique_id =
+  let counter = ref 0 in
+  fun () ->
+    incr counter;
+    !counter
+
+let fresh_name ~prefix =
+  let time_stamp = string_of_int @@ unique_id () in
+  Names.Id.of_string (prefix ^ "回" ^ time_stamp)
+
 
