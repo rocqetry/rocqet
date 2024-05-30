@@ -221,30 +221,26 @@ let extend_inductive_definition
   (* Compile deps *)
   let (name, judgement) = InhJudgements.peek () |> Option.get in
   let InhJudgement.{ base;  derived; _ } = judgement in
-  let exception Return of (Names.Id.t * FamilyTypeElem.t) list in 
-  let f (name, elem) deps =
-    if Names.Id.equal name ind_def_name then
-      raise (Return deps)
-    else (name, elem) :: deps
+  let rec calculate_dependencies fields =
+    match fields with
+    | [] -> []
+    | (found_name, _) :: fields when Names.Id.equal found_name ind_def_name ->
+       (* Remove the fields in the that have already been extended by the derived family *)
+       fields
+       |> List.filter (fun (name, _) ->
+              derived.body
+              |> List.map fst
+              |> List.exists (Names.Id.equal name)
+              |> not)
+    | _ :: fields -> calculate_dependencies fields 
   in  
-  let deps =
-    try 
-    List.fold_right f base.body []
-    |> List.filter (fun (name, _) ->
-           derived.body
-           |> List.exists (fun (name', _) ->                  
-                  Names.Id.equal name name')
-           |> not)
-    with Return deps -> deps
-  in
+  let deps = calculate_dependencies base.body in
   base.body |> List.iter (fun (name, _) -> Printf.printf "Base: %s\n" (Names.Id.to_string name));
   deps |> List.iter (fun (name, _) -> Printf.printf "Dep: %s\n" (Names.Id.to_string name));
   let derived = { derived with body = deps @ derived.body } in
   let inhs = deps |> List.map (fun (name, _) -> (name, InhElement.CInhInherit)) in
   let body = inhs @ judgement.body in 
-  InhJudgements.push ~name ~judgement:{ judgement with derived; body; };
-  (* Remove the ones already in the current family *)
-  (* compile deps *)
+  InhJudgements.push ~name ~judgement:{ judgement with derived; body; };  
   match inherited_elem with
   | FamilyTypeElem.FInductive { original_inductive; compiled_signature; _ } ->
      let ctx = InhJudgements.current_output_ctx () in

@@ -30,7 +30,7 @@ let _qualid_qualid_ (headpath : Libnames.qualid) (tailpath : Libnames.qualid) : 
 
 
 (* extract a path into (path "." name) *)
-let to_qualid_name (path : Libnames.qualid) : Libnames.qualid option * Names.Id.t = 
+let _to_qualid_name (path : Libnames.qualid) : Libnames.qualid option * Names.Id.t = 
   let open Libnames in 
   if qualid_is_ident path then (None, qualid_basename path) else 
     let (prefix_path, base) = Libnames.repr_qualid path in 
@@ -54,7 +54,7 @@ let to_name_qualid (path : Libnames.qualid) : Names.Id.t * Libnames.qualid =
   let remained = Libnames.make_qualid (Names.DirPath.make remained) base in 
   (startingpoint, remained)
 
-let to_name_optionqualid (path : Libnames.qualid) : Names.Id.t * (Libnames.qualid option) =
+let _to_name_optionqualid (path : Libnames.qualid) : Names.Id.t * (Libnames.qualid option) =
   let open Libnames in 
   if qualid_is_ident path then (qualid_basename path, None) else 
   let head, tail = to_name_qualid path in
