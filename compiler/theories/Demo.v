@@ -42,3 +42,6 @@ Check Semantics.step.
 Check BSemantics.step.
 
 
+Inductive t := a | b.
+
+Check t.

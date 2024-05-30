@@ -59,7 +59,7 @@ let inductive_to_famtype ~(ind_def : VernacInductive.t)
   let all_decls = declare_typedecls @ declare_csts_decls in
   let parameters =
     [
-      ( Nameops.add_prefix "self__" family_name,
+      ( Naming.self_version family_name,
         Termutils.ident_to_module_expr ctx );
     ]
   in
@@ -91,7 +91,7 @@ let inductive_to_famtype_for_extension ~(compiled_base : CompiledModuleType.t)
     List.map (fun (name, ty) -> Backend.postulate_axiom ~name ~ty) constr_decls
   in
   let all_decls = declare_csts_decls in
-  let self__family_name = Nameops.add_prefix "self__" family_name in
+  let self__family_name = Naming.self_version family_name in
   let functor_expr = Termutils.ident_to_module_expr compiled_base in
   let arguments = [ Libnames.qualid_of_ident self__family_name ] in
   let base_expr = Termutils.apply_module ~functor_expr ~arguments in
@@ -131,7 +131,7 @@ let inductive_to_famterm_and_recursor_type ~(ind_def : VernacInductive.t)
   let open Codegen.VernacBackend in
   let parameters =
     [
-      ( Nameops.add_prefix "self__" family_name,
+      ( Naming.self_version family_name,
         Termutils.ident_to_module_expr ctx );
     ]
   in
@@ -208,8 +208,8 @@ let check_extended_inductive_compatible ~(base : VernacInductive.t)
     match (oldcstrs, newcstrs) with
     | ( Vernacexpr.Constructors base_constr,
         Vernacexpr.Constructors derived_constr ) ->
-        let base_name = Nameops.add_prefix "self__" base_name in
-        let derived_name = Nameops.add_prefix "self__" derived_name in
+        let base_name = Naming.self_version base_name in
+        let derived_name = Naming.self_version derived_name in
         let base_constr_renamed =
           Naming.rename_ind_constructors base_constr ~base_name ~derived_name
         in

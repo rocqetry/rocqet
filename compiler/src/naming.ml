@@ -97,3 +97,7 @@ let rename_ind_constructors (constructors : Vernacexpr.constructor_expr list)
     (a, (b, replace_qualid_root ~source:base_name ~target:derived_name term))
   in
   constructors |> List.map rename_one_ind_constructor
+
+let self_version name = Nameops.add_prefix "self__" name
+
+
