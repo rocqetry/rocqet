@@ -69,7 +69,7 @@ end
 and InhElement : sig
   type t =
     | CInhNew of CompiledModule.t
-    | CInhExtendInh of InhJudgement.t
+    | CInhExtendInd of { parent : VernacInductive.t; increment : VernacInductive.t }
     | CInhInherit
 end
 

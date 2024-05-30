@@ -167,7 +167,7 @@ end =
 and InhElement : sig
   type t =
     | CInhNew of CompiledModule.t
-    | CInhExtendInh of InhJudgement.t
+    | CInhExtendInd of { parent : VernacInductive.t; increment : VernacInductive.t }
     | CInhInherit
 end =
   InhElement
@@ -175,9 +175,9 @@ end =
 and InhJudgement : sig
   type t = {
     base : FamilyType.t;
-        (** This is the family that is being extended -- This is our "input" *)
+        (** This is the family that is being extended -- This is the "input" *)
     derived : FamilyType.t;
-        (** This is the resulting family of that extension -- This is our "output" *)
+        (** This is the resulting family of that extension -- This is the "output" *)
     body : (Names.Id.t * InhElement.t) list;
         (** More about `derived` extends particular fields in `base` *)
   }

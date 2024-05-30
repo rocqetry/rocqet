@@ -7,3 +7,7 @@ val internalize :
   Evd.evar_map * Evd.econstr
 
 val ident_to_module_expr : Libnames.qualid -> Constrexpr.module_ast
+
+val apply_module: 
+      functor_expr:Constrexpr.module_ast ->
+      arguments:Libnames.qualid list-> Constrexpr.module_ast
