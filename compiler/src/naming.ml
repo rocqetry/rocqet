@@ -1,3 +1,6 @@
+(* These functions are copied verbatim from
+   https://github.com/DKXXXL/FPOP/blob/main/src/utils.ml#L407*)
+
 let _point_qualid_ (f : Names.Id.t) (path : Libnames.qualid) : Libnames.qualid =
   let path, base = Libnames.repr_qualid path in
   let newpath = List.append (Names.DirPath.repr path) [ f ] in
