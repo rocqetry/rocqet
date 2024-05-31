@@ -1,8 +1,8 @@
 
 ### Backward Lists
-We use "Backward lists" for contexts becuase they preserve the order textual order.
-Backward lists are usually used in the implementation of proof assistants. It makes
-operation on contexts intuitive.
+We use `bwd` ("Backward Lists") for contexts becuase they preserve the order
+textual order. Backward lists are usually used in the implementation of proof
+assistants. It makes operation on contexts intuitive.
 
 For more information about this package see: https://github.com/RedPRL/ocaml-bwd
 
