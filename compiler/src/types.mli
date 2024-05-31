@@ -1,3 +1,5 @@
+open Bwd
+
 module VernacInductive : sig
   type t =
     (Vernacexpr.inductive_expr * Vernacexpr.notation_declaration list) list
@@ -10,14 +12,18 @@ module VernacInductive : sig
     (Names.Id.t * Constrexpr.constr_expr) list
 
   val extract_all_names_with_type :
-    t -> ((Names.Id.t * Constrexpr.constr_expr) * (Names.Id.t * Constrexpr.constr_expr) list) list
+    t ->
+    ((Names.Id.t * Constrexpr.constr_expr)
+    * (Names.Id.t * Constrexpr.constr_expr) list)
+    list
 
-  val extract_inductive_names_with_sort: t -> (Names.Id.t * Constrexpr.constr_expr) list
+  val extract_inductive_names_with_sort :
+    t -> (Names.Id.t * Constrexpr.constr_expr) list
 
-  val extract_constructor_names_with_type : t -> (Names.Id.t * Constrexpr.constr_expr) list
+  val extract_constructor_names_with_type :
+    t -> (Names.Id.t * Constrexpr.constr_expr) list
 
   val extract_inductive_name : t -> Names.Id.t
-  
   val extract_all_ident : t -> Names.Id.t list
   val extract_type_ident : t -> Names.Id.t list
   val extract_constructors_ident : t -> Names.Id.t list
@@ -54,7 +60,7 @@ module rec FamilyTypeElem : sig
 end
 
 and FamilyType : sig
-  type t = { name : Names.Id.t; body : (Names.Id.t * FamilyTypeElem.t) list }
+  type t = { name : Names.Id.t; body : (Names.Id.t * FamilyTypeElem.t) Bwd.t }
 
   val extend : name:Names.Id.t -> elem:FamilyTypeElem.t -> t -> t
 end
@@ -72,7 +78,7 @@ and FamilyTermElem : sig
 end
 
 and FamilyTerm : sig
-  type t = { body : (Names.Id.t * FamilyTermElem.t) list }
+  type t = { body : (Names.Id.t * FamilyTermElem.t) Bwd.t }
 end
 
 and InhElement : sig
@@ -89,13 +95,13 @@ and InhJudgement : sig
   type t = {
     base : FamilyType.t;
     derived : FamilyType.t;
-    body : (Names.Id.t * InhElement.t) list;
+    body : (Names.Id.t * InhElement.t) Bwd.t;
   }
 
   val empty : base:FamilyType.t -> derived:FamilyType.t -> t
 
   val family_type_inh_op :
-    t -> (Names.Id.t * FamilyTypeElem.t * InhElement.t) list
+    t -> (Names.Id.t * FamilyTypeElem.t * InhElement.t) Bwd.t
 end
 
 module PluginCmd : sig

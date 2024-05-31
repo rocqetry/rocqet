@@ -1,5 +1,7 @@
 open Types
 open Env
+open Bwd
+open Bwd.Infix
 
 (* Does this family have a base family? *)
 let judgement_has_base judgement =
@@ -21,9 +23,8 @@ let top_uninherited_fields judgement =
     | _ :: _, [] -> base
     | [], _ :: _ -> []
   in
-  compute_difference
-    ~base:(base.FamilyType.body |> List.rev)
-    ~derived:(derived.FamilyType.body |> List.rev)
+  compute_difference ~base:(base.body |> Bwd.to_list)
+    ~derived:(derived.body |> Bwd.to_list)
 
 let inherit_all_remained () =
   InhJudgements.ensure_open_judgememt ();
@@ -32,14 +33,18 @@ let inherit_all_remained () =
   let types, judgements =
     List.fold_left
       (fun (types, judgements) (fname, elem) ->
-        ((fname, elem) :: types, (fname, InhElement.CInhInherit) :: judgements))
-      ([], []) inherited_fields
+        ( Bwd.Snoc (types, (fname, elem)),
+          Bwd.Snoc (judgements, (fname, InhElement.CInhInherit)) ))
+      (Bwd.Emp, Bwd.Emp) inherited_fields
   in
   let derived =
     FamilyType.
-      { name = judgement.derived.name; body = types @ judgement.derived.body }
+      {
+        name = judgement.derived.name;
+        body = judgement.derived.body <@ Bwd.to_list types;
+      }
   in
-  let body = judgements @ judgement.body in
+  let body = judgement.body <@ Bwd.to_list judgements in
   let judgement = InhJudgement.{ judgement with derived; body } in
   InhJudgements.push ~name ~judgement
 
@@ -57,7 +62,7 @@ let family_term_of_judgement ~(judgement : InhJudgement.t) : FamilyTerm.t =
   in
   let family_term_body =
     judgement |> InhJudgement.family_type_inh_op
-    |> List.map compute_family_term_elem
+    |> Bwd.map compute_family_term_elem
   in
   FamilyTerm.{ body = family_term_body }
 
@@ -66,7 +71,7 @@ let apply_judgement_to_family_term ~(judgement : InhJudgement.t)
   let compute_family_term_elem (name, type_elem, inh_elem) =
     (* This is O(n^2) *)
     let _term_elem =
-      family_term.body |> List.map fst |> List.find_opt (Names.Id.equal name)
+      family_term.body |> Bwd.map fst |> Bwd.find_opt (Names.Id.equal name)
     in
     match (inh_elem, type_elem) with
     | InhElement.CInhNew compiled, FamilyTypeElem.FInductive _ ->
@@ -79,7 +84,7 @@ let apply_judgement_to_family_term ~(judgement : InhJudgement.t)
   in
   let body =
     judgement |> InhJudgement.family_type_inh_op
-    |> List.map compute_family_term_elem
+    |> Bwd.map compute_family_term_elem
   in
   FamilyTerm.{ body }
 
@@ -97,12 +102,11 @@ let compile_family_term_module ~(family_term : FamilyTerm.t)
   let open Codegen.VernacBackend in
   let open Codegen in
   let FamilyTerm.{ body } = family_term in
-  let rec famterm_internal_include (body : (Names.Id.t * FamilyTermElem.t) list)
-      (ctx : ModuleTerm.t list) =
+  let rec famterm_internal_include body (ctx : ModuleTerm.t list) =
     match body with
-    | [] -> return ()
-    | (name, FamilyTermElem.CompiledDefinition compiled) :: body_rest ->
-        let* _ = famterm_internal_include body_rest ctx in
+    | Bwd.Emp -> return ()
+    | Bwd.Snoc (body, (name, FamilyTermElem.CompiledDefinition compiled)) ->
+        let* _ = famterm_internal_include body ctx in
         let module_expr = Termutils.ident_to_module_expr compiled in
         let* _ = include_module ~module_expr in
         return ()
@@ -133,12 +137,12 @@ let close_current_inheritance_judgement () =
     ~family_term:derived_family_term
 
 let open_new_inheritance_judgement name =
-  let family_type = FamilyType.{ name; body = [] } in
+  let family_type = FamilyType.{ name; body = Bwd.Emp } in
   let judgement = InhJudgement.empty ~base:family_type ~derived:family_type in
   InhJudgements.push ~name ~judgement
 
 let open_derived_inheritance_judgement ~base ~derived =
-  let family_type = FamilyType.{ name = derived; body = [] } in
+  let family_type = FamilyType.{ name = derived; body = Bwd.Emp } in
   let base_family_type =
     match GlobalCtx.lookup base with
     | None ->
@@ -161,7 +165,7 @@ let infer_field_inh_kind name =
     | Some (FamilyRef.ToplevelRef (_, _, family_type)) -> (
         let base_field =
           family_type.body
-          |> List.find_opt (fun (found_name, _) ->
+          |> Bwd.find_opt (fun (found_name, _) ->
                  Names.Id.equal name found_name)
         in
         match base_field with

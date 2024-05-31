@@ -11,10 +11,7 @@
                                     ; flag; CoqPP generated code
                                     ; requires to disable warning 27
                                     ; often.
- (libraries ; OCaml Libraries we want to link
-            ; with, your choice here.
-  coq-core.vernac ; Needed for vernac extend.
-  coq-core.plugins.ltac))
+ (libraries coq-core.vernac coq-core.plugins.ltac))
 
 ; Needed for tactic extend. 
 

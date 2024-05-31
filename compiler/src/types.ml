@@ -1,3 +1,6 @@
+open Bwd
+open Bwd.Infix
+
 module VernacInductive = struct
   type t =
     (Vernacexpr.inductive_expr * Vernacexpr.notation_declaration list) list
@@ -33,20 +36,13 @@ module VernacInductive = struct
            ((ind_name, ty), cstrs))
 
   let extract_inductive_names_with_sort ind_def =
-    ind_def
-    |> extract_all_names_with_type
-    |> List.map fst
+    ind_def |> extract_all_names_with_type |> List.map fst
 
   let extract_inductive_name ind_def =
-    ind_def
-    |> extract_inductive_names_with_sort
-    |> List.hd
-    |> fst
+    ind_def |> extract_inductive_names_with_sort |> List.hd |> fst
 
   let extract_constructor_names_with_type ind_def =
-    ind_def
-    |> extract_all_names_with_type
-    |> List.concat_map snd    
+    ind_def |> extract_all_names_with_type |> List.concat_map snd
 
   let extract_all_ident ind_def =
     let all_names =
@@ -161,15 +157,15 @@ end =
   FamilyTypeElem
 
 and FamilyType : sig
-  type t = { name : Names.Id.t; body : (Names.Id.t * FamilyTypeElem.t) list }
+  type t = { name : Names.Id.t; body : (Names.Id.t * FamilyTypeElem.t) Bwd.t }
 
   val extend : name:Names.Id.t -> elem:FamilyTypeElem.t -> t -> t
 end = struct
-  type t = { name : Names.Id.t; body : (Names.Id.t * FamilyTypeElem.t) list }
+  type t = { name : Names.Id.t; body : (Names.Id.t * FamilyTypeElem.t) Bwd.t }
 
   let extend ~name ~elem family_type =
     let { body; _ } = family_type in
-    { family_type with body = (name, elem) :: body }
+    { family_type with body = body <: (name, elem) }
 end
 
 (* `FamilyContext.t` is a "focused" view of `InhJudgemen.t`*)
@@ -189,7 +185,7 @@ end =
   FamilyTermElem
 
 and FamilyTerm : sig
-  type t = { body : (Names.Id.t * FamilyTermElem.t) list }
+  type t = { body : (Names.Id.t * FamilyTermElem.t) Bwd.t }
 end =
   FamilyTerm
 
@@ -210,33 +206,33 @@ and InhJudgement : sig
         (** This is the family that is being extended -- This is the "input" *)
     derived : FamilyType.t;
         (** This is the resulting family of that extension -- This is the "output" *)
-    body : (Names.Id.t * InhElement.t) list;
+    body : (Names.Id.t * InhElement.t) Bwd.t;
         (** More about `derived` extends particular fields in `base` *)
   }
 
   val empty : base:FamilyType.t -> derived:FamilyType.t -> t
 
   val family_type_inh_op :
-    t -> (Names.Id.t * FamilyTypeElem.t * InhElement.t) list
+    t -> (Names.Id.t * FamilyTypeElem.t * InhElement.t) Bwd.t
 end = struct
   type t = {
     base : FamilyType.t;
     derived : FamilyType.t;
-    body : (Names.Id.t * InhElement.t) list;
+    body : (Names.Id.t * InhElement.t) Bwd.t;
   }
 
   (* The empty family context here is not really right
      becuase once we have an inheritnce judgement, we can't
      have an empty family context. We can have a context which
      the family type contains no field though. *)
-  let empty ~base ~derived = { base; derived; body = [] }
+  let empty ~base ~derived = { base; derived; body = Bwd.Emp }
 
   let family_type_inh_op judgement =
     let { derived; body = judgement_body; _ } = judgement in
     let FamilyType.{ body = family_type_body; _ } = derived in
-    let family_type_inh_op = List.combine family_type_body judgement_body in
+    let family_type_inh_op = Bwd.combine family_type_body judgement_body in
     family_type_inh_op
-    |> List.map (fun ((name1, family_type_elem), (name2, inh_elem)) ->
+    |> Bwd.map (fun ((name1, family_type_elem), (name2, inh_elem)) ->
            (* Assert that name1 == name2 *)
            (name1, family_type_elem, inh_elem))
 end
