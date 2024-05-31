@@ -1,5 +1,4 @@
 open Bwd
-open Bwd.Infix
 
 module VernacInductive = struct
   type t =
@@ -124,16 +123,6 @@ module VernacInductive = struct
     (modified_ind_def, alias_all_name_term_type_decl)
 end
 
-module FamilyId = struct
-  type t = int
-
-  let fresh =
-    let store = ref 0 in
-    fun () ->
-      incr store;
-      !store
-end
-
 (* Module naming *)
 (* This should really be Names.ModPath.t *)
 module CompiledModule = struct
@@ -144,180 +133,37 @@ module CompiledModuleType = struct
   type t = Libnames.qualid
 end
 
-module rec FamilyTypeElem : sig
-  type t =
-    | FInductive of {
-        original_inductive : VernacInductive.t;
-        constructor_names : Names.Id.t list;
-        compiled_signature : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;
-        compiled_ctx : CompiledModuleType.t;
-      }
-end =
-  FamilyTypeElem
-
-and FamilyType : sig
-  type t = { name : Names.Id.t; body : (Names.Id.t * FamilyTypeElem.t) Bwd.t }
-
-  val extend : name:Names.Id.t -> elem:FamilyTypeElem.t -> t -> t
-end = struct
-  type t = { name : Names.Id.t; body : (Names.Id.t * FamilyTypeElem.t) Bwd.t }
-
-  let extend ~name ~elem family_type =
-    let { body; _ } = family_type in
-    { family_type with body = body <: (name, elem) }
-end
-
-(* `FamilyContext.t` is a "focused" view of `InhJudgemen.t`*)
-and FamilyContext : sig
-  type t = Toplevel of Names.Id.t * FamilyType.t
-end =
-  FamilyContext
-
-module rec FamilyRef : sig
-  type t = ToplevelRef of Names.Id.t * FamilyTerm.t * FamilyType.t
-end =
-  FamilyRef
-
-and FamilyTermElem : sig
-  type t = CompiledDefinition of CompiledModule.t
-end =
-  FamilyTermElem
-
-and FamilyTerm : sig
-  type t = { body : (Names.Id.t * FamilyTermElem.t) Bwd.t }
-end =
-  FamilyTerm
-
-and InhElement : sig
-  type t =
-    | CInhNew of CompiledModule.t
-    | CInhExtendInd of {
-        parent : VernacInductive.t;
-        increment : VernacInductive.t;
-      }
-    | CInhInherit
-end =
-  InhElement
-
-and InhJudgement : sig
-  type t = {
-    base : FamilyType.t;
-        (** This is the family that is being extended -- This is the "input" *)
-    derived : FamilyType.t;
-        (** This is the resulting family of that extension -- This is the "output" *)
-    body : (Names.Id.t * InhElement.t) Bwd.t;
-        (** More about `derived` extends particular fields in `base` *)
-  }
-
-  val empty : base:FamilyType.t -> derived:FamilyType.t -> t
-
-  val family_type_inh_op :
-    t -> (Names.Id.t * FamilyTypeElem.t * InhElement.t) Bwd.t
-end = struct
-  type t = {
-    base : FamilyType.t;
-    derived : FamilyType.t;
-    body : (Names.Id.t * InhElement.t) Bwd.t;
-  }
-
-  (* The empty family context here is not really right
-     becuase once we have an inheritnce judgement, we can't
-     have an empty family context. We can have a context which
-     the family type contains no field though. *)
-  let empty ~base ~derived = { base; derived; body = Bwd.Emp }
-
-  let family_type_inh_op judgement =
-    let { derived; body = judgement_body; _ } = judgement in
-    let FamilyType.{ body = family_type_body; _ } = derived in
-    let family_type_inh_op = Bwd.combine family_type_body judgement_body in
-    family_type_inh_op
-    |> Bwd.map (fun ((name1, family_type_elem), (name2, inh_elem)) ->
-           (* Assert that name1 == name2 *)
-           (name1, family_type_elem, inh_elem))
-end
-
 (* Linkages *)
 module InhOp = struct
   type t = CInhNew | CInhExtend | CInhInherit
 end
 
 module rec LinkageElem : sig
-  type t =         
-   | InductiveDefinition of
-        { inductive : VernacInductive.t;
-          compiled_context : CompiledModuleType.t;
-          compiled_signature : CompiledModuleType.t;
-          compiled_impl : CompiledModule.t;
-          operation : InhOp.t }
-end = LinkageElem
-
-and Linkage : sig
-  type t =
-    { name : Names.Id.t;      
-      base : t option;
-      fields : (Names.Id.t * LinkageElem.t) Bwd.t }
-end = Linkage
-
-and LinkageCtx : sig 
-  type t = Toplevel of Linkage.t
-end = LinkageCtx
-
-(*
-module LinkageInhKind = struct
-  type t =
-    | CInhNew
-    | CInhExtend
-    | CInhInherit
-end
-
-module rec LinkageElem : sig
   type t =
     | InductiveDefinition of {
         inductive : VernacInductive.t;
-        compiled_context : CompiledModuleType.t Bwd.t;
+        compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        complied_impl : CompiledModule.t;
-        kind : LinkageInhKind.t
+        compiled_impl : CompiledModule.t;
+        operation : InhOp.t;
       }
-    | NestedFamily of
-        { compiled_context : CompiledModuleType.t Bwd.t;
-          compiled_signature : CompiledModuleType.t;
-          compiled_impl : CompiledModule.t;
-          body: LinkageBody.t }
-end = struct
-  type t =
-    | InductiveDefinition of
-        { inductive : VernacInductive.t;
-          compiled_context : CompiledModuleType.t Bwd.t;
-          compiled_signature : CompiledModuleType.t;
-          complied_impl : CompiledModule.t;
-          kind : LinkageInhKind.t }
-    | NestedFamily of
-        { compiled_context : CompiledModuleType.t Bwd.t;
-          compiled_signature : CompiledModuleType.t Bwd.t;
-          compiled_impl : CompiledModule.t;
-          body: LinkageBody.t }
-end
+end =
+  LinkageElem
 
-and LinkageBody : sig
-  type t =
-    { name : Names.Id.t;      
-      template : t option; (* The template is the base family *)
-      body : (Names.Id.t * LinkageElem.t) Bwd.t }
-end = struct
-  type t =
-    { name : Names.Id.t;      
-      template : t option; (* The template is the base family *)
-      body : (Names.Id.t * LinkageElem.t) Bwd.t }
-end
+and Linkage : sig
+  type t = {
+    name : Names.Id.t;
+    base : t option;
+    fields : (Names.Id.t * LinkageElem.t) Bwd.t;
+  }
+end =
+  Linkage
 
-module Linkage = struct
-  type t =
-    | Toplevel of LinkageBody.t
-    | Nested of t * LinkageBody.t
-end*)
-
+(* A linkage we are currently constructing *)
+and LinkageCtx : sig
+  type t = Toplevel of Linkage.t
+end =
+  LinkageCtx
 
 (* A single plugin command *)
 (* e.g Family A. ... *)
@@ -335,31 +181,3 @@ end
 module FieldInhKind = struct
   type t = New | Extend of LinkageElem.t
 end
-
-(*
-module NestedFamilyContext = struct 
-  type t = 
-    | Top of FamilyContext.t
-    | Level of FamilyContext.t * t
-end
-
-module F = struct
-  type t =
-    | Toplevel of Names.Id.t * FamilyType.t
-    | Nestedlevel of Names.Id.t * FamilyType.t * t
-end
-
-let name ty = match ty with
-  | F.Toplevel (name, ty) -> failwith ""
-  | F.Nestedlevel (name, ty, upper) -> failwith ""
-
-
-
-(* Field inheritance kind *)
-
-
-module FamilyDefinitionContext = struct 
-  type t =
-    | InitialInhBase of Family.Ref.t option (* A toplevel family *)
-end
-*)

@@ -2,8 +2,6 @@ open Types
 open Env
 open Bwd
 
-(* Contains information on how to compile inductive types *)
-
 let compile_linkage_context ~field_name (context : LinkageCtx.t) =
   let (LinkageCtx.Toplevel linkage) = context in
   let Linkage.{ fields; _ } = linkage in
@@ -14,12 +12,15 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) =
   let open Codegen.VernacBackend in
   match fields with
   | Bwd.Emp ->
-     define_moduletype ~module_name:module_name_ctx ~parameters:[]
+      define_moduletype ~module_name:module_name_ctx ~parameters:[]
         ~body:(fun _arguments -> return ())
       |> run
-
-  | Bwd.Snoc(_, (_, LinkageElem.InductiveDefinition { compiled_context; compiled_signature; _ })) ->
-     define_moduletype ~module_name:module_name_ctx ~parameters:[]
+  | Bwd.Snoc
+      ( _,
+        ( _,
+          LinkageElem.InductiveDefinition
+            { compiled_context; compiled_signature; _ } ) ) ->
+      define_moduletype ~module_name:module_name_ctx ~parameters:[]
         ~body:(fun _arguments ->
           let* () =
             include_module
@@ -130,8 +131,9 @@ let inductive_to_famterm_and_recursor_type ~(ind_def : VernacInductive.t)
   in
   module_name
 
-let declare_inductive_definition ~(ind_def_name : Names.Id.t) ~(ind_def : VernacInductive.t) =  
-  let context = Context.get () in  
+let declare_inductive_definition ~(ind_def_name : Names.Id.t)
+    ~(ind_def : VernacInductive.t) =
+  let context = Context.get () in
   let compiled_ctx = compile_linkage_context ~field_name:ind_def_name context in
   let (LinkageCtx.Toplevel linkage) = context in
   let family_name = linkage.Linkage.name in
@@ -141,7 +143,7 @@ let declare_inductive_definition ~(ind_def_name : Names.Id.t) ~(ind_def : Vernac
   let compiled_impl =
     inductive_to_famterm_and_recursor_type ~ind_def ~ctx:compiled_ctx
       ~family_name
-  in  
+  in
   let elem =
     LinkageElem.InductiveDefinition
       {
@@ -152,7 +154,7 @@ let declare_inductive_definition ~(ind_def_name : Names.Id.t) ~(ind_def : Vernac
         operation = InhOp.CInhNew;
       }
   in
-  Context.add_field ~name:ind_def_name ~elem      
+  Context.add_field ~name:ind_def_name ~elem
 
 let check_extended_inductive_compatible ~(base : VernacInductive.t)
     ~(derived : VernacInductive.t) ~base_name ~derived_name : VernacInductive.t
@@ -180,17 +182,23 @@ let check_extended_inductive_compatible ~(base : VernacInductive.t)
   let child_ind_def = [ (child_ind, []) ] in
   child_ind_def
 
-let extend_inductive_definition ~ind_def_name ~ind_def ~(inherited_elem: LinkageElem.t) =
+let extend_inductive_definition ~ind_def_name ~ind_def
+    ~(inherited_elem : LinkageElem.t) =
   let (LinkageCtx.Toplevel linkage) = Context.get () in
   let base_linkage =
     match linkage.base with
-    | None -> Errors.fail ~info:"There needs to be a base family to extend an inductive type"
+    | None ->
+        Errors.fail
+          ~info:"There needs to be a base family to extend an inductive type"
     | Some base_linkage -> base_linkage
   in
-  let linkage = Context.linkage_concatenate_prefix ~prefix:ind_def_name ~derived:linkage ~base:base_linkage in
-  Context.replace ~linkage; 
+  let linkage =
+    Context.linkage_concatenate_prefix ~prefix:ind_def_name ~derived:linkage
+      ~base:base_linkage
+  in
+  Context.replace ~linkage;
   match inherited_elem with
-  | LinkageElem.InductiveDefinition { inductive; compiled_signature; _ } ->      
+  | LinkageElem.InductiveDefinition { inductive; compiled_signature; _ } ->
       let context = Context.get () in
       let (LinkageCtx.Toplevel linkage) = context in
       let Linkage.{ name; fields; base; _ } = linkage in
@@ -198,12 +206,14 @@ let extend_inductive_definition ~ind_def_name ~ind_def ~(inherited_elem: Linkage
         match base with
         | None -> Errors.fail ~info:"Should not happen"
         | Some base -> base
-      in 
-      let complete_ind_def =
-        check_extended_inductive_compatible ~base:inductive
-          ~derived:ind_def ~base_name:base.name ~derived_name:name
       in
-      let compiled_ctx = compile_linkage_context ~field_name:ind_def_name context in 
+      let complete_ind_def =
+        check_extended_inductive_compatible ~base:inductive ~derived:ind_def
+          ~base_name:base.name ~derived_name:name
+      in
+      let compiled_ctx =
+        compile_linkage_context ~field_name:ind_def_name context
+      in
       let compiled_signature =
         inductive_to_famtype_for_extension ~ind_def ~ctx:compiled_ctx
           ~family_name:name ~compiled_base:compiled_signature
@@ -211,21 +221,20 @@ let extend_inductive_definition ~ind_def_name ~ind_def ~(inherited_elem: Linkage
       let compiled_impl =
         inductive_to_famterm_and_recursor_type ~ind_def:complete_ind_def
           ~ctx:compiled_ctx ~family_name:name
-      in      
+      in
       let elem =
-           LinkageElem.InductiveDefinition
-             {
-               inductive = complete_ind_def;
-               compiled_context = compiled_ctx;
-               compiled_impl;
-               compiled_signature;
-               operation = InhOp.CInhNew;
-             }
-         in
-       Context.add_field ~name:ind_def_name ~elem
-      
+        LinkageElem.InductiveDefinition
+          {
+            inductive = complete_ind_def;
+            compiled_context = compiled_ctx;
+            compiled_impl;
+            compiled_signature;
+            operation = InhOp.CInhNew;
+          }
+      in
+      Context.add_field ~name:ind_def_name ~elem
 
-let add_inductive_definition ind_def =  
+let add_inductive_definition ind_def =
   let ind_def_name = ind_def |> VernacInductive.extract_inductive_name in
   match Inheritance.infer_field_inh_kind ind_def_name with
   | FieldInhKind.New -> declare_inductive_definition ~ind_def_name ~ind_def
