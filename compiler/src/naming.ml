@@ -109,5 +109,3 @@ let unique_id =
 let fresh_name ~prefix =
   let time_stamp = string_of_int @@ unique_id () in
   Names.Id.of_string (prefix ^ "回" ^ time_stamp)
-
-

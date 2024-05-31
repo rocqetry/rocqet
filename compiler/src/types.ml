@@ -19,6 +19,35 @@ module VernacInductive = struct
         ((ind_type_name, indtype), List.map each_constr cstrlist)
     | Vernacexpr.RecordDecl _ -> Errors.fail ~info:"Records not yet supported"
 
+  let extract_all_names_with_type ind_def =
+    ind_def
+    |> List.map (fun ind -> ind |> fst |> extract_type_and_cstrs)
+    |> List.map (fun ((ind_name, ty), cstrs) ->
+           let ty =
+             match ty with
+             | None ->
+                 Errors.fail
+                   ~info:"You need to specify the sort of an inductive type"
+             | Some ty -> ty
+           in
+           ((ind_name, ty), cstrs))
+
+  let extract_inductive_names_with_sort ind_def =
+    ind_def
+    |> extract_all_names_with_type
+    |> List.map fst
+
+  let extract_inductive_name ind_def =
+    ind_def
+    |> extract_inductive_names_with_sort
+    |> List.hd
+    |> fst
+
+  let extract_constructor_names_with_type ind_def =
+    ind_def
+    |> extract_all_names_with_type
+    |> List.concat_map snd    
+
   let extract_all_ident ind_def =
     let all_names =
       ind_def
@@ -37,7 +66,7 @@ module VernacInductive = struct
        |> fst (* get just the type name *)
 
   (* Get the constructors in an inductive definition *)
-  let extract_cstrs_ident ind_def =
+  let extract_constructors_ident ind_def =
     ind_def
     |> List.map (fun (ind_expr, _) -> ind_expr |> extract_type_and_cstrs)
     |> List.concat_map (fun (_, cstrs) -> cstrs |> List.map fst)

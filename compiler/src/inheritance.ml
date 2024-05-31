@@ -28,7 +28,7 @@ let top_uninherited_fields judgement =
 let inherit_all_remained () =
   InhJudgements.ensure_open_judgememt ();
   let name, judgement = InhJudgements.peek () |> Option.get in
-  let inherited_fields = top_uninherited_fields judgement in  
+  let inherited_fields = top_uninherited_fields judgement in
   let types, judgements =
     List.fold_left
       (fun (types, judgements) (fname, elem) ->
