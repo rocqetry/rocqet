@@ -1,6 +1,6 @@
 
 ### Backward Lists
-We use `bwd` ("Backward Lists") for contexts becuase they preserve the order
+We use `bwd` ("Backward Lists") for contexts becuase they preserve the
 textual order. Backward lists are usually used in the implementation of proof
 assistants. It makes operation on contexts intuitive.
 
