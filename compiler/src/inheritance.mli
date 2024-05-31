@@ -1,6 +1,5 @@
 open Types
 
-val inherit_all_remained : unit -> unit
 val close_current_inheritance_judgement : unit -> unit
 val open_new_inheritance_judgement : Names.Id.t -> unit
 

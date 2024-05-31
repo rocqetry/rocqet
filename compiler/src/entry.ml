@@ -14,7 +14,7 @@ let fend scope_name =
       close ()
 
 let family name =
-  Inheritance.open_new_inheritance_judgement name;
+  Inheritance.open_new_inheritance_judgement name;  
   PluginScopes.push
     PluginCmdScope.
       {
@@ -27,14 +27,13 @@ let family name =
   Feedback.msg_info message
 
 let family_extends ~derived ~base =
-  Inheritance.open_derived_inheritance_judgement ~derived ~base;
+  Inheritance.open_derived_inheritance_judgement ~derived ~base;  
   PluginScopes.push
     PluginCmdScope.
       {
         name = derived;
         command = PluginCmd.Family;
         close =
-          (fun () ->
-            Inheritance.inherit_all_remained ();
+          (fun () ->            
             Inheritance.close_current_inheritance_judgement ());
       }

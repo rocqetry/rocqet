@@ -25,3 +25,20 @@ module GlobalCtx : sig
 
   val lookup : Names.Id.t -> FamilyRef.t option
 end
+
+(* Stored computed linkages *)
+module Linkages : sig
+  val add : Linkage.t -> unit
+  val lookup : Names.Id.t -> Linkage.t option
+end
+
+(* Computing a linkage in an open context *)
+module Context : sig
+  val get : unit -> LinkageCtx.t
+  val start_linkage : Names.Id.t -> unit
+  val start_linkage_with_base : name:Names.Id.t -> base:Names.Id.t -> unit
+  val add_field : name:Names.Id.t -> elem:LinkageElem.t -> unit
+  val close : unit -> Linkage.t
+  val linkage_concatenate_prefix: prefix:Names.Id.t -> derived:Linkage.t -> base:Linkage.t -> Linkage.t
+  val replace : linkage:Linkage.t -> unit
+end

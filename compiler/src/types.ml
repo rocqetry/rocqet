@@ -236,7 +236,88 @@ end = struct
            (* Assert that name1 == name2 *)
            (name1, family_type_elem, inh_elem))
 end
-(* InhJudgement and FamilyContext should be merged into one type really *)
+
+(* Linkages *)
+module InhOp = struct
+  type t = CInhNew | CInhExtend | CInhInherit
+end
+
+module rec LinkageElem : sig
+  type t =         
+   | InductiveDefinition of
+        { inductive : VernacInductive.t;
+          compiled_context : CompiledModuleType.t;
+          compiled_signature : CompiledModuleType.t;
+          compiled_impl : CompiledModule.t;
+          operation : InhOp.t }
+end = LinkageElem
+
+and Linkage : sig
+  type t =
+    { name : Names.Id.t;      
+      base : t option;
+      fields : (Names.Id.t * LinkageElem.t) Bwd.t }
+end = Linkage
+
+and LinkageCtx : sig 
+  type t = Toplevel of Linkage.t
+end = LinkageCtx
+
+(*
+module LinkageInhKind = struct
+  type t =
+    | CInhNew
+    | CInhExtend
+    | CInhInherit
+end
+
+module rec LinkageElem : sig
+  type t =
+    | InductiveDefinition of {
+        inductive : VernacInductive.t;
+        compiled_context : CompiledModuleType.t Bwd.t;
+        compiled_signature : CompiledModuleType.t;
+        complied_impl : CompiledModule.t;
+        kind : LinkageInhKind.t
+      }
+    | NestedFamily of
+        { compiled_context : CompiledModuleType.t Bwd.t;
+          compiled_signature : CompiledModuleType.t;
+          compiled_impl : CompiledModule.t;
+          body: LinkageBody.t }
+end = struct
+  type t =
+    | InductiveDefinition of
+        { inductive : VernacInductive.t;
+          compiled_context : CompiledModuleType.t Bwd.t;
+          compiled_signature : CompiledModuleType.t;
+          complied_impl : CompiledModule.t;
+          kind : LinkageInhKind.t }
+    | NestedFamily of
+        { compiled_context : CompiledModuleType.t Bwd.t;
+          compiled_signature : CompiledModuleType.t Bwd.t;
+          compiled_impl : CompiledModule.t;
+          body: LinkageBody.t }
+end
+
+and LinkageBody : sig
+  type t =
+    { name : Names.Id.t;      
+      template : t option; (* The template is the base family *)
+      body : (Names.Id.t * LinkageElem.t) Bwd.t }
+end = struct
+  type t =
+    { name : Names.Id.t;      
+      template : t option; (* The template is the base family *)
+      body : (Names.Id.t * LinkageElem.t) Bwd.t }
+end
+
+module Linkage = struct
+  type t =
+    | Toplevel of LinkageBody.t
+    | Nested of t * LinkageBody.t
+end*)
+
 
 (* A single plugin command *)
 (* e.g Family A. ... *)
@@ -252,7 +333,7 @@ end
 
 (* Does a field exends a field in the base family? *)
 module FieldInhKind = struct
-  type t = New | Extend of FamilyTypeElem.t
+  type t = New | Extend of LinkageElem.t
 end
 
 (*
