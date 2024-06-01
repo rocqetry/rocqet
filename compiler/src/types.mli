@@ -17,16 +17,7 @@ module VernacInductive : sig
     * (Names.Id.t * Constrexpr.constr_expr) list)
     list
 
-  val extract_inductive_names_with_sort :
-    t -> (Names.Id.t * Constrexpr.constr_expr) list
-
-  val extract_constructor_names_with_type :
-    t -> (Names.Id.t * Constrexpr.constr_expr) list
-
   val extract_inductive_name : t -> Names.Id.t
-  val extract_all_ident : t -> Names.Id.t list
-  val extract_type_ident : t -> Names.Id.t list
-  val extract_constructors_ident : t -> Names.Id.t list
 
   val definition_mapping :
     prefix:string ->

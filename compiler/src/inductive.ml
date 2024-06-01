@@ -4,29 +4,18 @@ open Env
 (* Return the name of the compiled family field and return its compiled context's name *)
 let inductive_to_famtype ~(ind_def : VernacInductive.t)
     ~(ctx : CompiledModuleType.t) ~family_name : CompiledModuleType.t =
-  let inductive_name = ind_def |> VernacInductive.extract_inductive_name in
-  let type_decls =
-    ind_def |> VernacInductive.extract_inductive_names_with_sort
-  in
-  let constr_decls =
-    ind_def |> VernacInductive.extract_constructor_names_with_type
-  in
   let module_name =
-    let prefix =
-      inductive_name
-      |> Nameops.add_prefix (Names.Id.to_string family_name)
-      |> Names.Id.to_string
-    in
-    Naming.fresh_name ~prefix
+    let inductive_name = ind_def |> VernacInductive.extract_inductive_name in
+    Naming.module_name_of ~family_name inductive_name
   in
   let module Backend = Codegen.VernacBackend in
-  let declare_typedecls =
-    List.map (fun (name, ty) -> Backend.postulate_axiom ~name ~ty) type_decls
+  let all_decls =
+    let type_decls, constr_decls =
+      ind_def |> VernacInductive.extract_all_names_with_type |> List.split
+    in
+    type_decls @ List.concat constr_decls
+    |> List.map (fun (name, ty) -> Backend.postulate_axiom ~name ~ty)
   in
-  let declare_csts_decls =
-    List.map (fun (name, ty) -> Backend.postulate_axiom ~name ~ty) constr_decls
-  in
-  let all_decls = declare_typedecls @ declare_csts_decls in
   let parameters =
     [ (Naming.self_version family_name, Termutils.ident_to_module_expr ctx) ]
   in
@@ -39,17 +28,14 @@ let inductive_to_famtype ~(ind_def : VernacInductive.t)
 (* This is the instantiation of an inductive type and it's recursors *)
 let inductive_to_famterm_and_recursor_type ~(ind_def : VernacInductive.t)
     ~(ctx : CompiledModuleType.t) ~family_name : CompiledModule.t =
-  let original_ind_name = ind_def |> VernacInductive.extract_inductive_name in
   (* Generate a definition mapping of the inductive type and
      return the new inductive definition and the export of the correct names *)
   let modified_indcstrs, alias_all_name_term_type_decl =
     VernacInductive.definition_mapping ~prefix:"__internal_" ind_def
   in
   let module_name =
-    let name =
-      Nameops.add_prefix (Names.Id.to_string family_name) original_ind_name
-    in
-    Naming.fresh_name ~prefix:(name |> Names.Id.to_string)
+    let original_ind_name = ind_def |> VernacInductive.extract_inductive_name in
+    Naming.module_name_of ~family_name original_ind_name
   in
   let open Codegen.VernacBackend in
   let parameters =
@@ -100,28 +86,23 @@ let declare_inductive_definition ~(ind_def_name : Names.Id.t)
 let check_extended_inductive_compatible ~(base : VernacInductive.t)
     ~(derived : VernacInductive.t) ~base_name ~derived_name : VernacInductive.t
     =
-  let base = base |> List.hd in
-  (* No mutual inductive types *)
-  let derived = derived |> List.hd in
-
-  (* No mutual indcutive types *)
-  let _, _, _, oldcstrs = fst base in
-  let a, b, c, newcstrs = fst derived in
-  let childcstrs =
-    match (oldcstrs, newcstrs) with
-    | ( Vernacexpr.Constructors base_constr,
-        Vernacexpr.Constructors derived_constr ) ->
-        let base_name = Naming.self_version base_name in
-        let derived_name = Naming.self_version derived_name in
-        let base_constr_renamed =
-          Naming.rename_ind_constructors base_constr ~base_name ~derived_name
-        in
-        Vernacexpr.Constructors (base_constr_renamed @ derived_constr)
-    | _, _ -> Errors.fail ~info:"Record types are not yet supported"
+  let check_one_type (((_, _, _, oldcstrs), _), ((a, b, c, newcstrs), _)) =
+    let childcstrs =
+      match (oldcstrs, newcstrs) with
+      | ( Vernacexpr.Constructors base_constr,
+          Vernacexpr.Constructors derived_constr ) ->
+          let base_name = Naming.self_version base_name in
+          let derived_name = Naming.self_version derived_name in
+          let base_constr_renamed =
+            Naming.rename_ind_constructors base_constr ~base_name ~derived_name
+          in
+          Vernacexpr.Constructors (base_constr_renamed @ derived_constr)
+      | _, _ -> Errors.fail ~info:"Record types are not yet supported"
+    in
+    let child_ind = (a, b, c, childcstrs) in
+    (child_ind, [])
   in
-  let child_ind = (a, b, c, childcstrs) in
-  let child_ind_def = [ (child_ind, []) ] in
-  child_ind_def
+  List.combine base derived |> List.map check_one_type
 
 let extend_inductive_definition ~ind_def_name ~ind_def
     ~(inherited_elem : LinkageElem.t) =
