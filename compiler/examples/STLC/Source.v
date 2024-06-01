@@ -43,5 +43,7 @@ family IfExt extends BaseComp {
        Inductive Ty += TBool
        Inductive Val += Bool (b : bool)
        Inductive Exp += EIf (v : Val) (e1 e2 : Exp)
-     }     
+     }
+
+     family ILC extends IL { }
 }

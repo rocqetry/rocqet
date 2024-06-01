@@ -4,7 +4,7 @@ family STLC {
     | TUnit : Ty 
     | TNat : Ty 
     | TTuple : Ty -> Ty 
-  Definition sample_tuple := TTuple TNat                                                                  
+  Definition sample_tuple := TTuple TNat
 }
             
 family PairExt { 

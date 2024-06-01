@@ -150,32 +150,7 @@ End BaseComp_STLC_Sig.
 (* Instantiate BaseComp.STLC *)
 Module BaseComp_STLC_Impl (self__BaseComp : BaseComp_STLC_Ctx) 
         <: BaseComp_STLC_Sig(self__BaseComp).
-  Module STLC.
-       Inductive Ty' : Set := 
-     | TyUnit' : Ty'
-     | TNat' : Ty' 
-     | TArr' : Ty' -> Ty' -> Ty'.
-   Definition Ty := Ty'.
-   Definition TyUnit := TyUnit'.
-   Definition TNat := TNat'.
-   Definition TArr := TArr'.
-   
-   Inductive Val' : Set := 
-     | Unit' : Val'
-     | Var' : ident -> Val'
-     | Lam' : ident -> Exp' -> Val' 
-    with Exp' : Set := 
-      | EVal' : Val' -> Exp' 
-      | EApp' : Exp' -> Exp' -> Exp'.
-   
-   Definition Val := Val'.
-   Definition Unit := Unit'.
-   Definition Var := Var'.
-   Definition Lam := Lam'.
-   Definition Exp := Exp'.
-   Definition EVal := EVal'.
-   Definition EApp := EApp'.
-  End STLC.
+  Module STLC := STLCBase.
 End BaseComp_STLC_Impl.
 
 Module Type BaseComp_Ident_Ctx.
@@ -651,7 +626,7 @@ Module Type IfExt_ILK_Ty
   (self__IfExt : IfExt_ILK_Ctx)
   (self__ILK : IfExt_ILK_Ty_Ctx self__IfExt).
   Include BaseComp_ILK_Ty (self__IfExt) (self__ILK).
-  (* Include IfExt_IL_Ty (self__IfExt) (self__ILK). *)
+  Include IfExt_IL_Ty (self__IfExt) (self__ILK).
   (* how to compile mixins? *)
   (* can we compile mixins without code duplication? *)
   Axiom TBool : Ty.
