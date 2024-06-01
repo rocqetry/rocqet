@@ -21,10 +21,7 @@ let family name =
         name;
         command = PluginCmd.Family;
         close = (fun () -> Inheritance.close_current_inheritance_judgement ());
-      };
-
-  let message = Pp.(str "Family " ++ (name |> Names.Id.to_string |> str)) in
-  Feedback.msg_info message
+      }
 
 let family_extends ~derived ~base =
   Inheritance.open_derived_inheritance_judgement ~derived ~base;
@@ -33,8 +30,5 @@ let family_extends ~derived ~base =
       {
         name = derived;
         command = PluginCmd.Family;
-        close =
-          (fun () ->
-            Inheritance.inherit_all_remained ();
-            Inheritance.close_current_inheritance_judgement ());
+        close = (fun () -> Inheritance.close_current_inheritance_judgement ());
       }

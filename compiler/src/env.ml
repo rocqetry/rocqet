@@ -1,4 +1,6 @@
 open Types
+open Bwd
+open Bwd.Infix
 
 module PluginScopes = struct
   (* This is basically a stack of scopes *)
@@ -28,58 +30,64 @@ module PluginScopes = struct
     | Some _ | None -> Errors.fail ~info:"Expected to be in a different scope"
 end
 
-module InhJudgements = struct
-  (* The name in the pair is the name of the family in the current
-     inheritance context. i.e the family we're currenlty adding fields to *)
-  let judgements =
-    Summary.ref ~name:"InhJudgements"
-      (None : (Names.Id.t * InhJudgement.t) option)
-
-  let push ~name ~judgement = judgements := Some (name, judgement)
-
-  let pop () =
-    match !judgements with
-    | None -> None
-    | Some judgement ->
-        judgements := None;
-        Some judgement
-
-  let peek () = !judgements
-
-  let ensure_open_judgememt () =
-    match !judgements with
-    | None ->
-        Errors.fail ~info:"Need to have a judgement present to add stuff to"
-    | Some _ -> ()
-
-  (* This means that the current context is gotten from the current Inh judgement *)
-  let current_output_ctx () =
-    match !judgements with
-    | None ->
-        Errors.fail
-          ~info:
-            "Ensure you are in a judgement before trying to get the family \
-             context"
-    | Some (name, judgement) ->
-        let InhJudgement.{ derived; _ } = judgement in
-        FamilyContext.Toplevel (name, derived)
-
-  let current_family_name () =
-    match !judgements with
-    | None -> Errors.fail ~info:"There is no current family scope"
-    | Some (name, _) -> name
-end
-
-(* This stores the toplevel families that have been closed *)
-module GlobalCtx = struct
-  let store = Summary.ref ~name:"GlobalCtx" ([] : FamilyRef.t list)
-
-  let push ~name ~family_term ~family_type =
-    let family_ref = FamilyRef.ToplevelRef (name, family_term, family_type) in
-    store := family_ref :: !store
+module Linkages = struct
+  let store = Summary.ref ~name:"Linkages" (Bwd.Emp : Linkage.t Bwd.t)
+  let add linkage = store := Bwd.Snoc (!store, linkage)
 
   let lookup name =
     !store
-    |> List.find_opt (function FamilyRef.ToplevelRef (store_name, _, _) ->
-           Names.Id.equal store_name name)
+    |> Bwd.find_opt (fun linkage -> Names.Id.equal linkage.Linkage.name name)
+end
+
+module Context = struct
+  let store = Summary.ref ~name:"LinkageContext" (None : LinkageCtx.t option)
+
+  let get () =
+    match !store with
+    | None -> Errors.fail ~info:"There is not current context"
+    | Some context -> context
+
+  let start_linkage name =
+    match !store with
+    | Some _ -> Errors.fail ~info:"A linkage has already started"
+    | None ->
+        let linkage = Linkage.{ name; base = None; fields = Bwd.Emp } in
+        store := Some (LinkageCtx.Toplevel linkage)
+
+  let start_linkage_with_base ~name ~base =
+    match Linkages.lookup base with
+    | None -> Errors.fail ~info:("Unbound Name " ^ Names.Id.to_string base)
+    | Some base_linkage -> (
+        match !store with
+        | Some _ -> Errors.fail ~info:"A linkage has already started"
+        | None ->
+            let linkage =
+              Linkage.{ name; base = Some base_linkage; fields = Bwd.Emp }
+            in
+            store := Some (LinkageCtx.Toplevel linkage))
+
+  let add_field ~name ~elem =
+    match !store with
+    | None ->
+        Errors.fail
+          ~info:"You need to open a linkage context in order to add a field"
+    | Some linkage ->
+        let (LinkageCtx.Toplevel body) = linkage in
+        let fields = body.fields <: (name, elem) in
+        let linkage = LinkageCtx.Toplevel { body with fields } in
+        store := Some linkage
+
+  let replace ~linkage = store := Some (LinkageCtx.Toplevel linkage)
+
+  let close () =
+    let context = !store in
+    store := None;
+    match context with
+    | None -> Errors.fail ~info:"There is no linkage context to close"
+    | Some context -> (
+        let (LinkageCtx.Toplevel linkage) = context in
+        match linkage.base with
+        | None -> linkage
+        | Some base_linkage ->
+            Linkage.concatenate ~base:base_linkage ~derived:linkage)
 end

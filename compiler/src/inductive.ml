@@ -1,39 +1,5 @@
 open Types
 open Env
-open Bwd
-open Bwd.Infix
-
-(* Contains information on how to compile inductive types *)
-
-(* Compile a context *)
-let compile_context ~ctx ~module_name =
-  let (FamilyContext.Toplevel (name, ty)) = ctx in
-  let FamilyType.{ body; _ } = ty in
-  let open Codegen.VernacBackend in
-  let module_name_ctx =
-    Naming.fresh_name
-      ~prefix:(Nameops.add_suffix module_name "Ctx" |> Names.Id.to_string)
-  in
-  match body with
-  | Bwd.Emp ->
-      define_moduletype ~module_name:module_name_ctx ~parameters:[]
-        ~body:(fun _arguments -> return ())
-      |> run
-  | Bwd.Snoc
-      (_, (_, FamilyTypeElem.FInductive { compiled_signature; compiled_ctx; _ }))
-    ->
-      define_moduletype ~module_name:module_name_ctx ~parameters:[]
-        ~body:(fun _arguments ->
-          let* () =
-            include_module
-              ~module_expr:(Termutils.ident_to_module_expr compiled_ctx)
-          in
-          let* () =
-            include_module
-              ~module_expr:(Termutils.ident_to_module_expr compiled_signature)
-          in
-          return ())
-      |> run
 
 (* Return the name of the compiled family field and return its compiled context's name *)
 let inductive_to_famtype ~(ind_def : VernacInductive.t)
@@ -46,10 +12,12 @@ let inductive_to_famtype ~(ind_def : VernacInductive.t)
     ind_def |> VernacInductive.extract_constructor_names_with_type
   in
   let module_name =
-    let name =
-      Nameops.add_prefix (Names.Id.to_string family_name) inductive_name
+    let prefix =
+      inductive_name
+      |> Nameops.add_prefix (Names.Id.to_string family_name)
+      |> Names.Id.to_string
     in
-    Naming.fresh_name ~prefix:(name |> Names.Id.to_string)
+    Naming.fresh_name ~prefix
   in
   let module Backend = Codegen.VernacBackend in
   let declare_typedecls =
@@ -66,37 +34,6 @@ let inductive_to_famtype ~(ind_def : VernacInductive.t)
   Backend.run
   @@ Backend.define_moduletype ~module_name ~parameters ~body:(fun _ ->
          let* () = flatmap all_decls in
-         return ())
-
-let inductive_to_famtype_for_extension ~(compiled_base : CompiledModuleType.t)
-    ~(ind_def : VernacInductive.t) ~(ctx : CompiledModuleType.t) ~family_name :
-    CompiledModuleType.t =
-  let inductive_name = ind_def |> VernacInductive.extract_inductive_name in
-  let constructors =
-    ind_def |> VernacInductive.extract_constructor_names_with_type
-  in
-  let module_name =
-    let name =
-      Nameops.add_prefix (Names.Id.to_string family_name) inductive_name
-    in
-    Naming.fresh_name ~prefix:(name |> Names.Id.to_string)
-  in
-  let module Backend = Codegen.VernacBackend in
-  let constructors_declaration =
-    List.map (fun (name, ty) -> Backend.postulate_axiom ~name ~ty) constructors
-  in
-  let self__family_name = Naming.self_version family_name in
-  let functor_expr = Termutils.ident_to_module_expr compiled_base in
-  let arguments = [ Libnames.qualid_of_ident self__family_name ] in
-  let base_expr = Termutils.apply_module ~functor_expr ~arguments in
-  let parameters =
-    [ (self__family_name, Termutils.ident_to_module_expr ctx) ]
-  in
-  let open Backend in
-  Backend.run
-  @@ Backend.define_moduletype ~module_name ~parameters ~body:(fun _ ->
-         let* () = include_module ~module_expr:base_expr in
-         let* () = flatmap constructors_declaration in
          return ())
 
 (* This is the instantiation of an inductive type and it's recursors *)
@@ -133,13 +70,14 @@ let inductive_to_famterm_and_recursor_type ~(ind_def : VernacInductive.t)
   in
   module_name
 
-let compile_inductive_definition ~(judgement : InhJudgement.t)
-    ~(ind_def_name : Names.Id.t) ~(ind_def : VernacInductive.t)
-    ~(ctx : FamilyContext.t) : InhJudgement.t =
-  let InhJudgement.{ derived; body; _ } = judgement in
-  let constructor_names = VernacInductive.extract_all_ident ind_def in
-  let compiled_ctx = compile_context ~ctx ~module_name:ind_def_name in
-  let family_name = derived.name in
+let declare_inductive_definition ~(ind_def_name : Names.Id.t)
+    ~(ind_def : VernacInductive.t) =
+  let context = Context.get () in
+  let compiled_ctx =
+    Codegen.compile_linkage_context ~field_name:ind_def_name context
+  in
+  let (LinkageCtx.Toplevel linkage) = context in
+  let family_name = linkage.Linkage.name in
   let compiled_signature =
     inductive_to_famtype ~ind_def ~ctx:compiled_ctx ~family_name
   in
@@ -147,35 +85,17 @@ let compile_inductive_definition ~(judgement : InhJudgement.t)
     inductive_to_famterm_and_recursor_type ~ind_def ~ctx:compiled_ctx
       ~family_name
   in
-  let ctx_elem =
-    FamilyTypeElem.FInductive
+  let elem =
+    LinkageElem.InductiveDefinition
       {
-        original_inductive = ind_def;
-        constructor_names;
-        compiled_signature;
+        inductive = ind_def;
+        compiled_context = compiled_ctx;
         compiled_impl;
-        compiled_ctx;
+        compiled_signature;
+        operation = InhOp.CInhNew;
       }
   in
-  let derived_with_elem =
-    FamilyType.extend ~name:ind_def_name ~elem:ctx_elem derived
-  in
-  let inh_elem = InhElement.CInhNew compiled_impl in
-  {
-    judgement with
-    derived = derived_with_elem;
-    body = body <: (ind_def_name, inh_elem);
-  }
-
-let declare_inductive_definition ~ind_def_name ~ind_def =
-  let ctx = InhJudgements.current_output_ctx () in
-  match InhJudgements.pop () with
-  | None -> Errors.fail ~info:"Expected a non empty inh context"
-  | Some (family_name, judgement) ->
-      let judgement =
-        compile_inductive_definition ~judgement ~ind_def_name ~ind_def ~ctx
-      in
-      InhJudgements.push ~name:family_name ~judgement
+  Context.add_field ~name:ind_def_name ~elem
 
 let check_extended_inductive_compatible ~(base : VernacInductive.t)
     ~(derived : VernacInductive.t) ~base_name ~derived_name : VernacInductive.t
@@ -203,79 +123,59 @@ let check_extended_inductive_compatible ~(base : VernacInductive.t)
   let child_ind_def = [ (child_ind, []) ] in
   child_ind_def
 
-let extend_inductive_definition ~ind_def_name ~ind_def ~inherited_elem =
-  (* Include the dependencies of this inductive type  *)
-  let name, judgement = InhJudgements.peek () |> Option.get in
-  let InhJudgement.{ base; derived; _ } = judgement in
-  let rec calculate_dependencies fields =
-    match fields with
-    | Bwd.Emp -> Bwd.Emp
-    | Bwd.Snoc (fields, (found_name, _))
-      when Names.Id.equal found_name ind_def_name ->
-        (* Remove the fields in the that have already been extended by the derived family *)
-        fields
-        |> Bwd.filter (fun (name, _) ->
-               derived.body |> Bwd.map fst
-               |> Bwd.exists (Names.Id.equal name)
-               |> not)
-    | Bwd.Snoc (fields, _) -> calculate_dependencies fields
+let extend_inductive_definition ~ind_def_name ~ind_def
+    ~(inherited_elem : LinkageElem.t) =
+  let (LinkageCtx.Toplevel linkage) = Context.get () in
+  let base_linkage =
+    match linkage.base with
+    | None ->
+        Errors.fail
+          ~info:"There needs to be a base family to extend an inductive type"
+    | Some base_linkage -> base_linkage
   in
-  let deps = calculate_dependencies base.body in
-  let derived = { derived with body = deps <@ Bwd.to_list derived.body } in
-  let inhs =
-    deps |> Bwd.map (fun (name, _) -> (name, InhElement.CInhInherit))
+  let linkage =
+    Linkage.concatenate_prefix ~prefix:ind_def_name ~derived:linkage
+      ~base:base_linkage
   in
-  let body = inhs <@ Bwd.to_list judgement.body in
-  InhJudgements.push ~name ~judgement:{ judgement with derived; body };
+  Context.replace ~linkage;
   match inherited_elem with
-  | FamilyTypeElem.FInductive { original_inductive; compiled_signature; _ } ->
-      let ctx = InhJudgements.current_output_ctx () in
-      let _, judgement = InhJudgements.pop () |> Option.get in
-      let InhJudgement.{ base; derived; _ } = judgement in
+  | LinkageElem.InductiveDefinition { inductive; compiled_signature; _ } ->
+      let context = Context.get () in
+      let (LinkageCtx.Toplevel linkage) = context in
+      let Linkage.{ name; fields; base; _ } = linkage in
+      let base =
+        match base with
+        | None -> Errors.fail ~info:"Should not happen"
+        | Some base -> base
+      in
       let complete_ind_def =
-        check_extended_inductive_compatible ~base:original_inductive
-          ~derived:ind_def ~base_name:base.name ~derived_name:derived.name
+        check_extended_inductive_compatible ~base:inductive ~derived:ind_def
+          ~base_name:base.name ~derived_name:name
       in
-      let inh_elem =
-        InhElement.CInhExtendInd
-          { parent = original_inductive; increment = ind_def }
+      let compiled_ctx =
+        Codegen.compile_linkage_context ~field_name:ind_def_name context
       in
-      let constructor_names =
-        VernacInductive.extract_constructors_ident complete_ind_def
-      in
-      let compiled_ctx = compile_context ~ctx ~module_name:ind_def_name in
       let compiled_signature =
-        inductive_to_famtype_for_extension ~ind_def ~ctx:compiled_ctx
-          ~family_name:derived.name ~compiled_base:compiled_signature
+        inductive_to_famtype ~ind_def:complete_ind_def ~ctx:compiled_ctx
+          ~family_name:name
       in
       let compiled_impl =
         inductive_to_famterm_and_recursor_type ~ind_def:complete_ind_def
-          ~ctx:compiled_ctx ~family_name:derived.name
+          ~ctx:compiled_ctx ~family_name:name
       in
-      let ctx_elem =
-        FamilyTypeElem.FInductive
+      let elem =
+        LinkageElem.InductiveDefinition
           {
-            original_inductive = complete_ind_def;
-            constructor_names;
-            compiled_signature;
+            inductive = complete_ind_def;
+            compiled_context = compiled_ctx;
             compiled_impl;
-            compiled_ctx;
+            compiled_signature;
+            operation = InhOp.CInhNew;
           }
       in
-      let derived_with_elem =
-        FamilyType.extend ~name:ind_def_name ~elem:ctx_elem derived
-      in
-      let judgement =
-        {
-          judgement with
-          derived = derived_with_elem;
-          body = judgement.body <: (ind_def_name, inh_elem);
-        }
-      in
-      InhJudgements.push ~name:base.name ~judgement
+      Context.add_field ~name:ind_def_name ~elem
 
 let add_inductive_definition ind_def =
-  InhJudgements.ensure_open_judgememt ();
   let ind_def_name = ind_def |> VernacInductive.extract_inductive_name in
   match Inheritance.infer_field_inh_kind ind_def_name with
   | FieldInhKind.New -> declare_inductive_definition ~ind_def_name ~ind_def

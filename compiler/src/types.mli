@@ -34,74 +34,12 @@ module VernacInductive : sig
     t * (Names.Id.t * Constrexpr.constr_expr * Constrexpr.constr_expr) list
 end
 
-module FamilyId : sig
-  type t = int
-
-  val fresh : unit -> t
-end
-
 module CompiledModule : sig
   type t = Libnames.qualid
 end
 
 module CompiledModuleType : sig
   type t = Libnames.qualid
-end
-
-module rec FamilyTypeElem : sig
-  type t =
-    | FInductive of {
-        original_inductive : VernacInductive.t;
-        constructor_names : Names.Id.t list;
-        compiled_signature : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;
-        compiled_ctx : CompiledModuleType.t;
-      }
-end
-
-and FamilyType : sig
-  type t = { name : Names.Id.t; body : (Names.Id.t * FamilyTypeElem.t) Bwd.t }
-
-  val extend : name:Names.Id.t -> elem:FamilyTypeElem.t -> t -> t
-end
-
-and FamilyContext : sig
-  type t = Toplevel of Names.Id.t * FamilyType.t
-end
-
-module rec FamilyRef : sig
-  type t = ToplevelRef of Names.Id.t * FamilyTerm.t * FamilyType.t
-end
-
-and FamilyTermElem : sig
-  type t = CompiledDefinition of CompiledModule.t
-end
-
-and FamilyTerm : sig
-  type t = { body : (Names.Id.t * FamilyTermElem.t) Bwd.t }
-end
-
-and InhElement : sig
-  type t =
-    | CInhNew of CompiledModule.t
-    | CInhExtendInd of {
-        parent : VernacInductive.t;
-        increment : VernacInductive.t;
-      }
-    | CInhInherit
-end
-
-and InhJudgement : sig
-  type t = {
-    base : FamilyType.t;
-    derived : FamilyType.t;
-    body : (Names.Id.t * InhElement.t) Bwd.t;
-  }
-
-  val empty : base:FamilyType.t -> derived:FamilyType.t -> t
-
-  val family_type_inh_op :
-    t -> (Names.Id.t * FamilyTypeElem.t * InhElement.t) Bwd.t
 end
 
 module PluginCmd : sig
@@ -112,6 +50,37 @@ module PluginCmdScope : sig
   type t = { command : PluginCmd.t; name : Names.Id.t; close : unit -> unit }
 end
 
+(* Linkages *)
+module InhOp : sig
+  type t = CInhNew | CInhExtend | CInhInherit
+end
+
+module rec LinkageElem : sig
+  type t =
+    | InductiveDefinition of {
+        inductive : VernacInductive.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
+        operation : InhOp.t;
+      }
+end
+
+and Linkage : sig
+  type t = {
+    name : Names.Id.t;
+    base : t option;
+    fields : (Names.Id.t * LinkageElem.t) Bwd.t;
+  }
+
+  val concatenate : derived:t -> base:t -> t
+  val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
+end
+
+and LinkageCtx : sig
+  type t = Toplevel of Linkage.t
+end
+
 module FieldInhKind : sig
-  type t = New | Extend of FamilyTypeElem.t
+  type t = New | Extend of LinkageElem.t
 end

@@ -1,6 +1,7 @@
 open Bwd
 open Bwd.Infix
 
+(* A parsed vernacular inductive type *)
 module VernacInductive = struct
   type t =
     (Vernacexpr.inductive_expr * Vernacexpr.notation_declaration list) list
@@ -124,16 +125,6 @@ module VernacInductive = struct
     (modified_ind_def, alias_all_name_term_type_decl)
 end
 
-module FamilyId = struct
-  type t = int
-
-  let fresh =
-    let store = ref 0 in
-    fun () ->
-      incr store;
-      !store
-end
-
 (* Module naming *)
 (* This should really be Names.ModPath.t *)
 module CompiledModule = struct
@@ -144,100 +135,91 @@ module CompiledModuleType = struct
   type t = Libnames.qualid
 end
 
-module rec FamilyTypeElem : sig
+(* Linkages *)
+module InhOp = struct
+  type t = CInhNew | CInhExtend | CInhInherit
+end
+
+(* A Linkage element is the "type" of a single field in a family *)
+(* I use "type" becuase it is not really a type *)
+module rec LinkageElem : sig
   type t =
-    | FInductive of {
-        original_inductive : VernacInductive.t;
-        constructor_names : Names.Id.t list;
+    | InductiveDefinition of {
+        inductive : VernacInductive.t;
+        compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
-        compiled_ctx : CompiledModuleType.t;
+        operation : InhOp.t;
       }
 end =
-  FamilyTypeElem
+  LinkageElem
 
-and FamilyType : sig
-  type t = { name : Names.Id.t; body : (Names.Id.t * FamilyTypeElem.t) Bwd.t }
-
-  val extend : name:Names.Id.t -> elem:FamilyTypeElem.t -> t -> t
-end = struct
-  type t = { name : Names.Id.t; body : (Names.Id.t * FamilyTypeElem.t) Bwd.t }
-
-  let extend ~name ~elem family_type =
-    let { body; _ } = family_type in
-    { family_type with body = body <: (name, elem) }
-end
-
-(* `FamilyContext.t` is a "focused" view of `InhJudgemen.t`*)
-and FamilyContext : sig
-  type t = Toplevel of Names.Id.t * FamilyType.t
-end =
-  FamilyContext
-
-module rec FamilyRef : sig
-  type t = ToplevelRef of Names.Id.t * FamilyTerm.t * FamilyType.t
-end =
-  FamilyRef
-
-and FamilyTermElem : sig
-  type t = CompiledDefinition of CompiledModule.t
-end =
-  FamilyTermElem
-
-and FamilyTerm : sig
-  type t = { body : (Names.Id.t * FamilyTermElem.t) Bwd.t }
-end =
-  FamilyTerm
-
-and InhElement : sig
-  type t =
-    | CInhNew of CompiledModule.t
-    | CInhExtendInd of {
-        parent : VernacInductive.t;
-        increment : VernacInductive.t;
-      }
-    | CInhInherit
-end =
-  InhElement
-
-and InhJudgement : sig
+and Linkage : sig
   type t = {
-    base : FamilyType.t;
-        (** This is the family that is being extended -- This is the "input" *)
-    derived : FamilyType.t;
-        (** This is the resulting family of that extension -- This is the "output" *)
-    body : (Names.Id.t * InhElement.t) Bwd.t;
-        (** More about `derived` extends particular fields in `base` *)
+    name : Names.Id.t;
+    base : t option;
+    fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
-  val empty : base:FamilyType.t -> derived:FamilyType.t -> t
-
-  val family_type_inh_op :
-    t -> (Names.Id.t * FamilyTypeElem.t * InhElement.t) Bwd.t
+  val concatenate : derived:t -> base:t -> t
+  val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
 end = struct
   type t = {
-    base : FamilyType.t;
-    derived : FamilyType.t;
-    body : (Names.Id.t * InhElement.t) Bwd.t;
+    name : Names.Id.t;
+    base : t option;
+    fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
-  (* The empty family context here is not really right
-     becuase once we have an inheritnce judgement, we can't
-     have an empty family context. We can have a context which
-     the family type contains no field though. *)
-  let empty ~base ~derived = { base; derived; body = Bwd.Emp }
+  let concatenate ~derived ~base =
+    (* This is a very naive concatenation *)
+    let rec compute_difference ~base ~derived =
+      match (base, derived) with
+      | [], [] -> []
+      | (bname, belem) :: base', (dname, delem) :: derived' ->
+          if Names.Id.equal bname dname then
+            compute_difference ~base:base' ~derived:derived'
+          else
+            (* Since this element is inherited, it should have InhOp.CInhInherit *)
+            (* let belem = LinkageElem.{ belem with in  *)
+            (bname, belem) :: compute_difference ~base:base' ~derived
+      | _ :: _, [] -> base
+      | [], _ :: _ -> []
+    in
+    let base_fields = base.Linkage.fields |> Bwd.to_list in
+    let derived_fields = derived.Linkage.fields |> Bwd.to_list in
+    let inherited_fields =
+      compute_difference ~base:base_fields ~derived:derived_fields
+    in
+    let fields = derived.fields <@ inherited_fields in
+    Linkage.{ derived with fields }
 
-  let family_type_inh_op judgement =
-    let { derived; body = judgement_body; _ } = judgement in
-    let FamilyType.{ body = family_type_body; _ } = derived in
-    let family_type_inh_op = Bwd.combine family_type_body judgement_body in
-    family_type_inh_op
-    |> Bwd.map (fun ((name1, family_type_elem), (name2, inh_elem)) ->
-           (* Assert that name1 == name2 *)
-           (name1, family_type_elem, inh_elem))
+  let concatenate_prefix ~prefix ~(derived : Linkage.t) ~(base : Linkage.t) =
+    let rec calculate_dependencies fields =
+      match fields with
+      | Bwd.Emp -> Bwd.Emp
+      | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
+        ->
+          (* Remove the fields in the that have already been extended by the derived family *)
+          (* Here we could use the previous concatenate *)
+          fields
+          |> Bwd.filter (fun (name, _) ->
+                 derived.fields |> Bwd.map fst
+                 |> Bwd.exists (Names.Id.equal name)
+                 |> not)
+      | Bwd.Snoc (fields, _) -> calculate_dependencies fields
+    in
+    let inherited_fields = calculate_dependencies base.fields in
+    let fields = inherited_fields <@ Bwd.to_list derived.fields in
+    { derived with fields }
 end
-(* InhJudgement and FamilyContext should be merged into one type really *)
 
+(* A linkage we are currently constructing *)
+and LinkageCtx : sig
+  type t = Toplevel of Linkage.t
+end =
+  LinkageCtx
+
+(* I think this can be merged with LinkageCtx *)
 (* A single plugin command *)
 (* e.g Family A. ... *)
 module PluginCmd = struct
@@ -252,33 +234,5 @@ end
 
 (* Does a field exends a field in the base family? *)
 module FieldInhKind = struct
-  type t = New | Extend of FamilyTypeElem.t
+  type t = New | Extend of LinkageElem.t
 end
-
-(*
-module NestedFamilyContext = struct 
-  type t = 
-    | Top of FamilyContext.t
-    | Level of FamilyContext.t * t
-end
-
-module F = struct
-  type t =
-    | Toplevel of Names.Id.t * FamilyType.t
-    | Nestedlevel of Names.Id.t * FamilyType.t * t
-end
-
-let name ty = match ty with
-  | F.Toplevel (name, ty) -> failwith ""
-  | F.Nestedlevel (name, ty, upper) -> failwith ""
-
-
-
-(* Field inheritance kind *)
-
-
-module FamilyDefinitionContext = struct 
-  type t =
-    | InitialInhBase of Family.Ref.t option (* A toplevel family *)
-end
-*)
