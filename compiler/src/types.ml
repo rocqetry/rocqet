@@ -1,5 +1,6 @@
 open Bwd
 
+(* A parsed vernacular inductive type *)
 module VernacInductive = struct
   type t =
     (Vernacexpr.inductive_expr * Vernacexpr.notation_declaration list) list
@@ -138,6 +139,8 @@ module InhOp = struct
   type t = CInhNew | CInhExtend | CInhInherit
 end
 
+(* A Linkage element is the "type" of a single field in a family *)
+(* I use "type" becuase it is not really a type *)
 module rec LinkageElem : sig
   type t =
     | InductiveDefinition of {
@@ -156,15 +159,14 @@ and Linkage : sig
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
-end =
-  Linkage
+end = Linkage
 
 (* A linkage we are currently constructing *)
 and LinkageCtx : sig
   type t = Toplevel of Linkage.t
-end =
-  LinkageCtx
+end = LinkageCtx
 
+(* I think this can be merged with LinkageCtx *)
 (* A single plugin command *)
 (* e.g Family A. ... *)
 module PluginCmd = struct

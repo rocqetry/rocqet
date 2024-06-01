@@ -196,3 +196,31 @@ module VernacBackend = struct
               Declaremods.NoInline,
               [ (NoCoercion, ([ fname_ ], ty)) ] )))
 end
+
+let compile_linkage_context ~field_name (context : LinkageCtx.t) =
+  let open VernacBackend in
+  let (LinkageCtx.Toplevel linkage) = context in
+  let Linkage.{ fields; _ } = linkage in
+  let module_name_ctx =
+    Naming.fresh_name
+      ~prefix:(Nameops.add_suffix field_name "Ctx" |> Names.Id.to_string)
+  in  
+  match fields with
+  | Bwd.Emp ->
+     define_moduletype ~module_name:module_name_ctx ~parameters:[]
+        ~body:(fun _arguments -> return ())
+      |> run
+
+  | Bwd.Snoc(_, (_, LinkageElem.InductiveDefinition { compiled_context; compiled_signature; _ })) ->
+     define_moduletype ~module_name:module_name_ctx ~parameters:[]
+        ~body:(fun _arguments ->
+          let* () =
+            include_module
+              ~module_expr:(Termutils.ident_to_module_expr compiled_context)
+          in
+          let* () =
+            include_module
+              ~module_expr:(Termutils.ident_to_module_expr compiled_signature)
+          in
+          return ())
+      |> run
