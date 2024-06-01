@@ -127,7 +127,7 @@ let extend_inductive_definition ~ind_def_name ~ind_def ~(inherited_elem: Linkage
     | None -> Errors.fail ~info:"There needs to be a base family to extend an inductive type"
     | Some base_linkage -> base_linkage
   in
-  let linkage = Context.linkage_concatenate_prefix ~prefix:ind_def_name ~derived:linkage ~base:base_linkage in
+  let linkage = Linkage.concatenate_prefix ~prefix:ind_def_name ~derived:linkage ~base:base_linkage in
   Context.replace ~linkage; 
   match inherited_elem with
   | LinkageElem.InductiveDefinition { inductive; compiled_signature; _ } ->      

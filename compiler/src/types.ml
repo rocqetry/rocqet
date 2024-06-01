@@ -1,4 +1,5 @@
 open Bwd
+open Bwd.Infix
 
 (* A parsed vernacular inductive type *)
 module VernacInductive = struct
@@ -159,7 +160,58 @@ and Linkage : sig
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
-end = Linkage
+
+  val concatenate : derived:t -> base:t -> t
+  val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
+end = struct
+  type t = {
+    name : Names.Id.t;
+    base : t option;
+    fields : (Names.Id.t * LinkageElem.t) Bwd.t;
+  }
+
+  let concatenate ~derived ~base =
+    (* This is a very naive concatenation *)
+    let rec compute_difference ~base ~derived =
+      match (base, derived) with
+      | [], [] -> []
+      | (bname, belem) :: base', (dname, delem) :: derived' ->
+          if Names.Id.equal bname dname then
+            compute_difference ~base:base' ~derived:derived'
+          else
+            (* Since this element is inherited, it should have InhOp.CInhInherit *)
+            (* let belem = LinkageElem.{ belem with in  *)
+            (bname, belem) :: compute_difference ~base:base' ~derived
+      | _ :: _, [] -> base
+      | [], _ :: _ -> []
+    in
+    let base_fields = base.Linkage.fields |> Bwd.to_list in
+    let derived_fields = derived.Linkage.fields |> Bwd.to_list in
+    let inherited_fields =
+      compute_difference ~base:base_fields ~derived:derived_fields
+    in
+    let fields = derived.fields <@ inherited_fields in
+    Linkage.{ derived with fields }
+  
+  let concatenate_prefix ~prefix ~(derived : Linkage.t) ~(base : Linkage.t) =
+    let rec calculate_dependencies fields =
+      match fields with
+      | Bwd.Emp -> Bwd.Emp
+      | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
+        ->
+          (* Remove the fields in the that have already been extended by the derived family *)
+          (* Here we could use the previous concatenate *)
+          fields
+          |> Bwd.filter (fun (name, _) ->
+                 derived.fields |> Bwd.map fst
+                 |> Bwd.exists (Names.Id.equal name)
+                 |> not)
+      | Bwd.Snoc (fields, _) -> calculate_dependencies fields
+    in
+    let inherited_fields = calculate_dependencies base.fields in
+    let fields = inherited_fields <@ Bwd.to_list derived.fields in
+    { derived with fields }
+end
 
 (* A linkage we are currently constructing *)
 and LinkageCtx : sig
