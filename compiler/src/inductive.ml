@@ -36,37 +36,6 @@ let inductive_to_famtype ~(ind_def : VernacInductive.t)
          let* () = flatmap all_decls in
          return ())
 
-let inductive_to_famtype_for_extension ~(compiled_base : CompiledModuleType.t)
-    ~(ind_def : VernacInductive.t) ~(ctx : CompiledModuleType.t) ~family_name :
-    CompiledModuleType.t =
-  let inductive_name = ind_def |> VernacInductive.extract_inductive_name in
-  let constructors =
-    ind_def |> VernacInductive.extract_constructor_names_with_type
-  in
-  let module_name =
-    let name =
-      Nameops.add_prefix (Names.Id.to_string family_name) inductive_name
-    in
-    Naming.fresh_name ~prefix:(name |> Names.Id.to_string)
-  in
-  let module Backend = Codegen.VernacBackend in
-  let constructors_declaration =
-    List.map (fun (name, ty) -> Backend.postulate_axiom ~name ~ty) constructors
-  in
-  let self__family_name = Naming.self_version family_name in
-  let functor_expr = Termutils.ident_to_module_expr compiled_base in
-  let arguments = [ Libnames.qualid_of_ident self__family_name ] in
-  let base_expr = Termutils.apply_module ~functor_expr ~arguments in
-  let parameters =
-    [ (self__family_name, Termutils.ident_to_module_expr ctx) ]
-  in
-  let open Backend in
-  Backend.run
-  @@ Backend.define_moduletype ~module_name ~parameters ~body:(fun _ ->
-         let* () = include_module ~module_expr:base_expr in
-         let* () = flatmap constructors_declaration in
-         return ())
-
 (* This is the instantiation of an inductive type and it's recursors *)
 let inductive_to_famterm_and_recursor_type ~(ind_def : VernacInductive.t)
     ~(ctx : CompiledModuleType.t) ~family_name : CompiledModule.t =
@@ -176,8 +145,7 @@ let extend_inductive_definition ~ind_def_name ~ind_def ~(inherited_elem: Linkage
       in
       let compiled_ctx = Codegen.compile_linkage_context ~field_name:ind_def_name context in 
       let compiled_signature =
-        inductive_to_famtype_for_extension ~ind_def ~ctx:compiled_ctx
-          ~family_name:name ~compiled_base:compiled_signature
+        inductive_to_famtype ~ind_def:complete_ind_def ~ctx:compiled_ctx ~family_name:name
       in
       let compiled_impl =
         inductive_to_famterm_and_recursor_type ~ind_def:complete_ind_def
