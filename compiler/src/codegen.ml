@@ -227,3 +227,20 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) =
           in
           return ())
       |> run
+
+let compile_linkage (linkage : Linkage.t) =
+  let Linkage.{ name; fields; _ } = linkage in
+  let open VernacBackend in  
+  let rec compile_fields fields (ctx : ModuleTerm.t list) =
+    match fields with
+    | Bwd.Emp -> return ()
+    | Bwd.Snoc
+        (fields, (name, LinkageElem.InductiveDefinition { compiled_impl; _ }))
+      ->
+        let* _ = compile_fields fields ctx in
+        let module_expr = Termutils.ident_to_module_expr compiled_impl in
+        let* _ = include_module ~module_expr in
+        return ()
+  in
+  define_module ~module_name:name ~parameters:[] ~body:(compile_fields fields)
+  |> run |> ignore

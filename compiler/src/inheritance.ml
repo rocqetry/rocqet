@@ -2,27 +2,9 @@ open Types
 open Env
 open Bwd
 
-let compile_linkage (linkage : Linkage.t) =
-  let Linkage.{ name; fields; _ } = linkage in
-  let open Codegen.VernacBackend in
-  let open Codegen in
-  let rec compile_fields fields (ctx : ModuleTerm.t list) =
-    match fields with
-    | Bwd.Emp -> return ()
-    | Bwd.Snoc
-        (fields, (name, LinkageElem.InductiveDefinition { compiled_impl; _ }))
-      ->
-        let* _ = compile_fields fields ctx in
-        let module_expr = Termutils.ident_to_module_expr compiled_impl in
-        let* _ = include_module ~module_expr in
-        return ()
-  in
-  define_module ~module_name:name ~parameters:[] ~body:(compile_fields fields)
-  |> run |> ignore
-
 let close_current_inheritance_judgement () =
   let linkage = Context.close () in
-  compile_linkage linkage;
+  Codegen.compile_linkage linkage;
   Linkages.add linkage
 
 let open_new_inheritance_judgement name = Context.start_linkage name
