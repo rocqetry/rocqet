@@ -19,6 +19,6 @@ module Context : sig
   val start_linkage : Names.Id.t -> unit
   val start_linkage_with_base : name:Names.Id.t -> base:Names.Id.t -> unit
   val add_field : name:Names.Id.t -> elem:LinkageElem.t -> unit
-  val close : unit -> Linkage.t 
+  val close : unit -> Linkage.t
   val replace : linkage:Linkage.t -> unit
 end

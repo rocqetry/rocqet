@@ -204,15 +204,18 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) =
   let module_name_ctx =
     Naming.fresh_name
       ~prefix:(Nameops.add_suffix field_name "Ctx" |> Names.Id.to_string)
-  in  
+  in
   match fields with
   | Bwd.Emp ->
-     define_moduletype ~module_name:module_name_ctx ~parameters:[]
+      define_moduletype ~module_name:module_name_ctx ~parameters:[]
         ~body:(fun _arguments -> return ())
       |> run
-
-  | Bwd.Snoc(_, (_, LinkageElem.InductiveDefinition { compiled_context; compiled_signature; _ })) ->
-     define_moduletype ~module_name:module_name_ctx ~parameters:[]
+  | Bwd.Snoc
+      ( _,
+        ( _,
+          LinkageElem.InductiveDefinition
+            { compiled_context; compiled_signature; _ } ) ) ->
+      define_moduletype ~module_name:module_name_ctx ~parameters:[]
         ~body:(fun _arguments ->
           let* () =
             include_module

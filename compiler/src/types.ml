@@ -192,7 +192,7 @@ end = struct
     in
     let fields = derived.fields <@ inherited_fields in
     Linkage.{ derived with fields }
-  
+
   let concatenate_prefix ~prefix ~(derived : Linkage.t) ~(base : Linkage.t) =
     let rec calculate_dependencies fields =
       match fields with
@@ -216,7 +216,8 @@ end
 (* A linkage we are currently constructing *)
 and LinkageCtx : sig
   type t = Toplevel of Linkage.t
-end = LinkageCtx
+end =
+  LinkageCtx
 
 (* I think this can be merged with LinkageCtx *)
 (* A single plugin command *)
