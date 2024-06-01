@@ -1,11 +1,10 @@
 open Types
 
-(* Referencing the name of a module *)
+(* These should actually be a module name *)
 module ModuleTerm = struct
   type t = Libnames.qualid
 end
 
-(* Referencing a module type *)
 module ModuleType = struct
   type t = Libnames.qualid
 end

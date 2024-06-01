@@ -39,6 +39,7 @@ module Linkages = struct
     |> Bwd.find_opt (fun linkage -> Names.Id.equal linkage.Linkage.name name)
 end
 
+(* TODO: Give this a better name *)
 module Context = struct
   let store = Summary.ref ~name:"LinkageContext" (None : LinkageCtx.t option)
 
@@ -66,6 +67,7 @@ module Context = struct
             in
             store := Some (LinkageCtx.Toplevel linkage))
 
+  (* Add the field to the current linkage *)
   let add_field ~name ~elem =
     match !store with
     | None ->
@@ -77,6 +79,7 @@ module Context = struct
         let linkage = LinkageCtx.Toplevel { body with fields } in
         store := Some linkage
 
+  (* TODO: Don't allow this, have an update function *)
   let replace ~linkage = store := Some (LinkageCtx.Toplevel linkage)
 
   let close () =
