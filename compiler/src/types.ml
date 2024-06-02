@@ -9,23 +9,25 @@ module VernacInductive = struct
   (* This returns (inductive type name, inductive type sort) and
                   (constructor name * consructor type)  list*)
   let extract_type_and_cstrs (inductive : Vernacexpr.inductive_expr) =
-    let ind_type_name, ind_params, indtype, cstrlist = inductive in
+    let ( (_coercion_flag, (ind_type_name, _cumul_univ_decl)),
+          _ind_params,
+          ind_type,
+          cstrlist ) =
+      inductive
+    in
     (* assert_cerror ~einfo:"Doesn't Support Inductive Parameter yet"
        (fun _ -> fst ind_params = [] && snd ind_params = None); *)
-    let _, (ind_type_name, _) = ind_type_name in
-    let ind_type_name = CAst.with_val (fun x -> x) ind_type_name in
-    let each_constr ((_, (cname, cty)) : Vernacexpr.constructor_expr) =
-      let cname = CAst.with_val (fun x -> x) cname in
-      (cname, cty)
+    let each_constr ((_flags, (cname, cty)) : Vernacexpr.constructor_expr) =
+      (cname.v, cty)
     in
     match cstrlist with
     | Vernacexpr.Constructors cstrlist ->
-        ((ind_type_name, indtype), List.map each_constr cstrlist)
+        ((ind_type_name.v, ind_type), List.map each_constr cstrlist)
     | Vernacexpr.RecordDecl _ -> Errors.fail ~info:"Records not yet supported"
 
   let extract_all_names_with_type ind_def =
     ind_def
-    |> List.map (fun ind -> ind |> fst |> extract_type_and_cstrs)
+    |> List.map (fun (ind, _) -> ind |> extract_type_and_cstrs)
     |> List.map (fun ((ind_name, ty), cstrs) ->
            let ty =
              match ty with
@@ -36,83 +38,51 @@ module VernacInductive = struct
            in
            ((ind_name, ty), cstrs))
 
-  let extract_inductive_names_with_sort ind_def =
-    ind_def |> extract_all_names_with_type |> List.map fst
-
   let extract_inductive_name ind_def =
-    ind_def |> extract_inductive_names_with_sort |> List.hd |> fst
-
-  let extract_constructor_names_with_type ind_def =
-    ind_def |> extract_all_names_with_type |> List.concat_map snd
-
-  let extract_all_ident ind_def =
-    let all_names =
-      ind_def
-      |> List.map (fun (ind_expr, _) -> ind_expr |> extract_type_and_cstrs)
-    in
-    let type_names = all_names |> List.map (fun x -> x |> fst |> fst) in
-    let cstr_names = all_names |> List.concat_map snd |> List.map fst in
-    type_names @ cstr_names
-
-  (* Get the name of an inductive definition *)
-  let extract_type_ident ind_def =
-    ind_def
-    |> List.map @@ fun (ind_expr, _) ->
-       ind_expr |> extract_type_and_cstrs
-       |> fst (* get the type name, type sort *)
-       |> fst (* get just the type name *)
-
-  (* Get the constructors in an inductive definition *)
-  let extract_constructors_ident ind_def =
-    ind_def
-    |> List.map (fun (ind_expr, _) -> ind_expr |> extract_type_and_cstrs)
-    |> List.concat_map (fun (_, cstrs) -> cstrs |> List.map fst)
+    let (type_name, _), _ = ind_def |> extract_all_names_with_type |> List.hd in
+    type_name
 
   (* Create a "definition mapping" *)
   let definition_mapping ~prefix ind_def =
     let all_names_with_type =
-      ind_def |> List.map (fun (ind_expr, _) -> extract_type_and_cstrs ind_expr)
+      let type_decls, constr_decls =
+        ind_def |> extract_all_names_with_type |> List.split
+      in
+      type_decls @ List.concat constr_decls
     in
-    let prefix_with_internal (name : Names.Id.t) =
-      Nameops.add_prefix prefix name
-    in
-    let all_original_names =
-      all_names_with_type
-      |> List.concat_map (fun ((ind_name, _), cstrs) ->
-             ind_name :: List.map fst cstrs)
-    in
-    let all_new_names = List.map prefix_with_internal all_original_names in
-    let definition_mapping = List.combine all_original_names all_new_names in
-    let map_name_newname =
-      List.fold_right
-        (fun (original_name, new_name) map ->
-          Names.Id.Map.add original_name new_name map)
-        definition_mapping Names.Id.Map.empty
-    in
+    let prefix_with_internal = Nameops.add_prefix prefix in
     let apply_subst_expr =
+      let all_original_names = all_names_with_type |> List.map fst in
+      let map_name_newname =
+        Naming.name_map_with prefix_with_internal all_original_names
+      in
       Constrexpr_ops.replace_vars_constr_expr map_name_newname
     in
-    (* TODO: Rename the variables in this function *)
-    let apply_subst_inductive_expr (((a, (b, c)), d, e, f), g) =
-      let b = CAst.map prefix_with_internal b in
-      let e = Option.map apply_subst_expr e in
-      match f with
+    let apply_subst_inductive_expr
+        (( ( (coercion_flag, (ind_type_name, cumul_univ_decl)),
+             ind_params,
+             ind_type,
+             csts ),
+           decl_notations ) :
+          Vernacexpr.inductive_expr * Vernacexpr.notation_declaration list) =
+      let ind_type_name = CAst.map prefix_with_internal ind_type_name in
+      let ind_type = Option.map apply_subst_expr ind_type in
+      match csts with
       | Vernacexpr.Constructors csts ->
           let csts =
-            List.map
-              (fun (z, (x, y)) ->
-                (z, (CAst.map prefix_with_internal x, apply_subst_expr y)))
-              csts
+            csts
+            |> List.map (fun (flags, (cst_name, cst_type)) ->
+                   ( flags,
+                     ( CAst.map prefix_with_internal cst_name,
+                       apply_subst_expr cst_type ) ))
           in
-          let f = Vernacexpr.Constructors csts in
-          (((a, (b, c)), d, e, f), g)
+          let csts = Vernacexpr.Constructors csts in
+          ( ( (coercion_flag, (ind_type_name, cumul_univ_decl)),
+              ind_params,
+              ind_type,
+              csts ),
+            decl_notations )
       | _ -> Errors.fail ~info:"Records not yet supported"
-    in
-    (* Use option to extract the type *)
-    let all_names_with_type =
-      List.concat_map
-        (fun ((x, y), z) -> (x, Option.get y) :: z)
-        all_names_with_type
     in
     (* Exporting the names *)
     let alias_all_name_term_type_decl =

@@ -101,7 +101,7 @@ let rename_ind_constructors (constructors : Vernacexpr.constructor_expr list)
   in
   constructors |> List.map rename_one_ind_constructor
 
-let self_version name = Nameops.add_prefix "self__" name
+let self_version = Nameops.add_prefix "self__"
 
 let unique_id =
   let counter = ref 0 in
@@ -112,3 +112,16 @@ let unique_id =
 let fresh_name ~prefix =
   let time_stamp = string_of_int @@ unique_id () in
   Names.Id.of_string (prefix ^ "回" ^ time_stamp)
+
+let module_name_of ~family_name type_name =
+  let prefix =
+    type_name
+    |> Nameops.add_prefix (Names.Id.to_string family_name)
+    |> Names.Id.to_string
+  in
+  fresh_name ~prefix
+
+let name_map_with f =
+  List.fold_left
+    (fun acc name -> Names.Id.Map.add name (f name) acc)
+    Names.Id.Map.empty
