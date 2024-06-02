@@ -30,6 +30,7 @@ module PluginScopes = struct
     | Some _ | None -> Errors.fail ~info:"Expected to be in a different scope"
 end
 
+(* Take note that there is now a local scope for linkages *)
 module Linkages = struct
   let store = Summary.ref ~name:"Linkages" (Bwd.Emp : Linkage.t Bwd.t)
   let add linkage = store := Bwd.Snoc (!store, linkage)
@@ -50,9 +51,23 @@ module Context = struct
 
   let start_linkage name =
     match !store with
-    | Some _ -> Errors.fail ~info:"A linkage has already started"
+    | Some context ->
+       let compiled_context, parameters = Codegen.compile_linkage_context ~field_name:name context in
+       let linkage =
+         Linkage.{
+             context = parameters |> Bwd.of_list;
+             compiled_context = Some compiled_context;
+             name;
+             base = None;
+             fields = Bwd.Emp
+        }
+       in
+       let context = LinkageCtx.Nested (context, linkage) in 
+       store := Some context
     | None ->
-        let linkage = Linkage.{ name; base = None; fields = Bwd.Emp } in
+        let linkage =
+          Linkage.{ context = Bwd.Emp; compiled_context = None; name; base = None; fields = Bwd.Emp }
+        in
         store := Some (LinkageCtx.Toplevel linkage)
 
   let start_linkage_with_base ~name ~base =
@@ -60,10 +75,29 @@ module Context = struct
     | None -> Errors.fail ~info:("Unbound Name " ^ Names.Id.to_string base)
     | Some base_linkage -> (
         match !store with
-        | Some _ -> Errors.fail ~info:"A linkage has already started"
+        | Some context ->
+           let compiled_context, parameters = Codegen.compile_linkage_context ~field_name:name context in
+           let linkage =
+             Linkage.{
+                 context = parameters |> Bwd.of_list;
+                 compiled_context = Some compiled_context;
+                 name;
+                 base = Some base_linkage;
+                 fields = Bwd.Emp
+            }
+           in
+           let context = LinkageCtx.Nested (context, linkage) in 
+           store := Some context
         | None ->
             let linkage =
-              Linkage.{ name; base = Some base_linkage; fields = Bwd.Emp }
+              Linkage.
+                {
+                  context = Bwd.Emp;
+                  compiled_context = None; 
+                  name;
+                  base = Some base_linkage;
+                  fields = Bwd.Emp;
+                }
             in
             store := Some (LinkageCtx.Toplevel linkage))
 
@@ -73,24 +107,96 @@ module Context = struct
     | None ->
         Errors.fail
           ~info:"You need to open a linkage context in order to add a field"
-    | Some linkage ->
-        let (LinkageCtx.Toplevel body) = linkage in
-        let fields = body.fields <: (name, elem) in
-        let linkage = LinkageCtx.Toplevel { body with fields } in
-        store := Some linkage
+    | Some (LinkageCtx.Toplevel linkage) ->
+        let fields = linkage.fields <: (name, elem) in
+        let ctx = LinkageCtx.Toplevel { linkage with fields } in
+        store := Some ctx
+    | Some (LinkageCtx.Nested (upper, linkage)) ->
+        let fields = linkage.fields <: (name, elem) in
+        let linkage = Linkage.{ linkage with fields } in
+        let ctx = LinkageCtx.Nested (upper, linkage) in
+        store := Some ctx
 
   (* TODO: Don't allow this, have an update function *)
   let replace ~linkage = store := Some (LinkageCtx.Toplevel linkage)
 
+  let rec walk_up context =
+    match context with
+    | LinkageCtx.Toplevel linkage ->
+        linkage.base |> Option.map (fun base -> (Bwd.Emp, base))
+    | LinkageCtx.Nested (upper, linkage) ->
+        walk_up upper
+        |> Option.map (fun (path, base) ->
+               (Bwd.Snoc (path, linkage.name), base))
+
+  let rec walk_down linkage path =
+    match path with
+    | [] -> linkage
+    | head :: path ->
+        let Linkage.{ fields; _ } = linkage in
+        let linkage =
+          let elem =
+            fields |> Bwd.find_opt (fun (name, _) -> Names.Id.equal head name)
+          in
+          match elem with
+          | None -> Errors.fail ~info:"Got a malformed path"
+          | Some (_, LinkageElem.FamilyDefinition { linkage; _ }) -> linkage
+          | Some _ -> Errors.fail ~info:"Expected a family in path"
+        in
+        walk_down linkage path
+
+  let further_bound context =
+    match context with
+    | LinkageCtx.Toplevel _ -> None
+    | LinkageCtx.Nested (_, _) ->
+        match walk_up context with
+        | None -> None            
+        | Some (path, parent) -> Some (walk_down parent (path |> Bwd.to_list))                                  
+
   let close () =
     let context = !store in
-    store := None;
     match context with
     | None -> Errors.fail ~info:"There is no linkage context to close"
-    | Some context -> (
-        let (LinkageCtx.Toplevel linkage) = context in
+    | Some (LinkageCtx.Toplevel linkage) -> (
         match linkage.base with
         | None -> linkage
         | Some base_linkage ->
+            store := None;
+            (* We shouldn't return it: we should just add it to the context and move on *)
             Linkage.concatenate ~base:base_linkage ~derived:linkage)
+    | Some (LinkageCtx.Nested (_, linkage) as context) -> (
+        match walk_up context with
+        | None ->
+           let result = Codegen.compile_linkage linkage in
+           failwith ""
+        | Some (path, parent) ->
+            (* This is the linkage we want to futher bind *)
+            let further = walk_down parent (path |> Bwd.to_list) in
+            let further_bound =
+              Linkage.concatenate ~base:further ~derived:linkage
+            in            
+            failwith "")
+
+  (* Does this linkage further binds any other linkage? *)
+  (* Does this linkage have a base family? *)
+  (* Futher binding take precedence over having a base family *)
+  (* Precendece here means that if a field `f` is in both a base and futher bound family,
+     we should pick the one in the further bound family *)
+  (* Also maybe further binding logic should be in concatenate? *)
 end
+
+(*
+                     Family A {
+                        Family B {
+                           Family C { } 
+                        }
+                     }
+                   *)
+
+(*
+                     Family A1 extends C {
+                        Family B { 
+                           Family C { }
+                        }
+                     }
+                    *)

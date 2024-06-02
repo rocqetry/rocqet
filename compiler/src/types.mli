@@ -55,10 +55,18 @@ module rec LinkageElem : sig
         compiled_impl : CompiledModule.t;
         operation : InhOp.t;
       }
+    | FamilyDefinition of {
+        linkage : Linkage.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
+      }
 end
 
 and Linkage : sig
   type t = {
+    context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
+    compiled_context : CompiledModuleType.t option;
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
@@ -69,7 +77,7 @@ and Linkage : sig
 end
 
 and LinkageCtx : sig
-  type t = Toplevel of Linkage.t
+  type t = Toplevel of Linkage.t | Nested of t * Linkage.t
 end
 
 module FieldInhKind : sig

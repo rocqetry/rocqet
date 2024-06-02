@@ -1,4 +1,6 @@
 open Types
+open Bwd
+open Bwd.Infix
 
 (* These should actually be a module name *)
 module ModuleTerm = struct
@@ -196,49 +198,90 @@ module VernacBackend = struct
               [ (NoCoercion, ([ fname_ ], ty)) ] )))
 end
 
-let compile_linkage_context ~field_name (context : LinkageCtx.t) =
+let compile_linkage_context ~field_name (context : LinkageCtx.t) :
+   CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
   let open VernacBackend in
-  let (LinkageCtx.Toplevel linkage) = context in
+  let linkage =
+    match context with
+    | LinkageCtx.Toplevel linkage -> linkage
+    | LinkageCtx.Nested (_, linkage) -> linkage
+  in
   let Linkage.{ fields; _ } = linkage in
   let module_name_ctx =
     Naming.fresh_name
       ~prefix:(Nameops.add_suffix field_name "Ctx" |> Names.Id.to_string)
   in
+  (* Invariant: linkage.context contains self prefixed paths *)
+  let parameters =
+    linkage.context |> Bwd.map fst
+    |> Bwd.map Libnames.qualid_of_ident
+    |> Bwd.to_list
+  in
   match fields with
   | Bwd.Emp ->
-      define_moduletype ~module_name:module_name_ctx ~parameters:[]
-        ~body:(fun _arguments -> return ())
-      |> run
+      let signature_name =
+        define_moduletype ~module_name:module_name_ctx
+          ~parameters:(Bwd.to_list linkage.context) ~body:(fun _arguments ->
+            return ())
+        |> run
+      in
+      let signature =
+        Termutils.apply_module ~functor_expr:(Termutils.ident_to_module_expr signature_name) ~arguments:parameters
+      in
+      (signature_name, linkage.context @> [ (Naming.self_version linkage.name, signature) ])
+  | Bwd.Snoc
+      ( _,
+        ( _,
+          LinkageElem.FamilyDefinition
+            { compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
         ( _,
           LinkageElem.InductiveDefinition
             { compiled_context; compiled_signature; _ } ) ) ->
-      define_moduletype ~module_name:module_name_ctx ~parameters:[]
-        ~body:(fun _arguments ->
-          let* () =
-            include_module
-              ~module_expr:(Termutils.ident_to_module_expr compiled_context)
-          in
-          let* () =
-            include_module
-              ~module_expr:(Termutils.ident_to_module_expr compiled_signature)
-          in
-          return ())
-      |> run
+      let signature_name =
+        define_moduletype ~module_name:module_name_ctx
+          ~parameters:(Bwd.to_list linkage.context) ~body:(fun _arguments ->
+            let ctx =
+              Termutils.apply_module
+                ~functor_expr:(Termutils.ident_to_module_expr compiled_context)
+                ~arguments:parameters
+            in
+            let* () = include_module ~module_expr:ctx in
+            let signature =
+              Termutils.apply_module
+                ~functor_expr:
+                  (Termutils.ident_to_module_expr compiled_signature)
+                ~arguments:parameters
+            in
+            let* () = include_module ~module_expr:signature in
+            return ())
+        |> run
+      in
+      let signature =
+        Termutils.apply_module ~functor_expr:(Termutils.ident_to_module_expr signature_name) ~arguments:parameters
+      in
+      (signature_name, linkage.context @> [ (Naming.self_version linkage.name, signature) ])
 
 let compile_linkage (linkage : Linkage.t) =
-  let Linkage.{ name; fields; _ } = linkage in
+  let Linkage.{ context; name; fields; _ } = linkage in
   let open VernacBackend in
   let rec compile_fields fields (ctx : ModuleTerm.t list) =
     match fields with
     | Bwd.Emp -> return ()
     | Bwd.Snoc
+        (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
+    | Bwd.Snoc
         (fields, (_, LinkageElem.InductiveDefinition { compiled_impl; _ })) ->
-        let* _ = compile_fields fields ctx in
+        let* _ = compile_fields fields ctx in        
         let module_expr = Termutils.ident_to_module_expr compiled_impl in
+        let module_expr =
+          Termutils.apply_module
+            ~functor_expr:module_expr
+            ~arguments:(context |> Bwd.map fst |> Bwd.map Libnames.qualid_of_ident |> Bwd.to_list)
+        in 
         let* _ = include_module ~module_expr in
         return ()
   in
-  define_module ~module_name:name ~parameters:[] ~body:(compile_fields fields)
-  |> run |> ignore
+  define_module ~module_name:name ~parameters:(Bwd.to_list context) ~body:(compile_fields fields)
+  |> run

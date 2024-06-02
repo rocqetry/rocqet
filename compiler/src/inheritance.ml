@@ -4,7 +4,7 @@ open Bwd
 
 let close_current_inheritance_judgement () =
   let linkage = Context.close () in
-  Codegen.compile_linkage linkage;
+  let _impl_name = Codegen.compile_linkage linkage in
   Linkages.add linkage
 
 let open_new_inheritance_judgement name = Context.start_linkage name
@@ -13,12 +13,23 @@ let open_derived_inheritance_judgement ~base ~derived =
   Context.start_linkage_with_base ~name:derived ~base
 
 let infer_field_inh_kind name =
-  let (LinkageCtx.Toplevel linkage) = Context.get () in
-  let Linkage.{ base; _ } = linkage in
+  let ctx = Context.get () in  
+  let base =
+    match ctx with
+    | LinkageCtx.Nested (_, linkage) | LinkageCtx.Toplevel linkage -> linkage.base
+  in 
   match base with
   | None -> FieldInhKind.New
   | Some base -> (
-      match Linkages.lookup base.name with
+    let linkage =
+      (* Wrong semantics here:
+         If the field is not present in the futher bound family,
+         we still want to check the base. This doesn't do that *)
+      match Context.further_bound ctx with
+      | Some linkage -> Some linkage
+      | None -> Linkages.lookup base.name 
+    in 
+      match linkage with
       | None ->
           Errors.fail
             ~info:("Unbound family name " ^ Names.Id.to_string base.name)

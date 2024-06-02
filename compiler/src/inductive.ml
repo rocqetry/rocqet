@@ -3,7 +3,8 @@ open Env
 
 (* Return the name of the compiled family field and return its compiled context's name *)
 let inductive_to_famtype ~(ind_def : VernacInductive.t)
-    ~(ctx : CompiledModuleType.t) ~family_name : CompiledModuleType.t =
+      ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
+      ~family_name : CompiledModuleType.t =
   let module_name =
     let inductive_name = ind_def |> VernacInductive.extract_inductive_name in
     Naming.module_name_of ~family_name inductive_name
@@ -15,19 +16,17 @@ let inductive_to_famtype ~(ind_def : VernacInductive.t)
     in
     type_decls @ List.concat constr_decls
     |> List.map (fun (name, ty) -> Backend.postulate_axiom ~name ~ty)
-  in
-  let parameters =
-    [ (Naming.self_version family_name, Termutils.ident_to_module_expr ctx) ]
-  in
+  in  
   let open Backend in
   Backend.run
-  @@ Backend.define_moduletype ~module_name ~parameters ~body:(fun _ ->
+  @@ Backend.define_moduletype ~module_name ~parameters:ctx ~body:(fun _ ->
          let* () = flatmap all_decls in
          return ())
 
 (* This is the instantiation of an inductive type and it's recursors *)
-let inductive_to_famterm_and_recursor_type ~(ind_def : VernacInductive.t)
-    ~(ctx : CompiledModuleType.t) ~family_name : CompiledModule.t =
+let inductive_to_famterm_and_recursor_type ~(ind_def : VernacInductive.t)      
+      ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
+      ~family_name : CompiledModule.t =
   (* Generate a definition mapping of the inductive type and
      return the new inductive definition and the export of the correct names *)
   let modified_indcstrs, alias_all_name_term_type_decl =
@@ -38,12 +37,9 @@ let inductive_to_famterm_and_recursor_type ~(ind_def : VernacInductive.t)
     Naming.module_name_of ~family_name original_ind_name
   in
   let open Codegen.VernacBackend in
-  let parameters =
-    [ (Naming.self_version family_name, Termutils.ident_to_module_expr ctx) ]
-  in
   let module_name =
     run
-    @@ define_module ~module_name ~parameters ~body:(fun _ ->
+    @@ define_module ~module_name ~parameters:ctx ~body:(fun _ ->
            let* () = define_inductive modified_indcstrs in
            let alias_all =
              List.map
@@ -59,16 +55,19 @@ let inductive_to_famterm_and_recursor_type ~(ind_def : VernacInductive.t)
 let declare_inductive_definition ~(ind_def_name : Names.Id.t)
     ~(ind_def : VernacInductive.t) =
   let context = Context.get () in
-  let compiled_ctx =
+  let compiled_ctx, parameters =
     Codegen.compile_linkage_context ~field_name:ind_def_name context
-  in
-  let (LinkageCtx.Toplevel linkage) = context in
-  let family_name = linkage.Linkage.name in
+  in  
+  let family_name =
+    match context with
+    | LinkageCtx.Toplevel linkage
+    | LinkageCtx.Nested (_, linkage) -> linkage.name
+  in 
   let compiled_signature =
-    inductive_to_famtype ~ind_def ~ctx:compiled_ctx ~family_name
+    inductive_to_famtype ~ind_def ~ctx:parameters ~family_name
   in
   let compiled_impl =
-    inductive_to_famterm_and_recursor_type ~ind_def ~ctx:compiled_ctx
+    inductive_to_famterm_and_recursor_type ~ind_def ~ctx:parameters
       ~family_name
   in
   let elem =
@@ -83,7 +82,7 @@ let declare_inductive_definition ~(ind_def_name : Names.Id.t)
   in
   Context.add_field ~name:ind_def_name ~elem
 
-let check_extended_inductive_compatible ~(base : VernacInductive.t)
+let concatenate_inductive ~(base : VernacInductive.t)
     ~(derived : VernacInductive.t) ~base_name ~derived_name : VernacInductive.t
     =
   let check_one_type
@@ -112,9 +111,20 @@ let check_extended_inductive_compatible ~(base : VernacInductive.t)
 
 let extend_inductive_definition ~ind_def_name ~ind_def
     ~(inherited_elem : LinkageElem.t) =
-  let (LinkageCtx.Toplevel linkage) = Context.get () in
+  let context = Context.get () in
+  let linkage =
+    match context with
+    | LinkageCtx.Toplevel linkage -> linkage
+    | LinkageCtx.Nested (_, linkage) -> linkage
+  in 
+  let base_linkage =    
+    (* Again, we should fall back on the base if there is no further binding module *)
+    match context with
+    | LinkageCtx.Toplevel linkage -> linkage.base
+    | LinkageCtx.Nested (_, _) -> Context.further_bound context
+  in 
   let base_linkage =
-    match linkage.base with
+    match base_linkage with
     | None ->
         Errors.fail
           ~info:"There needs to be a base family to extend an inductive type"
@@ -126,9 +136,14 @@ let extend_inductive_definition ~ind_def_name ~ind_def
   in
   Context.replace ~linkage;
   match inherited_elem with
+  | LinkageElem.FamilyDefinition _ -> Errors.fail ~info:"Expected to extend an inductive type"
   | LinkageElem.InductiveDefinition { inductive; _ } ->
       let context = Context.get () in
-      let (LinkageCtx.Toplevel linkage) = context in
+      let linkage =
+         match context with
+         | LinkageCtx.Toplevel linkage -> linkage
+         | LinkageCtx.Nested (_, linkage) -> linkage
+      in  
       let Linkage.{ name; base; _ } = linkage in
       let base =
         match base with
@@ -136,19 +151,19 @@ let extend_inductive_definition ~ind_def_name ~ind_def
         | Some base -> base
       in
       let complete_ind_def =
-        check_extended_inductive_compatible ~base:inductive ~derived:ind_def
+        concatenate_inductive ~base:inductive ~derived:ind_def
           ~base_name:base.name ~derived_name:name
       in
-      let compiled_ctx =
+      let compiled_ctx, parameters =
         Codegen.compile_linkage_context ~field_name:ind_def_name context
       in
       let compiled_signature =
-        inductive_to_famtype ~ind_def:complete_ind_def ~ctx:compiled_ctx
+        inductive_to_famtype ~ind_def:complete_ind_def ~ctx:parameters
           ~family_name:name
       in
       let compiled_impl =
         inductive_to_famterm_and_recursor_type ~ind_def:complete_ind_def
-          ~ctx:compiled_ctx ~family_name:name
+          ~ctx:parameters ~family_name:name
       in
       let elem =
         LinkageElem.InductiveDefinition

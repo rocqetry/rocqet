@@ -125,16 +125,24 @@ module rec LinkageElem : sig
              the base family to the derived family *)
         operation : InhOp.t;
       }
+    | FamilyDefinition of {
+        linkage : Linkage.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
+      }
 end =
   LinkageElem
 
 and Linkage : sig
   type t = {
+    context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
+    compiled_context : CompiledModuleType.t option;
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
-  }
-
+  }  
+  
   (* Linkage concatenation *)
   val concatenate : derived:t -> base:t -> t
 
@@ -142,6 +150,8 @@ and Linkage : sig
   val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
 end = struct
   type t = {
+    context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
+    compiled_context : CompiledModuleType.t option;
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
@@ -192,7 +202,7 @@ end
 
 (* A linkage we are currently constructing *)
 and LinkageCtx : sig
-  type t = Toplevel of Linkage.t
+  type t = Toplevel of Linkage.t | Nested of t * Linkage.t
 end =
   LinkageCtx
 
