@@ -134,7 +134,7 @@ module VernacBackend = struct
     in
 
     let inner_parameter =
-      List.map (fun (n, m) -> Libnames.qualid_of_ident n) parameters
+      List.map (fun (n, _) -> Libnames.qualid_of_ident n) parameters
     in
     let* _ =
       vernac_
@@ -158,7 +158,7 @@ module VernacBackend = struct
     in
 
     let inner_parameter =
-      List.map (fun (n, m) -> Libnames.qualid_of_ident n) parameters
+      List.map (fun (n, _) -> Libnames.qualid_of_ident n) parameters
     in
     let* _ =
       vernac_
@@ -229,13 +229,12 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) =
 
 let compile_linkage (linkage : Linkage.t) =
   let Linkage.{ name; fields; _ } = linkage in
-  let open VernacBackend in  
+  let open VernacBackend in
   let rec compile_fields fields (ctx : ModuleTerm.t list) =
     match fields with
     | Bwd.Emp -> return ()
     | Bwd.Snoc
-        (fields, (name, LinkageElem.InductiveDefinition { compiled_impl; _ }))
-      ->
+        (fields, (_, LinkageElem.InductiveDefinition { compiled_impl; _ })) ->
         let* _ = compile_fields fields ctx in
         let module_expr = Termutils.ident_to_module_expr compiled_impl in
         let* _ = include_module ~module_expr in

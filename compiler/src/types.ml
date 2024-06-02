@@ -119,7 +119,7 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
-        (** `operation` describes how a field is transformed from the base family 
+            (** `operation` describes how a field is transformed from the base family 
              to the derived family. If there is no base family it is just InhOp.CInhNew,
              otherwise it describes the nature of the transformation of a field from 
              the base family to the derived family *)
@@ -137,6 +137,7 @@ and Linkage : sig
 
   (* Linkage concatenation *)
   val concatenate : derived:t -> base:t -> t
+
   (* Concatenate the fields before `prefix` *)
   val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
 end = struct
@@ -151,7 +152,7 @@ end = struct
     let rec compute_difference ~base ~derived =
       match (base, derived) with
       | [], [] -> []
-      | (bname, belem) :: base', (dname, delem) :: derived' ->
+      | (bname, belem) :: base', (dname, _) :: derived' ->
           if Names.Id.equal bname dname then
             compute_difference ~base:base' ~derived:derived'
           else

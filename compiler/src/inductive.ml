@@ -126,10 +126,10 @@ let extend_inductive_definition ~ind_def_name ~ind_def
   in
   Context.replace ~linkage;
   match inherited_elem with
-  | LinkageElem.InductiveDefinition { inductive; compiled_signature; _ } ->
+  | LinkageElem.InductiveDefinition { inductive; _ } ->
       let context = Context.get () in
       let (LinkageCtx.Toplevel linkage) = context in
-      let Linkage.{ name; fields; base; _ } = linkage in
+      let Linkage.{ name; base; _ } = linkage in
       let base =
         match base with
         | None -> Errors.fail ~info:"Should not happen"

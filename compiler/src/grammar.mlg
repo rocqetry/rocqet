@@ -1,6 +1,8 @@
 DECLARE PLUGIN "nfpop.plugin"
 
 {
+  [@@@warning "-27"]
+  (* Diable warnings about unused names in the generared ml file *)
   open Stdarg  
   open Pvernac.Vernac_
   open Pcoq.Constr

@@ -81,7 +81,8 @@ let replace_qualid_root ~source ~target =
   in
   let rec replace_qualid_path _ r =
     match r with
-    | { CAst.loc; v = CRef (qid, us) } as x when not (qualid_is_ident qid) -> (
+    | { CAst.loc = _; v = CRef (qid, us) } as x when not (qualid_is_ident qid)
+      -> (
         (* rename the  *)
         match Names.Id.equal (take_root_of_path qid) source with
         | true ->
