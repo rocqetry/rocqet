@@ -86,7 +86,11 @@ let declare_inductive_definition ~(ind_def_name : Names.Id.t)
 let check_extended_inductive_compatible ~(base : VernacInductive.t)
     ~(derived : VernacInductive.t) ~base_name ~derived_name : VernacInductive.t
     =
-  let check_one_type (((_, _, _, oldcstrs), _), ((a, b, c, newcstrs), _)) =
+  let check_one_type
+      ( (((_, (old_name, _)), _, _, oldcstrs), _),
+        ((((_, (new_name, _)) as a), b, c, newcstrs), _) ) =
+    if CAst.eq ( <> ) old_name new_name then
+      Errors.fail ~info:"Name mismatch when extending inductive types.";
     let childcstrs =
       match (oldcstrs, newcstrs) with
       | ( Vernacexpr.Constructors base_constr,
@@ -102,6 +106,8 @@ let check_extended_inductive_compatible ~(base : VernacInductive.t)
     let child_ind = (a, b, c, childcstrs) in
     (child_ind, [])
   in
+  if List.length base <> List.length derived then
+    Errors.fail ~info:"All inductive types must be specified when extending.";
   List.combine base derived |> List.map check_one_type
 
 let extend_inductive_definition ~ind_def_name ~ind_def

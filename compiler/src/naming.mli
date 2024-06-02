@@ -7,4 +7,6 @@ val rename_ind_constructors :
 val self_version : Names.Id.t -> Names.Id.t
 val module_name_of : family_name:Names.Id.t -> Names.Id.t -> Names.Id.t
 val fresh_name : prefix:string -> Names.Id.t
-val name_map_with : (Names.Id.t -> 'a) -> Names.Id.t list -> 'a Names.Id.Map.t
+
+val name_map_with :
+  (Names.Id.t -> Names.Id.t) -> Names.Id.t list -> Names.Id.t Names.Id.Map.t
