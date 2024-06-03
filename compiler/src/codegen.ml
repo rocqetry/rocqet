@@ -294,7 +294,7 @@ let compile_linkage (linkage : Linkage.t) =
   define_module ~module_name:name ~parameters:(Bwd.to_list context) ~body:(compile_fields fields)
   |> run
 
-let compile_nested_linkage (linkage : Linkage.t) =
+let compile_nested_linkage (linkage : Linkage.t)  =
   let Linkage.{ context; name; fields; _ } = linkage in
   let open VernacBackend in
   let rec compile_fields fields (ctx : ModuleTerm.t list) =
@@ -352,7 +352,7 @@ let compile_nested_linkage_signature linkage =
                ~functor_expr:(Termutils.ident_to_module_expr compiled_signature)
                ~arguments:ctx
            in 
-           let _ = include_module ~module_expr:signature_module_expr in 
+           let* _ = include_module ~module_expr:signature_module_expr in 
            return ()) |> run 
   in
   let sig_final = Naming.fresh_name ~prefix:"Sig" in  
