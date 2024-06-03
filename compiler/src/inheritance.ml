@@ -2,11 +2,8 @@ open Types
 open Env
 open Bwd
 
-let close_current_inheritance_judgement () =
-  let linkage = Context.close () in
-  let _impl_name = Codegen.compile_linkage linkage in
-  Linkages.add linkage
-
+let close_current_inheritance_judgement () = Context.close ()
+  
 let open_new_inheritance_judgement name = Context.start_linkage name
 
 let open_derived_inheritance_judgement ~base ~derived =

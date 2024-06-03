@@ -95,6 +95,7 @@ module VernacInductive = struct
     (modified_ind_def, alias_all_name_term_type_decl)
 end
 
+
 (* Module naming *)
 (* This should really be Names.ModPath.t *)
 module CompiledModule = struct

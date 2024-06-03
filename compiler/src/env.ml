@@ -76,6 +76,8 @@ module Context = struct
     | Some base_linkage -> (
         match !store with
         | Some context ->
+           (* Is this correct? *)
+           (* Are we missing a parameter? *)
            let compiled_context, parameters = Codegen.compile_linkage_context ~field_name:name context in
            let linkage =
              Linkage.{
@@ -153,29 +155,44 @@ module Context = struct
         | None -> None            
         | Some (path, parent) -> Some (walk_down parent (path |> Bwd.to_list))                                  
 
-  let close () =
+  let close () : unit =
     let context = !store in
     match context with
     | None -> Errors.fail ~info:"There is no linkage context to close"
-    | Some (LinkageCtx.Toplevel linkage) -> (
+    | Some (LinkageCtx.Toplevel linkage) ->
+      let linkage =
         match linkage.base with
         | None -> linkage
-        | Some base_linkage ->
-            store := None;
-            (* We shouldn't return it: we should just add it to the context and move on *)
-            Linkage.concatenate ~base:base_linkage ~derived:linkage)
-    | Some (LinkageCtx.Nested (_, linkage) as context) -> (
+        | Some base_linkage ->                        
+            Linkage.concatenate ~base:base_linkage ~derived:linkage
+      in
+          store := None;
+          let _ = Codegen.compile_linkage linkage in 
+          Linkages.add linkage
+    | Some (LinkageCtx.Nested (upper, linkage) as context) ->
+       let linkage = 
         match walk_up context with
-        | None ->
-           let result = Codegen.compile_linkage linkage in
-           failwith ""
+        | None -> linkage            
         | Some (path, parent) ->
             (* This is the linkage we want to futher bind *)
             let further = walk_down parent (path |> Bwd.to_list) in
             let further_bound =
               Linkage.concatenate ~base:further ~derived:linkage
             in            
-            failwith "")
+            further_bound
+       in
+       let signature = Codegen.compile_nested_linkage_signature linkage in
+       let impl = Codegen.compile_nested_linkage linkage in
+       let elem =
+       LinkageElem.FamilyDefinition {
+           linkage;
+           compiled_context = linkage.compiled_context |> Option.get;
+           compiled_signature = signature;
+           compiled_impl = impl;
+       }
+       in
+       store := Some upper;
+       add_field ~name:linkage.name ~elem       
 
   (* Does this linkage further binds any other linkage? *)
   (* Does this linkage have a base family? *)

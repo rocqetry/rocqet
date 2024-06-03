@@ -148,6 +148,14 @@ module VernacBackend = struct
     let* _ = vernac_ (VernacSynterp (VernacEndSegment modname_)) in
     return @@ Libnames.qualid_of_ident module_name
 
+  let declare_module ~(module_name : Names.Id.t) (ty : Constrexpr.module_ast) : unit t=
+    let name = CAst.make module_name in 
+    let* _ =
+      vernac_
+        (VernacSynterp (VernacDeclareModule (None, name, [], (ty, Declaremods.DefaultInline))))
+    in
+    return ()
+
   let define_moduletype ~(module_name : Names.Id.t)
       ~(parameters : (Names.Id.t * Constrexpr.module_ast) list)
       ~(body : ModuleTerm.t list -> unit t) : ModuleType.t t =
@@ -285,3 +293,78 @@ let compile_linkage (linkage : Linkage.t) =
   in
   define_module ~module_name:name ~parameters:(Bwd.to_list context) ~body:(compile_fields fields)
   |> run
+
+let compile_nested_linkage (linkage : Linkage.t) =
+  let Linkage.{ context; name; fields; _ } = linkage in
+  let open VernacBackend in
+  let rec compile_fields fields (ctx : ModuleTerm.t list) =
+    match fields with
+    | Bwd.Emp -> return ()
+    | Bwd.Snoc
+        (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
+    | Bwd.Snoc
+        (fields, (_, LinkageElem.InductiveDefinition { compiled_impl; _ })) ->
+        let* _ = compile_fields fields ctx in        
+        let module_expr = Termutils.ident_to_module_expr compiled_impl in
+        let module_expr =
+          Termutils.apply_module
+            ~functor_expr:module_expr
+            ~arguments:(context |> Bwd.map fst |> Bwd.map Libnames.qualid_of_ident |> Bwd.to_list)
+        in 
+        let* _ = include_module ~module_expr in
+        return ()
+  in
+  let wrapper = Naming.fresh_name ~prefix:"Impl" in 
+  define_module ~module_name:wrapper ~parameters:(Bwd.to_list context)
+    ~body:(fun _ctx ->
+      (* Wrong context application here? *)
+      let* _ = define_module ~module_name:name ~parameters:[] ~body:(compile_fields fields) in 
+      return ())
+  |> run
+
+let compile_nested_linkage_signature linkage =
+  let open VernacBackend in 
+  let Linkage.{ name; fields; context;  _ } = linkage in
+  let helper = Naming.fresh_name ~prefix:"HelperSig" in
+  let helper_module = 
+    match fields with
+    | Bwd.Emp ->
+       define_moduletype
+         ~module_name:helper
+         ~parameters:(Bwd.to_list context)
+         ~body:(fun _ctx -> return ()) |> run 
+    | Bwd.Snoc
+        (_, (_, LinkageElem.FamilyDefinition { compiled_context; compiled_signature; _ }))
+    | Bwd.Snoc
+        (_, (_, LinkageElem.InductiveDefinition { compiled_context; compiled_signature; _ })) ->
+       define_moduletype
+         ~module_name:helper
+         ~parameters:(Bwd.to_list context)
+         ~body:(fun ctx ->
+           let context_module_expr =
+             Termutils.apply_module
+               ~functor_expr:(Termutils.ident_to_module_expr compiled_context)
+               ~arguments:ctx
+           in 
+           let* _ = include_module ~module_expr:context_module_expr in
+           let signature_module_expr =
+             Termutils.apply_module
+               ~functor_expr:(Termutils.ident_to_module_expr compiled_signature)
+               ~arguments:ctx
+           in 
+           let _ = include_module ~module_expr:signature_module_expr in 
+           return ()) |> run 
+  in
+  let sig_final = Naming.fresh_name ~prefix:"Sig" in  
+  define_moduletype
+    ~module_name:sig_final
+    ~parameters:(Bwd.to_list context)
+    ~body:(fun ctx ->
+      let helper_module_expr =
+             Termutils.apply_module
+               ~functor_expr:(Termutils.ident_to_module_expr helper_module)
+               ~arguments:ctx
+      in 
+      (* Declare Name : Helper *)
+      let* _ = declare_module ~module_name:name helper_module_expr in 
+      return () ) |> run 
