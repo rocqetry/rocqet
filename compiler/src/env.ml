@@ -131,21 +131,18 @@ module Context = struct
         |> Option.map (fun (path, base) ->
                (Bwd.Snoc (path, linkage.name), base))
 
-  let rec walk_down linkage path =
+  let rec walk_down (linkage: Linkage.t) path : Linkage.t option =
     match path with
-    | [] -> linkage
+    | [] -> Some linkage
     | head :: path ->
-        let Linkage.{ fields; _ } = linkage in
-        let linkage =
+        let Linkage.{ fields; _ } = linkage in        
           let elem =
             fields |> Bwd.find_opt (fun (name, _) -> Names.Id.equal head name)
           in
           match elem with
-          | None -> Errors.fail ~info:"Got a malformed path"
-          | Some (_, LinkageElem.FamilyDefinition { linkage; _ }) -> linkage
-          | Some _ -> Errors.fail ~info:"Expected a family in path"
-        in
-        walk_down linkage path
+          | None -> None             
+          | Some (_, LinkageElem.FamilyDefinition { linkage; _ }) -> walk_down linkage path
+          | Some _ -> Errors.fail ~info:"Expected a family in path"                
 
   let further_bound context =
     match context with
@@ -153,7 +150,7 @@ module Context = struct
     | LinkageCtx.Nested (_, _) ->
         match walk_up context with
         | None -> None            
-        | Some (path, parent) -> Some (walk_down parent (path |> Bwd.to_list))                                  
+        | Some (path, parent) -> walk_down parent (path |> Bwd.to_list)
 
   let close () : unit =
     let context = !store in
@@ -171,11 +168,10 @@ module Context = struct
           Linkages.add linkage
     | Some (LinkageCtx.Nested (upper, linkage) as context) ->
        let linkage = 
-        match walk_up context with
+        match further_bound context with
         | None -> linkage            
-        | Some (path, parent) ->
-            (* This is the linkage we want to futher bind *)
-            let further = walk_down parent (path |> Bwd.to_list) in
+        | Some further ->
+            (* This is the linkage we want to futher bind *)                        
             let further_bound =
               Linkage.concatenate ~base:further ~derived:linkage
             in            
