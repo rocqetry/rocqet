@@ -145,14 +145,16 @@ let extend_inductive_definition ~ind_def_name ~ind_def
          | LinkageCtx.Nested (_, linkage) -> linkage
       in  
       let Linkage.{ name; base; _ } = linkage in
-      let base =
+      let base_name =
         match base with
-        | None -> Errors.fail ~info:"Should not happen"
-        | Some base -> base
+        | None ->
+           (* Path substitution *)
+           Names.Id.of_string "TODO"
+        | Some base -> base.name
       in
       let complete_ind_def =
         concatenate_inductive ~base:inductive ~derived:ind_def
-          ~base_name:base.name ~derived_name:name
+          ~base_name ~derived_name:name
       in
       let compiled_ctx, parameters =
         Codegen.compile_linkage_context ~field_name:ind_def_name context

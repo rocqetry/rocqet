@@ -120,7 +120,12 @@ module Context = struct
         store := Some ctx
 
   (* TODO: Don't allow this, have an update function *)
-  let replace ~linkage = store := Some (LinkageCtx.Toplevel linkage)
+  let replace ~linkage =
+    match !store with
+    | None | Some (LinkageCtx.Toplevel _) ->
+       store := Some (LinkageCtx.Toplevel linkage)
+    | Some (LinkageCtx.Nested (upper, _)) ->
+       store := Some (LinkageCtx.Nested (upper, linkage))
 
   let rec walk_up context =
     match context with
@@ -188,7 +193,7 @@ module Context = struct
        }
        in
        store := Some upper;
-       add_field ~name:linkage.name ~elem       
+       add_field ~name:linkage.name ~elem
 
   (* Does this linkage further binds any other linkage? *)
   (* Does this linkage have a base family? *)
@@ -198,18 +203,4 @@ module Context = struct
   (* Also maybe further binding logic should be in concatenate? *)
 end
 
-(*
-                     Family A {
-                        Family B {
-                           Family C { } 
-                        }
-                     }
-                   *)
 
-(*
-                     Family A1 extends C {
-                        Family B { 
-                           Family C { }
-                        }
-                     }
-                    *)
