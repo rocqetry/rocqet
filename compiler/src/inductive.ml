@@ -148,6 +148,7 @@ let extend_inductive_definition ~ind_def_name ~ind_def
       let base_name =
         match base with
         | None ->
+           (* Also: further binding? *)
            (* Path substitution *)
            Names.Id.of_string "TODO"
         | Some base -> base.name

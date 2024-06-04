@@ -52,11 +52,10 @@ module Context = struct
   let start_linkage name =
     match !store with
     | Some context ->
-       let compiled_context, parameters = Codegen.compile_linkage_context ~field_name:name context in
+       let _, parameters = Codegen.compile_linkage_context ~field_name:name context in
        let linkage =
          Linkage.{
-             context = parameters |> Bwd.of_list;
-             compiled_context = Some compiled_context;
+             context = parameters |> Bwd.of_list;             
              name;
              base = None;
              fields = Bwd.Emp
@@ -66,7 +65,7 @@ module Context = struct
        store := Some context
     | None ->
         let linkage =
-          Linkage.{ context = Bwd.Emp; compiled_context = None; name; base = None; fields = Bwd.Emp }
+          Linkage.{ context = Bwd.Emp; name; base = None; fields = Bwd.Emp }
         in
         store := Some (LinkageCtx.Toplevel linkage)
 
@@ -78,11 +77,10 @@ module Context = struct
         | Some context ->
            (* Is this correct? *)
            (* Are we missing a parameter? *)
-           let compiled_context, parameters = Codegen.compile_linkage_context ~field_name:name context in
+           let _, parameters = Codegen.compile_linkage_context ~field_name:name context in
            let linkage =
              Linkage.{
-                 context = parameters |> Bwd.of_list;
-                 compiled_context = Some compiled_context;
+                 context = parameters |> Bwd.of_list;                 
                  name;
                  base = Some base_linkage;
                  fields = Bwd.Emp
@@ -94,8 +92,7 @@ module Context = struct
             let linkage =
               Linkage.
                 {
-                  context = Bwd.Emp;
-                  compiled_context = None; 
+                  context = Bwd.Emp;                  
                   name;
                   base = Some base_linkage;
                   fields = Bwd.Emp;
@@ -185,9 +182,21 @@ module Context = struct
        let signature = Codegen.compile_nested_linkage_signature linkage in
        let impl = Codegen.compile_nested_linkage linkage in
        let elem =
+       let compiled_context =
+         let rec extract_name (name : Constrexpr.module_ast) =
+           match name.v with
+           | Constrexpr.CMident name -> name
+           | Constrexpr.CMapply (name, _) -> extract_name name
+           | Constrexpr.CMwith (name, _) -> extract_name name
+         in 
+         match linkage.context with
+         | Bwd.Emp ->
+            Errors.fail ~info:"We should have parameters since we're in a nested context"
+         | Bwd.Snoc (_, (_, name)) -> extract_name name         
+       in 
        LinkageElem.FamilyDefinition {
            linkage;
-           compiled_context = linkage.compiled_context |> Option.get;
+           compiled_context;
            compiled_signature = signature;
            compiled_impl = impl;
        }
