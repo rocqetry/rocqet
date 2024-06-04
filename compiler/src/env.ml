@@ -49,6 +49,11 @@ module Context = struct
     | None -> Errors.fail ~info:"There is not current context"
     | Some context -> context
 
+  let family_name context =
+    match context with
+    | LinkageCtx.Toplevel linkage
+    | LinkageCtx.Nested (_, linkage) -> linkage.name
+
   let start_linkage name =
     match !store with
     | Some context ->
@@ -60,9 +65,8 @@ module Context = struct
              base = None;
              fields = Bwd.Emp
         }
-       in
-       let context = LinkageCtx.Nested (context, linkage) in 
-       store := Some context
+       in       
+       store := Some (LinkageCtx.Nested (context, linkage))
     | None ->
         let linkage =
           Linkage.{ context = Bwd.Emp; name; base = None; fields = Bwd.Emp }
@@ -124,16 +128,16 @@ module Context = struct
     | Some (LinkageCtx.Nested (upper, _)) ->
        store := Some (LinkageCtx.Nested (upper, linkage))
 
-  let rec walk_up context =
+  let rec walk_up_linkage_context context =
     match context with
     | LinkageCtx.Toplevel linkage ->
         linkage.base |> Option.map (fun base -> (Bwd.Emp, base))
     | LinkageCtx.Nested (upper, linkage) ->
-        walk_up upper
+        walk_up_linkage_context upper
         |> Option.map (fun (path, base) ->
                (Bwd.Snoc (path, linkage.name), base))
 
-  let rec walk_down (linkage: Linkage.t) path : Linkage.t option =
+  let rec walk_down_linkage (linkage: Linkage.t) path : Linkage.t option =
     match path with
     | [] -> Some linkage
     | head :: path ->
@@ -143,17 +147,49 @@ module Context = struct
           in
           match elem with
           | None -> None             
-          | Some (_, LinkageElem.FamilyDefinition { linkage; _ }) -> walk_down linkage path
+          | Some (_, LinkageElem.FamilyDefinition { linkage; _ }) -> walk_down_linkage linkage path
           | Some _ -> Errors.fail ~info:"Expected a family in path"                
 
-  let further_bound context =
+  let further_bound_linkage context =
     match context with
     | LinkageCtx.Toplevel _ -> None
     | LinkageCtx.Nested (_, _) ->
-        match walk_up context with
+        match walk_up_linkage_context context with
         | None -> None            
-        | Some (path, parent) -> walk_down parent (path |> Bwd.to_list)
+        | Some (path, parent) -> walk_down_linkage parent (path |> Bwd.to_list)
 
+  let base_linkage context =
+    match context with
+    | LinkageCtx.Toplevel linkage
+    | LinkageCtx.Nested (_, linkage) -> linkage.base
+
+  let base_linkage_elem context ~field =
+    let lookup (linkage: Linkage.t) =
+      linkage.fields
+      |> Bwd.find_opt (fun (name, _) -> Names.Id.equal name field)
+    in 
+    context
+    |> base_linkage
+    |> Option.map lookup
+    |> Option.flatten
+    |> Option.map snd
+
+  let further_bound_linkage_elem context ~field =
+    let lookup (linkage: Linkage.t) =
+      linkage.fields
+      |> Bwd.find_opt (fun (name, _) -> Names.Id.equal name field)
+    in 
+    context
+    |> further_bound_linkage
+    |> Option.map lookup
+    |> Option.flatten
+    |> Option.map snd
+  
+  let family_linkage context =
+    match context with
+    | LinkageCtx.Toplevel linkage
+    | LinkageCtx.Nested (_, linkage) -> linkage
+  
   let close () : unit =
     let context = !store in
     match context with
@@ -170,7 +206,7 @@ module Context = struct
           Linkages.add linkage
     | Some (LinkageCtx.Nested (upper, linkage) as context) ->
        let linkage = 
-        match further_bound context with
+        match further_bound_linkage context with
         | None -> linkage            
         | Some further ->
             (* This is the linkage we want to futher bind *)                        

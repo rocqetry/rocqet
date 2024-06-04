@@ -52,36 +52,6 @@ let inductive_to_famterm_and_recursor_type ~(ind_def : VernacInductive.t)
   in
   module_name
 
-let declare_inductive_definition ~(ind_def_name : Names.Id.t)
-    ~(ind_def : VernacInductive.t) =
-  let context = Context.get () in
-  let compiled_ctx, parameters =
-    Codegen.compile_linkage_context ~field_name:ind_def_name context
-  in  
-  let family_name =
-    match context with
-    | LinkageCtx.Toplevel linkage
-    | LinkageCtx.Nested (_, linkage) -> linkage.name
-  in 
-  let compiled_signature =
-    inductive_to_famtype ~ind_def ~ctx:parameters ~family_name
-  in
-  let compiled_impl =
-    inductive_to_famterm_and_recursor_type ~ind_def ~ctx:parameters
-      ~family_name
-  in
-  let elem =
-    LinkageElem.InductiveDefinition
-      {
-        inductive = ind_def;
-        compiled_context = compiled_ctx;
-        compiled_impl;
-        compiled_signature;
-        operation = InhOp.CInhNew;
-      }
-  in
-  Context.add_field ~name:ind_def_name ~elem
-
 let concatenate_inductive ~(base : VernacInductive.t)
     ~(derived : VernacInductive.t) ~base_name ~derived_name : VernacInductive.t
     =
@@ -109,80 +79,57 @@ let concatenate_inductive ~(base : VernacInductive.t)
     Errors.fail ~info:"All inductive types must be specified when extending.";
   List.combine base derived |> List.map check_one_type
 
-let extend_inductive_definition ~ind_def_name ~ind_def
-    ~(inherited_elem : LinkageElem.t) =
-  let context = Context.get () in
-  let linkage =
-    match context with
-    | LinkageCtx.Toplevel linkage -> linkage
-    | LinkageCtx.Nested (_, linkage) -> linkage
-  in 
-  let base_linkage =    
-    (* Again, we should fall back on the base if there is no further binding module *)
-    match context with
-    | LinkageCtx.Toplevel linkage -> linkage.base
-    | LinkageCtx.Nested (_, _) -> Context.further_bound context
-  in 
-  let base_linkage =
-    match base_linkage with
-    | None ->
-        Errors.fail
-          ~info:"There needs to be a base family to extend an inductive type"
-    | Some base_linkage -> base_linkage
+let add_inductive_definition inductive =
+  let inductive_name = VernacInductive.extract_inductive_name inductive in 
+  let context = Context.get () in  
+  let further = Context.further_bound_linkage context in
+  let base = Context.base_linkage context in
+  let linkage = Context.family_linkage context in
+  let family = Context.family_name context in 
+  let linkage, base_name =
+    match further, base with
+    | Some base, None       
+    | None, Some base ->
+       Linkage.concatenate_prefix
+         ~prefix:inductive_name ~derived:linkage
+         ~base:base, base.name
+   | None, None -> linkage, family
+   | Some _futher, Some _base -> Errors.fail ~info:"Not yet implemented"
   in
-  let linkage =
-    Linkage.concatenate_prefix ~prefix:ind_def_name ~derived:linkage
-      ~base:base_linkage
-  in
+  let further_elem = Context.further_bound_linkage_elem context ~field:inductive_name in
+  let base_elem = Context.base_linkage_elem context ~field:inductive_name in
+  let inductive =
+    let open LinkageElem in 
+    match further_elem, base_elem with
+    | Some (InductiveDefinition { inductive = base; _ }), None
+    | None, Some (InductiveDefinition { inductive = base; _ }) ->
+       concatenate_inductive ~base ~derived:inductive
+          ~base_name ~derived_name:family
+    | Some (InductiveDefinition _), Some (InductiveDefinition _) ->
+       Errors.fail ~info:"Not yet implemented"    
+    | None, None -> inductive
+    | _, _ -> Errors.fail ~info:"Expected extension with inductive type"
+  in 
   Context.replace ~linkage;
-  match inherited_elem with
-  | LinkageElem.FamilyDefinition _ -> Errors.fail ~info:"Expected to extend an inductive type"
-  | LinkageElem.InductiveDefinition { inductive; _ } ->
-      let context = Context.get () in
-      let linkage =
-         match context with
-         | LinkageCtx.Toplevel linkage -> linkage
-         | LinkageCtx.Nested (_, linkage) -> linkage
-      in  
-      let Linkage.{ name; base; _ } = linkage in
-      let base_name =
-        match base with
-        | None ->
-           (* Also: further binding? *)
-           (* Path substitution *)
-           Names.Id.of_string "TODO"
-        | Some base -> base.name
-      in
-      let complete_ind_def =
-        concatenate_inductive ~base:inductive ~derived:ind_def
-          ~base_name ~derived_name:name
-      in
-      let compiled_ctx, parameters =
-        Codegen.compile_linkage_context ~field_name:ind_def_name context
-      in
-      let compiled_signature =
-        inductive_to_famtype ~ind_def:complete_ind_def ~ctx:parameters
-          ~family_name:name
-      in
-      let compiled_impl =
-        inductive_to_famterm_and_recursor_type ~ind_def:complete_ind_def
-          ~ctx:parameters ~family_name:name
-      in
-      let elem =
-        LinkageElem.InductiveDefinition
-          {
-            inductive = complete_ind_def;
-            compiled_context = compiled_ctx;
-            compiled_impl;
-            compiled_signature;
-            operation = InhOp.CInhNew;
-          }
-      in
-      Context.add_field ~name:ind_def_name ~elem
-
-let add_inductive_definition ind_def =
-  let ind_def_name = ind_def |> VernacInductive.extract_inductive_name in
-  match Inheritance.infer_field_inh_kind ind_def_name with
-  | FieldInhKind.New -> declare_inductive_definition ~ind_def_name ~ind_def
-  | FieldInhKind.Extend inherited_elem ->
-      extend_inductive_definition ~ind_def_name ~ind_def ~inherited_elem
+  let compiled_context, parameters =
+    Codegen.compile_linkage_context ~field_name:inductive_name context
+  in
+  let family_name = Context.family_name context in     
+  let compiled_signature =
+    inductive_to_famtype ~ind_def:inductive ~ctx:parameters ~family_name
+  in
+  let compiled_impl =
+    inductive_to_famterm_and_recursor_type ~ind_def:inductive ~ctx:parameters
+      ~family_name
+  in
+  let elem =
+    LinkageElem.InductiveDefinition
+      {
+        inductive;
+        compiled_context;
+        compiled_impl;
+        compiled_signature;
+        operation = InhOp.CInhNew;
+      }
+  in
+  Context.add_field ~name:inductive_name ~elem
