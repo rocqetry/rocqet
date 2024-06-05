@@ -206,12 +206,19 @@ module Context = struct
           Linkages.add linkage
     | Some (LinkageCtx.Nested (upper, linkage) as context) ->
        let linkage = 
-        match further_bound_linkage context with
-        | None -> linkage            
-        | Some further ->
-            (* This is the linkage we want to futher bind *)                        
+        match further_bound_linkage context, base_linkage context with
+        | None, None -> linkage
+        | Some _, Some _ ->
+           Errors.fail ~info:"Nested families can't be further bound and have a base family at the same time"
+        | _, Some base ->
+           let base = Codegen.parameterize ~prefix:linkage.context base in
+           let further_bound =
+              Linkage.concatenate ~base ~derived:linkage
+            in            
+            further_bound            
+        | Some base, _  ->            
             let further_bound =
-              Linkage.concatenate ~base:further ~derived:linkage
+              Linkage.concatenate ~base ~derived:linkage
             in            
             further_bound
        in

@@ -1,5 +1,6 @@
 open Types
 open Env
+open Bwd
 
 (* Return the name of the compiled family field and return its compiled context's name *)
 let inductive_to_famtype ~(ind_def : VernacInductive.t)
@@ -90,12 +91,19 @@ let add_inductive_definition inductive =
     match further, base with
     | Some base, None       
     | None, Some base ->
+       Printf.printf "Found base %s\n" (Names.Id.to_string base.name);
+       let prefix = 
        Linkage.concatenate_prefix
          ~prefix:inductive_name ~derived:linkage
-         ~base:base, base.name
+         ~base:base
+       in
+       prefix.fields |> Bwd.iter (fun (name, _) -> Printf.printf "Prefix: %s\n" (Names.Id.to_string name));
+       prefix , base.name
    | None, None -> linkage, family
    | Some _futher, Some _base -> Errors.fail ~info:"Not yet implemented"
   in
+  Context.replace ~linkage;
+  let context = Context.get () in 
   let further_elem = Context.further_bound_linkage_elem context ~field:inductive_name in
   let base_elem = Context.base_linkage_elem context ~field:inductive_name in
   let inductive =
@@ -109,8 +117,7 @@ let add_inductive_definition inductive =
        Errors.fail ~info:"Not yet implemented"    
     | None, None -> inductive
     | _, _ -> Errors.fail ~info:"Expected extension with inductive type"
-  in 
-  Context.replace ~linkage;
+  in  
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:inductive_name context
   in

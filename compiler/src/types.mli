@@ -71,6 +71,7 @@ and Linkage : sig
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
+  
   val concatenate : derived:t -> base:t -> t
   val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
 end
