@@ -23,7 +23,8 @@ module VernacInductive : sig
     prefix:string ->
     t ->
     t * (Names.Id.t * Constrexpr.constr_expr * Constrexpr.constr_expr) list
-  val path_subtitution :  t -> base:Names.Id.t -> derived:Names.Id.t -> t
+
+  val path_subtitution : t -> base:Names.Id.t -> derived:Names.Id.t -> t
   val concatenate : base:t -> derived:t -> t
 end
 

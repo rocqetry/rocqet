@@ -62,12 +62,14 @@ let add_inductive_definition inductive =
   let linkage, base_name =
     match (further, base) with
     | Some base, None | None, Some base ->
-       (* Always subtitute path before concatenation *)
-       let base = Linkage.path_subtitution base ~base:base.name ~derived:linkage.name in
+        (* Always subtitute path before concatenation *)
+        let base =
+          Linkage.path_subtitution base ~base:base.name ~derived:linkage.name
+        in
         let prefix =
           Linkage.concatenate_prefix ~prefix:inductive_name ~derived:linkage
             ~base
-        in        
+        in
         (prefix, base.name)
     | None, None -> (linkage, family)
     | Some _futher, Some _base -> Errors.fail ~info:"Not yet implemented"
@@ -83,9 +85,11 @@ let add_inductive_definition inductive =
     match (further_elem, base_elem) with
     | Some (InductiveDefinition { inductive = base; _ }), None
     | None, Some (InductiveDefinition { inductive = base; _ }) ->
-       (* Always do path subsitution before concatenation *)
-       let base = VernacInductive.path_subtitution base ~base:base_name ~derived:family in 
-       VernacInductive.concatenate ~base ~derived:inductive
+        (* Always do path subsitution before concatenation *)
+        let base =
+          VernacInductive.path_subtitution base ~base:base_name ~derived:family
+        in
+        VernacInductive.concatenate ~base ~derived:inductive
     | Some (InductiveDefinition _), Some (InductiveDefinition _) ->
         Errors.fail ~info:"Not yet implemented"
     | None, None -> inductive

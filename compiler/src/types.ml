@@ -95,45 +95,43 @@ module VernacInductive = struct
     (modified_ind_def, alias_all_name_term_type_decl)
 
   (* base -> derived *)
-  let path_subtitution (inductive: t) ~base ~derived  =
-    let check_one_type ((((_, (_, _)) as a), b, c, newcstrs), _) =      
-    let childcstrs =
-      match newcstrs with
-      | Vernacexpr.Constructors constr ->          
-          let base_name = Naming.self_version base in
-          let derived_name = Naming.self_version derived in
-          let base_constr_renamed =            
-             Naming.rename_ind_constructors constr ~base_name ~derived_name
-          in
-          Vernacexpr.Constructors base_constr_renamed
-      | _ -> Errors.fail ~info:"Record types are not yet supported"
+  let path_subtitution (inductive : t) ~base ~derived =
+    let check_one_type ((((_, (_, _)) as a), b, c, newcstrs), _) =
+      let childcstrs =
+        match newcstrs with
+        | Vernacexpr.Constructors constr ->
+            let base_name = Naming.self_version base in
+            let derived_name = Naming.self_version derived in
+            let base_constr_renamed =
+              Naming.rename_ind_constructors constr ~base_name ~derived_name
+            in
+            Vernacexpr.Constructors base_constr_renamed
+        | _ -> Errors.fail ~info:"Record types are not yet supported"
+      in
+      let child_ind = (a, b, c, childcstrs) in
+      (child_ind, [])
     in
-    let child_ind = (a, b, c, childcstrs) in
-    (child_ind, [])
-  in  
-  inductive |> List.map check_one_type    
+    inductive |> List.map check_one_type
 
-
- let concatenate ~(base : t) ~(derived : t) : t =
-  let check_one_type
-      ( (((_, (old_name, _)), _, _, oldcstrs), _),
-        ((((_, (new_name, _)) as a), b, c, newcstrs), _) ) =
-    if CAst.eq ( <> ) old_name new_name then
-      Errors.fail ~info:"Name mismatch when extending inductive types.";
-    let childcstrs =
-      match (oldcstrs, newcstrs) with
-      | ( Vernacexpr.Constructors base_constr,
-          Vernacexpr.Constructors derived_constr ) ->
-          Vernacexpr.Constructors (base_constr @ derived_constr)
-      | _, _ -> Errors.fail ~info:"Record types are not yet supported"
+  let concatenate ~(base : t) ~(derived : t) : t =
+    let check_one_type
+        ( (((_, (old_name, _)), _, _, oldcstrs), _),
+          ((((_, (new_name, _)) as a), b, c, newcstrs), _) ) =
+      if CAst.eq ( <> ) old_name new_name then
+        Errors.fail ~info:"Name mismatch when extending inductive types.";
+      let childcstrs =
+        match (oldcstrs, newcstrs) with
+        | ( Vernacexpr.Constructors base_constr,
+            Vernacexpr.Constructors derived_constr ) ->
+            Vernacexpr.Constructors (base_constr @ derived_constr)
+        | _, _ -> Errors.fail ~info:"Record types are not yet supported"
+      in
+      let child_ind = (a, b, c, childcstrs) in
+      (child_ind, [])
     in
-    let child_ind = (a, b, c, childcstrs) in
-    (child_ind, [])
-  in
-  if List.length base <> List.length derived then
-    Errors.fail ~info:"All inductive types must be specified when extending.";
-  List.combine base derived |> List.map check_one_type
-
+    if List.length base <> List.length derived then
+      Errors.fail ~info:"All inductive types must be specified when extending.";
+    List.combine base derived |> List.map check_one_type
 end
 
 (* Module naming *)
@@ -181,11 +179,11 @@ and Linkage : sig
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
-  }  
+  }
 
   (* base -> derived *)
   val path_subtitution : t -> base:Names.Id.t -> derived:Names.Id.t -> t
-  
+
   (* Linkage concatenation *)
   val concatenate : derived:t -> base:t -> t
 
@@ -204,20 +202,25 @@ end = struct
       let elem =
         match elem with
         | LinkageElem.FamilyDefinition family ->
-           LinkageElem.FamilyDefinition { family with linkage = path_subtitution family.linkage ~base ~derived }
+            LinkageElem.FamilyDefinition
+              {
+                family with
+                linkage = path_subtitution family.linkage ~base ~derived;
+              }
         | LinkageElem.InductiveDefinition definition ->
-           LinkageElem.InductiveDefinition
-             { definition with
-               inductive = VernacInductive.path_subtitution definition.inductive ~base ~derived }
+            LinkageElem.InductiveDefinition
+              {
+                definition with
+                inductive =
+                  VernacInductive.path_subtitution definition.inductive ~base
+                    ~derived;
+              }
       in
       (name, elem)
-    in 
-    let fields =
-      linkage.fields
-      |> Bwd.map f 
     in
+    let fields = linkage.fields |> Bwd.map f in
     { linkage with fields }
-  
+
   let concatenate ~derived ~base =
     (* This is a very naive concatenation *)
     let rec compute_difference ~base
