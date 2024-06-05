@@ -100,10 +100,13 @@ module VernacInductive = struct
       let childcstrs =
         match newcstrs with
         | Vernacexpr.Constructors constr ->
-            let base_name = Naming.self_version base in
-            let derived_name = Naming.self_version derived in
+            (* The right self_names should be passed to us *)
+            (* let base_name = Naming.self_version base in
+            let derived_name = Naming.self_version derived in*)
             let base_constr_renamed =
-              Naming.rename_ind_constructors constr ~base_name ~derived_name
+              Naming.rename_ind_constructors constr
+                ~base_name:base
+                ~derived_name:derived
             in
             Vernacexpr.Constructors base_constr_renamed
         | _ -> Errors.fail ~info:"Record types are not yet supported"
@@ -181,6 +184,7 @@ and Linkage : sig
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
+  val top_most_self_name : t -> Names.Id.t
   (* base -> derived *)
   val path_subtitution : t -> base:Names.Id.t -> derived:Names.Id.t -> t
 
@@ -196,6 +200,11 @@ end = struct
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
+
+  let top_most_self_name linkage =
+    match Bwd.to_list linkage.context with
+    | [] -> Naming.self_version linkage.name
+    | (name, _) :: _ -> name
 
   let rec path_subtitution linkage ~base ~derived =
     let f (name, elem) =

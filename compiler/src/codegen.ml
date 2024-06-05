@@ -387,6 +387,7 @@ let compile_nested_linkage_signature linkage =
       return ())
   |> run
 
+(* reparameterize a non-nested linkage into a nested linkage *)
 (* val parameterize : Linkage.t -> prefix:(Names.Id.t * Constrexpr.module_ast) Bwd.t -> Linkage.t *)
 let parameterize linkage ~prefix =
   let open VernacBackend in
@@ -447,9 +448,61 @@ let parameterize linkage ~prefix =
         ( name,
           LinkageElem.InductiveDefinition
             { impl with compiled_signature; compiled_context; compiled_impl } )
-    | LinkageElem.FamilyDefinition { compiled_context = _; _ } ->
-        Errors.fail
-          ~info:"We don't want to reparemeterize a nested linkage for now"
+    | LinkageElem.FamilyDefinition impl ->
+       let compiled_context =
+          define_moduletype
+            ~module_name:(Naming.fresh_name ~prefix:"Reparameterize")
+            ~parameters:(parameters @> []) ~body:(fun _ ->
+              let module_expr =
+                Termutils.apply_module
+                  ~functor_expr:
+                    (Termutils.ident_to_module_expr impl.compiled_context)
+                  ~arguments:[]
+              in
+
+              let* _ = include_module ~module_expr in
+              return ())
+          |> run
+        in
+        let ctx = "self" |> Names.Id.of_string in
+        let ctx_ty = Termutils.ident_to_module_expr impl.compiled_context in
+        let compiled_signature =
+          define_moduletype
+            ~module_name:(Naming.fresh_name ~prefix:"Reparameterize")
+            ~parameters:(parameters @> [ (ctx, ctx_ty) ])
+            ~body:(fun _ ->
+              let module_expr =
+                Termutils.apply_module
+                  ~functor_expr:
+                    (Termutils.ident_to_module_expr impl.compiled_signature)
+                  ~arguments:[ Libnames.qualid_of_ident ctx ]
+              in
+
+              let* _ = include_module ~module_expr in
+              return ())
+          |> run
+        in
+        let compiled_impl =
+          define_module
+            ~module_name:(Naming.fresh_name ~prefix:"Reparameterize")
+            ~parameters:(parameters @> [ (ctx, ctx_ty) ])
+            ~body:(fun _ ->
+              let module_expr =
+                Termutils.apply_module
+                  ~functor_expr:
+                    (Termutils.ident_to_module_expr impl.compiled_impl)
+                  ~arguments:[ Libnames.qualid_of_ident ctx ]
+              in
+
+              let* _ = include_module ~module_expr in
+              return ())
+          |> run
+        in
+        ( name,
+          LinkageElem.FamilyDefinition
+            { impl with compiled_signature; compiled_context; compiled_impl } )
+        (* Errors.fail
+          ~info:"We don't want to reparemeterize a nested linkage for now"*)
   in
   let fields = linkage.fields |> Bwd.map f in
   { linkage with context = parameters; fields }

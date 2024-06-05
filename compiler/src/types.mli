@@ -74,6 +74,7 @@ and Linkage : sig
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
+  val top_most_self_name : t -> Names.Id.t
   val path_subtitution : t -> base:Names.Id.t -> derived:Names.Id.t -> t
   val concatenate : derived:t -> base:t -> t
   val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t

@@ -200,8 +200,9 @@ module Context = struct
           | None -> linkage
           | Some base_linkage ->
               let base_linkage =
-                Linkage.path_subtitution base_linkage ~base:base_linkage.name
-                  ~derived:linkage.name
+                Linkage.path_subtitution base_linkage
+                  ~base:(Linkage.top_most_self_name base_linkage)
+                  ~derived:(Linkage.top_most_self_name linkage)
               in
               Linkage.concatenate ~base:base_linkage ~derived:linkage
         in
@@ -218,17 +219,24 @@ module Context = struct
                   "Nested families can't be further bound and have a base \
                    family at the same time"
           | _, Some base ->
-              let base = Codegen.parameterize ~prefix:linkage.context base in
+             (* Don't just reparameterize! We need some kind of condition to check
+                on linkages to know when two linkages "can't fit" *)
+             (* Possibly reparameterization can go both ways? *)
+             let base = Codegen.parameterize ~prefix:linkage.context base in
+             (* Here we don't need to topmost self name becuase this is classic
+                inheritance, not further binding *)
               let base =
-                Linkage.path_subtitution base ~base:base.name
+                Linkage.path_subtitution base
+                  ~base:base.name
                   ~derived:linkage.name
               in
               let further_bound = Linkage.concatenate ~base ~derived:linkage in
               further_bound
           | Some base, _ ->
               let base =
-                Linkage.path_subtitution base ~base:base.name
-                  ~derived:linkage.name
+                Linkage.path_subtitution base
+                  ~base:(Linkage.top_most_self_name base)
+                  ~derived:(Linkage.top_most_self_name linkage)
               in
               let further_bound = Linkage.concatenate ~base ~derived:linkage in
               further_bound

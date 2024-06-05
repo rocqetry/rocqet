@@ -57,21 +57,22 @@ let add_inductive_definition inductive =
   let context = Context.get () in
   let further = Context.further_bound_linkage context in
   let base = Context.base_linkage context in
-  let linkage = Context.family_linkage context in
-  let family = Context.family_name context in
-  let linkage, base_name =
+  let linkage = Context.family_linkage context in  
+  let linkage, base_family =
     match (further, base) with
     | Some base, None | None, Some base ->
         (* Always subtitute path before concatenation *)
-        let base =
-          Linkage.path_subtitution base ~base:base.name ~derived:linkage.name
+       let base =          
+         Linkage.path_subtitution base
+           ~base:(Linkage.top_most_self_name base)
+           ~derived:(Linkage.top_most_self_name linkage)
         in
         let prefix =
           Linkage.concatenate_prefix ~prefix:inductive_name ~derived:linkage
             ~base
         in
-        (prefix, base.name)
-    | None, None -> (linkage, family)
+        (prefix, base)
+    | None, None -> (linkage, linkage)
     | Some _futher, Some _base -> Errors.fail ~info:"Not yet implemented"
   in
   Context.replace ~linkage;
@@ -87,7 +88,9 @@ let add_inductive_definition inductive =
     | None, Some (InductiveDefinition { inductive = base; _ }) ->
         (* Always do path subsitution before concatenation *)
         let base =
-          VernacInductive.path_subtitution base ~base:base_name ~derived:family
+          VernacInductive.path_subtitution base
+            ~base:(Linkage.top_most_self_name base_family)
+            ~derived:(Linkage.top_most_self_name linkage)
         in
         VernacInductive.concatenate ~base ~derived:inductive
     | Some (InductiveDefinition _), Some (InductiveDefinition _) ->
