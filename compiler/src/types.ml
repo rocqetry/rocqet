@@ -95,7 +95,6 @@ module VernacInductive = struct
     (modified_ind_def, alias_all_name_term_type_decl)
 end
 
-
 (* Module naming *)
 (* This should really be Names.ModPath.t *)
 module CompiledModule = struct
@@ -141,26 +140,25 @@ and Linkage : sig
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
-  } 
-  
+  }
+
   (* Linkage concatenation *)
   val concatenate : derived:t -> base:t -> t
 
   (* Concatenate the fields before `prefix` *)
-  val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t  
+  val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
 end = struct
   type t = {
-    context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;    
+    context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
-  }    
-  
+  }
+
   let concatenate ~derived ~base =
     (* This is a very naive concatenation *)
-    let rec compute_difference
-              ~base
-              ~(derived: (Names.Id.t * LinkageElem.t) list) =
+    let rec compute_difference ~base
+        ~(derived : (Names.Id.t * LinkageElem.t) list) =
       match (base, derived) with
       | [], [] -> []
       | (bname, belem) :: base', (dname, _) :: derived' ->

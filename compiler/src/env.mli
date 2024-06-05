@@ -24,7 +24,12 @@ module Context : sig
   val close : unit -> unit
   val further_bound_linkage : LinkageCtx.t -> Linkage.t option
   val base_linkage : LinkageCtx.t -> Linkage.t option
-  val base_linkage_elem : LinkageCtx.t -> field:Names.Id.t -> LinkageElem.t option
-  val further_bound_linkage_elem : LinkageCtx.t -> field:Names.Id.t -> LinkageElem.t option
+
+  val base_linkage_elem :
+    LinkageCtx.t -> field:Names.Id.t -> LinkageElem.t option
+
+  val further_bound_linkage_elem :
+    LinkageCtx.t -> field:Names.Id.t -> LinkageElem.t option
+
   val replace : linkage:Linkage.t -> unit
 end

@@ -65,13 +65,12 @@ end
 
 and Linkage : sig
   type t = {
-    context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;    
+    context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
-  
   val concatenate : derived:t -> base:t -> t
   val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
 end

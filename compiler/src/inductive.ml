@@ -4,8 +4,8 @@ open Bwd
 
 (* Return the name of the compiled family field and return its compiled context's name *)
 let inductive_to_famtype ~(ind_def : VernacInductive.t)
-      ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
-      ~family_name : CompiledModuleType.t =
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
+    CompiledModuleType.t =
   let module_name =
     let inductive_name = ind_def |> VernacInductive.extract_inductive_name in
     Naming.module_name_of ~family_name inductive_name
@@ -17,7 +17,7 @@ let inductive_to_famtype ~(ind_def : VernacInductive.t)
     in
     type_decls @ List.concat constr_decls
     |> List.map (fun (name, ty) -> Backend.postulate_axiom ~name ~ty)
-  in  
+  in
   let open Backend in
   Backend.run
   @@ Backend.define_moduletype ~module_name ~parameters:ctx ~body:(fun _ ->
@@ -25,9 +25,9 @@ let inductive_to_famtype ~(ind_def : VernacInductive.t)
          return ())
 
 (* This is the instantiation of an inductive type and it's recursors *)
-let inductive_to_famterm_and_recursor_type ~(ind_def : VernacInductive.t)      
-      ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
-      ~family_name : CompiledModule.t =
+let inductive_to_famterm_and_recursor_type ~(ind_def : VernacInductive.t)
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
+    CompiledModule.t =
   (* Generate a definition mapping of the inductive type and
      return the new inductive definition and the export of the correct names *)
   let modified_indcstrs, alias_all_name_term_type_decl =
@@ -81,47 +81,49 @@ let concatenate_inductive ~(base : VernacInductive.t)
   List.combine base derived |> List.map check_one_type
 
 let add_inductive_definition inductive =
-  let inductive_name = VernacInductive.extract_inductive_name inductive in 
-  let context = Context.get () in  
+  let inductive_name = VernacInductive.extract_inductive_name inductive in
+  let context = Context.get () in
   let further = Context.further_bound_linkage context in
   let base = Context.base_linkage context in
   let linkage = Context.family_linkage context in
-  let family = Context.family_name context in 
+  let family = Context.family_name context in
   let linkage, base_name =
-    match further, base with
-    | Some base, None       
-    | None, Some base ->
-       Printf.printf "Found base %s\n" (Names.Id.to_string base.name);
-       let prefix = 
-       Linkage.concatenate_prefix
-         ~prefix:inductive_name ~derived:linkage
-         ~base:base
-       in
-       prefix.fields |> Bwd.iter (fun (name, _) -> Printf.printf "Prefix: %s\n" (Names.Id.to_string name));
-       prefix , base.name
-   | None, None -> linkage, family
-   | Some _futher, Some _base -> Errors.fail ~info:"Not yet implemented"
+    match (further, base) with
+    | Some base, None | None, Some base ->
+        Printf.printf "Found base %s\n" (Names.Id.to_string base.name);
+        let prefix =
+          Linkage.concatenate_prefix ~prefix:inductive_name ~derived:linkage
+            ~base
+        in
+        prefix.fields
+        |> Bwd.iter (fun (name, _) ->
+               Printf.printf "Prefix: %s\n" (Names.Id.to_string name));
+        (prefix, base.name)
+    | None, None -> (linkage, family)
+    | Some _futher, Some _base -> Errors.fail ~info:"Not yet implemented"
   in
   Context.replace ~linkage;
-  let context = Context.get () in 
-  let further_elem = Context.further_bound_linkage_elem context ~field:inductive_name in
+  let context = Context.get () in
+  let further_elem =
+    Context.further_bound_linkage_elem context ~field:inductive_name
+  in
   let base_elem = Context.base_linkage_elem context ~field:inductive_name in
   let inductive =
-    let open LinkageElem in 
-    match further_elem, base_elem with
+    let open LinkageElem in
+    match (further_elem, base_elem) with
     | Some (InductiveDefinition { inductive = base; _ }), None
     | None, Some (InductiveDefinition { inductive = base; _ }) ->
-       concatenate_inductive ~base ~derived:inductive
-          ~base_name ~derived_name:family
+        concatenate_inductive ~base ~derived:inductive ~base_name
+          ~derived_name:family
     | Some (InductiveDefinition _), Some (InductiveDefinition _) ->
-       Errors.fail ~info:"Not yet implemented"    
+        Errors.fail ~info:"Not yet implemented"
     | None, None -> inductive
     | _, _ -> Errors.fail ~info:"Expected extension with inductive type"
-  in  
+  in
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:inductive_name context
   in
-  let family_name = Context.family_name context in     
+  let family_name = Context.family_name context in
   let compiled_signature =
     inductive_to_famtype ~ind_def:inductive ~ctx:parameters ~family_name
   in
