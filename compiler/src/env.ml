@@ -199,6 +199,9 @@ module Context = struct
           match linkage.base with
           | None -> linkage
           | Some base_linkage ->
+             let base_linkage =
+               Linkage.path_subtitution base_linkage ~base:base_linkage.name ~derived:linkage.name
+             in 
               Linkage.concatenate ~base:base_linkage ~derived:linkage
         in
         store := None;
@@ -215,9 +218,11 @@ module Context = struct
                    family at the same time"
           | _, Some base ->
               let base = Codegen.parameterize ~prefix:linkage.context base in
+              let base = Linkage.path_subtitution base ~base:base.name ~derived:linkage.name in 
               let further_bound = Linkage.concatenate ~base ~derived:linkage in
               further_bound
           | Some base, _ ->
+              let base = Linkage.path_subtitution base ~base:base.name ~derived:linkage.name in 
               let further_bound = Linkage.concatenate ~base ~derived:linkage in
               further_bound
         in

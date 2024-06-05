@@ -1,6 +1,5 @@
 open Types
 open Env
-open Bwd
 
 (* Return the name of the compiled family field and return its compiled context's name *)
 let inductive_to_famtype ~(ind_def : VernacInductive.t)
@@ -53,33 +52,6 @@ let inductive_to_famterm_and_recursor_type ~(ind_def : VernacInductive.t)
   in
   module_name
 
-let concatenate_inductive ~(base : VernacInductive.t)
-    ~(derived : VernacInductive.t) ~base_name ~derived_name : VernacInductive.t
-    =
-  let check_one_type
-      ( (((_, (old_name, _)), _, _, oldcstrs), _),
-        ((((_, (new_name, _)) as a), b, c, newcstrs), _) ) =
-    if CAst.eq ( <> ) old_name new_name then
-      Errors.fail ~info:"Name mismatch when extending inductive types.";
-    let childcstrs =
-      match (oldcstrs, newcstrs) with
-      | ( Vernacexpr.Constructors base_constr,
-          Vernacexpr.Constructors derived_constr ) ->
-          let base_name = Naming.self_version base_name in
-          let derived_name = Naming.self_version derived_name in
-          let base_constr_renamed =
-            Naming.rename_ind_constructors base_constr ~base_name ~derived_name
-          in
-          Vernacexpr.Constructors (base_constr_renamed @ derived_constr)
-      | _, _ -> Errors.fail ~info:"Record types are not yet supported"
-    in
-    let child_ind = (a, b, c, childcstrs) in
-    (child_ind, [])
-  in
-  if List.length base <> List.length derived then
-    Errors.fail ~info:"All inductive types must be specified when extending.";
-  List.combine base derived |> List.map check_one_type
-
 let add_inductive_definition inductive =
   let inductive_name = VernacInductive.extract_inductive_name inductive in
   let context = Context.get () in
@@ -90,14 +62,12 @@ let add_inductive_definition inductive =
   let linkage, base_name =
     match (further, base) with
     | Some base, None | None, Some base ->
-        Printf.printf "Found base %s\n" (Names.Id.to_string base.name);
+       (* Always subtitute path before concatenation *)
+       let base = Linkage.path_subtitution base ~base:base.name ~derived:linkage.name in
         let prefix =
           Linkage.concatenate_prefix ~prefix:inductive_name ~derived:linkage
             ~base
-        in
-        prefix.fields
-        |> Bwd.iter (fun (name, _) ->
-               Printf.printf "Prefix: %s\n" (Names.Id.to_string name));
+        in        
         (prefix, base.name)
     | None, None -> (linkage, family)
     | Some _futher, Some _base -> Errors.fail ~info:"Not yet implemented"
@@ -113,8 +83,9 @@ let add_inductive_definition inductive =
     match (further_elem, base_elem) with
     | Some (InductiveDefinition { inductive = base; _ }), None
     | None, Some (InductiveDefinition { inductive = base; _ }) ->
-        concatenate_inductive ~base ~derived:inductive ~base_name
-          ~derived_name:family
+       (* Always do path subsitution before concatenation *)
+       let base = VernacInductive.path_subtitution base ~base:base_name ~derived:family in 
+       VernacInductive.concatenate ~base ~derived:inductive
     | Some (InductiveDefinition _), Some (InductiveDefinition _) ->
         Errors.fail ~info:"Not yet implemented"
     | None, None -> inductive
