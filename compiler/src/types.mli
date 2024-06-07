@@ -24,7 +24,7 @@ module VernacInductive : sig
     t ->
     t * (Names.Id.t * Constrexpr.constr_expr * Constrexpr.constr_expr) list
 
-  val path_subtitution : t -> base:Names.Id.t -> derived:Names.Id.t -> t
+  val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
   val concatenate : base:t -> derived:t -> t
 end
 
@@ -75,7 +75,8 @@ and Linkage : sig
   }
 
   val top_most_self_name : t -> Names.Id.t
-  val path_subtitution : t -> base:Names.Id.t -> derived:Names.Id.t -> t
+  val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
+  val concatenate_recursive : derived:t -> base:t -> t
   val concatenate : derived:t -> base:t -> t
   val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
 end

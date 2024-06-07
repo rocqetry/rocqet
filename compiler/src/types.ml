@@ -95,7 +95,7 @@ module VernacInductive = struct
     (modified_ind_def, alias_all_name_term_type_decl)
 
   (* base -> derived *)
-  let path_subtitution (inductive : t) ~base ~derived =
+  let path_subtitution (inductive : t) ~source ~target =
     let check_one_type ((((_, (_, _)) as a), b, c, newcstrs), _) =
       let childcstrs =
         match newcstrs with
@@ -105,8 +105,8 @@ module VernacInductive = struct
             let derived_name = Naming.self_version derived in*)
             let base_constr_renamed =
               Naming.rename_ind_constructors constr
-                ~base_name:base
-                ~derived_name:derived
+                ~base_name:source
+                ~derived_name:target
             in
             Vernacexpr.Constructors base_constr_renamed
         | _ -> Errors.fail ~info:"Record types are not yet supported"
@@ -117,6 +117,17 @@ module VernacInductive = struct
     inductive |> List.map check_one_type
 
   let concatenate ~(base : t) ~(derived : t) : t =
+    let remove_duplicates lst =
+       let rec aux seen = function
+         | [] -> []
+         | hd :: tl ->
+             if List.mem hd seen then
+               aux seen tl
+             else
+               hd :: aux (hd :: seen) tl
+       in
+       aux [] lst
+    in
     let check_one_type
         ( (((_, (old_name, _)), _, _, oldcstrs), _),
           ((((_, (new_name, _)) as a), b, c, newcstrs), _) ) =
@@ -125,8 +136,8 @@ module VernacInductive = struct
       let childcstrs =
         match (oldcstrs, newcstrs) with
         | ( Vernacexpr.Constructors base_constr,
-            Vernacexpr.Constructors derived_constr ) ->
-            Vernacexpr.Constructors (base_constr @ derived_constr)
+            Vernacexpr.Constructors derived_constr ) ->            
+            Vernacexpr.Constructors (remove_duplicates (base_constr @ derived_constr))
         | _, _ -> Errors.fail ~info:"Record types are not yet supported"
       in
       let child_ind = (a, b, c, childcstrs) in
@@ -186,7 +197,10 @@ and Linkage : sig
 
   val top_most_self_name : t -> Names.Id.t
   (* base -> derived *)
-  val path_subtitution : t -> base:Names.Id.t -> derived:Names.Id.t -> t
+  val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
+
+
+  val concatenate_recursive : derived:t -> base:t -> t
 
   (* Linkage concatenation *)
   val concatenate : derived:t -> base:t -> t
@@ -206,7 +220,7 @@ end = struct
     | [] -> Naming.self_version linkage.name
     | (name, _) :: _ -> name
 
-  let rec path_subtitution linkage ~base ~derived =
+  let rec path_subtitution linkage ~source ~target =
     let f (name, elem) =
       let elem =
         match elem with
@@ -214,15 +228,15 @@ end = struct
             LinkageElem.FamilyDefinition
               {
                 family with
-                linkage = path_subtitution family.linkage ~base ~derived;
+                linkage = path_subtitution family.linkage ~source ~target;
               }
         | LinkageElem.InductiveDefinition definition ->
             LinkageElem.InductiveDefinition
               {
                 definition with
                 inductive =
-                  VernacInductive.path_subtitution definition.inductive ~base
-                    ~derived;
+                  VernacInductive.path_subtitution definition.inductive ~source
+                    ~target;
               }
       in
       (name, elem)
@@ -230,8 +244,43 @@ end = struct
     let fields = linkage.fields |> Bwd.map f in
     { linkage with fields }
 
+  let rec concatenate_recursive ~derived ~base =    
+    let rec pick x lst =
+      match lst with
+      | [] -> (None, [])
+      | (hd, elem) :: tl ->
+          if Names.Id.equal hd x then
+            (Some (hd, elem), tl)
+          else
+            let (result, rest) = pick x tl in
+            (result, (hd, elem) :: rest)
+    in
+    let rec go base derived =
+      match base with
+      | [] -> []
+      | (name, elem) :: base ->
+         match pick name derived with
+         | None, _ -> (name, elem) :: go base derived
+         | Some (_, delem), derived ->(
+            match (elem, delem) with
+            | LinkageElem.InductiveDefinition ibase, LinkageElem.InductiveDefinition iderived ->
+               let elem = 
+               LinkageElem.InductiveDefinition
+                 { ibase with inductive = VernacInductive.concatenate ~base:ibase.inductive ~derived:iderived.inductive }
+               in 
+               (name, elem) :: go base derived
+            | LinkageElem.FamilyDefinition ibase, LinkageElem.FamilyDefinition iderived ->
+               let linkage = concatenate_recursive ~base:ibase.linkage ~derived:iderived.linkage in 
+               let elem = LinkageElem.FamilyDefinition { ibase with linkage } in
+               (name, elem) :: go base derived
+            | _ -> Errors.fail ~info:"Wrong concatenation arguments")
+    in
+    let fields = go (Bwd.to_list base.fields) (Bwd.to_list derived.fields) in 
+    Linkage.{ derived with fields = Bwd.of_list fields }
+
   let concatenate ~derived ~base =
     (* This is a very naive concatenation *)
+    (* This basically adds the things that are not present *)
     let rec compute_difference ~base
         ~(derived : (Names.Id.t * LinkageElem.t) list) =
       match (base, derived) with

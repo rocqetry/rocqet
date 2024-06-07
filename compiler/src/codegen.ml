@@ -208,6 +208,54 @@ module VernacBackend = struct
               [ (NoCoercion, ([ fname_ ], ty)) ] )))
 end
 
+let compile_inductive_signature ~(ind_def : VernacInductive.t)
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
+      CompiledModuleType.t =
+  let module_name =
+    let inductive_name = ind_def |> VernacInductive.extract_inductive_name in
+    Naming.module_name_of ~family_name inductive_name
+  in
+  let module Backend = VernacBackend in
+  let all_decls =
+    let type_decls, constr_decls =
+      ind_def |> VernacInductive.extract_all_names_with_type |> List.split
+    in
+    type_decls @ List.concat constr_decls
+    |> List.map (fun (name, ty) -> Backend.postulate_axiom ~name ~ty)
+  in
+  let open Backend in
+  Backend.run
+  @@ Backend.define_moduletype ~module_name ~parameters:ctx ~body:(fun _ ->
+         let* () = flatmap all_decls in
+         return ())
+
+let compile_inductive_implementation ~(ind_def : VernacInductive.t)
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
+      CompiledModule.t =
+  (* Generate a definition mapping of the inductive type and
+     return the new inductive definition and the export of the correct names *)
+  let modified_indcstrs, alias_all_name_term_type_decl =
+    VernacInductive.definition_mapping ~prefix:"__internal_" ind_def
+  in
+  let module_name =
+    let original_ind_name = ind_def |> VernacInductive.extract_inductive_name in
+    Naming.module_name_of ~family_name original_ind_name
+  in
+  let open VernacBackend in  
+    define_module ~module_name ~parameters:ctx ~body:(fun _ ->
+           let* () = define_inductive modified_indcstrs in
+           let alias_all =
+             List.map
+               (fun (original_name, new_name, ty) ->
+                 define_term ~name:original_name ~expr:new_name ~ty)
+               alias_all_name_term_type_decl
+           in
+           let* _ = flatmap alias_all in
+           return ())
+  |> run 
+  
+  
+
 let compile_linkage_context ~field_name (context : LinkageCtx.t) :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
   let open VernacBackend in
@@ -506,3 +554,56 @@ let parameterize linkage ~prefix =
   in
   let fields = linkage.fields |> Bwd.map f in
   { linkage with context = parameters; fields }
+
+let rec recompute_linkage (linkage: Linkage.t) =
+  let empty_linkage = { linkage with fields = Bwd.Emp } in
+  let f linkage (name, field) = 
+      match field with
+      | LinkageElem.FamilyDefinition { linkage = nested_linkage;  _ } ->         
+         let compiled_context, parameters =
+           compile_linkage_context
+             ~field_name:nested_linkage.name
+             (LinkageCtx.Toplevel linkage)
+         in
+         let nested_linkage = { nested_linkage with context = Bwd.of_list parameters } in
+         let nested_linkage = recompute_linkage nested_linkage in
+         let signature = compile_nested_linkage_signature nested_linkage in
+         let impl = compile_nested_linkage nested_linkage in
+         let elem =
+           LinkageElem.FamilyDefinition
+            {
+              linkage = nested_linkage;
+              compiled_context;
+              compiled_signature = signature;
+              compiled_impl = impl;
+            }
+         in
+         { linkage with fields = Bwd.Snoc (linkage.fields, (name, elem)) }         
+      | LinkageElem.InductiveDefinition { inductive; _ } ->
+         let compiled_context, parameters =
+           compile_linkage_context
+             ~field_name:(VernacInductive.extract_inductive_name inductive)
+             (LinkageCtx.Toplevel linkage)
+         in  
+        let compiled_signature =
+          compile_inductive_signature ~ind_def:inductive ~ctx:parameters
+            ~family_name:linkage.name
+        in
+        let compiled_impl =
+          compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
+            ~family_name:linkage.name
+       in
+       let elem =
+         LinkageElem.InductiveDefinition
+           {
+             inductive;
+             compiled_context;
+             compiled_impl;
+             compiled_signature;
+             operation = InhOp.CInhNew;
+           }
+       in
+       { linkage with fields = Bwd.Snoc (linkage.fields, (name, elem)) }
+  in   
+  Bwd.fold_left f empty_linkage linkage.fields
+  

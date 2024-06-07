@@ -57,6 +57,7 @@ module Context = struct
   let start_linkage name =
     match !store with
     | Some context ->
+        (* Inherit dependencies *)
         let _, parameters =
           Codegen.compile_linkage_context ~field_name:name context
         in
@@ -171,20 +172,20 @@ module Context = struct
         linkage.base
 
   let base_linkage_elem context ~field =
-    let lookup (linkage : Linkage.t) =
+    let lookup (linkage : Linkage.t) =      
       linkage.fields
       |> Bwd.find_opt (fun (name, _) -> Names.Id.equal name field)
+      |> Option.map (fun (_, elem) -> linkage, elem) 
     in
-    context |> base_linkage |> Option.map lookup |> Option.flatten
-    |> Option.map snd
+    context |> base_linkage |> Option.map lookup |> Option.flatten    
 
   let further_bound_linkage_elem context ~field =
     let lookup (linkage : Linkage.t) =
       linkage.fields
       |> Bwd.find_opt (fun (name, _) -> Names.Id.equal name field)
+      |> Option.map (fun (_, elem) -> linkage, elem) 
     in
-    context |> further_bound_linkage |> Option.map lookup |> Option.flatten
-    |> Option.map snd
+    context |> further_bound_linkage |> Option.map lookup |> Option.flatten    
 
   let family_linkage context =
     match context with
@@ -201,45 +202,42 @@ module Context = struct
           | Some base_linkage ->
               let base_linkage =
                 Linkage.path_subtitution base_linkage
-                  ~base:(Linkage.top_most_self_name base_linkage)
-                  ~derived:(Linkage.top_most_self_name linkage)
+                  ~source:(Linkage.top_most_self_name base_linkage)
+                  ~target:(Linkage.top_most_self_name linkage)
               in
               Linkage.concatenate ~base:base_linkage ~derived:linkage
         in
         store := None;
-        let _ = Codegen.compile_linkage linkage in
+        Codegen.compile_linkage linkage |> ignore;
         Linkages.add linkage
     | Some (LinkageCtx.Nested (upper, linkage) as context) ->
         let linkage =
           match (further_bound_linkage context, base_linkage context) with
           | None, None -> linkage
           | Some _, Some _ ->
-              Errors.fail
-                ~info:
-                  "Nested families can't be further bound and have a base \
-                   family at the same time"
+             Errors.fail
+               ~info:"Further binding and inheritance at the same time has not been implememnted for nested families"
           | _, Some base ->
+             (* Here, we are assuming that base is a toplevel family *)
              (* Don't just reparameterize! We need some kind of condition to check
                 on linkages to know when two linkages "can't fit" *)
              (* Possibly reparameterization can go both ways? *)
              let base = Codegen.parameterize ~prefix:linkage.context base in
              (* Here we don't need to topmost self name becuase this is classic
-                inheritance, not further binding *)
+                inheritance, not further binding *)        
               let base =
                 Linkage.path_subtitution base
-                  ~base:base.name
-                  ~derived:linkage.name
-              in
-              let further_bound = Linkage.concatenate ~base ~derived:linkage in
-              further_bound
-          | Some base, _ ->
+                  ~source:(Naming.self_version base.name)
+                  ~target:(Naming.self_version linkage.name)
+              in              
+              Linkage.concatenate ~base ~derived:linkage              
+          | Some further, _ ->
               let base =
-                Linkage.path_subtitution base
-                  ~base:(Linkage.top_most_self_name base)
-                  ~derived:(Linkage.top_most_self_name linkage)
+                Linkage.path_subtitution further
+                  ~source:(Linkage.top_most_self_name further)
+                  ~target:(Linkage.top_most_self_name linkage)
               in
-              let further_bound = Linkage.concatenate ~base ~derived:linkage in
-              further_bound
+              Linkage.concatenate ~base ~derived:linkage              
         in
         let signature = Codegen.compile_nested_linkage_signature linkage in
         let impl = Codegen.compile_nested_linkage linkage in

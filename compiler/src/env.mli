@@ -26,10 +26,10 @@ module Context : sig
   val base_linkage : LinkageCtx.t -> Linkage.t option
 
   val base_linkage_elem :
-    LinkageCtx.t -> field:Names.Id.t -> LinkageElem.t option
+    LinkageCtx.t -> field:Names.Id.t -> (Linkage.t * LinkageElem.t) option
 
   val further_bound_linkage_elem :
-    LinkageCtx.t -> field:Names.Id.t -> LinkageElem.t option
+    LinkageCtx.t -> field:Names.Id.t -> (Linkage.t * LinkageElem.t) option
 
   val replace : linkage:Linkage.t -> unit
 end
