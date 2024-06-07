@@ -1,0 +1,1 @@
+val close : unit -> unit

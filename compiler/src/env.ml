@@ -127,6 +127,9 @@ module Context = struct
         let ctx = LinkageCtx.Nested (upper, linkage) in
         store := Some ctx
 
+  let destructive_update new_store =
+    store := new_store
+  
   (* TODO: Don't allow this, have an update function *)
   let replace ~linkage =
     match !store with
@@ -189,88 +192,5 @@ module Context = struct
 
   let family_linkage context =
     match context with
-    | LinkageCtx.Toplevel linkage | LinkageCtx.Nested (_, linkage) -> linkage
-
-  let close () : unit =
-    let context = !store in
-    match context with
-    | None -> Errors.fail ~info:"There is no linkage context to close"
-    | Some (LinkageCtx.Toplevel linkage) ->
-        let linkage =
-          match linkage.base with
-          | None -> linkage
-          | Some base_linkage ->
-              let base_linkage =
-                Linkage.path_subtitution base_linkage
-                  ~source:(Linkage.top_most_self_name base_linkage)
-                  ~target:(Linkage.top_most_self_name linkage)
-              in
-              Linkage.concatenate ~base:base_linkage ~derived:linkage
-        in
-        store := None;
-        Codegen.compile_linkage linkage |> ignore;
-        Linkages.add linkage
-    | Some (LinkageCtx.Nested (upper, linkage) as context) ->
-        let linkage =
-          match (further_bound_linkage context, base_linkage context) with
-          | None, None -> linkage
-          | Some _, Some _ ->
-             Errors.fail
-               ~info:"Further binding and inheritance at the same time has not been implememnted for nested families"
-          | _, Some base ->
-             (* Here, we are assuming that base is a toplevel family *)
-             (* Don't just reparameterize! We need some kind of condition to check
-                on linkages to know when two linkages "can't fit" *)
-             (* Possibly reparameterization can go both ways? *)
-             let base = Codegen.parameterize ~prefix:linkage.context base in
-             (* Here we don't need to topmost self name becuase this is classic
-                inheritance, not further binding *)        
-              let base =
-                Linkage.path_subtitution base
-                  ~source:(Naming.self_version base.name)
-                  ~target:(Naming.self_version linkage.name)
-              in              
-              Linkage.concatenate ~base ~derived:linkage              
-          | Some further, _ ->
-              let base =
-                Linkage.path_subtitution further
-                  ~source:(Linkage.top_most_self_name further)
-                  ~target:(Linkage.top_most_self_name linkage)
-              in
-              Linkage.concatenate ~base ~derived:linkage              
-        in
-        let signature = Codegen.compile_nested_linkage_signature linkage in
-        let impl = Codegen.compile_nested_linkage linkage in
-        let elem =
-          let compiled_context =
-            let rec extract_name (name : Constrexpr.module_ast) =
-              match name.v with
-              | Constrexpr.CMident name -> name
-              | Constrexpr.CMapply (name, _) -> extract_name name
-              | Constrexpr.CMwith (name, _) -> extract_name name
-            in
-            match linkage.context with
-            | Bwd.Emp ->
-                Errors.fail
-                  ~info:
-                    "We should have parameters since we're in a nested context"
-            | Bwd.Snoc (_, (_, name)) -> extract_name name
-          in
-          LinkageElem.FamilyDefinition
-            {
-              linkage;
-              compiled_context;
-              compiled_signature = signature;
-              compiled_impl = impl;
-            }
-        in
-        store := Some upper;
-        add_field ~name:linkage.name ~elem
-
-  (* Does this linkage further binds any other linkage? *)
-  (* Does this linkage have a base family? *)
-  (* Futher binding take precedence over having a base family *)
-  (* Precendece here means that if a field `f` is in both a base and futher bound family,
-     we should pick the one in the further bound family *)
-  (* Also maybe further binding logic should be in concatenate? *)
+    | LinkageCtx.Toplevel linkage | LinkageCtx.Nested (_, linkage) -> linkage  
 end

@@ -21,7 +21,6 @@ module Context : sig
   val start_linkage : Names.Id.t -> unit
   val start_linkage_with_base : name:Names.Id.t -> base:Names.Id.t -> unit
   val add_field : name:Names.Id.t -> elem:LinkageElem.t -> unit
-  val close : unit -> unit
   val further_bound_linkage : LinkageCtx.t -> Linkage.t option
   val base_linkage : LinkageCtx.t -> Linkage.t option
 
@@ -32,4 +31,6 @@ module Context : sig
     LinkageCtx.t -> field:Names.Id.t -> (Linkage.t * LinkageElem.t) option
 
   val replace : linkage:Linkage.t -> unit
+
+  val destructive_update : LinkageCtx.t option -> unit
 end
