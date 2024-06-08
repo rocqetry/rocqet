@@ -185,8 +185,7 @@ and Linkage : sig
   }
 
   val top_most_self_name : t -> Names.Id.t
-
-  (* base -> derived *)
+  
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
   val concatenate_recursive : derived:t -> base:t -> t
 
@@ -303,20 +302,10 @@ end = struct
       match fields with
       | Bwd.Emp -> derived
       | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
-        ->
-          (* Remove the fields in the that have already been extended by the derived family *)
-          (* Here we could use the previous concatenate *)
-          let base = { base with fields } in
-          concatenate ~base ~derived
-          (* |> Bwd.filter (fun (name, _) ->
-                 derived.fields |> Bwd.map fst
-                 |> Bwd.exists (Names.Id.equal name)
-                 |> not*)
+        ->                    
+          concatenate ~base:{ base with fields } ~derived          
       | Bwd.Snoc (fields, _) -> calculate_dependencies fields
-    in
-    (* let inherited_fields = calculate_dependencies base.fields in
-       let fields = inherited_fields <@ Bwd.to_list derived.fields in
-       { derived with fields }*)
+    in    
     calculate_dependencies base.fields
 end
 
