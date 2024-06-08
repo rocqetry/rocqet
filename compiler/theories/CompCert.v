@@ -37,6 +37,8 @@ FEnd ClightVariant.
 
 
 Family CminorVariant extends Cfrontend.
+   FInductive constant : Type := Unit : constant.
+
    FInductive statement : Type :=
       | Sloop : statement -> statement.
 
