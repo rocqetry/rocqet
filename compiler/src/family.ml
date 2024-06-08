@@ -1,8 +1,68 @@
 open Types
 open Env
+open Bwd
+
+let open_family name =
+  match Context.get_store () with
+  | Some _context ->
+      (* Inherit dependencies *)
+      Inheritance.inherit_dependencies ~prefix:name;
+      let context = Context.get () in
+      let _, parameters =
+        Codegen.compile_linkage_context ~field_name:name context
+      in
+      let linkage =
+        Linkage.
+          {
+            context = parameters |> Bwd.of_list;
+            name;
+            base = None;
+            fields = Bwd.Emp;
+          }
+      in
+      Context.destructive_update (Some (LinkageCtx.Nested (context, linkage)))
+  | None ->
+      let linkage =
+        Linkage.{ context = Bwd.Emp; name; base = None; fields = Bwd.Emp }
+      in
+      Context.destructive_update (Some (LinkageCtx.Toplevel linkage))
+
+let open_family_with_base ~name ~base =
+  match Linkages.lookup base with
+  | None -> Errors.fail ~info:("Unbound Name " ^ Names.Id.to_string base)
+  | Some base_linkage -> (
+      match Context.get_store () with
+      | Some _context ->
+          Inheritance.inherit_dependencies ~prefix:name;
+          let context = Context.get () in
+          let _, parameters =
+            Codegen.compile_linkage_context ~field_name:name context
+          in
+          let linkage =
+            Linkage.
+              {
+                context = parameters |> Bwd.of_list;
+                name;
+                base = Some base_linkage;
+                fields = Bwd.Emp;
+              }
+          in
+          let context = LinkageCtx.Nested (context, linkage) in
+          Context.destructive_update (Some context)
+      | None ->
+          let linkage =
+            Linkage.
+              {
+                context = Bwd.Emp;
+                name;
+                base = Some base_linkage;
+                fields = Bwd.Emp;
+              }
+          in
+          Context.destructive_update (Some (LinkageCtx.Toplevel linkage)))
 
 (* Close a family *)
-let close () : unit =
+let close_family () : unit =
   let context = Context.get () in
   match context with
   | LinkageCtx.Toplevel linkage ->

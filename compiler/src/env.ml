@@ -43,6 +43,7 @@ end
 (* TODO: Give this a better name *)
 module Context = struct
   let store = Summary.ref ~name:"LinkageContext" (None : LinkageCtx.t option)
+  let get_store () = !store
 
   let get () =
     match !store with
@@ -54,62 +55,17 @@ module Context = struct
     | LinkageCtx.Toplevel linkage | LinkageCtx.Nested (_, linkage) ->
         linkage.name
 
-  let start_linkage name =
-    match !store with
-    | Some context ->
-        (* Inherit dependencies *)
-        let _, parameters =
-          Codegen.compile_linkage_context ~field_name:name context
-        in
-        let linkage =
-          Linkage.
-            {
-              context = parameters |> Bwd.of_list;
-              name;
-              base = None;
-              fields = Bwd.Emp;
-            }
-        in
-        store := Some (LinkageCtx.Nested (context, linkage))
-    | None ->
-        let linkage =
-          Linkage.{ context = Bwd.Emp; name; base = None; fields = Bwd.Emp }
-        in
-        store := Some (LinkageCtx.Toplevel linkage)
+  let family_linkage context =
+    match context with
+    | LinkageCtx.Toplevel linkage | LinkageCtx.Nested (_, linkage) -> linkage
 
-  let start_linkage_with_base ~name ~base =
-    match Linkages.lookup base with
-    | None -> Errors.fail ~info:("Unbound Name " ^ Names.Id.to_string base)
-    | Some base_linkage -> (
-        match !store with
-        | Some context ->
-            (* Is this correct? *)
-            (* Are we missing a parameter? *)
-            let _, parameters =
-              Codegen.compile_linkage_context ~field_name:name context
-            in
-            let linkage =
-              Linkage.
-                {
-                  context = parameters |> Bwd.of_list;
-                  name;
-                  base = Some base_linkage;
-                  fields = Bwd.Emp;
-                }
-            in
-            let context = LinkageCtx.Nested (context, linkage) in
-            store := Some context
-        | None ->
-            let linkage =
-              Linkage.
-                {
-                  context = Bwd.Emp;
-                  name;
-                  base = Some base_linkage;
-                  fields = Bwd.Emp;
-                }
-            in
-            store := Some (LinkageCtx.Toplevel linkage))
+  (* TODO: Don't allow this, have an update function *)
+  let replace ~linkage =
+    match !store with
+    | None | Some (LinkageCtx.Toplevel _) ->
+        store := Some (LinkageCtx.Toplevel linkage)
+    | Some (LinkageCtx.Nested (upper, _)) ->
+        store := Some (LinkageCtx.Nested (upper, linkage))
 
   (* Add the field to the current linkage *)
   let add_field ~name ~elem =
@@ -128,14 +84,6 @@ module Context = struct
         store := Some ctx
 
   let destructive_update new_store = store := new_store
-
-  (* TODO: Don't allow this, have an update function *)
-  let replace ~linkage =
-    match !store with
-    | None | Some (LinkageCtx.Toplevel _) ->
-        store := Some (LinkageCtx.Toplevel linkage)
-    | Some (LinkageCtx.Nested (upper, _)) ->
-        store := Some (LinkageCtx.Nested (upper, linkage))
 
   let rec walk_up_linkage_context context =
     match context with
@@ -188,8 +136,4 @@ module Context = struct
       |> Option.map (fun (_, elem) -> (linkage, elem))
     in
     context |> further_bound_linkage |> Option.map lookup |> Option.flatten
-
-  let family_linkage context =
-    match context with
-    | LinkageCtx.Toplevel linkage | LinkageCtx.Nested (_, linkage) -> linkage
 end

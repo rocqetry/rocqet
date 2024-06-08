@@ -301,21 +301,23 @@ end = struct
   let concatenate_prefix ~prefix ~(derived : Linkage.t) ~(base : Linkage.t) =
     let rec calculate_dependencies fields =
       match fields with
-      | Bwd.Emp -> Bwd.Emp
+      | Bwd.Emp -> derived
       | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
         ->
           (* Remove the fields in the that have already been extended by the derived family *)
           (* Here we could use the previous concatenate *)
-          fields
-          |> Bwd.filter (fun (name, _) ->
+          let base = { base with fields } in
+          concatenate ~base ~derived
+          (* |> Bwd.filter (fun (name, _) ->
                  derived.fields |> Bwd.map fst
                  |> Bwd.exists (Names.Id.equal name)
-                 |> not)
+                 |> not*)
       | Bwd.Snoc (fields, _) -> calculate_dependencies fields
     in
-    let inherited_fields = calculate_dependencies base.fields in
-    let fields = inherited_fields <@ Bwd.to_list derived.fields in
-    { derived with fields }
+    (* let inherited_fields = calculate_dependencies base.fields in
+       let fields = inherited_fields <@ Bwd.to_list derived.fields in
+       { derived with fields }*)
+    calculate_dependencies base.fields
 end
 
 (* A linkage we are currently constructing *)
