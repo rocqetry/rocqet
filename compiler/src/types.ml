@@ -102,10 +102,9 @@ module VernacInductive = struct
         | Vernacexpr.Constructors constr ->
             (* The right self_names should be passed to us *)
             (* let base_name = Naming.self_version base in
-            let derived_name = Naming.self_version derived in*)
+               let derived_name = Naming.self_version derived in*)
             let base_constr_renamed =
-              Naming.rename_ind_constructors constr
-                ~base_name:source
+              Naming.rename_ind_constructors constr ~base_name:source
                 ~derived_name:target
             in
             Vernacexpr.Constructors base_constr_renamed
@@ -118,15 +117,12 @@ module VernacInductive = struct
 
   let concatenate ~(base : t) ~(derived : t) : t =
     let remove_duplicates lst =
-       let rec aux seen = function
-         | [] -> []
-         | hd :: tl ->
-             if List.mem hd seen then
-               aux seen tl
-             else
-               hd :: aux (hd :: seen) tl
-       in
-       aux [] lst
+      let rec aux seen = function
+        | [] -> []
+        | hd :: tl ->
+            if List.mem hd seen then aux seen tl else hd :: aux (hd :: seen) tl
+      in
+      aux [] lst
     in
     let check_one_type
         ( (((_, (old_name, _)), _, _, oldcstrs), _),
@@ -136,8 +132,9 @@ module VernacInductive = struct
       let childcstrs =
         match (oldcstrs, newcstrs) with
         | ( Vernacexpr.Constructors base_constr,
-            Vernacexpr.Constructors derived_constr ) ->            
-            Vernacexpr.Constructors (remove_duplicates (base_constr @ derived_constr))
+            Vernacexpr.Constructors derived_constr ) ->
+            Vernacexpr.Constructors
+              (remove_duplicates (base_constr @ derived_constr))
         | _, _ -> Errors.fail ~info:"Record types are not yet supported"
       in
       let child_ind = (a, b, c, childcstrs) in
@@ -159,9 +156,6 @@ module CompiledModuleType = struct
 end
 
 (* Linkages *)
-module InhOp = struct
-  type t = CInhNew | CInhExtend | CInhInherit
-end
 
 (* A Linkage element is the "type" of a single field in a family *)
 (* I use "type" becuase it is not really a type *)
@@ -172,11 +166,6 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
-            (** `operation` describes how a field is transformed from the base family 
-             to the derived family. If there is no base family it is just InhOp.CInhNew,
-             otherwise it describes the nature of the transformation of a field from 
-             the base family to the derived family *)
-        operation : InhOp.t;
       }
     | FamilyDefinition of {
         linkage : Linkage.t;
@@ -196,10 +185,9 @@ and Linkage : sig
   }
 
   val top_most_self_name : t -> Names.Id.t
+
   (* base -> derived *)
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
-
-
   val concatenate_recursive : derived:t -> base:t -> t
 
   (* Linkage concatenation *)
@@ -244,43 +232,53 @@ end = struct
     let fields = linkage.fields |> Bwd.map f in
     { linkage with fields }
 
-  let rec concatenate_recursive ~derived ~base =    
+  let rec concatenate_recursive ~derived ~base =
     let rec pick x lst =
       match lst with
       | [] -> (None, [])
       | (hd, elem) :: tl ->
-          if Names.Id.equal hd x then
-            (Some (hd, elem), tl)
+          if Names.Id.equal hd x then (Some (hd, elem), tl)
           else
-            let (result, rest) = pick x tl in
+            let result, rest = pick x tl in
             (result, (hd, elem) :: rest)
     in
     let rec go base derived =
       match base with
       | [] -> []
-      | (name, elem) :: base ->
-         match pick name derived with
-         | None, _ -> (name, elem) :: go base derived
-         | Some (_, delem), derived ->(
-            match (elem, delem) with
-            | LinkageElem.InductiveDefinition ibase, LinkageElem.InductiveDefinition iderived ->
-               let elem = 
-               LinkageElem.InductiveDefinition
-                 { ibase with inductive = VernacInductive.concatenate ~base:ibase.inductive ~derived:iderived.inductive }
-               in 
-               (name, elem) :: go base derived
-            | LinkageElem.FamilyDefinition ibase, LinkageElem.FamilyDefinition iderived ->
-               let linkage = concatenate_recursive ~base:ibase.linkage ~derived:iderived.linkage in 
-               let elem = LinkageElem.FamilyDefinition { ibase with linkage } in
-               (name, elem) :: go base derived
-            | _ -> Errors.fail ~info:"Wrong concatenation arguments")
+      | (name, elem) :: base -> (
+          match pick name derived with
+          | None, _ -> (name, elem) :: go base derived
+          | Some (_, delem), derived -> (
+              match (elem, delem) with
+              | ( LinkageElem.InductiveDefinition ibase,
+                  LinkageElem.InductiveDefinition iderived ) ->
+                  let elem =
+                    LinkageElem.InductiveDefinition
+                      {
+                        ibase with
+                        inductive =
+                          VernacInductive.concatenate ~base:ibase.inductive
+                            ~derived:iderived.inductive;
+                      }
+                  in
+                  (name, elem) :: go base derived
+              | ( LinkageElem.FamilyDefinition ibase,
+                  LinkageElem.FamilyDefinition iderived ) ->
+                  let linkage =
+                    concatenate_recursive ~base:ibase.linkage
+                      ~derived:iderived.linkage
+                  in
+                  let elem =
+                    LinkageElem.FamilyDefinition { ibase with linkage }
+                  in
+                  (name, elem) :: go base derived
+              | _ -> Errors.fail ~info:"Wrong concatenation arguments"))
     in
-    let fields = go (Bwd.to_list base.fields) (Bwd.to_list derived.fields) in 
+    let fields = go (Bwd.to_list base.fields) (Bwd.to_list derived.fields) in
     Linkage.{ derived with fields = Bwd.of_list fields }
 
   let concatenate ~derived ~base =
     (* This is a very naive concatenation *)
-    (* This basically adds the things that are not present *)
     let rec compute_difference ~base
         ~(derived : (Names.Id.t * LinkageElem.t) list) =
       match (base, derived) with
@@ -288,10 +286,7 @@ end = struct
       | (bname, belem) :: base', (dname, _) :: derived' ->
           if Names.Id.equal bname dname then
             compute_difference ~base:base' ~derived:derived'
-          else
-            (* Since this element is inherited, it should have InhOp.CInhInherit *)
-            (* let belem = LinkageElem.{ belem with in  *)
-            (bname, belem) :: compute_difference ~base:base' ~derived
+          else (bname, belem) :: compute_difference ~base:base' ~derived
       | _ :: _, [] -> base
       | [], _ :: _ -> []
     in

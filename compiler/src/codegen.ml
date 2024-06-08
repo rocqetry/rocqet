@@ -210,7 +210,7 @@ end
 
 let compile_inductive_signature ~(ind_def : VernacInductive.t)
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
-      CompiledModuleType.t =
+    CompiledModuleType.t =
   let module_name =
     let inductive_name = ind_def |> VernacInductive.extract_inductive_name in
     Naming.module_name_of ~family_name inductive_name
@@ -231,7 +231,7 @@ let compile_inductive_signature ~(ind_def : VernacInductive.t)
 
 let compile_inductive_implementation ~(ind_def : VernacInductive.t)
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
-      CompiledModule.t =
+    CompiledModule.t =
   (* Generate a definition mapping of the inductive type and
      return the new inductive definition and the export of the correct names *)
   let modified_indcstrs, alias_all_name_term_type_decl =
@@ -241,20 +241,18 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
     let original_ind_name = ind_def |> VernacInductive.extract_inductive_name in
     Naming.module_name_of ~family_name original_ind_name
   in
-  let open VernacBackend in  
-    define_module ~module_name ~parameters:ctx ~body:(fun _ ->
-           let* () = define_inductive modified_indcstrs in
-           let alias_all =
-             List.map
-               (fun (original_name, new_name, ty) ->
-                 define_term ~name:original_name ~expr:new_name ~ty)
-               alias_all_name_term_type_decl
-           in
-           let* _ = flatmap alias_all in
-           return ())
-  |> run 
-  
-  
+  let open VernacBackend in
+  define_module ~module_name ~parameters:ctx ~body:(fun _ ->
+      let* () = define_inductive modified_indcstrs in
+      let alias_all =
+        List.map
+          (fun (original_name, new_name, ty) ->
+            define_term ~name:original_name ~expr:new_name ~ty)
+          alias_all_name_term_type_decl
+      in
+      let* _ = flatmap alias_all in
+      return ())
+  |> run
 
 let compile_linkage_context ~field_name (context : LinkageCtx.t) :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
@@ -497,7 +495,7 @@ let parameterize linkage ~prefix =
           LinkageElem.InductiveDefinition
             { impl with compiled_signature; compiled_context; compiled_impl } )
     | LinkageElem.FamilyDefinition impl ->
-       let compiled_context =
+        let compiled_context =
           define_moduletype
             ~module_name:(Naming.fresh_name ~prefix:"Reparameterize")
             ~parameters:(parameters @> []) ~body:(fun _ ->
@@ -549,42 +547,43 @@ let parameterize linkage ~prefix =
         ( name,
           LinkageElem.FamilyDefinition
             { impl with compiled_signature; compiled_context; compiled_impl } )
-        (* Errors.fail
-          ~info:"We don't want to reparemeterize a nested linkage for now"*)
+    (* Errors.fail
+       ~info:"We don't want to reparemeterize a nested linkage for now"*)
   in
   let fields = linkage.fields |> Bwd.map f in
   { linkage with context = parameters; fields }
 
-let rec recompute_linkage (linkage: Linkage.t) =
+let rec recompute_linkage (linkage : Linkage.t) =
   let empty_linkage = { linkage with fields = Bwd.Emp } in
-  let f linkage (name, field) = 
-      match field with
-      | LinkageElem.FamilyDefinition { linkage = nested_linkage;  _ } ->         
-         let compiled_context, parameters =
-           compile_linkage_context
-             ~field_name:nested_linkage.name
-             (LinkageCtx.Toplevel linkage)
-         in
-         let nested_linkage = { nested_linkage with context = Bwd.of_list parameters } in
-         let nested_linkage = recompute_linkage nested_linkage in
-         let signature = compile_nested_linkage_signature nested_linkage in
-         let impl = compile_nested_linkage nested_linkage in
-         let elem =
-           LinkageElem.FamilyDefinition
+  let f linkage (name, field) =
+    match field with
+    | LinkageElem.FamilyDefinition { linkage = nested_linkage; _ } ->
+        let compiled_context, parameters =
+          compile_linkage_context ~field_name:nested_linkage.name
+            (LinkageCtx.Toplevel linkage)
+        in
+        let nested_linkage =
+          { nested_linkage with context = Bwd.of_list parameters }
+        in
+        let nested_linkage = recompute_linkage nested_linkage in
+        let signature = compile_nested_linkage_signature nested_linkage in
+        let impl = compile_nested_linkage nested_linkage in
+        let elem =
+          LinkageElem.FamilyDefinition
             {
               linkage = nested_linkage;
               compiled_context;
               compiled_signature = signature;
               compiled_impl = impl;
             }
-         in
-         { linkage with fields = Bwd.Snoc (linkage.fields, (name, elem)) }         
-      | LinkageElem.InductiveDefinition { inductive; _ } ->
-         let compiled_context, parameters =
-           compile_linkage_context
-             ~field_name:(VernacInductive.extract_inductive_name inductive)
-             (LinkageCtx.Toplevel linkage)
-         in  
+        in
+        { linkage with fields = Bwd.Snoc (linkage.fields, (name, elem)) }
+    | LinkageElem.InductiveDefinition { inductive; _ } ->
+        let compiled_context, parameters =
+          compile_linkage_context
+            ~field_name:(VernacInductive.extract_inductive_name inductive)
+            (LinkageCtx.Toplevel linkage)
+        in
         let compiled_signature =
           compile_inductive_signature ~ind_def:inductive ~ctx:parameters
             ~family_name:linkage.name
@@ -592,18 +591,11 @@ let rec recompute_linkage (linkage: Linkage.t) =
         let compiled_impl =
           compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
             ~family_name:linkage.name
-       in
-       let elem =
-         LinkageElem.InductiveDefinition
-           {
-             inductive;
-             compiled_context;
-             compiled_impl;
-             compiled_signature;
-             operation = InhOp.CInhNew;
-           }
-       in
-       { linkage with fields = Bwd.Snoc (linkage.fields, (name, elem)) }
-  in   
+        in
+        let elem =
+          LinkageElem.InductiveDefinition
+            { inductive; compiled_context; compiled_impl; compiled_signature }
+        in
+        { linkage with fields = Bwd.Snoc (linkage.fields, (name, elem)) }
+  in
   Bwd.fold_left f empty_linkage linkage.fields
-  

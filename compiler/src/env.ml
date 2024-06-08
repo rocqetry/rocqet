@@ -127,9 +127,8 @@ module Context = struct
         let ctx = LinkageCtx.Nested (upper, linkage) in
         store := Some ctx
 
-  let destructive_update new_store =
-    store := new_store
-  
+  let destructive_update new_store = store := new_store
+
   (* TODO: Don't allow this, have an update function *)
   let replace ~linkage =
     match !store with
@@ -175,22 +174,22 @@ module Context = struct
         linkage.base
 
   let base_linkage_elem context ~field =
-    let lookup (linkage : Linkage.t) =      
+    let lookup (linkage : Linkage.t) =
       linkage.fields
       |> Bwd.find_opt (fun (name, _) -> Names.Id.equal name field)
-      |> Option.map (fun (_, elem) -> linkage, elem) 
+      |> Option.map (fun (_, elem) -> (linkage, elem))
     in
-    context |> base_linkage |> Option.map lookup |> Option.flatten    
+    context |> base_linkage |> Option.map lookup |> Option.flatten
 
   let further_bound_linkage_elem context ~field =
     let lookup (linkage : Linkage.t) =
       linkage.fields
       |> Bwd.find_opt (fun (name, _) -> Names.Id.equal name field)
-      |> Option.map (fun (_, elem) -> linkage, elem) 
+      |> Option.map (fun (_, elem) -> (linkage, elem))
     in
-    context |> further_bound_linkage |> Option.map lookup |> Option.flatten    
+    context |> further_bound_linkage |> Option.map lookup |> Option.flatten
 
   let family_linkage context =
     match context with
-    | LinkageCtx.Toplevel linkage | LinkageCtx.Nested (_, linkage) -> linkage  
+    | LinkageCtx.Toplevel linkage | LinkageCtx.Nested (_, linkage) -> linkage
 end

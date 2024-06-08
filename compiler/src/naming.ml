@@ -105,7 +105,7 @@ let rename_ind_constructors (constructors : Vernacexpr.constructor_expr list)
 let self_version = Nameops.add_prefix "self__"
 
 let unique_id =
-  let counter = Summary.ref ~name:"FreshCounter" 0 in  
+  let counter = Summary.ref ~name:"FreshCounter" 0 in
   fun () ->
     incr counter;
     !counter

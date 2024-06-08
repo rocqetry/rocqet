@@ -44,11 +44,6 @@ module PluginCmdScope : sig
   type t = { command : PluginCmd.t; name : Names.Id.t; close : unit -> unit }
 end
 
-(* Linkages *)
-module InhOp : sig
-  type t = CInhNew | CInhExtend | CInhInherit
-end
-
 module rec LinkageElem : sig
   type t =
     | InductiveDefinition of {
@@ -56,7 +51,6 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
-        operation : InhOp.t;
       }
     | FamilyDefinition of {
         linkage : Linkage.t;
