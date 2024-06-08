@@ -9,8 +9,7 @@ let add_inductive_definition inductive =
     Context.further_bound_linkage_elem context ~field:inductive_name
   in
   let base_elem = Context.base_linkage_elem context ~field:inductive_name in
-  let inductive =
-    let open LinkageElem in
+  let inductive =    
     match (further_elem, base_elem) with
     | ( Some (further, InductiveDefinition { inductive = further_inductive; _ }),
         None ) ->
