@@ -23,6 +23,9 @@ module VernacInductive : sig
     prefix:string ->
     t ->
     t * (Names.Id.t * Constrexpr.constr_expr * Constrexpr.constr_expr) list
+
+  val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
+  val concatenate : base:t -> derived:t -> t
 end
 
 module CompiledModule : sig
@@ -41,11 +44,6 @@ module PluginCmdScope : sig
   type t = { command : PluginCmd.t; name : Names.Id.t; close : unit -> unit }
 end
 
-(* Linkages *)
-module InhOp : sig
-  type t = CInhNew | CInhExtend | CInhInherit
-end
-
 module rec LinkageElem : sig
   type t =
     | InductiveDefinition of {
@@ -53,23 +51,32 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
-        operation : InhOp.t;
+      }
+    | FamilyDefinition of {
+        linkage : Linkage.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
       }
 end
 
 and Linkage : sig
   type t = {
+    context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
+  val top_most_self_name : t -> Names.Id.t
+  val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
+  val concatenate_recursive : derived:t -> base:t -> t
   val concatenate : derived:t -> base:t -> t
   val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
 end
 
 and LinkageCtx : sig
-  type t = Toplevel of Linkage.t
+  type t = Toplevel of Linkage.t | Nested of t * Linkage.t
 end
 
 module FieldInhKind : sig

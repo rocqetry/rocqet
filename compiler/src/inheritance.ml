@@ -1,33 +1,30 @@
-open Types
 open Env
-open Bwd
+open Types
 
-let close_current_inheritance_judgement () =
-  let linkage = Context.close () in
-  Codegen.compile_linkage linkage;
-  Linkages.add linkage
-
-let open_new_inheritance_judgement name = Context.start_linkage name
-
-let open_derived_inheritance_judgement ~base ~derived =
-  Context.start_linkage_with_base ~name:derived ~base
-
-let infer_field_inh_kind name =
-  let (LinkageCtx.Toplevel linkage) = Context.get () in
-  let Linkage.{ base; _ } = linkage in
-  match base with
-  | None -> FieldInhKind.New
-  | Some base -> (
-      match Linkages.lookup base.name with
-      | None ->
-          Errors.fail
-            ~info:("Unbound family name " ^ Names.Id.to_string base.name)
-      | Some linkage -> (
-          let base_field =
-            linkage.fields
-            |> Bwd.find_opt (fun (found_name, _) ->
-                   Names.Id.equal name found_name)
-          in
-          match base_field with
-          | None -> FieldInhKind.New
-          | Some (_, elem) -> FieldInhKind.Extend elem))
+(* This updates the context so you must call Context.get again after using this *)
+let inherit_dependencies ~prefix =
+  let context = Context.get () in
+  let further = Context.further_bound_linkage context in
+  let base = Context.base_linkage context in
+  let linkage = Context.family_linkage context in
+  let linkage =
+    match (base, further) with
+    | None, None -> linkage
+    | Some base, None ->
+        let base =
+          Linkage.path_subtitution base
+            ~source:(Naming.self_version base.name)
+            ~target:(Naming.self_version linkage.name)
+        in
+        Linkage.concatenate_prefix ~prefix ~derived:linkage ~base
+    | None, Some further ->
+        let further =
+          Linkage.path_subtitution further
+            ~source:(Linkage.top_most_self_name further)
+            ~target:(Linkage.top_most_self_name linkage)
+        in
+        Linkage.concatenate_prefix ~prefix ~derived:linkage ~base:further
+    | Some _, Some _ ->
+        Errors.fail ~info:"Further binding + Inheritance not yet implemented"
+  in
+  Context.replace ~linkage
