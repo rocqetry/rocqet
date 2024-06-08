@@ -231,7 +231,9 @@ end = struct
     let fields = linkage.fields |> Bwd.map f in
     { linkage with fields }
 
+  (* Deep concatenation *)
   let rec concatenate_recursive ~derived ~base =
+    (* Using pick here reorders the fields in a family, which is wrong *)
     let rec pick x lst =
       match lst with
       | [] -> (None, [])
@@ -276,16 +278,27 @@ end = struct
     let fields = go (Bwd.to_list base.fields) (Bwd.to_list derived.fields) in
     Linkage.{ derived with fields = Bwd.of_list fields }
 
-  let concatenate ~derived ~base =
-    (* This is a very naive concatenation *)
+  (* Naive concatenation *)
+  let concatenate ~derived ~base =    
     let rec compute_difference ~base
         ~(derived : (Names.Id.t * LinkageElem.t) list) =
       match (base, derived) with
       | [], [] -> []
-      | (bname, belem) :: base', (dname, _) :: derived' ->
+      | (bname, belem) :: base', (dname, _) :: rest_derived ->
           if Names.Id.equal bname dname then
-            compute_difference ~base:base' ~derived:derived'
-          else (bname, belem) :: compute_difference ~base:base' ~derived
+            compute_difference ~base:base' ~derived:rest_derived
+          else
+            (* Check if the name has already been inherited:
+               in a later position *)
+            let cond =
+              rest_derived
+              |> List.map fst
+              |> List.exists (Names.Id.equal bname)
+            in
+            if not cond then 
+              (bname, belem) :: compute_difference ~base:base' ~derived
+            else
+              compute_difference ~base:base' ~derived
       | _ :: _, [] -> base
       | [], _ :: _ -> []
     in
@@ -297,6 +310,7 @@ end = struct
     let fields = derived.fields <@ inherited_fields in
     Linkage.{ derived with fields }
 
+  (* Naive concatenation of the linkage before a particular field *)
   let concatenate_prefix ~prefix ~(derived : Linkage.t) ~(base : Linkage.t) =
     let rec calculate_dependencies fields =
       match fields with
