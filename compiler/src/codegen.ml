@@ -373,8 +373,7 @@ let compile_nested_linkage (linkage : Linkage.t) =
   in
   let wrapper = Naming.fresh_name ~prefix:"Impl" in
   define_module ~module_name:wrapper ~parameters:(Bwd.to_list context)
-    ~body:(fun _ctx ->
-      (* Wrong context application here? *)
+    ~body:(fun _ctx ->      
       let* _ =
         define_module ~module_name:name ~parameters:[]
           ~body:(compile_fields fields)
@@ -546,9 +545,7 @@ let parameterize linkage ~prefix =
         in
         ( name,
           LinkageElem.FamilyDefinition
-            { impl with compiled_signature; compiled_context; compiled_impl } )
-    (* Errors.fail
-       ~info:"We don't want to reparemeterize a nested linkage for now"*)
+            { impl with compiled_signature; compiled_context; compiled_impl } )    
   in
   let fields = linkage.fields |> Bwd.map f in
   { linkage with context = parameters; fields }
