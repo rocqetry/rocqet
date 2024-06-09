@@ -11,3 +11,10 @@ val finductive : VernacInductive.t -> unit
 
 (* Handle a `FEnd ...` command *)
 val fend : Names.Id.t -> unit
+
+(* Handle a `FRecursor ... using ... by ...` command *)
+val frecursor :
+  ind_decls:(Names.Id.t * Libnames.qualid * Constrexpr.constr_expr) list ->
+  rec_mod:Libnames.qualid ->
+  suffix:Names.Id.t ->
+  unit
