@@ -6,6 +6,8 @@ val internalize :
   Evd.evar_map ->
   Evd.evar_map * Evd.econstr
 
+val checked_type_of : Constrexpr.constr_expr -> Constr.t
+val reflect_checked_term : Constr.t -> Constrexpr.constr_expr
 val ident_to_module_expr : Libnames.qualid -> Constrexpr.module_ast
 
 val apply_module :

@@ -131,3 +131,8 @@ let name_map_with f =
   List.fold_left
     (fun acc name -> Names.Id.Map.add name (f name) acc)
     Names.Id.Map.empty
+
+let inv_name_map_with f =
+  List.fold_left
+    (fun acc name -> Names.Id.Map.add (f name) name acc)
+    Names.Id.Map.empty

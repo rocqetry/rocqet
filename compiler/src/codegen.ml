@@ -113,6 +113,23 @@ module VernacBackend = struct
     let open Vernacexpr in
     vernac_ (VernacSynPure (VernacInductive (Inductive_kw, ind_def)))
 
+  let define_inductive_scheme
+      (specs : (Names.Id.t * Names.Id.t * Sorts.family) list) : unit t =
+    let open Vernacexpr in
+    let scheme =
+      specs
+      |> List.map (fun (name, ind_name, sort) ->
+             ( Some (CAst.make name),
+               {
+                 sch_type = SchemeInduction;
+                 sch_qualid =
+                   CAst.make
+                   @@ Constrexpr.AN (Libnames.qualid_of_ident ind_name);
+                 sch_sort = sort;
+               } ))
+    in
+    vernac_ (VernacSynPure (VernacScheme scheme))
+
   let define_term ~(name : Names.Id.t) ~(expr : Constrexpr.constr_expr)
       ~(ty : Constrexpr.constr_expr) : unit t =
     let open Vernacexpr in
@@ -231,28 +248,92 @@ let compile_inductive_signature ~(ind_def : VernacInductive.t)
 
 let compile_inductive_implementation ~(ind_def : VernacInductive.t)
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
-    CompiledModule.t =
+    CompiledModule.t
+    * ((Names.Id.t list * string) * Constrexpr.constr_expr) list =
   (* Generate a definition mapping of the inductive type and
      return the new inductive definition and the export of the correct names *)
   let modified_indcstrs, alias_all_name_term_type_decl =
     VernacInductive.definition_mapping ~prefix:"__internal_" ind_def
   in
+  let type_names, constr_names =
+    ind_def |> VernacInductive.extract_all_names |> List.split
+  in
   let module_name =
-    let original_ind_name = ind_def |> VernacInductive.extract_inductive_name in
+    let original_ind_name = List.hd type_names in
     Naming.module_name_of ~family_name original_ind_name
   in
+
+  (* Stuff for collecting recursors *)
+  let possible_suffixes = [ "_ind"; "_ind_comp"; "_rec"; "_rect" ] in
+  let defined_recursors :
+      ((Names.Id.t list * string) * Constrexpr.constr_expr) Bwd.t ref =
+    ref Bwd.Emp
+  in
+  let remove_internal_prefix_map =
+    let all_names = type_names @ List.concat constr_names in
+    Naming.inv_name_map_with (Nameops.add_prefix "__internal_") all_names
+  in
   let open VernacBackend in
-  define_module ~module_name ~parameters:ctx ~body:(fun _ ->
-      let* () = define_inductive modified_indcstrs in
-      let alias_all =
-        List.map
-          (fun (original_name, new_name, ty) ->
-            define_term ~name:original_name ~expr:new_name ~ty)
-          alias_all_name_term_type_decl
-      in
-      let* _ = flatmap alias_all in
-      return ())
-  |> run
+  let collect_recursors_for ind_name () : unit t =
+    let internal_name = Nameops.add_prefix "__internal_" ind_name in
+    possible_suffixes
+    |> List.iter (fun suffix ->
+           (* This is only a potential recursor name, since _rec and _rect may not exist.
+              For instance, if the type is Prop, _rec and _rect are impossible to derive. *)
+           let potential_recursor = Nameops.add_suffix internal_name suffix in
+           if Constrintern.is_global potential_recursor then
+             let recursor_name =
+               potential_recursor |> Libnames.qualid_of_ident
+               |> Constrexpr_ops.mkRefC
+             in
+             let recursor_type =
+               recursor_name |> Termutils.checked_type_of
+               |> Termutils.reflect_checked_term
+               |> Constrexpr_ops.replace_vars_constr_expr
+                    remove_internal_prefix_map
+             in
+             defined_recursors :=
+               !defined_recursors <: (([ ind_name ], suffix), recursor_type));
+    return ()
+  in
+  let compiled_impl =
+    define_module ~module_name ~parameters:ctx ~body:(fun _ ->
+        let* () = define_inductive modified_indcstrs in
+
+        (* The default _ind principle is declared as if with `Scheme Minimality`,
+           so we define "complete" principles that use `Scheme Induction` and are
+           thus in line with _rec and _rect. *)
+        let all_ind_comp_schemes =
+          List.map
+            (fun ind_name ->
+              define_inductive_scheme
+                [
+                  ( Nameops.add_suffix ind_name "_ind_comp",
+                    Nameops.add_prefix "__internal_" ind_name,
+                    Sorts.InProp );
+                ])
+            type_names
+        in
+        let* () = flatmap all_ind_comp_schemes in
+
+        (* Now, we read from the environment all defined recursors and get their types. *)
+        let collect_thunks =
+          type_names
+          |> List.map (fun ind_name -> thunk (collect_recursors_for ind_name))
+        in
+        let* () = flatmap collect_thunks in
+
+        let alias_all =
+          List.map
+            (fun (original_name, new_name, ty) ->
+              define_term ~name:original_name ~expr:new_name ~ty)
+            alias_all_name_term_type_decl
+        in
+        let* () = flatmap alias_all in
+        return ())
+    |> run
+  in
+  (compiled_impl, Bwd.to_list !defined_recursors)
 
 let compile_linkage_context ~field_name (context : LinkageCtx.t) :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
@@ -432,6 +513,7 @@ let compile_nested_linkage_signature linkage =
       return ())
   |> run
 
+
 (* We should be keeping track of a context *)
 let rec recompute_linkage (linkage : Linkage.t) =
   let lookup (linkage : Linkage.t) name =
@@ -494,7 +576,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
           compile_inductive_signature ~ind_def:inductive ~ctx:parameters
             ~family_name:linkage.name
         in
-        let compiled_impl =
+        let compiled_impl, _recursors =
           compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
             ~family_name:linkage.name
         in

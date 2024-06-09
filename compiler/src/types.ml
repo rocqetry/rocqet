@@ -38,9 +38,13 @@ module VernacInductive = struct
            in
            ((ind_name, ty), cstrs))
 
+  let extract_all_names ind_def =
+    ind_def
+    |> List.map (fun (ind, _) -> ind |> extract_type_and_cstrs)
+    |> List.map (fun ((ind_name, _), cstrs) -> (ind_name, List.map fst cstrs))
+
   let extract_inductive_name ind_def =
-    let (type_name, _), _ = ind_def |> extract_all_names_with_type |> List.hd in
-    type_name
+    ind_def |> extract_all_names |> List.hd |> fst
 
   (* Create a "definition mapping" *)
   let definition_mapping ~prefix ind_def =
@@ -64,7 +68,8 @@ module VernacInductive = struct
              ind_type,
              csts ),
            decl_notations ) :
-          Vernacexpr.inductive_expr * Vernacexpr.notation_declaration list) =
+          Vernacexpr.inductive_expr * Vernacexpr.notation_declaration list) :
+        Vernacexpr.inductive_expr * Vernacexpr.notation_declaration list =
       let ind_type_name = CAst.map prefix_with_internal ind_type_name in
       let ind_type = Option.map apply_subst_expr ind_type in
       match csts with

@@ -66,10 +66,11 @@ let add_inductive_definition inductive =
     Codegen.compile_inductive_signature ~ind_def:inductive ~ctx:parameters
       ~family_name
   in
-  let compiled_impl =
+  let compiled_impl, _recursors =
     Codegen.compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
       ~family_name
   in
+  (* TODO: compile recursors *)
   let elem =
     LinkageElem.InductiveDefinition
       { inductive; compiled_context; compiled_impl; compiled_signature }
