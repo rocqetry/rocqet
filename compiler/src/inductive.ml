@@ -66,13 +66,22 @@ let add_inductive_definition inductive =
     Codegen.compile_inductive_signature ~ind_def:inductive ~ctx:parameters
       ~family_name
   in
-  let compiled_impl, _recursors =
+  let compiled_impl, recursors =
     Codegen.compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
       ~family_name
   in
-  (* TODO: compile recursors *)
   let elem =
     LinkageElem.InductiveDefinition
       { inductive; compiled_context; compiled_impl; compiled_signature }
   in
-  Context.add_field ~name:inductive_name ~elem
+  Context.add_field ~name:inductive_name ~elem;
+  let context = Context.get () in
+  let _compiled_context, parameters =
+    Codegen.compile_linkage_context ~field_name:inductive_name context
+  in
+  let recursor_info =
+    Codegen.compile_recursors ~ind_def:inductive ~recursors ~ctx:parameters
+      ~family_name
+  in
+  (* TODO *)
+  ignore recursor_info

@@ -6,6 +6,12 @@ val rename_ind_constructors :
   derived_name:Names.Id.t ->
   Vernacexpr.constructor_expr list
 
+val add_path_constr_expr :
+  Names.Id.t ->
+  Names.Id.Set.t ->
+  Constrexpr.constr_expr ->
+  Constrexpr.constr_expr
+
 val self_version : Names.Id.t -> Names.Id.t
 val module_name_of : family_name:Names.Id.t -> Names.Id.t -> Names.Id.t
 val fresh_name : prefix:string -> Names.Id.t
@@ -20,3 +26,5 @@ val path_to_list : Libnames.qualid -> Names.Id.t list
 
 val inv_name_map_with :
   (Names.Id.t -> Names.Id.t) -> Names.Id.t list -> Names.Id.t Names.Id.Map.t
+
+val concat_names : Names.Id.t list -> Names.Id.t

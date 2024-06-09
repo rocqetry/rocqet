@@ -107,6 +107,23 @@ let rename_ind_constructors (constructors : Vernacexpr.constructor_expr list)
   in
   constructors |> List.map rename_one_ind_constructor
 
+(* Adapted from Constexpr_ops.replace_vars_constr_expr to add paths. *)
+let add_path_constr_expr path l r =
+  let open Constrexpr_ops in
+  let open Constrexpr in
+  let open Libnames in
+  let rec go l r =
+    match r with
+    | { CAst.loc; v = CRef (qid, us) } as x when qualid_is_ident qid ->
+        let id = qualid_basename qid in
+        if Names.Id.Set.mem id l then
+          CAst.make ?loc
+          @@ CRef (make_qualid ?loc (Names.DirPath.make [ path ]) id, us)
+        else x
+    | cn -> map_constr_expr_with_binders Names.Id.Set.remove go l cn
+  in
+  go l r
+
 let self_version = Nameops.add_prefix "self__"
 
 let unique_id =
@@ -136,3 +153,8 @@ let inv_name_map_with f =
   List.fold_left
     (fun acc name -> Names.Id.Map.add (f name) name acc)
     Names.Id.Map.empty
+
+let concat_names names =
+  names
+  |> List.map Names.Id.to_string
+  |> List.sort String.compare |> String.concat "_" |> Names.Id.of_string

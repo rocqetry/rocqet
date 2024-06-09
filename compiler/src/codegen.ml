@@ -130,8 +130,8 @@ module VernacBackend = struct
     in
     vernac_ (VernacSynPure (VernacScheme scheme))
 
-  let define_term ~(name : Names.Id.t) ~(expr : Constrexpr.constr_expr)
-      ~(ty : Constrexpr.constr_expr) : unit t =
+  let define_term ?(ty : Constrexpr.constr_expr option) ~(name : Names.Id.t)
+      (expr : Constrexpr.constr_expr) : unit t =
     let open Vernacexpr in
     let fname_ = (CAst.make @@ Names.Name.mk_name name, None) in
     vernac_
@@ -139,7 +139,7 @@ module VernacBackend = struct
          (VernacDefinition
             ( (NoDischarge, Decls.Definition),
               fname_,
-              DefineBody ([], None, expr, Some ty) )))
+              DefineBody ([], None, expr, ty) )))
 
   let define_module ~(module_name : Names.Id.t)
       ~(parameters : (Names.Id.t * Constrexpr.module_ast) list)
@@ -326,7 +326,7 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
         let alias_all =
           List.map
             (fun (original_name, new_name, ty) ->
-              define_term ~name:original_name ~expr:new_name ~ty)
+              define_term ~ty ~name:original_name new_name)
             alias_all_name_term_type_decl
         in
         let* () = flatmap alias_all in
@@ -334,6 +334,101 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
     |> run
   in
   (compiled_impl, Bwd.to_list !defined_recursors)
+
+let compile_recursors ~(ind_def : VernacInductive.t)
+    ~(recursors : ((Names.Id.t list * string) * Constrexpr.constr_expr) list)
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name =
+  let all_names = ind_def |> VernacInductive.extract_all_names in
+  let all_type_names = all_names |> List.map fst in
+  let path_to_add = Naming.self_version family_name in
+  let compile_one_recursor ((type_names, suffix), recursor) =
+    (* Future-proofing for mutually inductive types *)
+    let type_name = type_names |> Naming.concat_names in
+    let recursor_name = Nameops.add_suffix type_name suffix in
+    let module_name = Naming.module_name_of ~family_name recursor_name in
+    let relevant_cstrs =
+      type_names |> List.concat_map (fun n -> List.assoc n all_names)
+    in
+    let recursor =
+      let name_set = all_type_names @ relevant_cstrs |> Names.Id.Set.of_list in
+      Naming.add_path_constr_expr path_to_add name_set recursor
+    in
+    let rec_handlers =
+      (* Copied from FPOP almost verbatim: *)
+      let from_recursor_type_to_subcase_handlers_constructor
+          (cstname : Names.Id.t list) (recursor : Constrexpr.constr_expr) :
+          (Names.Id.t * Constrexpr.constr_expr) list =
+        let open Constrexpr in
+        let open Constrexpr_ops in
+        let isArrow { CAst.v = t; _ } =
+          match t with CNotation (_, (_, "_ -> _"), _) -> true | _ -> false
+        in
+        let destDepProd { CAst.v = t; _ } =
+          match t with
+          | CProdN (al, b) -> (al, b)
+          | _ -> Errors.fail ~info:"unexpected"
+        in
+        let destArrow { CAst.v = t; _ } =
+          match t with
+          | CNotation (_, (_, "_ -> _"), ([ domain; codomain ], _, _, _)) ->
+              (domain, codomain)
+          | _ -> Errors.fail ~info:"unreachable"
+        in
+        let _inputP, _body = destDepProd recursor in
+        let rec collect_handler cstname f =
+          match (cstname, f) with
+          | _ :: t, f when isArrow f ->
+              let currentT, remained_f = destArrow f in
+              let ret, otherparts = collect_handler t remained_f in
+              (ret, currentT :: otherparts)
+          | [], f -> (f, [])
+          | _, _ -> Errors.fail ~info:"unexpected"
+        in
+        let _, all_recursor_handlers = collect_handler cstname _body in
+        let cst_name_corresponding_recursor_handlers_sig =
+          List.combine cstname
+            (* decorate each ai case with a _inputP *)
+            (List.map
+               (fun body -> mkLambdaCN _inputP body)
+               all_recursor_handlers)
+        in
+        cst_name_corresponding_recursor_handlers_sig
+      in
+      from_recursor_type_to_subcase_handlers_constructor relevant_cstrs recursor
+    in
+    let open VernacBackend in
+    let compiled_handlers =
+      rec_handlers
+      |> List.map (fun (case_name, raw_ty) ->
+             let handler_type_name =
+               Nameops.add_prefix "__handler_type_" case_name
+             in
+             let module_name =
+               Nameops.add_prefix
+                 (Names.Id.to_string type_name)
+                 handler_type_name
+               |> Naming.module_name_of ~family_name
+             in
+             let compiled_mod =
+               define_module ~module_name ~parameters:ctx ~body:(fun _ ->
+                   define_term ~name:handler_type_name raw_ty)
+               |> run
+             in
+             (case_name, compiled_mod))
+    in
+    let compiled_recursor =
+      define_module ~module_name ~parameters:ctx ~body:(fun _ ->
+          let* () =
+            define_term
+              ~name:(Nameops.add_prefix "__recursor_type_" recursor_name)
+              recursor
+          in
+          return ())
+      |> run
+    in
+    ((type_names, suffix), compiled_recursor, compiled_handlers)
+  in
+  recursors |> List.map compile_one_recursor
 
 let compile_linkage_context ~field_name (context : LinkageCtx.t) :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
@@ -580,6 +675,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
           compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
             ~family_name:linkage.name
         in
+        (* TODO: compile recursors here too *)
         let elem =
           LinkageElem.InductiveDefinition
             { inductive; compiled_context; compiled_impl; compiled_signature }
