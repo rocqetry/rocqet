@@ -306,10 +306,11 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
         let all_ind_comp_schemes =
           List.map
             (fun ind_name ->
+              let internal_name = Nameops.add_prefix "__internal_" ind_name in
               define_inductive_scheme
                 [
-                  ( Nameops.add_suffix ind_name "_ind_comp",
-                    Nameops.add_prefix "__internal_" ind_name,
+                  ( Nameops.add_suffix internal_name "_ind_comp",
+                    internal_name,
                     Sorts.InProp );
                 ])
             type_names
