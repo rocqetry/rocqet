@@ -14,6 +14,7 @@ val add_path_constr_expr :
 
 val self_version : Names.Id.t -> Names.Id.t
 val module_name_of : family_name:Names.Id.t -> Names.Id.t -> Names.Id.t
+val fresh_string : prefix:string -> string
 val fresh_name : prefix:string -> Names.Id.t
 
 val name_map_with :

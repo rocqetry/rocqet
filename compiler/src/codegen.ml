@@ -662,24 +662,47 @@ let rec recompute_linkage (linkage : Linkage.t) =
         in
         { linkage with fields = Bwd.Snoc (linkage.fields, (name, elem)) }
     | LinkageElem.InductiveDefinition { inductive; _ } ->
+        let inductive_name = VernacInductive.extract_inductive_name inductive in
         let compiled_context, parameters =
-          compile_linkage_context
-            ~field_name:(VernacInductive.extract_inductive_name inductive)
+          compile_linkage_context ~field_name:inductive_name
             (LinkageCtx.Toplevel linkage)
         in
         let compiled_signature =
           compile_inductive_signature ~ind_def:inductive ~ctx:parameters
             ~family_name:linkage.name
         in
-        let compiled_impl, _recursors =
+        let compiled_impl, recursors =
           compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
             ~family_name:linkage.name
         in
-        (* TODO: compile recursors here too *)
+        let compiled_recursors =
+          Summary.ref
+            ~name:(Naming.fresh_string ~prefix:"recursors")
+            CompiledRecursors.{ compiled_context; recursors = [] }
+        in
         let elem =
           LinkageElem.InductiveDefinition
-            { inductive; compiled_context; compiled_impl; compiled_signature }
+            {
+              inductive;
+              compiled_context;
+              compiled_impl;
+              compiled_signature;
+              compiled_recursors;
+            }
         in
-        { linkage with fields = Bwd.Snoc (linkage.fields, (name, elem)) }
+        let next_linkage =
+          { linkage with fields = Bwd.Snoc (linkage.fields, (name, elem)) }
+        in
+        let compiled_context, parameters =
+          compile_linkage_context ~field_name:inductive_name
+            (LinkageCtx.Toplevel next_linkage)
+        in
+        let recursors =
+          compile_recursors ~ind_def:inductive ~recursors ~ctx:parameters
+            ~family_name:linkage.name
+        in
+        (compiled_recursors := CompiledRecursors.{ compiled_context; recursors });
+        next_linkage
   in
+
   Bwd.fold_left f empty_linkage linkage.fields

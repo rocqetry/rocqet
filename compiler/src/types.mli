@@ -37,6 +37,17 @@ module CompiledModuleType : sig
   type t = Libnames.qualid
 end
 
+module CompiledRecursors : sig
+  type t = {
+    compiled_context : CompiledModuleType.t;
+    recursors :
+      ((Names.Id.t list * string)
+      * CompiledModule.t
+      * (Names.Id.t * CompiledModule.t) list)
+      list;
+  }
+end
+
 module PluginCmd : sig
   type t = Family
 end
@@ -52,6 +63,7 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
+        compiled_recursors : CompiledRecursors.t ref;
       }
     | FamilyDefinition of {
         linkage : Linkage.t;

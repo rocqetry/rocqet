@@ -160,6 +160,24 @@ module CompiledModuleType = struct
   type t = Libnames.qualid
 end
 
+module CompiledRecursors = struct
+  type t = {
+    (* TODO: do we need to keep track of the context? *)
+    compiled_context : CompiledModuleType.t;
+    (*
+      ((type_names * suffix)
+      * compiled_recursor
+      * (case_name * compiled_handler) list)
+      list
+    *)
+    recursors :
+      ((Names.Id.t list * string)
+      * CompiledModule.t
+      * (Names.Id.t * CompiledModule.t) list)
+      list;
+  }
+end
+
 (* Linkages *)
 
 (* A Linkage element is the "type" of a single field in a family *)
@@ -171,6 +189,7 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
+        compiled_recursors : CompiledRecursors.t ref;
       }
     | FamilyDefinition of {
         linkage : Linkage.t;

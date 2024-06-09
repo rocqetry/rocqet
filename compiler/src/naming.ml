@@ -132,9 +132,11 @@ let unique_id =
     incr counter;
     !counter
 
-let fresh_name ~prefix =
+let fresh_string ~prefix =
   let time_stamp = string_of_int @@ unique_id () in
-  Names.Id.of_string (prefix ^ "回" ^ time_stamp)
+  prefix ^ "回" ^ time_stamp
+
+let fresh_name ~prefix = fresh_string ~prefix |> Names.Id.of_string
 
 let module_name_of ~family_name type_name =
   let prefix =
