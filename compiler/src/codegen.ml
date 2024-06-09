@@ -677,9 +677,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
             ~family_name:linkage.name
         in
         let compiled_recursors =
-          Summary.ref
-            ~name:(Naming.fresh_string ~prefix:"recursors")
-            CompiledRecursors.{ compiled_context; recursors = [] }
+          ref CompiledRecursors.{ compiled_context; recursors = [] }
         in
         let elem =
           LinkageElem.InductiveDefinition
