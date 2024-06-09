@@ -87,11 +87,21 @@ let close_family () : unit =
       let linkage =
         match (further_base, base) with
         | None, None -> linkage
-        | Some _, Some _ ->
-            Errors.fail
-              ~info:
-                "Further binding and inheritance at the same time has not been \
-                 implememnted for nested families"
+        | Some further, Some base ->
+            let further =
+              Linkage.path_subtitution further
+                ~source:(Linkage.top_most_self_name further)
+                ~target:(Linkage.top_most_self_name linkage)
+            in            
+            let base =
+              let base = Codegen.parameterize ~prefix:linkage.context base in
+              Linkage.path_subtitution base
+                ~source:(Naming.self_version base.name)
+                ~target:(Naming.self_version linkage.name)
+            in
+            let base = { base with name = further.name } in
+            let base = Linkage.concatenate_recursive ~base:further ~derived:base in 
+            Codegen.recompute_linkage base
         | _, Some base ->
             (* Here, we are assuming that base is a toplevel family *)
             (* Don't just reparameterize! We need some kind of condition to check
