@@ -122,6 +122,8 @@ let close_family () : unit =
                 ~source:(Linkage.top_most_self_name further)
                 ~target:(Linkage.top_most_self_name linkage)
             in
+            if Bwd.length base.context <> Bwd.length linkage.context then              
+              failwith "Need to reparameterize";            
             Linkage.concatenate ~base ~derived:linkage
       in
       let signature = Codegen.compile_nested_linkage_signature linkage in

@@ -24,7 +24,25 @@ let inherit_dependencies ~prefix =
             ~target:(Linkage.top_most_self_name linkage)
         in
         Linkage.concatenate_prefix ~prefix ~derived:linkage ~base:further
-    | Some _, Some _ ->
-        Errors.fail ~info:"Further binding + Inheritance not yet implemented"
+    | Some base, Some further ->
+        Printf.printf "Linkage : %s\n" (Names.Id.to_string linkage.name);
+        Printf.printf "Further : %s\n" (Names.Id.to_string further.name);
+        Printf.printf "Base : %s\n" (Names.Id.to_string base.name);
+        (* failwith "" |> ignore;*)
+        let further =             
+              Linkage.path_subtitution further
+                ~source:(Linkage.top_most_self_name further)
+                ~target:(Linkage.top_most_self_name linkage)
+            in            
+        let base =
+           let base = Codegen.parameterize ~prefix:linkage.context base in
+           Linkage.path_subtitution base
+           ~source:(Naming.self_version base.name)
+           ~target:(Naming.self_version linkage.name)
+         in
+         let base = { base with name = further.name } in              
+         let base = Linkage.concatenate_recursive_prefix ~prefix ~base:further ~derived:base in            
+         let base = Codegen.recompute_linkage base in 
+         Linkage.concatenate_prefix ~prefix ~derived:linkage ~base
   in
   Context.replace ~linkage

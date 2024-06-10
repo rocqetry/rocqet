@@ -194,6 +194,7 @@ and Linkage : sig
 
   (* Concatenate the fields before `prefix` *)
   val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
+  val concatenate_recursive_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
 end = struct
   type t = {
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
@@ -318,6 +319,17 @@ end = struct
       | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
         ->                    
           concatenate ~base:{ base with fields } ~derived          
+      | Bwd.Snoc (fields, _) -> calculate_dependencies fields
+    in    
+    calculate_dependencies base.fields
+
+   let concatenate_recursive_prefix ~prefix ~(derived : Linkage.t) ~(base : Linkage.t) =
+    let rec calculate_dependencies fields =
+      match fields with
+      | Bwd.Emp -> derived
+      | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
+        ->                    
+          concatenate_recursive ~base:{ base with fields } ~derived          
       | Bwd.Snoc (fields, _) -> calculate_dependencies fields
     in    
     calculate_dependencies base.fields
