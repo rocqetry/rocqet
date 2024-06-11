@@ -434,6 +434,12 @@ let compile_nested_linkage_signature linkage =
 
 (* reparameterize a non-nested linkage into a nested linkage *)
 (* val parameterize : Linkage.t -> prefix:(Names.Id.t * Constrexpr.module_ast) Bwd.t -> Linkage.t *)
+(* 
+  params
+
+   module type Ctx { ... } => module type ReparamCtx (params) { include Ctx  }
+   module type Ctx (args) { ... } => module type ReparamCtx 
+*)
 let parameterize linkage ~prefix =
   let open VernacBackend in
   let open Linkage in
