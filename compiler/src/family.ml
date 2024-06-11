@@ -90,7 +90,9 @@ let close_family () : unit =
         | Some further, Some base ->
             let base =         
               match Linkage.context_match base linkage with
-              | `Less -> Codegen.parameterize base ~prefix:linkage.context
+              | `Less -> 
+                  (* Codegen.parameterize ~linkage:base ~prefix:linkage ~arguments:[] *)
+                  Codegen.recompute_linkage { base with context = linkage.context }
               | `More -> Errors.fail ~info:"[inherit_dependencies] can't deal with base.context > derived.context"
               | `Equal -> base
             in
@@ -110,7 +112,9 @@ let close_family () : unit =
         | _, Some base ->
             let base =         
               match Linkage.context_match base linkage with
-              | `Less -> Codegen.parameterize base ~prefix:linkage.context
+              | `Less -> 
+                 (* Codegen.parameterize ~linkage:base ~prefix:linkage ~arguments:[] *)
+                 Codegen.recompute_linkage { base with context = linkage.context }
               | `More -> Errors.fail ~info:"[inherit_dependencies] can't deal with base.context > derived.context"
               | `Equal -> base
             in
