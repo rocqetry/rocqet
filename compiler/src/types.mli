@@ -68,6 +68,7 @@ and Linkage : sig
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
+  val context_match : t -> t -> [ `Equal | `Less | `More ]
   val top_most_self_name : t -> Names.Id.t
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
   val concatenate_recursive : derived:t -> base:t -> t

@@ -88,13 +88,18 @@ let close_family () : unit =
         match (further_base, base) with
         | None, None -> linkage
         | Some further, Some base ->
+            let base =         
+              match Linkage.context_match base linkage with
+              | `Less -> Codegen.parameterize base ~prefix:linkage.context
+              | `More -> Errors.fail ~info:"[inherit_dependencies] can't deal with base.context > derived.context"
+              | `Equal -> base
+            in
             let further =
               Linkage.path_subtitution further
                 ~source:(Linkage.top_most_self_name further)
                 ~target:(Linkage.top_most_self_name linkage)
             in            
-            let base =
-              let base = Codegen.parameterize ~prefix:linkage.context base in
+            let base =              
               Linkage.path_subtitution base
                 ~source:(Naming.self_version base.name)
                 ~target:(Naming.self_version linkage.name)
@@ -103,13 +108,12 @@ let close_family () : unit =
             let base = Linkage.concatenate_recursive ~base:further ~derived:base in 
             Codegen.recompute_linkage base
         | _, Some base ->
-            (* Here, we are assuming that base is a toplevel family *)
-            (* Don't just reparameterize! We need some kind of condition to check
-               on linkages to know when two linkages "can't fit" *)
-            (* Possibly reparameterization can go both ways? *)
-            let base = Codegen.parameterize ~prefix:linkage.context base in
-            (* Here we don't need to topmost self name becuase this is classic
-               inheritance, not further binding *)
+            let base =         
+              match Linkage.context_match base linkage with
+              | `Less -> Codegen.parameterize base ~prefix:linkage.context
+              | `More -> Errors.fail ~info:"[inherit_dependencies] can't deal with base.context > derived.context"
+              | `Equal -> base
+            in
             let base =
               Linkage.path_subtitution base
                 ~source:(Naming.self_version base.name)
@@ -121,13 +125,11 @@ let close_family () : unit =
               Linkage.path_subtitution further
                 ~source:(Linkage.top_most_self_name further)
                 ~target:(Linkage.top_most_self_name linkage)
-            in
-            if Bwd.length base.context <> Bwd.length linkage.context then              
-              failwith "Need to reparameterize";            
+            in            
             Linkage.concatenate ~base ~derived:linkage
       in
       let signature = Codegen.compile_nested_linkage_signature linkage in
-      let impl = Codegen.compile_nested_linkage linkage in
+      let impl = Codegen.compile_neZsted_linkage linkage in
       let elem =
         let compiled_context =
           let rec extract_name (name : Constrexpr.module_ast) =

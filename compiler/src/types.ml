@@ -183,7 +183,9 @@ and Linkage : sig
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
-
+  
+  val context_match : t -> t -> [ `Equal | `Less | `More ]
+  
   val top_most_self_name : t -> Names.Id.t
   
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
@@ -203,6 +205,13 @@ end = struct
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
+  let context_match left right =
+    let left_length = Bwd.length left.context
+    and right_length = Bwd.length right.context in
+    if left_length < right_length then `Less
+    else if left_length > right_length then `More
+    else `Equal
+  
   let top_most_self_name linkage =
     match Bwd.to_list linkage.context with
     | [] -> Naming.self_version linkage.name

@@ -11,11 +11,17 @@ let inherit_dependencies ~prefix =
     match (base, further) with
     | None, None -> linkage
     | Some base, None ->
-        let base =
+       let base =         
+         match Linkage.context_match base linkage with
+         | `Less -> Codegen.parameterize base ~prefix:linkage.context
+         | `More -> Errors.fail ~info:"[inherit_dependencies] can't deal with base.context > derived.context"
+         | `Equal -> base
+       in
+       let base =
           Linkage.path_subtitution base
             ~source:(Naming.self_version base.name)
             ~target:(Naming.self_version linkage.name)
-        in
+       in       
         Linkage.concatenate_prefix ~prefix ~derived:linkage ~base
     | None, Some further ->
         let further =
@@ -25,17 +31,18 @@ let inherit_dependencies ~prefix =
         in
         Linkage.concatenate_prefix ~prefix ~derived:linkage ~base:further
     | Some base, Some further ->
-        Printf.printf "Linkage : %s\n" (Names.Id.to_string linkage.name);
-        Printf.printf "Further : %s\n" (Names.Id.to_string further.name);
-        Printf.printf "Base : %s\n" (Names.Id.to_string base.name);
-        (* failwith "" |> ignore;*)
+        let base =         
+         match Linkage.context_match base linkage with
+         | `Less -> Codegen.parameterize base ~prefix:linkage.context
+         | `More -> Errors.fail ~info:"[inherit_dependencies] can't deal with base.context > derived.context"
+         | `Equal -> base
+       in
         let further =             
               Linkage.path_subtitution further
                 ~source:(Linkage.top_most_self_name further)
                 ~target:(Linkage.top_most_self_name linkage)
             in            
-        let base =
-           let base = Codegen.parameterize ~prefix:linkage.context base in
+        let base =          
            Linkage.path_subtitution base
            ~source:(Naming.self_version base.name)
            ~target:(Naming.self_version linkage.name)

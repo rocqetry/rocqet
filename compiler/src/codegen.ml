@@ -438,13 +438,14 @@ let parameterize linkage ~prefix =
   let open VernacBackend in
   let open Linkage in
   let parameters = prefix in
+  let _old_parameters = linkage.context in 
   let f (name, elem) =
     match elem with
     | LinkageElem.InductiveDefinition impl ->
         let compiled_context =
           define_moduletype
             ~module_name:(Naming.fresh_name ~prefix:"Reparameterize")
-            ~parameters:(parameters @> []) ~body:(fun _ ->
+            ~parameters:(Bwd.to_list parameters) ~body:(fun _ ->
               let module_expr =
                 Termutils.apply_module
                   ~functor_expr:
