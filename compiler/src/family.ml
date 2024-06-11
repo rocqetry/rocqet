@@ -129,7 +129,7 @@ let close_family () : unit =
             Linkage.concatenate ~base ~derived:linkage
       in
       let signature = Codegen.compile_nested_linkage_signature linkage in
-      let impl = Codegen.compile_neZsted_linkage linkage in
+      let impl = Codegen.compile_nested_linkage linkage in
       let elem =
         let compiled_context =
           let rec extract_name (name : Constrexpr.module_ast) =
