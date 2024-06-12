@@ -13,6 +13,13 @@ let add_inductive_definition inductive =
     match (further_elem, base_elem) with
     | ( Some (further, InductiveDefinition { inductive = further_inductive; _ }),
         None ) ->
+        Printf.printf "Further binding %s\n" (Names.Id.to_string inductive_name);
+        let names = 
+          inductive 
+          |> VernacInductive.extract_all_names_with_type 
+          |> List.concat_map (fun (_, x) -> List.map fst x)
+        in 
+        names |> List.iter (fun name -> Printf.printf "C: %s\n" (Names.Id.to_string name));        
         (* Further binding *)
         let further_inductive =
           VernacInductive.path_subtitution further_inductive
@@ -59,4 +66,6 @@ let add_inductive_definition inductive =
     LinkageElem.InductiveDefinition
       { inductive; compiled_context; compiled_impl; compiled_signature }
   in
+  Printf.printf "Adding Inductive %s\n" 
+    (Names.Id.to_string inductive_name); 
   Context.add_field ~name:inductive_name ~elem

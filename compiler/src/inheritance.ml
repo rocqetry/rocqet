@@ -50,7 +50,7 @@ let inherit_dependencies ~prefix =
          let base = Linkage.concatenate_recursive_prefix ~prefix ~base:further ~derived:base in
          let base = { base with name = further.name } in
          let base = Codegen.recompute_linkage base in         
-         let linkage = Linkage.concatenate_recursive ~derived:linkage ~base in
+         let linkage = Linkage.concatenate_recursive_prefix ~prefix ~derived:linkage ~base in
          Codegen.recompute_linkage linkage
   in
   Context.replace ~linkage

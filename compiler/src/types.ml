@@ -242,6 +242,7 @@ end = struct
     { linkage with fields }
 
   (* Deep concatenation *)
+  (* If the base is empty we loose some items *)
   let rec concatenate_recursive ~derived ~base =
     (* Using pick here reorders the fields in a family, which is wrong *)
     let rec pick x lst =
@@ -255,7 +256,7 @@ end = struct
     in
     let rec go base derived =
       match base with
-      | [] -> []
+      | [] -> derived
       | (name, elem) :: base -> (
           match pick name derived with
           | None, _ -> (name, elem) :: go base derived
@@ -294,21 +295,21 @@ end = struct
         ~(derived : (Names.Id.t * LinkageElem.t) list) =
       match (base, derived) with
       | [], [] -> []
-      | (bname, belem) :: base', (dname, _) :: rest_derived ->
+      | (bname, belem) :: rest_base, (dname, _) :: rest_derived ->
           if Names.Id.equal bname dname then
-            compute_difference ~base:base' ~derived:rest_derived
+            compute_difference ~base:rest_base ~derived:rest_derived
           else
             (* Check if the name has already been inherited:
                in a later position *)
-            let cond =
+            let inherited_later =
               rest_derived
               |> List.map fst
               |> List.exists (Names.Id.equal bname)
             in
-            if not cond then 
-              (bname, belem) :: compute_difference ~base:base' ~derived
+            if not inherited_later then 
+              (bname, belem) :: compute_difference ~base:rest_base ~derived
             else
-              compute_difference ~base:base' ~derived
+              compute_difference ~base:rest_base ~derived
       | _ :: _, [] -> base
       | [], _ :: _ -> []
     in
