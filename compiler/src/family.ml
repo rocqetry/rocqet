@@ -107,6 +107,7 @@ let close_family () : unit =
                 ~target:(Naming.self_version linkage.name)
             in
             let base = { base with name = further.name } in
+            let base = Codegen.recompute_linkage base in 
             let base = Linkage.concatenate_recursive ~base:further ~derived:base in 
             Codegen.recompute_linkage base
         | _, Some base ->
@@ -131,7 +132,7 @@ let close_family () : unit =
                 ~target:(Linkage.top_most_self_name linkage)
             in            
             Linkage.concatenate ~base ~derived:linkage
-      in
+      in      
       let signature = Codegen.compile_nested_linkage_signature linkage in
       let impl = Codegen.compile_nested_linkage linkage in
       let elem =
