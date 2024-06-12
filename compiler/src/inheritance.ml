@@ -13,10 +13,8 @@ let inherit_dependencies ~prefix =
     | Some base, None ->
        let base =         
          match Linkage.context_match base linkage with
-         | `Less -> 
-            (* Codegen.parameterize ~linkage:base ~prefix:linkage ~arguments:[] *)
+         | `Less | `More -> 
             Codegen.recompute_linkage { base with context = linkage.context }
-         | `More -> Errors.fail ~info:"[inherit_dependencies] can't deal with base.context > derived.context"
          | `Equal -> base
        in
        let base =
@@ -35,10 +33,8 @@ let inherit_dependencies ~prefix =
     | Some base, Some further ->
         let base =         
          match Linkage.context_match base linkage with
-         | `Less -> 
-            (* Codegen.parameterize ~linkage:base ~prefix:linkage ~arguments:[] *)
-            Codegen.recompute_linkage { base with context = linkage.context }
-         | `More -> Errors.fail ~info:"[inherit_dependencies] can't deal with base.context > derived.context"
+         | `Less | `More -> 
+            Codegen.recompute_linkage { base with context = linkage.context } 
          | `Equal -> base
        in
         let further =             
