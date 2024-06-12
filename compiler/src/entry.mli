@@ -18,3 +18,10 @@ val frecursor :
   rec_mod:Libnames.qualid ->
   suffix:Names.Id.t ->
   unit
+
+(* Handle a `FDefinition ... : ... = ...` command *)
+val definition :
+  name:Names.Id.t ->
+  body_type:Constrexpr.constr_expr ->
+  body_expr:Constrexpr.constr_expr ->
+  unit

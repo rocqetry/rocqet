@@ -197,6 +197,12 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
       }
+    | FieldDefinition of {
+        body_expr : Constrexpr.constr_expr;
+        body_type : Constrexpr.constr_expr;
+        compiled_context : CompiledModuleType.t;
+        compiled_impl : CompiledModuleType.t;
+      }
 end =
   LinkageElem
 
@@ -259,6 +265,7 @@ end = struct
                   VernacInductive.path_subtitution definition.inductive ~source
                     ~target;
               }
+        | LinkageElem.FieldDefinition field -> FieldDefinition field
       in
       (name, elem)
     in
@@ -308,6 +315,8 @@ end = struct
                     LinkageElem.FamilyDefinition { ibase with linkage }
                   in
                   (name, elem) :: go base derived
+              | FieldDefinition _, FieldDefinition _ ->
+                  Errors.fail ~info:"Field name conflict"
               | _ -> Errors.fail ~info:"Wrong concatenation arguments"))
     in
     let fields = go (Bwd.to_list base.fields) (Bwd.to_list derived.fields) in

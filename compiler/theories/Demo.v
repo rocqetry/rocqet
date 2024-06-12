@@ -1,6 +1,8 @@
 From NFPOP Require Import Loader.
 
-Notation ident := nat.
+Family T.
+  FDefinition b : nat := 0.
+FEnd T.
 
 Family IR.
    FInductive constant : Type :=

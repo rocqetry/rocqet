@@ -1,4 +1,11 @@
+
 val point_qualid : Names.Id.t -> Libnames.qualid -> Libnames.qualid
+
+val replace_qualid_root :
+  source:Names.Id.t ->
+  target:Names.Id.t ->
+  Constrexpr.constr_expr ->
+  Constrexpr.constr_expr
 
 val rename_ind_constructors :
   Vernacexpr.constructor_expr list ->

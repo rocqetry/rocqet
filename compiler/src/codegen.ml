@@ -473,6 +473,11 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
   | Bwd.Snoc
       ( _,
         ( _,
+          LinkageElem.FieldDefinition
+            { compiled_context; compiled_impl = compiled_signature; _ } ) )
+  | Bwd.Snoc
+      ( _,
+        ( _,
           LinkageElem.InductiveDefinition
             { compiled_context; compiled_signature; _ } ) ) ->
       let signature_name =
@@ -509,6 +514,7 @@ let compile_linkage (linkage : Linkage.t) =
     match fields with
     | Bwd.Emp -> return ()
     | Bwd.Snoc (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
+    | Bwd.Snoc (fields, (_, LinkageElem.FieldDefinition { compiled_impl; _ }))
     | Bwd.Snoc
         (fields, (_, LinkageElem.InductiveDefinition { compiled_impl; _ })) ->
         let* _ = compile_fields fields ctx in
@@ -534,6 +540,7 @@ let compile_nested_linkage (linkage : Linkage.t) =
     match fields with
     | Bwd.Emp -> return ()
     | Bwd.Snoc (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
+    | Bwd.Snoc (fields, (_, LinkageElem.FieldDefinition { compiled_impl; _ }))
     | Bwd.Snoc
         (fields, (_, LinkageElem.InductiveDefinition { compiled_impl; _ })) ->
         let* _ = compile_fields fields ctx in
@@ -576,6 +583,11 @@ let compile_nested_linkage_signature linkage =
     | Bwd.Snoc
         ( _,
           ( _,
+            LinkageElem.FieldDefinition
+              { compiled_context; compiled_impl = compiled_signature; _ } ) )
+    | Bwd.Snoc
+        ( _,
+          ( _,
             LinkageElem.InductiveDefinition
               { compiled_context; compiled_signature; _ } ) ) ->
         define_moduletype ~module_name:helper ~parameters:(Bwd.to_list context)
@@ -609,6 +621,13 @@ let compile_nested_linkage_signature linkage =
       return ())
   |> run
 
+let compile_definition ~name ~body_type ~body_expr ~parameters =
+  let open VernacBackend in
+  let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in
+  define_module ~module_name ~parameters ~body:(fun _ ->
+      let* () = define_term ~name ~ty:body_type body_expr in
+      return ())
+  |> run
 
 (* We should be keeping track of a context *)
 let rec recompute_linkage (linkage : Linkage.t) =
@@ -624,6 +643,18 @@ let rec recompute_linkage (linkage : Linkage.t) =
   let empty_linkage = { linkage with fields = Bwd.Emp } in
   let f linkage (name, field) =
     match field with
+    | LinkageElem.FieldDefinition { body_expr; body_type; _ } ->
+        let compiled_context, parameters =
+          compile_linkage_context ~field_name:name (LinkageCtx.Toplevel linkage)
+        in
+        let compiled_impl =
+          compile_definition ~name ~body_type ~body_expr ~parameters
+        in
+        let elem =
+          LinkageElem.FieldDefinition
+            { body_expr; body_type; compiled_context; compiled_impl }
+        in
+        { linkage with fields = Bwd.Snoc (linkage.fields, (name, elem)) }
     | LinkageElem.FamilyDefinition { linkage = nested_linkage; _ } ->
         (* Late binding of family names *)
         let nested_linkage =

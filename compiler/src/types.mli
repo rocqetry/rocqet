@@ -71,6 +71,12 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
       }
+    | FieldDefinition of {
+        body_expr : Constrexpr.constr_expr;
+        body_type : Constrexpr.constr_expr;
+        compiled_context : CompiledModuleType.t;
+        compiled_impl : CompiledModuleType.t;
+      }
 end
 
 and Linkage : sig
