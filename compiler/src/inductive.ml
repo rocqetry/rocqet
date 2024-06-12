@@ -14,12 +14,13 @@ let add_inductive_definition inductive =
     | ( Some (further, InductiveDefinition { inductive = further_inductive; _ }),
         None ) ->
         Printf.printf "Further binding %s\n" (Names.Id.to_string inductive_name);
-        let names = 
-          inductive 
-          |> VernacInductive.extract_all_names_with_type 
+        let names =
+          inductive |> VernacInductive.extract_all_names_with_type
           |> List.concat_map (fun (_, x) -> List.map fst x)
-        in 
-        names |> List.iter (fun name -> Printf.printf "C: %s\n" (Names.Id.to_string name));        
+        in
+        names
+        |> List.iter (fun name ->
+               Printf.printf "C: %s\n" (Names.Id.to_string name));
         (* Further binding *)
         let further_inductive =
           VernacInductive.path_subtitution further_inductive
@@ -37,26 +38,26 @@ let add_inductive_definition inductive =
         in
         VernacInductive.concatenate ~base:base_inductive ~derived:inductive
     | None, None -> inductive
-    | Some (further, InductiveDefinition further_inductive), Some (base, InductiveDefinition base_inductive) ->
+    | ( Some (further, InductiveDefinition further_inductive),
+        Some (base, InductiveDefinition base_inductive) ) ->
         (* Further binding + Inheritance *)
-        let further_inductive = further_inductive.inductive in 
+        let further_inductive = further_inductive.inductive in
         let further_inductive =
           VernacInductive.path_subtitution further_inductive
             ~source:(Linkage.top_most_self_name further)
             ~target:(Linkage.top_most_self_name linkage)
         in
-        let base_inductive = base_inductive.inductive in        
+        let base_inductive = base_inductive.inductive in
         let base_inductive =
           VernacInductive.path_subtitution base_inductive
             ~source:(Naming.self_version base.name)
             ~target:(Naming.self_version linkage.name)
         in
-        let base_inductive = 
-          VernacInductive.concatenate 
-            ~base:further_inductive 
+        let base_inductive =
+          VernacInductive.concatenate ~base:further_inductive
             ~derived:base_inductive
-        in 
-        VernacInductive.concatenate ~base:base_inductive ~derived:inductive        
+        in
+        VernacInductive.concatenate ~base:base_inductive ~derived:inductive
     | _, _ ->
         Errors.fail
           ~info:
@@ -80,6 +81,5 @@ let add_inductive_definition inductive =
     LinkageElem.InductiveDefinition
       { inductive; compiled_context; compiled_impl; compiled_signature }
   in
-  Printf.printf "Adding Inductive %s\n" 
-    (Names.Id.to_string inductive_name); 
+  Printf.printf "Adding Inductive %s\n" (Names.Id.to_string inductive_name);
   Context.add_field ~name:inductive_name ~elem

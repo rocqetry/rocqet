@@ -373,7 +373,7 @@ let compile_nested_linkage (linkage : Linkage.t) =
   in
   let wrapper = Naming.fresh_name ~prefix:"Impl" in
   define_module ~module_name:wrapper ~parameters:(Bwd.to_list context)
-    ~body:(fun _ctx ->      
+    ~body:(fun _ctx ->
       let* _ =
         define_module ~module_name:name ~parameters:[]
           ~body:(compile_fields fields)

@@ -74,7 +74,9 @@ and Linkage : sig
   val concatenate_recursive : derived:t -> base:t -> t
   val concatenate : derived:t -> base:t -> t
   val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
-  val concatenate_recursive_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
+
+  val concatenate_recursive_prefix :
+    prefix:Names.Id.t -> derived:t -> base:t -> t
 end
 
 and LinkageCtx : sig

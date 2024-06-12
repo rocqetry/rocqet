@@ -89,50 +89,55 @@ let close_family () : unit =
       let base = Context.base_linkage context in
       let linkage =
         match (further_base, base) with
-        | None, None ->            
-           (* failwith "" |> ignore;*)
-           linkage
+        | None, None ->
+            (* failwith "" |> ignore;*)
+            linkage
         | Some further, Some base ->
-           Printf.printf "FURTHER + INHERITANCE: %s %s\n" 
-             (linkage |> Linkage.top_most_self_name |> Names.Id.to_string) 
-             (Names.Id.to_string linkage.name);
-           linkage.fields
-           |> Bwd.iter (fun (name, elem) -> 
-                  Printf.printf "F: %s\n" (Names.Id.to_string name);
-                  match elem with 
-                  | LinkageElem.FamilyDefinition { linkage; _ } -> 
-                     linkage.fields
-                     |> Bwd.iter (fun (name, _) -> 
-                            Printf.printf "Inner: %s\n" (Names.Id.to_string name))
-                  | _ -> ());           
-            let base =         
+            Printf.printf "FURTHER + INHERITANCE: %s %s\n"
+              (linkage |> Linkage.top_most_self_name |> Names.Id.to_string)
+              (Names.Id.to_string linkage.name);
+            linkage.fields
+            |> Bwd.iter (fun (name, elem) ->
+                   Printf.printf "F: %s\n" (Names.Id.to_string name);
+                   match elem with
+                   | LinkageElem.FamilyDefinition { linkage; _ } ->
+                       linkage.fields
+                       |> Bwd.iter (fun (name, _) ->
+                              Printf.printf "Inner: %s\n"
+                                (Names.Id.to_string name))
+                   | _ -> ());
+            let base =
               match Linkage.context_match base linkage with
-              | `Less | `More -> 
-                 Codegen.recompute_linkage { base with context = linkage.context }
+              | `Less | `More ->
+                  Codegen.recompute_linkage
+                    { base with context = linkage.context }
               | `Equal -> base
             in
             let further =
               Linkage.path_subtitution further
                 ~source:(Linkage.top_most_self_name further)
                 ~target:(Linkage.top_most_self_name linkage)
-            in            
-            let base =              
+            in
+            let base =
               Linkage.path_subtitution base
                 ~source:(Naming.self_version base.name)
                 ~target:(Naming.self_version linkage.name)
             in
             let base = { base with name = further.name } in
             (* let base = Codegen.recompute_linkage base in *)
-            let base = Linkage.concatenate_recursive ~base:further ~derived:base in 
+            let base =
+              Linkage.concatenate_recursive ~base:further ~derived:base
+            in
             (* let base = Codegen.recompute_linkage base in *)
             let result = Linkage.concatenate ~base ~derived:linkage in
             (* Codegen.recompute_linkage result *)
             result
         | _, Some base ->
-            let base =         
+            let base =
               match Linkage.context_match base linkage with
-              | `Less | `More -> 
-                 Codegen.recompute_linkage { base with context = linkage.context } 
+              | `Less | `More ->
+                  Codegen.recompute_linkage
+                    { base with context = linkage.context }
               | `Equal -> base
             in
             let base =
@@ -142,21 +147,23 @@ let close_family () : unit =
             in
             Linkage.concatenate ~base ~derived:linkage
         | Some further, _ ->
-           Printf.printf "FURTHER: %s %s\n" 
-             (linkage |> Linkage.top_most_self_name |> Names.Id.to_string) 
-             (Names.Id.to_string linkage.name);
-           linkage.fields
-           |> Bwd.iter (fun (name, _) -> Printf.printf "F: %s\n" (Names.Id.to_string name));
+            Printf.printf "FURTHER: %s %s\n"
+              (linkage |> Linkage.top_most_self_name |> Names.Id.to_string)
+              (Names.Id.to_string linkage.name);
+            linkage.fields
+            |> Bwd.iter (fun (name, _) ->
+                   Printf.printf "F: %s\n" (Names.Id.to_string name));
             let base =
               Linkage.path_subtitution further
                 ~source:(Linkage.top_most_self_name further)
                 ~target:(Linkage.top_most_self_name linkage)
-            in            
-            let result = Linkage.concatenate ~base ~derived:linkage in 
+            in
+            let result = Linkage.concatenate ~base ~derived:linkage in
             result.fields
-           |> Bwd.iter (fun (name, _) -> Printf.printf "AFTER: %s\n" (Names.Id.to_string name));
-            result 
-      in      
+            |> Bwd.iter (fun (name, _) ->
+                   Printf.printf "AFTER: %s\n" (Names.Id.to_string name));
+            result
+      in
       let signature = Codegen.compile_nested_linkage_signature linkage in
       let impl = Codegen.compile_nested_linkage linkage in
       let elem =
