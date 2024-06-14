@@ -4,7 +4,7 @@ open Types
 val family : Names.Id.t -> unit
 
 (* Handle a `Family ... extends ...` command *)
-val family_extends : derived:Names.Id.t -> base:Names.Id.t -> unit
+val family_extends : derived:Names.Id.t -> base:Libnames.qualid -> unit
 
 (* Handle a `FInductive ... := ...` command *)
 val finductive : VernacInductive.t -> unit

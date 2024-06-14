@@ -46,6 +46,11 @@ let _to_qualid_name (path : Libnames.qualid) :
     | newbase :: remained ->
         (Some (make_qualid (Names.DirPath.make remained) newbase), base)
 
+let path_to_list (path : Libnames.qualid) : Names.Id.t list = 
+  let prefix, base = Libnames.repr_qualid path in 
+  let prefix = List.rev (Names.DirPath.repr prefix) in 
+  prefix @ [base]
+
 (* extract a path into (name "." path) *)
 let to_name_qualid (path : Libnames.qualid) : Names.Id.t * Libnames.qualid =
   let prefix_path, base = Libnames.repr_qualid path in

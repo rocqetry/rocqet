@@ -31,12 +31,17 @@ DECLARE PLUGIN "nfpop.plugin"
   
   let llconstr_ip : Constrexpr.constr_expr Pcoq.Entry.t =
     Pcoq.create_generic_entry2 "llconstr_ip" (Genarg.rawwit wit_llconstr_ip)
+
+  (* let wit_path : (Names.Id.t list, Util.Empty.t, Util.Empty.t) Genarg.genarg_type =
+    Genarg.create_arg "path_ty"*)  
 }
 
 GRAMMAR EXTEND Gram
 GLOBAL: mutind_defs llconstr_ip gallina_ext list1ident reference_ip;
   list1ident : 
     [[ listid = LIST1 ident -> { listid }]];
+  path : 
+    [[ listid = LIST1 ident SEP "." -> { listid }]];
   mutind_defs :
     [[ indl = LIST1 inductive_or_record_definition SEP "with" -> { indl } ]];
   llconstr_ip : 
@@ -48,7 +53,7 @@ GLOBAL: mutind_defs llconstr_ip gallina_ext list1ident reference_ip;
 END
 
 VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
-| [ "Family" ident(derived) "extends" ident(base) ] ->  { Entry.family_extends ~derived ~base }
+| [ "Family" ident(derived) "extends" reference(base) ] ->  { Entry.family_extends ~derived ~base }
 
 | [ "Family" ident(name) ] -> { Entry.family name }
 
@@ -56,5 +61,3 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "FEnd" ident(scope_name) ] -> { Entry.fend scope_name }
 END
-
-

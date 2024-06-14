@@ -29,7 +29,7 @@ let open_family name =
 
 let open_family_with_base ~name ~base =
   match Context.lookup base with
-  | None -> Errors.fail ~info:("Unbound Name " ^ Names.Id.to_string base)
+  | None -> Errors.fail ~info:("Unbound Family Name")
   | Some base_linkage -> (
       match Context.get_store () with
       | Some _context ->
