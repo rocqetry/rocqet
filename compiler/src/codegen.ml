@@ -441,6 +441,7 @@ let lookup (linkage : Linkage.t) name =
              Some linkage
          | _ -> None)
 
+(* We should be keeping track of a context *)
 let rec recompute_linkage (linkage : Linkage.t) =
   let empty_linkage = { linkage with fields = Bwd.Emp } in
   let f linkage (name, field) =
@@ -454,6 +455,8 @@ let rec recompute_linkage (linkage : Linkage.t) =
               match lookup linkage base.name with
               | None -> nested_linkage
               | Some base ->
+                 (* We can also imagine this being done for regular
+                    base families. But is that needed? *)
                   let base =
                     Linkage.path_subtitution base
                       ~source:(Naming.self_version base.name)

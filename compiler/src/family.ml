@@ -78,7 +78,7 @@ let close_family () : unit =
                 ~source:(Linkage.top_most_self_name base_linkage)
                 ~target:(Linkage.top_most_self_name linkage)
             in
-            Linkage.concatenate ~base:base_linkage ~derived:linkage
+            Linkage.concatenate_recursive ~base:base_linkage ~derived:linkage
       in
       (* store := None; *)
       Context.destructive_update None;
@@ -118,7 +118,7 @@ let close_family () : unit =
               Linkage.concatenate_recursive ~base:further ~derived:base
             in
             (* let base = Codegen.recompute_linkage base in *)
-            let result = Linkage.concatenate ~base ~derived:linkage in
+            let result = Linkage.concatenate_recursive ~base ~derived:linkage in
             (* Codegen.recompute_linkage result *)
             result
         | _, Some base ->
@@ -134,15 +134,17 @@ let close_family () : unit =
                 ~source:(Naming.self_version base.name)
                 ~target:(Naming.self_version linkage.name)
             in
-            Linkage.concatenate ~base ~derived:linkage
+            Linkage.concatenate_recursive ~base ~derived:linkage
         | Some further, _ ->
             let base =
               Linkage.path_subtitution further
                 ~source:(Linkage.top_most_self_name further)
                 ~target:(Linkage.top_most_self_name linkage)
             in
-            Linkage.concatenate ~base ~derived:linkage
+            Linkage.concatenate_recursive ~base ~derived:linkage
       in
+      (* Again should not do this all the time: *)
+      let linkage = Codegen.recompute_linkage linkage in
       let signature = Codegen.compile_nested_linkage_signature linkage in
       let impl = Codegen.compile_nested_linkage linkage in
       let elem =
@@ -159,7 +161,7 @@ let close_family () : unit =
                 ~info:
                   "We should have parameters since we're in a nested context"
           | Bwd.Snoc (_, (_, name)) -> extract_name name
-        in
+        in        
         LinkageElem.FamilyDefinition
           {
             linkage;
