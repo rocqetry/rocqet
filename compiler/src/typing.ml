@@ -35,6 +35,8 @@ let rec check ~further_base ~(base : Linkage.t) =
   (* Physical equality? *)
   if further_base = base then ()
   else
+    (* This should not only be base. 
+       There is also a path for further binding *)
     match base.base with
     | None ->
         Errors.fail
@@ -43,6 +45,7 @@ let rec check ~further_base ~(base : Linkage.t) =
              structure."
     | Some base -> check ~further_base ~base
 
+(* *)
 let check_further_binding_structure context =
   let further_base =
     let further = Context.further_bound_linkage context in
@@ -51,9 +54,5 @@ let check_further_binding_structure context =
   let base = Context.base_linkage context in
   match (further_base, base) with
   | Some further_base, Some base -> check ~further_base ~base
-  (* | Some _, None | None, Some _ -> 
-     Errors.fail
-          ~info:
-            "Type Error: further binding doesn't preserve inheritance \
-             structure."*)
-  | _, _ -> ()
+  | Some _, None | None, Some _ -> ()  
+  | None, None -> ()
