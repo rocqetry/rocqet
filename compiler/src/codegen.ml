@@ -454,6 +454,11 @@ let rec recompute_linkage (linkage : Linkage.t) =
              match lookup linkage base.name with 
              | None -> nested_linkage
              | Some base -> 
+                let base = 
+                  Linkage.path_subtitution base 
+                       ~source:(Naming.self_version base.name)
+                       ~target:(Naming.self_version nested_linkage.name)
+                in 
                 Linkage.concatenate_recursive ~base ~derived:nested_linkage
         in
         let compiled_context, parameters =
