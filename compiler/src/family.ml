@@ -82,6 +82,8 @@ let close_family () : unit =
       in
       (* store := None; *)
       Context.destructive_update None;
+      (* Note that we only want to do this when late binding happens in the family  *)
+      let linkage = Codegen.recompute_linkage linkage in 
       Codegen.compile_linkage linkage |> ignore;
       Linkages.add linkage
   | LinkageCtx.Nested (upper, linkage) as context ->

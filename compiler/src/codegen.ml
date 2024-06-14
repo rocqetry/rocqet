@@ -440,6 +440,7 @@ let lookup (linkage: Linkage.t) name =
               when Names.Id.equal name field_name -> Some linkage
       | _ -> None)
 
+(* TODO: make only change things it needs to change  *)
 let rec recompute_linkage (linkage : Linkage.t) =
   let empty_linkage = { linkage with fields = Bwd.Emp } in
   let f linkage (name, field) =
