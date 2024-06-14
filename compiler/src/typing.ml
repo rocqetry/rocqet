@@ -31,13 +31,13 @@
 open Env
 open Types
 
-let rec check ~(further_base: Linkage.t) ~(base : Linkage.t) =
+let rec check ~(further_base : Linkage.t) ~(base : Linkage.t) =
   (* Physical equality? *)
   (* further_base = base *)
   (* TODO: keep track of the `further_base` in a linkage *)
   if Names.Id.equal further_base.name base.name then ()
   else
-    (* This should not only be base. 
+    (* This should not only be base.
        There is also a path for further binding *)
     match base.base with
     | None ->
@@ -56,5 +56,5 @@ let check_further_binding_structure context =
   let base = Context.base_linkage context in
   match (further_base, base) with
   | Some further_base, Some base -> check ~further_base ~base
-  | Some _, None | None, Some _ -> ()  
+  | Some _, None | None, Some _ -> ()
   | None, None -> ()

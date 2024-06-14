@@ -43,36 +43,42 @@ end
 (* TODO: Give this a better name *)
 module Context = struct
   let store = Summary.ref ~name:"LinkageContext" (None : LinkageCtx.t option)
-  let get_store () = !store      
+  let get_store () = !store
 
   let get () =
     match !store with
     | None -> Errors.fail ~info:"There is not current context"
     | Some context -> context
 
-  let lookup name = 
-    let rec walk context = 
-      match context with 
+  let lookup name =
+    let rec walk context =
+      match context with
       | LinkageCtx.Toplevel linkage -> (
-         linkage.fields
-         |> Bwd.find_map (fun (field_name, elem) -> 
-                match elem with 
-                | LinkageElem.FamilyDefinition { linkage; _ } 
-                        when Names.Id.equal name field_name -> Some linkage
-                | _ -> None)
-         |> function None -> Linkages.lookup name | linkage -> linkage)
-      | LinkageCtx.Nested (context, linkage) -> 
-         linkage.fields
-         |> Bwd.find_map (fun (field_name, elem) -> 
-                match elem with 
-                | LinkageElem.FamilyDefinition { linkage; _ } 
-                        when Names.Id.equal name field_name -> Some linkage
-                | _ -> None)
-         |> function None -> walk context | linkage -> linkage
-      in 
-      match !store with
-      | None -> Linkages.lookup name 
-      | Some context -> walk context       
+          linkage.fields
+          |> Bwd.find_map (fun (field_name, elem) ->
+                 match elem with
+                 | LinkageElem.FamilyDefinition { linkage; _ }
+                   when Names.Id.equal name field_name ->
+                     Some linkage
+                 | _ -> None)
+          |> function
+          | None -> Linkages.lookup name
+          | linkage -> linkage)
+      | LinkageCtx.Nested (context, linkage) -> (
+          linkage.fields
+          |> Bwd.find_map (fun (field_name, elem) ->
+                 match elem with
+                 | LinkageElem.FamilyDefinition { linkage; _ }
+                   when Names.Id.equal name field_name ->
+                     Some linkage
+                 | _ -> None)
+          |> function
+          | None -> walk context
+          | linkage -> linkage)
+    in
+    match !store with
+    | None -> Linkages.lookup name
+    | Some context -> walk context
 
   let family_name context =
     match context with

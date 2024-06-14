@@ -432,34 +432,34 @@ let compile_nested_linkage_signature linkage =
       return ())
   |> run
 
-let lookup (linkage: Linkage.t) name = 
+let lookup (linkage : Linkage.t) name =
   linkage.fields
-  |> Bwd.find_map (fun (field_name, elem) -> 
-      match elem with 
-      | LinkageElem.FamilyDefinition { linkage; _ } 
-              when Names.Id.equal name field_name -> Some linkage
-      | _ -> None)
+  |> Bwd.find_map (fun (field_name, elem) ->
+         match elem with
+         | LinkageElem.FamilyDefinition { linkage; _ }
+           when Names.Id.equal name field_name ->
+             Some linkage
+         | _ -> None)
 
-(* TODO: make only change things it needs to change  *)
 let rec recompute_linkage (linkage : Linkage.t) =
   let empty_linkage = { linkage with fields = Bwd.Emp } in
   let f linkage (name, field) =
     match field with
     | LinkageElem.FamilyDefinition { linkage = nested_linkage; _ } ->
         (* Late binding of family names *)
-        let nested_linkage = 
-          match nested_linkage.base with 
-          | None -> nested_linkage 
-          | Some base -> 
-             match lookup linkage base.name with 
-             | None -> nested_linkage
-             | Some base -> 
-                let base = 
-                  Linkage.path_subtitution base 
-                       ~source:(Naming.self_version base.name)
-                       ~target:(Naming.self_version nested_linkage.name)
-                in 
-                Linkage.concatenate_recursive ~base ~derived:nested_linkage
+        let nested_linkage =
+          match nested_linkage.base with
+          | None -> nested_linkage
+          | Some base -> (
+              match lookup linkage base.name with
+              | None -> nested_linkage
+              | Some base ->
+                  let base =
+                    Linkage.path_subtitution base
+                      ~source:(Naming.self_version base.name)
+                      ~target:(Naming.self_version nested_linkage.name)
+                  in
+                  Linkage.concatenate_recursive ~base ~derived:nested_linkage)
         in
         let compiled_context, parameters =
           compile_linkage_context ~field_name:nested_linkage.name

@@ -82,8 +82,8 @@ let close_family () : unit =
       in
       (* store := None; *)
       Context.destructive_update None;
-      (* Note that we only want to do this when late binding happens in the family  *)
-      let linkage = Codegen.recompute_linkage linkage in 
+      (* Note that we only want to do this when late binding happens in the linkage *)
+      let linkage = Codegen.recompute_linkage linkage in
       Codegen.compile_linkage linkage |> ignore;
       Linkages.add linkage
   | LinkageCtx.Nested (upper, linkage) as context ->
@@ -95,19 +95,6 @@ let close_family () : unit =
             (* failwith "" |> ignore;*)
             linkage
         | Some further, Some base ->
-            Printf.printf "FURTHER + INHERITANCE: %s %s\n"
-              (linkage |> Linkage.top_most_self_name |> Names.Id.to_string)
-              (Names.Id.to_string linkage.name);
-            linkage.fields
-            |> Bwd.iter (fun (name, elem) ->
-                   Printf.printf "F: %s\n" (Names.Id.to_string name);
-                   match elem with
-                   | LinkageElem.FamilyDefinition { linkage; _ } ->
-                       linkage.fields
-                       |> Bwd.iter (fun (name, _) ->
-                              Printf.printf "Inner: %s\n"
-                                (Names.Id.to_string name))
-                   | _ -> ());
             let base =
               match Linkage.context_match base linkage with
               | `Less | `More ->
@@ -149,22 +136,12 @@ let close_family () : unit =
             in
             Linkage.concatenate ~base ~derived:linkage
         | Some further, _ ->
-            Printf.printf "FURTHER: %s %s\n"
-              (linkage |> Linkage.top_most_self_name |> Names.Id.to_string)
-              (Names.Id.to_string linkage.name);
-            linkage.fields
-            |> Bwd.iter (fun (name, _) ->
-                   Printf.printf "F: %s\n" (Names.Id.to_string name));
             let base =
               Linkage.path_subtitution further
                 ~source:(Linkage.top_most_self_name further)
                 ~target:(Linkage.top_most_self_name linkage)
             in
-            let result = Linkage.concatenate ~base ~derived:linkage in
-            result.fields
-            |> Bwd.iter (fun (name, _) ->
-                   Printf.printf "AFTER: %s\n" (Names.Id.to_string name));
-            result
+            Linkage.concatenate ~base ~derived:linkage
       in
       let signature = Codegen.compile_nested_linkage_signature linkage in
       let impl = Codegen.compile_nested_linkage linkage in
