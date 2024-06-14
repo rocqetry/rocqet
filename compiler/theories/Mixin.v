@@ -5,7 +5,6 @@ Notation ident := nat.
 Family STLCBase.
   FInductive Ty: Set :=
      | TUnit : Ty
-     | TNat : Ty
      | TArr : Ty -> Ty -> Ty.
 
   FInductive Exp : Set :=     
@@ -19,6 +18,13 @@ FEnd STLCBase.
 
 Family IfExt. 
    Family Base extends STLCBase.
+       FInductive Ty : Set := TBool : Ty.
+
+       FInductive Exp : Set :=
+         | EIf : Exp -> Exp -> Exp -> Exp
+       with Val : Set :=
+         | VTrue : Val
+         | VFalse : Val.  
    FEnd Base.
    
    Family Derived extends Base.
@@ -27,6 +33,12 @@ FEnd IfExt.
 
 Family ArithExt. 
    Family Base extends STLCBase.
+        FInductive Ty : Set := TNat : Ty.
+
+       FInductive Exp : Set :=
+         | EAdd : Exp -> Exp -> Exp
+       with Val : Set :=
+         | VNat : nat -> Val.
    FEnd Base.
    
    Family Derived extends Base.
