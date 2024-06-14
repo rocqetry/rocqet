@@ -31,9 +31,11 @@
 open Env
 open Types
 
-let rec check ~further_base ~(base : Linkage.t) =
+let rec check ~(further_base: Linkage.t) ~(base : Linkage.t) =
   (* Physical equality? *)
-  if further_base = base then ()
+  (* further_base = base *)
+  (* TODO: keep track of the `further_base` in a linkage *)
+  if Names.Id.equal further_base.name base.name then ()
   else
     (* This should not only be base. 
        There is also a path for further binding *)
