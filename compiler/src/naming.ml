@@ -1,7 +1,7 @@
 (* These functions are copied verbatim from
    https://github.com/DKXXXL/FPOP/blob/main/src/utils.ml#L407*)
 
-let _point_qualid_ (f : Names.Id.t) (path : Libnames.qualid) : Libnames.qualid =
+let point_qualid (f : Names.Id.t) (path : Libnames.qualid) : Libnames.qualid =
   let path, base = Libnames.repr_qualid path in
   let newpath = List.append (Names.DirPath.repr path) [ f ] in
   Libnames.make_qualid (Names.DirPath.make newpath) base
@@ -10,7 +10,7 @@ let _point_optionqualid (f : Names.Id.t) (path : Libnames.qualid option) :
     Libnames.qualid =
   match path with
   | None -> Libnames.qualid_of_ident f
-  | Some x -> _point_qualid_ f x
+  | Some x -> point_qualid f x
 
 let _qualid_point_ (path : Libnames.qualid option) (f : Names.Id.t) :
     Libnames.qualid =
@@ -67,7 +67,7 @@ let to_name_qualid (path : Libnames.qualid) : Names.Id.t * Libnames.qualid =
   let remained = Libnames.make_qualid (Names.DirPath.make remained) base in
   (startingpoint, remained)
 
-let _to_name_optionqualid (path : Libnames.qualid) :
+let to_name_optionqualid (path : Libnames.qualid) :
     Names.Id.t * Libnames.qualid option =
   let open Libnames in
   if qualid_is_ident path then (qualid_basename path, None)
@@ -82,7 +82,7 @@ let replace_qualid_root ~source ~target =
   let take_root_of_path (t : qualid) : Names.Id.t = fst (to_name_qualid t) in
   let replace_root_of_path (t : qualid) (nr : Names.Id.t) : qualid =
     let _, tail = to_name_qualid t in
-    _point_qualid_ nr tail
+    point_qualid nr tail
   in
   let rec replace_qualid_path _ r =
     match r with
