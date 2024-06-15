@@ -34,22 +34,36 @@
    ```
 *)
 open Types
-open Bwd 
-open Bwd.Infix
+open Bwd
 
 (* Creates a `field name -> family name` mapping *)
 let rec linear_ctx_mapping context = 
+  let f (linkage : Linkage.t) (name, elem) = 
+    match elem with 
+    | LinkageElem.InductiveDefinition { inductive; _ } ->
+       let names = 
+         inductive 
+         |> VernacInductive.extract_all_names_with_type
+         |> List.concat_map (fun (_, constrs) -> 
+                constrs 
+                |> List.map (fun (name, _) -> (name, Naming.self_version linkage.name)))
+       in 
+       (name, Naming.self_version linkage.name) :: names 
+    | _ -> [name, Naming.self_version linkage.name]
+  in 
   match context with 
   | LinkageCtx.Toplevel linkage -> 
      linkage.fields 
-     |> Bwd.map (fun (name, _) -> name, Naming.self_version linkage.name)
+     |> Bwd.to_list
+     |> List.concat_map (f linkage)
   | LinkageCtx.Nested (upper, linkage) -> 
      let upper_result = linear_ctx_mapping upper in 
      let linkage_result = 
        linkage.fields 
-       |> Bwd.map (fun (name, _) -> name, Naming.self_version linkage.name)
+       |> Bwd.to_list
+       |> List.concat_map (f linkage)
      in
-     upper_result <@ Bwd.to_list linkage_result
+     upper_result @ linkage_result
 
 
 let rec replace_qualid_path dict r =
@@ -83,7 +97,7 @@ let rec replace_qualid_path dict r =
 
 let resolve_constrexpr ~(context : LinkageCtx.t) ~expression = 
   let mapping = linear_ctx_mapping context in 
-  replace_qualid_path (Bwd.to_list mapping) expression
+  replace_qualid_path mapping expression
 
 let resolve_inductive ~context ~inductive = 
   let resolve_constructor ((u, paramty, tyty, cstrty) : Vernacexpr.inductive_expr) : Vernacexpr.inductive_expr = 
