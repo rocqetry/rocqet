@@ -7,6 +7,23 @@ Family STLC.
   | ty_unit : ty
   | ty_arrow : ty -> ty -> ty.
 
+  Family ty_size_cases_handler.
+    FDefinition motive : self__STLC.ty -> Set := fun _ => nat.
+    FDefinition ty_unit :
+      self__ty_size_cases_handler.motive self__STLC.ty_unit
+      := 1.
+    FDefinition ty_arrow :
+      forall A B, self__ty_size_cases_handler.motive A ->
+      self__ty_size_cases_handler.motive B ->
+      self__ty_size_cases_handler.motive (self__STLC.ty_arrow A B)
+      := fun _ _ n m => n + m.
+  FEnd ty_size_cases_handler.
+
+  (* FRecursor ty_size_cases about ty
+    motive ty_size_cases_handler.motive
+    using ty_size_cases_handler
+    by _rec. *)
+
   FInductive tm : Set :=
   | tm_var : ident -> tm
   | tm_app : tm -> tm -> tm

@@ -77,6 +77,16 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModuleType.t;
       }
+    | RecursorDefinition of {
+        names : Names.Id.t list;
+        ind_names : Libnames.qualid list;
+        recursor_module : Libnames.qualid;
+        motive_module : CompiledModule.t;
+        suffix : string;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
+      }
 end
 
 and Linkage : sig

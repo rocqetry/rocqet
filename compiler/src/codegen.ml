@@ -283,8 +283,7 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
            let potential_recursor = Nameops.add_suffix internal_name suffix in
            if Constrintern.is_global potential_recursor then
              let recursor_name =
-               potential_recursor |> Libnames.qualid_of_ident
-               |> Constrexpr_ops.mkRefC
+               potential_recursor |> Constrexpr_ops.mkIdentC
              in
              let recursor_type =
                recursor_name |> Termutils.checked_type_of
@@ -431,6 +430,81 @@ let compile_recursors ~(ind_def : VernacInductive.t)
   in
   recursors |> List.map compile_one_recursor
 
+let compile_motives ~(names : Names.Id.t list)
+    ~(motives : Constrexpr.constr_expr list)
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
+    CompiledModule.t =
+  let module_name =
+    Naming.module_name_of ~family_name
+      (Nameops.add_prefix "__motive_of" (Naming.concat_names names))
+  in
+  let open VernacBackend in
+  define_module ~module_name ~parameters:ctx ~body:(fun _ ->
+      List.combine names motives
+      |> List.map (fun (name, motive) ->
+             let name = Nameops.add_prefix "__motiveT" name in
+             define_term ~name motive)
+      |> flatmap)
+  |> run
+
+let compile_recursor_signature ~(names : Names.Id.t list)
+    ~(motive_module : CompiledModule.t)
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
+    CompiledModuleType.t =
+  let module_name =
+    Naming.module_name_of ~family_name (Naming.concat_names names)
+  in
+  let rec get_product_parameter_count (t : Constr.constr) : int =
+    if Constr.isProd t then
+      let _, _, body = Constr.destProd t in
+      1 + get_product_parameter_count body
+    else 0
+  in
+  let open VernacBackend in
+  define_moduletype ~module_name ~parameters:ctx ~body:(fun ctx ->
+      let applied_motive =
+        Termutils.apply_module
+          ~functor_expr:(Termutils.ident_to_module_expr motive_module)
+          ~arguments:ctx
+      in
+      let* _ = include_module ~module_expr:applied_motive in
+      names
+      |> List.map (fun name ->
+             let open Constrexpr_ops in
+             let motiveT = Nameops.add_prefix "__motiveT" name |> mkIdentC in
+             (* This is evaluated inside the module, hence the thunk *)
+             thunk (fun () ->
+                 let parameter_count =
+                   motiveT |> Termutils.checked_type_of
+                   |> get_product_parameter_count
+                 in
+                 let vars =
+                   List.init parameter_count (fun x -> x + 1)
+                   |> List.map (fun x ->
+                          "v" ^ string_of_int x |> Names.Id.of_string)
+                 in
+                 let binders =
+                   vars
+                   |> List.map (fun var ->
+                          let open Constrexpr in
+                          CLocalAssum
+                            ( [ CAst.make @@ Names.Name.mk_name var ],
+                              Default Glob_term.Explicit,
+                              CAst.make @@ CHole None ))
+                 in
+                 let func_body = mkAppC (motiveT, vars |> List.map mkIdentC) in
+                 let prod_type = mkProdCN binders func_body in
+                 assume_parameter ~name ~ty:prod_type))
+      |> flatmap)
+  |> run
+
+let[@warning "-27"] compile_recursor_implementation ~(names : Names.Id.t list)
+    ~(ind_names : Libnames.qualid list) ~(rec_mod : Libnames.qualid)
+    ~(motive_module : CompiledModule.t) ~(suffix : string)
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
+    CompiledModule.t =
+  Errors.fail ~info:"TODO"
+
 let compile_linkage_context ~field_name (context : LinkageCtx.t) :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
   let open VernacBackend in
@@ -479,6 +553,11 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
       ( _,
         ( _,
           LinkageElem.InductiveDefinition
+            { compiled_context; compiled_signature; _ } ) )
+  | Bwd.Snoc
+      ( _,
+        ( _,
+          LinkageElem.RecursorDefinition
             { compiled_context; compiled_signature; _ } ) ) ->
       let signature_name =
         define_moduletype ~module_name:module_name_ctx
@@ -516,7 +595,9 @@ let compile_linkage (linkage : Linkage.t) =
     | Bwd.Snoc (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.FieldDefinition { compiled_impl; _ }))
     | Bwd.Snoc
-        (fields, (_, LinkageElem.InductiveDefinition { compiled_impl; _ })) ->
+        (fields, (_, LinkageElem.InductiveDefinition { compiled_impl; _ }))
+    | Bwd.Snoc (fields, (_, LinkageElem.RecursorDefinition { compiled_impl; _ }))
+      ->
         let* _ = compile_fields fields ctx in
         let module_expr = Termutils.ident_to_module_expr compiled_impl in
         let module_expr =
@@ -542,7 +623,9 @@ let compile_nested_linkage (linkage : Linkage.t) =
     | Bwd.Snoc (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.FieldDefinition { compiled_impl; _ }))
     | Bwd.Snoc
-        (fields, (_, LinkageElem.InductiveDefinition { compiled_impl; _ })) ->
+        (fields, (_, LinkageElem.InductiveDefinition { compiled_impl; _ }))
+    | Bwd.Snoc (fields, (_, LinkageElem.RecursorDefinition { compiled_impl; _ }))
+      ->
         let* _ = compile_fields fields ctx in
         let module_expr = Termutils.ident_to_module_expr compiled_impl in
         let module_expr =
@@ -589,6 +672,11 @@ let compile_nested_linkage_signature linkage =
         ( _,
           ( _,
             LinkageElem.InductiveDefinition
+              { compiled_context; compiled_signature; _ } ) )
+    | Bwd.Snoc
+        ( _,
+          ( _,
+            LinkageElem.RecursorDefinition
               { compiled_context; compiled_signature; _ } ) ) ->
         define_moduletype ~module_name:helper ~parameters:(Bwd.to_list context)
           ~body:(fun ctx ->
@@ -733,6 +821,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
         in
         (compiled_recursors := CompiledRecursors.{ compiled_context; recursors });
         next_linkage
+    | LinkageElem.RecursorDefinition _ -> Errors.fail ~info:"Not implemented"
   in
 
   Bwd.fold_left f empty_linkage linkage.fields
