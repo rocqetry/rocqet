@@ -40,23 +40,25 @@ Family BaseComp.
       with Val : Set := VUnit : Val | VVar : ident -> Val.
    FEnd IL.
 
-   Family ILK.
+   Family ILK extends IL.
    FEnd ILK.
 
-   Family ILC.
+   Family ILC extends IL.
    FEnd ILC.
 FEnd BaseComp.
 
 Family IfExt extends BaseComp.
-   Family STLC.       
+   Family STLC extends STLCIf.
    FEnd STLC.
 
-   Family IL.      
-   FEnd IL.
-
-   Family ILK.
-   FEnd ILK.
-
-   Family ILC.
-   FEnd ILC.
+   Family IL.
+       FInductive Ty : Set := TBool : Ty.
+       FInductive Exp : Set := EIf : Val -> Exp -> Exp -> Exp 
+       with Val : Set := Bool : bool -> Val.
+   FEnd IL.   
 FEnd IfExt.
+
+Check IfExt.STLC.EIf.
+Check IfExt.ILC.TBool.
+Check IfExt.ILK.TBool.
+Check IfExt.ILC.EIf.

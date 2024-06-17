@@ -184,8 +184,8 @@ and Linkage : sig
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
+  val context_match : t -> t -> [ `Equal | `Less | `More ]
   val top_most_self_name : t -> Names.Id.t
-  
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
   val concatenate_recursive : derived:t -> base:t -> t
 
@@ -194,6 +194,9 @@ and Linkage : sig
 
   (* Concatenate the fields before `prefix` *)
   val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
+
+  val concatenate_recursive_prefix :
+    prefix:Names.Id.t -> derived:t -> base:t -> t
 end = struct
   type t = {
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
@@ -201,6 +204,13 @@ end = struct
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
+
+  let context_match left right =
+    let left_length = Bwd.length left.context
+    and right_length = Bwd.length right.context in
+    if left_length < right_length then `Less
+    else if left_length > right_length then `More
+    else `Equal
 
   let top_most_self_name linkage =
     match Bwd.to_list linkage.context with
@@ -232,6 +242,7 @@ end = struct
     { linkage with fields }
 
   (* Deep concatenation *)
+  (* If the base is empty we loose some items *)
   let rec concatenate_recursive ~derived ~base =
     (* Using pick here reorders the fields in a family, which is wrong *)
     let rec pick x lst =
@@ -245,7 +256,7 @@ end = struct
     in
     let rec go base derived =
       match base with
-      | [] -> []
+      | [] -> derived
       | (name, elem) :: base -> (
           match pick name derived with
           | None, _ -> (name, elem) :: go base derived
@@ -279,26 +290,23 @@ end = struct
     Linkage.{ derived with fields = Bwd.of_list fields }
 
   (* Naive concatenation *)
-  let concatenate ~derived ~base =    
+  let concatenate ~derived ~base =
     let rec compute_difference ~base
         ~(derived : (Names.Id.t * LinkageElem.t) list) =
       match (base, derived) with
       | [], [] -> []
-      | (bname, belem) :: base', (dname, _) :: rest_derived ->
+      | (bname, belem) :: rest_base, (dname, _) :: rest_derived ->
           if Names.Id.equal bname dname then
-            compute_difference ~base:base' ~derived:rest_derived
+            compute_difference ~base:rest_base ~derived:rest_derived
           else
             (* Check if the name has already been inherited:
                in a later position *)
-            let cond =
-              rest_derived
-              |> List.map fst
-              |> List.exists (Names.Id.equal bname)
+            let inherited_later =
+              rest_derived |> List.map fst |> List.exists (Names.Id.equal bname)
             in
-            if not cond then 
-              (bname, belem) :: compute_difference ~base:base' ~derived
-            else
-              compute_difference ~base:base' ~derived
+            if not inherited_later then
+              (bname, belem) :: compute_difference ~base:rest_base ~derived
+            else compute_difference ~base:rest_base ~derived
       | _ :: _, [] -> base
       | [], _ :: _ -> []
     in
@@ -316,10 +324,22 @@ end = struct
       match fields with
       | Bwd.Emp -> derived
       | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
-        ->                    
-          concatenate ~base:{ base with fields } ~derived          
+        ->
+          concatenate ~base:{ base with fields } ~derived
       | Bwd.Snoc (fields, _) -> calculate_dependencies fields
-    in    
+    in
+    calculate_dependencies base.fields
+
+  let concatenate_recursive_prefix ~prefix ~(derived : Linkage.t)
+      ~(base : Linkage.t) =
+    let rec calculate_dependencies fields =
+      match fields with
+      | Bwd.Emp -> derived
+      | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
+        ->
+          concatenate_recursive ~base:{ base with fields } ~derived
+      | Bwd.Snoc (fields, _) -> calculate_dependencies fields
+    in
     calculate_dependencies base.fields
 end
 

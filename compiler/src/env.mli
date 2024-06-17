@@ -7,7 +7,7 @@ module PluginScopes : sig
   val ensure_in_scope : scope:PluginCmd.t -> unit
 end
 
-(* Stored computed linkages *)
+(* Global computed linkages *)
 module Linkages : sig
   val add : Linkage.t -> unit
   val lookup : Names.Id.t -> Linkage.t option
@@ -17,6 +17,7 @@ end
 module Context : sig
   val get : unit -> LinkageCtx.t
   val get_store : unit -> LinkageCtx.t option
+  val lookup : Libnames.qualid -> Linkage.t option
   val family_name : LinkageCtx.t -> Names.Id.t
   val family_linkage : LinkageCtx.t -> Linkage.t
   val add_field : name:Names.Id.t -> elem:LinkageElem.t -> unit

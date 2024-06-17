@@ -373,7 +373,7 @@ let compile_nested_linkage (linkage : Linkage.t) =
   in
   let wrapper = Naming.fresh_name ~prefix:"Impl" in
   define_module ~module_name:wrapper ~parameters:(Bwd.to_list context)
-    ~body:(fun _ctx ->      
+    ~body:(fun _ctx ->
       let* _ =
         define_module ~module_name:name ~parameters:[]
           ~body:(compile_fields fields)
@@ -432,129 +432,38 @@ let compile_nested_linkage_signature linkage =
       return ())
   |> run
 
-(* reparameterize a non-nested linkage into a nested linkage *)
-(* val parameterize : Linkage.t -> prefix:(Names.Id.t * Constrexpr.module_ast) Bwd.t -> Linkage.t *)
-let parameterize linkage ~prefix =
-  let open VernacBackend in
-  let open Linkage in
-  let parameters = prefix in
-  let f (name, elem) =
-    match elem with
-    | LinkageElem.InductiveDefinition impl ->
-        let compiled_context =
-          define_moduletype
-            ~module_name:(Naming.fresh_name ~prefix:"Reparameterize")
-            ~parameters:(parameters @> []) ~body:(fun _ ->
-              let module_expr =
-                Termutils.apply_module
-                  ~functor_expr:
-                    (Termutils.ident_to_module_expr impl.compiled_context)
-                  ~arguments:[]
-              in
-
-              let* _ = include_module ~module_expr in
-              return ())
-          |> run
-        in
-        let ctx = "self" |> Names.Id.of_string in
-        let ctx_ty = Termutils.ident_to_module_expr impl.compiled_context in
-        let compiled_signature =
-          define_moduletype
-            ~module_name:(Naming.fresh_name ~prefix:"Reparameterize")
-            ~parameters:(parameters @> [ (ctx, ctx_ty) ])
-            ~body:(fun _ ->
-              let module_expr =
-                Termutils.apply_module
-                  ~functor_expr:
-                    (Termutils.ident_to_module_expr impl.compiled_signature)
-                  ~arguments:[ Libnames.qualid_of_ident ctx ]
-              in
-
-              let* _ = include_module ~module_expr in
-              return ())
-          |> run
-        in
-        let compiled_impl =
-          define_module
-            ~module_name:(Naming.fresh_name ~prefix:"Reparameterize")
-            ~parameters:(parameters @> [ (ctx, ctx_ty) ])
-            ~body:(fun _ ->
-              let module_expr =
-                Termutils.apply_module
-                  ~functor_expr:
-                    (Termutils.ident_to_module_expr impl.compiled_impl)
-                  ~arguments:[ Libnames.qualid_of_ident ctx ]
-              in
-
-              let* _ = include_module ~module_expr in
-              return ())
-          |> run
-        in
-        ( name,
-          LinkageElem.InductiveDefinition
-            { impl with compiled_signature; compiled_context; compiled_impl } )
-    | LinkageElem.FamilyDefinition impl ->
-        let compiled_context =
-          define_moduletype
-            ~module_name:(Naming.fresh_name ~prefix:"Reparameterize")
-            ~parameters:(parameters @> []) ~body:(fun _ ->
-              let module_expr =
-                Termutils.apply_module
-                  ~functor_expr:
-                    (Termutils.ident_to_module_expr impl.compiled_context)
-                  ~arguments:[]
-              in
-
-              let* _ = include_module ~module_expr in
-              return ())
-          |> run
-        in
-        let ctx = "self" |> Names.Id.of_string in
-        let ctx_ty = Termutils.ident_to_module_expr impl.compiled_context in
-        let compiled_signature =
-          define_moduletype
-            ~module_name:(Naming.fresh_name ~prefix:"Reparameterize")
-            ~parameters:(parameters @> [ (ctx, ctx_ty) ])
-            ~body:(fun _ ->
-              let module_expr =
-                Termutils.apply_module
-                  ~functor_expr:
-                    (Termutils.ident_to_module_expr impl.compiled_signature)
-                  ~arguments:[ Libnames.qualid_of_ident ctx ]
-              in
-
-              let* _ = include_module ~module_expr in
-              return ())
-          |> run
-        in
-        let compiled_impl =
-          define_module
-            ~module_name:(Naming.fresh_name ~prefix:"Reparameterize")
-            ~parameters:(parameters @> [ (ctx, ctx_ty) ])
-            ~body:(fun _ ->
-              let module_expr =
-                Termutils.apply_module
-                  ~functor_expr:
-                    (Termutils.ident_to_module_expr impl.compiled_impl)
-                  ~arguments:[ Libnames.qualid_of_ident ctx ]
-              in
-
-              let* _ = include_module ~module_expr in
-              return ())
-          |> run
-        in
-        ( name,
-          LinkageElem.FamilyDefinition
-            { impl with compiled_signature; compiled_context; compiled_impl } )    
-  in
-  let fields = linkage.fields |> Bwd.map f in
-  { linkage with context = parameters; fields }
-
+(* We should be keeping track of a context *)
 let rec recompute_linkage (linkage : Linkage.t) =
+  let lookup (linkage : Linkage.t) name =
+    linkage.fields
+    |> Bwd.find_map (fun (field_name, elem) ->
+           match elem with
+           | LinkageElem.FamilyDefinition { linkage; _ }
+             when Names.Id.equal name field_name ->
+               Some linkage
+           | _ -> None)
+  in
   let empty_linkage = { linkage with fields = Bwd.Emp } in
   let f linkage (name, field) =
     match field with
     | LinkageElem.FamilyDefinition { linkage = nested_linkage; _ } ->
+        (* Late binding of family names *)
+        let nested_linkage =
+          match nested_linkage.base with
+          | None -> nested_linkage
+          | Some base -> (
+              match lookup linkage base.name with
+              | None -> nested_linkage
+              | Some base ->
+                  (* We can also imagine this being done for regular
+                     base families. But is that needed? *)
+                  let base =
+                    Linkage.path_subtitution base
+                      ~source:(Naming.self_version base.name)
+                      ~target:(Naming.self_version nested_linkage.name)
+                  in
+                  Linkage.concatenate_recursive ~base ~derived:nested_linkage)
+        in
         let compiled_context, parameters =
           compile_linkage_context ~field_name:nested_linkage.name
             (LinkageCtx.Toplevel linkage)

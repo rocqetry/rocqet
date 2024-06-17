@@ -30,12 +30,26 @@ let add_inductive_definition inductive =
         in
         VernacInductive.concatenate ~base:base_inductive ~derived:inductive
     | None, None -> inductive
-    | Some (_, InductiveDefinition _), Some (_, InductiveDefinition _) ->
+    | ( Some (further, InductiveDefinition further_inductive),
+        Some (base, InductiveDefinition base_inductive) ) ->
         (* Further binding + Inheritance *)
-        Errors.fail
-          ~info:
-            "Further binding and inheritance at the same time has not been \
-             implememnted for inductive types"
+        let further_inductive = further_inductive.inductive in
+        let further_inductive =
+          VernacInductive.path_subtitution further_inductive
+            ~source:(Linkage.top_most_self_name further)
+            ~target:(Linkage.top_most_self_name linkage)
+        in
+        let base_inductive = base_inductive.inductive in
+        let base_inductive =
+          VernacInductive.path_subtitution base_inductive
+            ~source:(Naming.self_version base.name)
+            ~target:(Naming.self_version linkage.name)
+        in
+        let base_inductive =
+          VernacInductive.concatenate ~base:further_inductive
+            ~derived:base_inductive
+        in
+        VernacInductive.concatenate ~base:base_inductive ~derived:inductive
     | _, _ ->
         Errors.fail
           ~info:
@@ -43,6 +57,7 @@ let add_inductive_definition inductive =
   in
   Inheritance.inherit_dependencies ~prefix:inductive_name;
   let context = Context.get () in
+  let inductive = Resolver.resolve_inductive ~context ~inductive in
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:inductive_name context
   in

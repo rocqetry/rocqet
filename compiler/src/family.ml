@@ -28,8 +28,8 @@ let open_family name =
       Context.destructive_update (Some (LinkageCtx.Toplevel linkage))
 
 let open_family_with_base ~name ~base =
-  match Linkages.lookup base with
-  | None -> Errors.fail ~info:("Unbound Name " ^ Names.Id.to_string base)
+  match Context.lookup base with
+  | None -> Errors.fail ~info:"Unbound Family Name"
   | Some base_linkage -> (
       match Context.get_store () with
       | Some _context ->
@@ -48,6 +48,7 @@ let open_family_with_base ~name ~base =
               }
           in
           let context = LinkageCtx.Nested (context, linkage) in
+          Typing.check_further_binding_structure context;
           Context.destructive_update (Some context)
       | None ->
           let linkage =
@@ -59,7 +60,9 @@ let open_family_with_base ~name ~base =
                 fields = Bwd.Emp;
               }
           in
-          Context.destructive_update (Some (LinkageCtx.Toplevel linkage)))
+          let context = LinkageCtx.Toplevel linkage in
+          Typing.check_further_binding_structure context;
+          Context.destructive_update (Some context))
 
 (* Close a family *)
 let close_family () : unit =
@@ -75,10 +78,13 @@ let close_family () : unit =
                 ~source:(Linkage.top_most_self_name base_linkage)
                 ~target:(Linkage.top_most_self_name linkage)
             in
-            Linkage.concatenate ~base:base_linkage ~derived:linkage
+            Linkage.concatenate_recursive ~base:base_linkage ~derived:linkage
       in
       (* store := None; *)
       Context.destructive_update None;
+      (* Note that we only want to do this when late binding of family names
+         happens in the linkage *)
+      let linkage = Codegen.recompute_linkage linkage in
       Codegen.compile_linkage linkage |> ignore;
       Linkages.add linkage
   | LinkageCtx.Nested (upper, linkage) as context ->
@@ -86,34 +92,57 @@ let close_family () : unit =
       let base = Context.base_linkage context in
       let linkage =
         match (further_base, base) with
-        | None, None -> linkage
-        | Some _, Some _ ->
-            Errors.fail
-              ~info:
-                "Further binding and inheritance at the same time has not been \
-                 implememnted for nested families"
-        | _, Some base ->
-            (* Here, we are assuming that base is a toplevel family *)
-            (* Don't just reparameterize! We need some kind of condition to check
-               on linkages to know when two linkages "can't fit" *)
-            (* Possibly reparameterization can go both ways? *)
-            let base = Codegen.parameterize ~prefix:linkage.context base in
-            (* Here we don't need to topmost self name becuase this is classic
-               inheritance, not further binding *)
+        | None, None ->
+            (* failwith "" |> ignore;*)
+            linkage
+        | Some further, Some base ->
+            let base =
+              match Linkage.context_match base linkage with
+              | `Less | `More ->
+                  Codegen.recompute_linkage
+                    { base with context = linkage.context }
+              | `Equal -> base
+            in
+            let further =
+              Linkage.path_subtitution further
+                ~source:(Linkage.top_most_self_name further)
+                ~target:(Linkage.top_most_self_name linkage)
+            in
             let base =
               Linkage.path_subtitution base
                 ~source:(Naming.self_version base.name)
                 ~target:(Naming.self_version linkage.name)
             in
-            Linkage.concatenate ~base ~derived:linkage
+            let base = { base with name = further.name } in
+            let base =
+              Linkage.concatenate_recursive ~base:further ~derived:base
+            in
+            let result = Linkage.concatenate_recursive ~base ~derived:linkage in
+            result
+        | _, Some base ->
+            let base =
+              match Linkage.context_match base linkage with
+              | `Less | `More ->
+                  Codegen.recompute_linkage
+                    { base with context = linkage.context }
+              | `Equal -> base
+            in
+            let base =
+              Linkage.path_subtitution base
+                ~source:(Naming.self_version base.name)
+                ~target:(Naming.self_version linkage.name)
+            in
+            Linkage.concatenate_recursive ~base ~derived:linkage
         | Some further, _ ->
             let base =
               Linkage.path_subtitution further
                 ~source:(Linkage.top_most_self_name further)
                 ~target:(Linkage.top_most_self_name linkage)
             in
-            Linkage.concatenate ~base ~derived:linkage
+            Linkage.concatenate_recursive ~base ~derived:linkage
       in
+      (* Again should not do this all the time: *)
+      let linkage = Codegen.recompute_linkage linkage in
       let signature = Codegen.compile_nested_linkage_signature linkage in
       let impl = Codegen.compile_nested_linkage linkage in
       let elem =

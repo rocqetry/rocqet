@@ -12,6 +12,12 @@ let inherit_dependencies ~prefix =
     | None, None -> linkage
     | Some base, None ->
         let base =
+          match Linkage.context_match base linkage with
+          | `Less | `More ->
+              Codegen.recompute_linkage { base with context = linkage.context }
+          | `Equal -> base
+        in
+        let base =
           Linkage.path_subtitution base
             ~source:(Naming.self_version base.name)
             ~target:(Naming.self_version linkage.name)
@@ -24,7 +30,32 @@ let inherit_dependencies ~prefix =
             ~target:(Linkage.top_most_self_name linkage)
         in
         Linkage.concatenate_prefix ~prefix ~derived:linkage ~base:further
-    | Some _, Some _ ->
-        Errors.fail ~info:"Further binding + Inheritance not yet implemented"
+    | Some base, Some further ->
+        let base =
+          match Linkage.context_match base linkage with
+          | `Less | `More ->
+              Codegen.recompute_linkage { base with context = linkage.context }
+          | `Equal -> base
+        in
+        let further =
+          Linkage.path_subtitution further
+            ~source:(Linkage.top_most_self_name further)
+            ~target:(Linkage.top_most_self_name linkage)
+        in
+        let base =
+          Linkage.path_subtitution base
+            ~source:(Naming.self_version base.name)
+            ~target:(Naming.self_version linkage.name)
+        in
+        let base =
+          Linkage.concatenate_recursive_prefix ~prefix ~base:further
+            ~derived:base
+        in
+        let base = { base with name = further.name } in
+        let base = Codegen.recompute_linkage base in
+        let linkage =
+          Linkage.concatenate_recursive_prefix ~prefix ~derived:linkage ~base
+        in
+        Codegen.recompute_linkage linkage
   in
   Context.replace ~linkage

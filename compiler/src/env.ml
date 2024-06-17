@@ -45,10 +45,72 @@ module Context = struct
   let store = Summary.ref ~name:"LinkageContext" (None : LinkageCtx.t option)
   let get_store () = !store
 
+  let rec walk_up_linkage_context context =
+    match context with
+    | LinkageCtx.Toplevel linkage ->
+        linkage.base |> Option.map (fun base -> (Bwd.Emp, base))
+    | LinkageCtx.Nested (upper, linkage) ->
+        walk_up_linkage_context upper
+        |> Option.map (fun (path, base) ->
+               (Bwd.Snoc (path, linkage.name), base))
+
+  let rec walk_down_linkage (linkage : Linkage.t) path : Linkage.t option =
+    match path with
+    | [] -> Some linkage
+    | head :: path -> (
+        let Linkage.{ fields; _ } = linkage in
+        let elem =
+          fields |> Bwd.find_opt (fun (name, _) -> Names.Id.equal head name)
+        in
+        match elem with
+        | None -> None
+        | Some (_, LinkageElem.FamilyDefinition { linkage; _ }) ->
+            walk_down_linkage linkage path
+        | Some _ -> Errors.fail ~info:"Expected a family in path")
+
   let get () =
     match !store with
     | None -> Errors.fail ~info:"There is not current context"
     | Some context -> context
+
+  let lookup (path : Libnames.qualid) =
+    let path = Naming.path_to_list path in
+    let name = List.hd path in
+    let rec walk context =
+      match context with
+      | LinkageCtx.Toplevel linkage -> (
+          linkage.fields
+          |> Bwd.find_map (fun (field_name, elem) ->
+                 match elem with
+                 | LinkageElem.FamilyDefinition { linkage; _ }
+                   when Names.Id.equal name field_name ->
+                     Some linkage
+                 | _ -> None)
+          |> function
+          | None -> Linkages.lookup name
+          | linkage -> linkage)
+      | LinkageCtx.Nested (context, linkage) -> (
+          linkage.fields
+          |> Bwd.find_map (fun (field_name, elem) ->
+                 match elem with
+                 | LinkageElem.FamilyDefinition { linkage; _ }
+                   when Names.Id.equal name field_name ->
+                     Some linkage
+                 | _ -> None)
+          |> function
+          | None -> walk context
+          | linkage -> linkage)
+    in
+    let rest = List.tl path in
+    let linkage =
+      match !store with
+      | None -> Linkages.lookup name
+      | Some context -> walk context
+    in
+    match rest with
+    | [] -> linkage
+    | path ->
+        Option.bind linkage (fun linkage -> walk_down_linkage linkage path)
 
   let family_name context =
     match context with
@@ -84,29 +146,6 @@ module Context = struct
         store := Some ctx
 
   let destructive_update new_store = store := new_store
-
-  let rec walk_up_linkage_context context =
-    match context with
-    | LinkageCtx.Toplevel linkage ->
-        linkage.base |> Option.map (fun base -> (Bwd.Emp, base))
-    | LinkageCtx.Nested (upper, linkage) ->
-        walk_up_linkage_context upper
-        |> Option.map (fun (path, base) ->
-               (Bwd.Snoc (path, linkage.name), base))
-
-  let rec walk_down_linkage (linkage : Linkage.t) path : Linkage.t option =
-    match path with
-    | [] -> Some linkage
-    | head :: path -> (
-        let Linkage.{ fields; _ } = linkage in
-        let elem =
-          fields |> Bwd.find_opt (fun (name, _) -> Names.Id.equal head name)
-        in
-        match elem with
-        | None -> None
-        | Some (_, LinkageElem.FamilyDefinition { linkage; _ }) ->
-            walk_down_linkage linkage path
-        | Some _ -> Errors.fail ~info:"Expected a family in path")
 
   let further_bound_linkage context =
     match context with
