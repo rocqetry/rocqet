@@ -29,7 +29,7 @@ let open_family name =
 
 let open_family_with_base ~name ~base =
   match Context.lookup base with
-  | None -> Errors.fail ~info:("Unbound Family Name")
+  | None -> Errors.fail ~info:"Unbound Family Name"
   | Some base_linkage -> (
       match Context.get_store () with
       | Some _context ->
@@ -82,7 +82,8 @@ let close_family () : unit =
       in
       (* store := None; *)
       Context.destructive_update None;
-      (* Note that we only want to do this when late binding happens in the linkage *)
+      (* Note that we only want to do this when late binding of family names
+         happens in the linkage *)
       let linkage = Codegen.recompute_linkage linkage in
       Codegen.compile_linkage linkage |> ignore;
       Linkages.add linkage
@@ -113,13 +114,10 @@ let close_family () : unit =
                 ~target:(Naming.self_version linkage.name)
             in
             let base = { base with name = further.name } in
-            (* let base = Codegen.recompute_linkage base in *)
             let base =
               Linkage.concatenate_recursive ~base:further ~derived:base
             in
-            (* let base = Codegen.recompute_linkage base in *)
             let result = Linkage.concatenate_recursive ~base ~derived:linkage in
-            (* Codegen.recompute_linkage result *)
             result
         | _, Some base ->
             let base =
@@ -161,7 +159,7 @@ let close_family () : unit =
                 ~info:
                   "We should have parameters since we're in a nested context"
           | Bwd.Snoc (_, (_, name)) -> extract_name name
-        in        
+        in
         LinkageElem.FamilyDefinition
           {
             linkage;

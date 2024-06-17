@@ -47,7 +47,6 @@ let rec check ~(further_base : Linkage.t) ~(base : Linkage.t) =
              structure."
     | Some base -> check ~further_base ~base
 
-(* *)
 let check_further_binding_structure context =
   let further_base =
     let further = Context.further_bound_linkage context in
@@ -56,5 +55,9 @@ let check_further_binding_structure context =
   let base = Context.base_linkage context in
   match (further_base, base) with
   | Some further_base, Some base -> check ~further_base ~base
-  | Some _, None | None, Some _ -> ()
+  | Some _, None ->
+      Errors.fail
+        ~info:
+          "Type Error: further binding doesn't preserve inheritance structure."
+  | None, Some _ -> ()
   | None, None -> ()

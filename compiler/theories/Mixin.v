@@ -41,7 +41,7 @@ Family ArithExt.
          | VNat : nat -> Val.
    FEnd Base.
    
-   Family Derived extends Base.
+   Family Derived extends Base. 
    FEnd Derived.
 FEnd ArithExt.
 
@@ -55,5 +55,5 @@ Family ArithExtBuild extends ArithExt.
    FEnd Base.
 FEnd ArithExtBuild.
 
-Family STLCArithIF extends ArithExtBuild.Derived.
-FEnd STLCArithIF.
+Family STLCArithIf extends ArithExtBuild.Derived.
+FEnd STLCArithIf.

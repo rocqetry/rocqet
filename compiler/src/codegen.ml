@@ -432,17 +432,17 @@ let compile_nested_linkage_signature linkage =
       return ())
   |> run
 
-let lookup (linkage : Linkage.t) name =
-  linkage.fields
-  |> Bwd.find_map (fun (field_name, elem) ->
-         match elem with
-         | LinkageElem.FamilyDefinition { linkage; _ }
-           when Names.Id.equal name field_name ->
-             Some linkage
-         | _ -> None)
-
 (* We should be keeping track of a context *)
 let rec recompute_linkage (linkage : Linkage.t) =
+  let lookup (linkage : Linkage.t) name =
+    linkage.fields
+    |> Bwd.find_map (fun (field_name, elem) ->
+           match elem with
+           | LinkageElem.FamilyDefinition { linkage; _ }
+             when Names.Id.equal name field_name ->
+               Some linkage
+           | _ -> None)
+  in
   let empty_linkage = { linkage with fields = Bwd.Emp } in
   let f linkage (name, field) =
     match field with
@@ -455,8 +455,8 @@ let rec recompute_linkage (linkage : Linkage.t) =
               match lookup linkage base.name with
               | None -> nested_linkage
               | Some base ->
-                 (* We can also imagine this being done for regular
-                    base families. But is that needed? *)
+                  (* We can also imagine this being done for regular
+                     base families. But is that needed? *)
                   let base =
                     Linkage.path_subtitution base
                       ~source:(Naming.self_version base.name)

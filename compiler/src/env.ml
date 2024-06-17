@@ -74,8 +74,8 @@ module Context = struct
     | Some context -> context
 
   let lookup (path : Libnames.qualid) =
-    let path = Naming.path_to_list path in 
-    let name = List.hd path in 
+    let path = Naming.path_to_list path in
+    let name = List.hd path in
     let rec walk context =
       match context with
       | LinkageCtx.Toplevel linkage -> (
@@ -101,15 +101,15 @@ module Context = struct
           | None -> walk context
           | linkage -> linkage)
     in
-    let rest = List.tl path in 
-    let linkage = 
-        match !store with
-        | None -> Linkages.lookup name
-        | Some context -> walk context
-     in 
-     match rest with 
-     | [] -> linkage
-     | path -> 
+    let rest = List.tl path in
+    let linkage =
+      match !store with
+      | None -> Linkages.lookup name
+      | Some context -> walk context
+    in
+    match rest with
+    | [] -> linkage
+    | path ->
         Option.bind linkage (fun linkage -> walk_down_linkage linkage path)
 
   let family_name context =
@@ -145,7 +145,7 @@ module Context = struct
         let ctx = LinkageCtx.Nested (upper, linkage) in
         store := Some ctx
 
-  let destructive_update new_store = store := new_store  
+  let destructive_update new_store = store := new_store
 
   let further_bound_linkage context =
     match context with

@@ -1,5 +1,7 @@
 From NFPOP Require Import Loader.
 
+(* Strictness of "Typechecking" further binding *)
+
 Notation ident := nat.
 
 Family Salad.
@@ -25,13 +27,15 @@ Family Dataflow.
     FEnd Liveness.
 FEnd Dataflow.
 
-Family Random.
+Family Random extends SaladX.
 FEnd Random.
 
+Family R1 extends Random.
+FEnd R1.
+
 Family DataflowX extends Dataflow.
-    Family Lang extends SaladX.
+    Family Lang extends R1.
         FInductive expr : Set := 
           | tm_proj_left : expr -> nat -> expr.
     FEnd Lang.
 FEnd DataflowX.
-
