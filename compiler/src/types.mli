@@ -37,11 +37,21 @@ module CompiledModuleType : sig
   type t = Libnames.qualid
 end
 
+module RecKind : sig
+  type t = 
+     | Ind 
+     | IndComplete 
+     | Rec 
+     | Rect
+
+   val to_string : t -> string
+end 
+
 module CompiledRecursors : sig
   type t = {
     compiled_context : CompiledModuleType.t;
     recursors :
-      ((Names.Id.t list * string)
+      ((Names.Id.t list * RecKind.t)
       * CompiledModule.t
       * (Names.Id.t * CompiledModule.t) list)
       list;

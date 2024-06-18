@@ -160,6 +160,20 @@ module CompiledModuleType = struct
   type t = Libnames.qualid
 end
 
+module RecKind = struct 
+  type t = 
+     | Ind 
+     | IndComplete 
+     | Rec 
+     | Rect
+
+  let to_string = function 
+      | Ind -> "_ind"
+      | IndComplete -> "_ind_comp"
+      | Rec -> "_rec"
+      | Rect -> "_rect"
+end 
+
 module CompiledRecursors = struct
   type t = {
     (* TODO: do we need to keep track of the context? *)
@@ -171,7 +185,7 @@ module CompiledRecursors = struct
       list
     *)
     recursors :
-      ((Names.Id.t list * string)
+      ((Names.Id.t list * RecKind.t)
       * CompiledModule.t
       * (Names.Id.t * CompiledModule.t) list)
       list;

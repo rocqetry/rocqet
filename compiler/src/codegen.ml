@@ -249,7 +249,7 @@ let compile_inductive_signature ~(ind_def : VernacInductive.t)
 let compile_inductive_implementation ~(ind_def : VernacInductive.t)
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
     CompiledModule.t
-    * ((Names.Id.t list * string) * Constrexpr.constr_expr) list =
+    * ((Names.Id.t list * RecKind.t) * Constrexpr.constr_expr) list =
   (* Generate a definition mapping of the inductive type and
      return the new inductive definition and the export of the correct names *)
   let modified_indcstrs, alias_all_name_term_type_decl =
@@ -264,9 +264,9 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
   in
 
   (* Stuff for collecting recursors *)
-  let possible_suffixes = [ "_ind"; "_ind_comp"; "_rec"; "_rect" ] in
+  let possible_suffixes = RecKind.[ Ind; IndComplete; Rec; Rect; ] in
   let defined_recursors :
-      ((Names.Id.t list * string) * Constrexpr.constr_expr) Bwd.t ref =
+      ((Names.Id.t list * RecKind.t) * Constrexpr.constr_expr) Bwd.t ref =
     ref Bwd.Emp
   in
   let remove_internal_prefix_map =
@@ -280,7 +280,7 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
     |> List.iter (fun suffix ->
            (* This is only a potential recursor name, since _rec and _rect may not exist.
               For instance, if the type is Prop, _rec and _rect are impossible to derive. *)
-           let potential_recursor = Nameops.add_suffix internal_name suffix in
+           let potential_recursor = Nameops.add_suffix internal_name (RecKind.to_string suffix) in
            if Constrintern.is_global potential_recursor then
              let recursor_name =
                potential_recursor |> Constrexpr_ops.mkIdentC
@@ -336,7 +336,7 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
   (compiled_impl, Bwd.to_list !defined_recursors)
 
 let compile_recursors ~(ind_def : VernacInductive.t)
-    ~(recursors : ((Names.Id.t list * string) * Constrexpr.constr_expr) list)
+    ~(recursors : ((Names.Id.t list * RecKind.t) * Constrexpr.constr_expr) list)
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name =
   let all_names = ind_def |> VernacInductive.extract_all_names in
   let all_type_names = all_names |> List.map fst in
@@ -344,7 +344,7 @@ let compile_recursors ~(ind_def : VernacInductive.t)
   let compile_one_recursor ((type_names, suffix), recursor) =
     (* Future-proofing for mutually inductive types *)
     let type_name = type_names |> Naming.concat_names in
-    let recursor_name = Nameops.add_suffix type_name suffix in
+    let recursor_name = Nameops.add_suffix type_name (RecKind.to_string suffix) in
     let module_name = Naming.module_name_of ~family_name recursor_name in
     let relevant_cstrs =
       type_names |> List.concat_map (fun n -> List.assoc n all_names)
