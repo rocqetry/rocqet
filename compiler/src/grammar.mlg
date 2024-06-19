@@ -76,7 +76,7 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "FRecursor" induction_decls(ind_decls)
       "using" reference_ip(rec_mod)
       "by" ident(suffix) ] ->
-   { Entry.frecursor ~ind_decls ~rec_mod ~suffix }
+   { Entry.frecursor ~ind_decls ~rec_mod ~suffix:(Types.RecKind.of_name suffix) }
 
 | [ "FDefinition" ident(name) ":" llconstr_ip(body_type) ":=" llconstr_ip(body_expr)  ] ->
    { Entry.definition ~name ~body_type ~body_expr}

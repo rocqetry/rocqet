@@ -16,7 +16,7 @@ val fend : Names.Id.t -> unit
 val frecursor :
   ind_decls:(Names.Id.t * Libnames.qualid * Constrexpr.constr_expr) list ->
   rec_mod:Libnames.qualid ->
-  suffix:Names.Id.t ->
+  suffix:RecKind.t ->
   unit
 
 (* Handle a `FDefinition ... : ... = ...` command *)

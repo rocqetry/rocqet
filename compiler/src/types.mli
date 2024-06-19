@@ -45,6 +45,8 @@ module RecKind : sig
      | Rect
 
    val to_string : t -> string
+   val of_string : string -> t
+   val of_name : Names.Id.t -> t
 end 
 
 module CompiledRecursors : sig
@@ -92,7 +94,7 @@ module rec LinkageElem : sig
         ind_names : Libnames.qualid list;
         recursor_module : Libnames.qualid;
         motive_module : CompiledModule.t;
-        suffix : string;
+        suffix : RecKind.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;

@@ -31,7 +31,7 @@ let family_extends ~derived ~base =
 
 let frecursor ~ind_decls ~rec_mod ~suffix =
   PluginScopes.ensure_in_scope ~scope:PluginCmd.Family;
-  Recursion.add_recursor ~ind_decls ~rec_mod ~suffix:(Names.Id.to_string suffix)
+  Recursion.add_recursor ~ind_decls ~rec_mod ~suffix
 
 let definition ~name ~body_type ~body_expr =
   Inheritance.inherit_dependencies ~prefix:name;

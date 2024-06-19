@@ -69,7 +69,7 @@ let add_inductive_definition inductive =
   let compiled_impl, recursors =
     Codegen.compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
       ~family_name
-  in
+  in  
   let compiled_recursors =
     ref CompiledRecursors.{ compiled_context; recursors = [] }
   in

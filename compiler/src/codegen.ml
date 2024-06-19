@@ -498,12 +498,75 @@ let compile_recursor_signature ~(names : Names.Id.t list)
       |> flatmap)
   |> run
 
-let[@warning "-27"] compile_recursor_implementation ~(names : Names.Id.t list)
-    ~(ind_names : Libnames.qualid list) ~(rec_mod : Libnames.qualid)
-    ~(motive_module : CompiledModule.t) ~(suffix : string)
-    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
-    CompiledModule.t =
-  Errors.fail ~info:"TODO"
+let compile_recursor_implementation 
+    ~(names : Names.Id.t list)    
+    ~(inductive : VernacInductive.t)    
+    ~(linkage : Linkage.t) (*The provenance of this inductive *)
+    ~(rec_mod : Libnames.qualid)    
+    ~(motive_module : CompiledModule.t) 
+    ~(suffix : RecKind.t)
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) 
+    ~(family_name : Names.Id.t) : CompiledModule.t =
+  let _internal_version_name n = Nameops.add_prefix "__internal_" n in 
+  let _qualid_point_ path f =    
+      match path with
+      | Some path ->
+          let path, base = Libnames.repr_qualid path in
+          let path = base :: Names.DirPath.repr path in
+          let path = Names.DirPath.make path in
+          Libnames.make_qualid path f
+      | None -> Libnames.qualid_of_ident f
+  in 
+  let module_name =
+    Naming.module_name_of ~family_name (Naming.concat_names names)
+  in
+  let ((_,({CAst.v = ind_name; _}, _)),_,_, all_cst), _ = inductive |> List.hd in   
+  let recursor_name =
+    Nameops.add_suffix 
+      ind_name
+      (RecKind.to_string suffix) 
+  in 
+  let _name_of_type_of_recursor = 
+    Nameops.add_prefix "__recursor_type_" 
+      (Nameops.add_suffix ind_name (RecKind.to_string suffix)) 
+  in
+  let recursor_path =     
+    let prefix = Names.DirPath.make [Naming.self_version linkage.name] in 
+    Libnames.make_qualid prefix recursor_name    
+  in
+   let all_cst = 
+    match all_cst with 
+    | Vernacexpr.Constructors csts -> csts 
+    | _ -> Errors.fail ~info:"Records are not yet supported"
+  in 
+  let all_cst = List.map (fun (_, (y, _)) -> CAst.with_val (fun x -> x) y) all_cst in 
+  let all_projection_test = List.map (fun z -> _qualid_point_ (Some rec_mod) z) all_cst in
+  let recursor_construction  =
+    let open Constrexpr_ops in     
+    let recursor = mkRefC recursor_path in
+    (* raw term of recursor construction will have the motive in the context *)
+    let motiveName = mkIdentC @@ Nameops.add_prefix "__motiveT" (List.hd names)  in
+    let recur_handlers =  List.map mkRefC all_projection_test in 
+    let all_args = motiveName :: recur_handlers in 
+    let applied_rec = mkAppC (recursor, all_args) in 
+    applied_rec 
+  in 
+  let open VernacBackend in
+  define_module ~module_name ~parameters:ctx ~body:(fun ctx ->
+      let applied_motive =
+        Termutils.apply_module
+          ~functor_expr:(Termutils.ident_to_module_expr motive_module)
+          ~arguments:ctx
+      in
+      let* _ = include_module ~module_expr:applied_motive in
+      names
+      |> List.map (fun name ->             
+             (* This is evaluated inside the module, hence the thunk *)
+             thunk (fun () ->
+                let* _ = define_term ~name recursor_construction in 
+                return ()))
+      |> flatmap)
+  |> run  
 
 let compile_linkage_context ~field_name (context : LinkageCtx.t) :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =

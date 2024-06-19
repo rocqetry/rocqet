@@ -172,6 +172,18 @@ module RecKind = struct
       | IndComplete -> "_ind_comp"
       | Rec -> "_rec"
       | Rect -> "_rect"
+  
+  let of_string = function 
+       | "_ind" -> Ind
+       | "_ind_comp" -> IndComplete
+       | "_rec" -> Rec
+       | "_rect" -> Rect
+       | _ -> Errors.fail ~info:"Unknown RecKind"
+  
+  let of_name name = 
+    name 
+    |> Names.Id.to_string
+    |> of_string
 end 
 
 module CompiledRecursors = struct
@@ -222,7 +234,7 @@ module rec LinkageElem : sig
         ind_names : Libnames.qualid list;
         recursor_module : Libnames.qualid;
         motive_module : CompiledModule.t;
-        suffix : string;
+        suffix : RecKind.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
