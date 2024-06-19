@@ -99,6 +99,13 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
       }
+    | PrincipleDefinition of { 
+         compiled_context : CompiledModuleType.t;
+         inductive : VernacInductive.t;
+         kind : RecKind.t; 
+         compiled_impl: CompiledModule.t;
+         compiled_signature : CompiledModuleType.t;
+     }
 end
 
 and Linkage : sig

@@ -430,6 +430,105 @@ let compile_recursors ~(ind_def : VernacInductive.t)
   in
   recursors |> List.map compile_one_recursor
 
+let compile_principle_signature 
+    ~(ind_def : VernacInductive.t)
+    ~(recursors : ((Names.Id.t list * RecKind.t) * Constrexpr.constr_expr) list)
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) 
+    ~family_name =
+  let all_names = ind_def |> VernacInductive.extract_all_names in
+  let all_type_names = all_names |> List.map fst in
+  let path_to_add = Naming.self_version family_name in
+  let compile_one_principle ((type_names, suffix), recursor) =
+    (* Future-proofing for mutually inductive types *)
+    let type_name = type_names |> Naming.concat_names in
+    let recursor_name = Nameops.add_suffix type_name (RecKind.to_string suffix) in
+    let module_name = Naming.module_name_of ~family_name recursor_name in
+    let relevant_cstrs =
+      type_names |> List.concat_map (fun n -> List.assoc n all_names)
+    in
+    let recursor =
+      let name_set = all_type_names @ relevant_cstrs |> Names.Id.Set.of_list in
+      Naming.add_path_constr_expr path_to_add name_set recursor
+    in
+    let open VernacBackend in    
+      define_moduletype ~module_name ~parameters:ctx ~body:(fun _ ->
+          let* () =
+            postulate_axiom
+              ~name:recursor_name
+              ~ty:recursor
+          in
+          return ())
+      |> run
+  in
+  let principles = 
+    recursors 
+    |> List.map compile_one_principle   
+  in 
+  let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string family_name)in 
+  let open VernacBackend in    
+  define_moduletype ~module_name ~parameters:ctx ~body:(fun arguments ->
+      let* _ = 
+        principles
+        |> List.map (fun principle -> 
+             let module_expr = 
+               Termutils.apply_module 
+                     ~functor_expr:(Termutils.ident_to_module_expr principle)
+                     ~arguments
+             in 
+             let* _ = include_module ~module_expr in
+             return ()) 
+         |> flatmap
+      in 
+      return ())
+  |> run
+
+let compile_principle_implementation  
+  ~(recursors : ((Names.Id.t list * RecKind.t) * Constrexpr.constr_expr) list)
+  ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) 
+  ~family_name =
+  let internal_version_name n = Nameops.add_prefix "__internal_" n in   
+  let compile_one_principle ((type_names, suffix), _recursor) =
+    let type_name = type_names |> Naming.concat_names in
+  let name = Nameops.add_suffix type_name (RecKind.to_string suffix) in
+  let value = 
+    let prefix = Names.DirPath.make [ (* Naming.self_version family_name ;*) ] in     
+    let name = Libnames.make_qualid prefix (internal_version_name name) in 
+    name    
+    |> Constrexpr_ops.mkRefC
+  in 
+  let module_name = Naming.module_name_of ~family_name name in  
+  let open VernacBackend in    
+   define_module ~module_name ~parameters:ctx ~body:(fun _ ->
+       let* () =
+         define_term
+           ~name
+            value
+       in
+       return ())
+   |> run  
+  in  
+  let principles = 
+    recursors 
+    |> List.map compile_one_principle   
+  in 
+  let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string family_name)in 
+  let open VernacBackend in    
+  define_module ~module_name ~parameters:ctx ~body:(fun arguments ->
+      let* _ = 
+        principles
+        |> List.map (fun principle -> 
+             let module_expr = 
+               Termutils.apply_module 
+                     ~functor_expr:(Termutils.ident_to_module_expr principle)
+                     ~arguments
+             in 
+             let* _ = include_module ~module_expr in
+             return ()) 
+         |> flatmap
+      in 
+      return ())
+  |> run
+
 let compile_motives ~(names : Names.Id.t list)
     ~(motives : Constrexpr.constr_expr list)
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
@@ -620,6 +719,11 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
   | Bwd.Snoc
       ( _,
         ( _,
+          LinkageElem.PrincipleDefinition
+            { compiled_context; compiled_signature; _ } ) )
+  | Bwd.Snoc
+      ( _,
+        ( _,
           LinkageElem.RecursorDefinition
             { compiled_context; compiled_signature; _ } ) ) ->
       let signature_name =
@@ -657,6 +761,7 @@ let compile_linkage (linkage : Linkage.t) =
     | Bwd.Emp -> return ()
     | Bwd.Snoc (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.FieldDefinition { compiled_impl; _ }))
+    | Bwd.Snoc (fields, (_, LinkageElem.PrincipleDefinition { compiled_impl; _ }))
     | Bwd.Snoc
         (fields, (_, LinkageElem.InductiveDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.RecursorDefinition { compiled_impl; _ }))
@@ -685,6 +790,7 @@ let compile_nested_linkage (linkage : Linkage.t) =
     | Bwd.Emp -> return ()
     | Bwd.Snoc (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.FieldDefinition { compiled_impl; _ }))
+    | Bwd.Snoc (fields, (_, LinkageElem.PrincipleDefinition { compiled_impl; _ }))
     | Bwd.Snoc
         (fields, (_, LinkageElem.InductiveDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.RecursorDefinition { compiled_impl; _ }))
@@ -725,6 +831,11 @@ let compile_nested_linkage_signature linkage =
         ( _,
           ( _,
             LinkageElem.FamilyDefinition
+              { compiled_context; compiled_signature; _ } ) )
+    | Bwd.Snoc
+        ( _,
+          ( _,
+            LinkageElem.PrincipleDefinition
               { compiled_context; compiled_signature; _ } ) )
     | Bwd.Snoc
         ( _,
@@ -794,6 +905,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
   let empty_linkage = { linkage with fields = Bwd.Emp } in
   let f linkage (name, field) =
     match field with
+    | LinkageElem.PrincipleDefinition _ -> linkage
     | LinkageElem.FieldDefinition { body_expr; body_type; _ } ->
         let compiled_context, parameters =
           compile_linkage_context ~field_name:name (LinkageCtx.Toplevel linkage)

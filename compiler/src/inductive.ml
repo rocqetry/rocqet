@@ -88,8 +88,29 @@ let add_inductive_definition inductive =
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:inductive_name context
   in
+  let _principle_signature = 
+    Codegen.compile_principle_signature 
+      ~ind_def:inductive 
+      ~recursors
+      ~ctx:parameters
+      ~family_name
+  in 
+  let _principle_impl = 
+    Codegen.compile_principle_implementation       
+      ~recursors
+      ~ctx:parameters
+      ~family_name
+  in 
+  (* let principle = 
+    LinkageElem.PrincipleDefinition 
+      {
+        compiled_context;
+        inductive;
+        
+      }
+   in*) 
   let recursors =
     Codegen.compile_recursors ~ind_def:inductive ~recursors ~ctx:parameters
       ~family_name
-  in
+  in  
   compiled_recursors := CompiledRecursors.{ compiled_context; recursors }

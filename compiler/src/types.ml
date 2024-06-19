@@ -239,6 +239,13 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
       }
+     | PrincipleDefinition of { 
+         compiled_context : CompiledModuleType.t;
+         inductive : VernacInductive.t;
+         kind : RecKind.t; 
+         compiled_impl: CompiledModule.t;
+         compiled_signature : CompiledModuleType.t;
+     }
 end =
   LinkageElem
 
@@ -304,6 +311,8 @@ end = struct
         | LinkageElem.FieldDefinition field -> FieldDefinition field
         | LinkageElem.RecursorDefinition definition ->
             RecursorDefinition definition
+        | LinkageElem.PrincipleDefinition principle -> 
+          LinkageElem.PrincipleDefinition principle 
       in
       (name, elem)
     in
