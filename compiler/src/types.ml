@@ -241,8 +241,7 @@ module rec LinkageElem : sig
       }
      | PrincipleDefinition of { 
          compiled_context : CompiledModuleType.t;
-         inductive : VernacInductive.t;
-         kind : RecKind.t; 
+         inductive : VernacInductive.t;         
          compiled_impl: CompiledModule.t;
          compiled_signature : CompiledModuleType.t;
      }

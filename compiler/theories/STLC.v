@@ -13,27 +13,27 @@ Family STLC.
       self__ty_size_cases_handler.motive self__STLC.ty_unit
       := 1.
     FDefinition ty_arrow :
-      forall A B, self__ty_size_cases_handler.motive A ->
-      self__ty_size_cases_handler.motive B ->
+      forall A, self__ty_size_cases_handler.motive A ->                
+      forall B, self__ty_size_cases_handler.motive B ->
       self__ty_size_cases_handler.motive (self__STLC.ty_arrow A B)
-      := fun _ _ n m => n + m.
+      := fun _ n _ m => n + m.
   FEnd ty_size_cases_handler.
 
-  (* FRecursor ty_size_cases about ty
-    motive ty_size_cases_handler.motive
-    using ty_size_cases_handler
-    by _rec. *)
+  FRecursor ty_size_cases about ty
+    motive self__STLC.ty_size_cases_handler.motive
+    using self__STLC.ty_size_cases_handler
+    by _rec.
 
-  FInductive tm : Set :=
+  (* FInductive tm : Set :=
   | tm_var : ident -> tm
   | tm_app : tm -> tm -> tm
   | tm_val : val -> tm
   with val : Set :=
   | val_abs : ident -> tm -> val
-  | val_unit: val.
+  | val_unit: val.*)
 FEnd STLC.
 
-Family STLC_bool extends STLC.
+(* Family STLC_bool extends STLC.
   FInductive ty : Set :=
     | ty_bool : ty.
 
@@ -55,3 +55,4 @@ Family STLC_prod extends STLC_bool.
   with val : Set :=
     | val_prod : val -> val -> val.
 FEnd STLC_prod.
+*)

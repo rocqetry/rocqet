@@ -285,6 +285,12 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
              let recursor_name =
                potential_recursor |> Constrexpr_ops.mkIdentC
              in
+             let _ = 
+               define_term 
+                 ~name:(Nameops.add_suffix ind_name (RecKind.to_string suffix))
+                 recursor_name 
+               |> run
+             in 
              let recursor_type =
                recursor_name |> Termutils.checked_type_of
                |> Termutils.reflect_checked_term
@@ -482,7 +488,15 @@ let compile_principle_signature
       return ())
   |> run
 
-let compile_principle_implementation  
+let compile_principle_implementation () = 
+  let open VernacBackend in 
+  let module_name = Naming.fresh_name ~prefix:"PrincipleImpl" in
+  define_module 
+    ~module_name 
+    ~parameters:[] 
+    ~body:(fun _ -> return ()) |> run 
+
+(*let compile_principle_implementation  
   ~(recursors : ((Names.Id.t list * RecKind.t) * Constrexpr.constr_expr) list)
   ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) 
   ~family_name =
@@ -491,6 +505,7 @@ let compile_principle_implementation
     let type_name = type_names |> Naming.concat_names in
   let name = Nameops.add_suffix type_name (RecKind.to_string suffix) in
   let value = 
+    (* This is the wrong value *)
     let prefix = Names.DirPath.make [ (* Naming.self_version family_name ;*) ] in     
     let name = Libnames.make_qualid prefix (internal_version_name name) in 
     name    
@@ -527,7 +542,7 @@ let compile_principle_implementation
          |> flatmap
       in 
       return ())
-  |> run
+  |> run*)
 
 let compile_motives ~(names : Names.Id.t list)
     ~(motives : Constrexpr.constr_expr list)

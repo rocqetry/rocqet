@@ -88,27 +88,26 @@ let add_inductive_definition inductive =
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:inductive_name context
   in
-  let _principle_signature = 
+  let principle_signature = 
     Codegen.compile_principle_signature 
       ~ind_def:inductive 
       ~recursors
       ~ctx:parameters
       ~family_name
-  in 
-  let _principle_impl = 
-    Codegen.compile_principle_implementation       
-      ~recursors
-      ~ctx:parameters
-      ~family_name
-  in 
-  (* let principle = 
+  in
+  let principle_impl = 
+    Codegen.compile_principle_implementation ()   
+  in
+  let principle = 
     LinkageElem.PrincipleDefinition 
       {
         compiled_context;
         inductive;
-        
+        compiled_signature = principle_signature; 
+        compiled_impl = principle_impl;
       }
-   in*) 
+  in
+  Context.add_field ~name:(Naming.fresh_name ~prefix:"Principle") ~elem:principle;
   let recursors =
     Codegen.compile_recursors ~ind_def:inductive ~recursors ~ctx:parameters
       ~family_name
