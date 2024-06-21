@@ -25,3 +25,14 @@ val definition :
   body_type:Constrexpr.constr_expr ->
   body_expr:Constrexpr.constr_expr ->
   unit
+
+(* Handle an `FRecursion ...` *)
+val frecursion : 
+  name:Names.Id.t -> 
+  inductive:Libnames.qualid -> 
+  motive:Constrexpr.constr_expr -> 
+  suffix:RecKind.t -> unit
+
+(* Handle a `Case ... := ...` *)
+val frecursion_handler : 
+  name:Names.Id.t -> handler:Constrexpr.constr_expr -> unit

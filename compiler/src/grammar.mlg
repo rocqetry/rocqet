@@ -80,4 +80,13 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "FDefinition" ident(name) ":" llconstr_ip(body_type) ":=" llconstr_ip(body_expr)  ] ->
    { Entry.definition ~name ~body_type ~body_expr}
+
+| [ "FRecursion" ident(name) 
+               "about" reference_ip(inductive)
+               "motive" llconstr_ip(motive)
+               "by" ident(reckind)  ] ->  
+{ Entry.frecursion ~name ~inductive ~motive ~suffix:(Types.RecKind.of_name reckind) }
+
+| [ "Case" ident(name) ":=" constr(handler) ] -> 
+   {  Entry.frecursion_handler ~name ~handler }
 END

@@ -898,11 +898,15 @@ let compile_nested_linkage_signature linkage =
       return ())
   |> run
 
-let compile_definition ~name ~body_type ~body_expr ~parameters =
+let compile_definition       
+      ~(name: Names.Id.t)
+      ?(body_type : Constrexpr.constr_expr option)
+      ~(body_expr: Constrexpr.constr_expr) 
+      parameters =
   let open VernacBackend in
   let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in
   define_module ~module_name ~parameters ~body:(fun _ ->
-      let* () = define_term ~name ~ty:body_type body_expr in
+      let* () = define_term ~name ?ty:body_type body_expr in
       return ())
   |> run
 
@@ -926,7 +930,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
           compile_linkage_context ~field_name:name (LinkageCtx.Toplevel linkage)
         in
         let compiled_impl =
-          compile_definition ~name ~body_type ~body_expr ~parameters
+          compile_definition ~name ?body_type ~body_expr parameters
         in
         let elem =
           LinkageElem.FieldDefinition

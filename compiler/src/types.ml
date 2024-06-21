@@ -225,7 +225,7 @@ module rec LinkageElem : sig
       }
     | FieldDefinition of {
         body_expr : Constrexpr.constr_expr;
-        body_type : Constrexpr.constr_expr;
+        body_type : Constrexpr.constr_expr option;
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModuleType.t;
       }
@@ -432,7 +432,7 @@ end =
 (* A single plugin command *)
 (* e.g Family A. ... *)
 module PluginCmd = struct
-  type t = Family
+  type t = Family | Recursion
 end
 
 (* A scope is a plugin command enriched with a name and a "closing" handler *)

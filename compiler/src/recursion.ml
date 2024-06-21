@@ -50,8 +50,7 @@ let add_recursor ~ind_decls ~rec_mod ~suffix =
     Codegen.compile_recursor_implementation 
       ~inductive
       ~linkage
-      ~names
-      (* ~ind_names *)
+      ~names      
       ~rec_mod
       ~motive_module 
       ~suffix 
@@ -72,3 +71,30 @@ let add_recursor ~ind_decls ~rec_mod ~suffix =
       }
   in
   Context.add_field ~name:recursor_name ~elem
+
+let close_recursion () = ()
+
+let open_recursion 
+   ~(name : Names.Id.t)
+   ~(inductive : Libnames.qualid)
+   ~(motive : Constrexpr.constr_expr)
+   ~(suffix: RecKind.t) =  
+  let handler_suffix name = Nameops.add_suffix name "_handler" in   
+  let _motive = (Names.Id.of_string "_motive") in 
+  let handler_family_name = handler_suffix name in   
+  let _outer_family_name = Context.family_name (Context.get ()) in 
+  suffix |> ignore;
+  inductive |> ignore;
+  Family.open_family handler_family_name ;  
+  Definition.add_definition ~name:_motive motive;
+  let _motive_path = 
+    Naming.point_qualid 
+      (Naming.self_version handler_family_name)
+      (Libnames.qualid_of_ident _motive)
+  in 
+  Errors.fail ~info:"TODO"
+
+let add_handler ~name ~handler = 
+  name |> ignore;
+  handler |> ignore;
+  Errors.fail ~info:"TODO"

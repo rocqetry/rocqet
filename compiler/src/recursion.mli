@@ -5,3 +5,14 @@ val add_recursor :
   rec_mod:Libnames.qualid ->
   suffix:RecKind.t ->
   unit
+
+val close_recursion : unit -> unit
+
+val open_recursion : 
+  name:Names.Id.t -> 
+  inductive:Libnames.qualid -> 
+  motive:Constrexpr.constr_expr -> 
+  suffix:RecKind.t -> unit
+
+val add_handler : 
+  name:Names.Id.t -> handler:Constrexpr.constr_expr -> unit

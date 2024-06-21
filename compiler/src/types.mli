@@ -61,7 +61,7 @@ module CompiledRecursors : sig
 end
 
 module PluginCmd : sig
-  type t = Family
+  type t = Family | Recursion
 end
 
 module PluginCmdScope : sig
@@ -85,7 +85,7 @@ module rec LinkageElem : sig
       }
     | FieldDefinition of {
         body_expr : Constrexpr.constr_expr;
-        body_type : Constrexpr.constr_expr;
+        body_type : Constrexpr.constr_expr option;
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModuleType.t;
       }
