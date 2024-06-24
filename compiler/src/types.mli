@@ -38,25 +38,28 @@ module CompiledModuleType : sig
 end
 
 module RecKind : sig
-  type t = 
-     | Ind 
-     | IndComplete 
-     | Rec 
-     | Rect
+  type t = Ind | IndComplete | Rec | Rect
 
-   val to_string : t -> string
-   val of_string : string -> t
-   val of_name : Names.Id.t -> t
-end 
+  val compare : t -> t -> int
+  val to_string : t -> string
+  val of_string : string -> t
+  val of_name : Names.Id.t -> t
+end
+
+module RecursorStore : Map.S with type key = RecKind.t
+
+module CompiledRecursor : sig
+  type t = {
+    inductive_names : Names.Id.t list;
+    compiled_recursor : CompiledModuleType.t;
+    compiled_handlers : (Names.Id.t * CompiledModuleType.t) list;
+  }
+end
 
 module CompiledRecursors : sig
   type t = {
     compiled_context : CompiledModuleType.t;
-    recursors :
-      ((Names.Id.t list * RecKind.t)
-      * CompiledModule.t
-      * (Names.Id.t * CompiledModule.t) list)
-      list;
+    recursors : CompiledRecursor.t RecursorStore.t;
   }
 end
 
@@ -91,7 +94,9 @@ module rec LinkageElem : sig
       }
     | RecursorDefinition of {
         names : Names.Id.t list;
-        ind_names : Libnames.qualid list;
+        handlers : Names.Id.t list;
+        (* ind_names : Names.Id.t list; *)
+        inductive : VernacInductive.t;
         recursor_module : Libnames.qualid;
         motive_module : CompiledModule.t;
         suffix : RecKind.t;
@@ -99,12 +104,12 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
       }
-    | PrincipleDefinition of { 
-         compiled_context : CompiledModuleType.t;
-         inductive : VernacInductive.t;         
-         compiled_impl: CompiledModule.t;
-         compiled_signature : CompiledModuleType.t;
-     }
+    | PrincipleDefinition of {
+        compiled_context : CompiledModuleType.t;
+        inductive : VernacInductive.t;
+        compiled_impl : CompiledModule.t;
+        compiled_signature : CompiledModuleType.t;
+      }
 end
 
 and Linkage : sig
@@ -115,6 +120,7 @@ and Linkage : sig
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
+  val context_parameters : t -> Libnames.qualid list
   val context_match : t -> t -> [ `Equal | `Less | `More ]
   val top_most_self_name : t -> Names.Id.t
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t

@@ -82,8 +82,11 @@ let close_family () : unit =
       in
       (* store := None; *)
       Context.destructive_update None;
+
       (* Note that we only want to do this when late binding of family names
          happens in the linkage *)
+
+      (* TODO: *)
       let linkage = Codegen.recompute_linkage linkage in
       Codegen.compile_linkage linkage |> ignore;
       Linkages.add linkage
@@ -143,7 +146,7 @@ let close_family () : unit =
       in
       (* Again should not do this all the time: *)
       let linkage = Codegen.recompute_linkage linkage in
-      let signature = Codegen.compile_nested_linkage_signature linkage in
+      let signature = Codegen.compile_linkage_signature linkage in
       let impl = Codegen.compile_nested_linkage linkage in
       let elem =
         let compiled_context =

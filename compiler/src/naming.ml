@@ -1,6 +1,12 @@
 (* These functions are copied verbatim from
    https://github.com/DKXXXL/FPOP/blob/main/src/utils.ml#L407*)
 
+let motive_of name = Nameops.add_prefix "__motiveT" name
+let internal_name name = Nameops.add_prefix "__internal_" name
+let recursor_type ~inductive suffix =   
+   Nameops.add_prefix "__recursor_type_" (Nameops.add_suffix inductive suffix)
+let handler_type name =  Nameops.add_prefix "__handler_type_" name
+
 let point_qualid (f : Names.Id.t) (path : Libnames.qualid) : Libnames.qualid =
   let path, base = Libnames.repr_qualid path in
   let newpath = List.append (Names.DirPath.repr path) [ f ] in
@@ -50,6 +56,14 @@ let path_to_list (path : Libnames.qualid) : Names.Id.t list =
   let prefix, base = Libnames.repr_qualid path in
   let prefix = List.rev (Names.DirPath.repr prefix) in
   prefix @ [ base ]
+
+(* Say path = A.B.C.D, we want (A.B.C, D) *)
+let path_to_prefix (path : Libnames.qualid) :
+    Libnames.qualid option * Names.Id.t =
+  let prefix, base = Libnames.repr_qualid path in
+  match Names.DirPath.repr prefix with
+  | [] -> (None, base)
+  | _ -> (Some (Libnames.qualid_of_dirpath prefix), base)
 
 (* extract a path into (name "." path) *)
 let to_name_qualid (path : Libnames.qualid) : Names.Id.t * Libnames.qualid =

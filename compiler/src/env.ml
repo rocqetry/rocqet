@@ -9,7 +9,7 @@ module PluginScopes = struct
 
   let push scope =
     match peek () with
-    | None | Some { command = PluginCmd.( Family | Recursion ); _ } ->
+    | None | Some { command = PluginCmd.(Family | Recursion); _ } ->
         scopes := scope :: !scopes
 
   (* Basically, the caller wants to close the scope with
@@ -70,7 +70,7 @@ module Context = struct
 
   let get () =
     match !store with
-    | None -> Errors.fail ~info:"There is not current context"
+    | None -> Errors.fail ~info:"There is no current context"
     | Some context -> context
 
   let lookup (path : Libnames.qualid) =
@@ -111,6 +111,35 @@ module Context = struct
     | [] -> linkage
     | path ->
         Option.bind linkage (fun linkage -> walk_down_linkage linkage path)
+
+  let lookup_linkage_elem context (path : Libnames.qualid) =
+    (* Handle paths later *)
+    let _family, name = Naming.path_to_prefix path in
+    let rec go context =
+      match context with
+      | LinkageCtx.Toplevel linkage ->
+          linkage.fields
+          |> Bwd.find_map (fun (found_name, elem) ->
+                 if Names.Id.equal name found_name then Some (elem, linkage)
+                 else None)
+      | LinkageCtx.Nested (context, linkage) -> (
+          linkage.fields
+          |> Bwd.find_map (fun (found_name, elem) ->
+                 if Names.Id.equal name found_name then Some (elem, linkage)
+                 else None)
+          |> function
+          | None -> go context
+          | Some (elem, linkage) -> Some (elem, linkage))
+    in
+    go context
+  
+  let lookup_inductive_for_recursion ~name context = 
+    match lookup_linkage_elem context name with
+    | Some
+        ( LinkageElem.InductiveDefinition { inductive; compiled_recursors; _ },
+          linkage ) ->
+        (inductive, !compiled_recursors, linkage)
+    | _ -> Errors.fail ~info:"Unbound inductive type "
 
   let family_name context =
     match context with

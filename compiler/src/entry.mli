@@ -13,11 +13,11 @@ val finductive : VernacInductive.t -> unit
 val fend : Names.Id.t -> unit
 
 (* Handle a `FRecursor ... using ... by ...` command *)
-val frecursor :
+(*val frecursor :
   ind_decls:(Names.Id.t * Libnames.qualid * Constrexpr.constr_expr) list ->
   rec_mod:Libnames.qualid ->
   suffix:RecKind.t ->
-  unit
+  unit*)
 
 (* Handle a `FDefinition ... : ... = ...` command *)
 val definition :
@@ -27,12 +27,15 @@ val definition :
   unit
 
 (* Handle an `FRecursion ...` *)
-val frecursion : 
-  name:Names.Id.t -> 
-  inductive:Libnames.qualid -> 
-  motive:Constrexpr.constr_expr -> 
-  suffix:RecKind.t -> unit
+val frecursion :
+  name:Names.Id.t ->
+  inductive:Libnames.qualid ->
+  motive:Constrexpr.constr_expr ->
+  suffix:RecKind.t ->
+  unit
 
 (* Handle a `Case ... := ...` *)
-val frecursion_handler : 
+val frecursion_handler :
   name:Names.Id.t -> handler:Constrexpr.constr_expr -> unit
+
+(* val test : Libnames.qualid -> unit *)

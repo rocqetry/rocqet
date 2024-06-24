@@ -160,47 +160,48 @@ module CompiledModuleType = struct
   type t = Libnames.qualid
 end
 
-module RecKind = struct 
-  type t = 
-     | Ind 
-     | IndComplete 
-     | Rec 
-     | Rect
+module RecKind = struct
+  type t = Ind | IndComplete | Rec | Rect
 
-  let to_string = function 
-      | Ind -> "_ind"
-      | IndComplete -> "_ind_comp"
-      | Rec -> "_rec"
-      | Rect -> "_rect"
-  
-  let of_string = function 
-       | "_ind" -> Ind
-       | "_ind_comp" -> IndComplete
-       | "_rec" -> Rec
-       | "_rect" -> Rect
-       | _ -> Errors.fail ~info:"Unknown RecKind"
-  
-  let of_name name = 
-    name 
-    |> Names.Id.to_string
-    |> of_string
-end 
+  let compare r1 r2 =
+    match (r1, r2) with
+    | Ind, Ind -> 0
+    | IndComplete, IndComplete -> 0
+    | Rec, Rec -> 0
+    | Rect, Rect -> 0
+    | _ -> -1
+
+  let to_string = function
+    | Ind -> "_ind"
+    | IndComplete -> "_ind_comp"
+    | Rec -> "_rec"
+    | Rect -> "_rect"
+
+  let of_string = function
+    | "_ind" -> Ind
+    | "_ind_comp" -> IndComplete
+    | "_rec" -> Rec
+    | "_rect" -> Rect
+    | _ -> Errors.fail ~info:"Unknown RecKind"
+
+  let of_name name = name |> Names.Id.to_string |> of_string
+end
+
+module RecursorStore = Map.Make (RecKind)
+
+module CompiledRecursor = struct
+  type t = {
+    inductive_names : Names.Id.t list;
+    compiled_recursor : CompiledModuleType.t;
+    compiled_handlers : (Names.Id.t * CompiledModuleType.t) list;
+  }
+end
 
 module CompiledRecursors = struct
   type t = {
     (* TODO: do we need to keep track of the context? *)
     compiled_context : CompiledModuleType.t;
-    (*
-      ((type_names * suffix)
-      * compiled_recursor
-      * (case_name * compiled_handler) list)
-      list
-    *)
-    recursors :
-      ((Names.Id.t list * RecKind.t)
-      * CompiledModule.t
-      * (Names.Id.t * CompiledModule.t) list)
-      list;
+    recursors : CompiledRecursor.t RecursorStore.t;
   }
 end
 
@@ -231,7 +232,8 @@ module rec LinkageElem : sig
       }
     | RecursorDefinition of {
         names : Names.Id.t list;
-        ind_names : Libnames.qualid list;
+        handlers : Names.Id.t list;        
+        inductive : VernacInductive.t;
         recursor_module : Libnames.qualid;
         motive_module : CompiledModule.t;
         suffix : RecKind.t;
@@ -239,12 +241,12 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
       }
-     | PrincipleDefinition of { 
-         compiled_context : CompiledModuleType.t;
-         inductive : VernacInductive.t;         
-         compiled_impl: CompiledModule.t;
-         compiled_signature : CompiledModuleType.t;
-     }
+    | PrincipleDefinition of {
+        compiled_context : CompiledModuleType.t;
+        inductive : VernacInductive.t;
+        compiled_impl : CompiledModule.t;
+        compiled_signature : CompiledModuleType.t;
+      }
 end =
   LinkageElem
 
@@ -256,6 +258,7 @@ and Linkage : sig
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
+  val context_parameters : t -> Libnames.qualid list
   val context_match : t -> t -> [ `Equal | `Less | `More ]
   val top_most_self_name : t -> Names.Id.t
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
@@ -276,6 +279,11 @@ end = struct
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
+
+  let context_parameters linkage =
+    linkage.context |> Bwd.map fst
+    |> Bwd.map Libnames.qualid_of_ident
+    |> Bwd.to_list
 
   let context_match left right =
     let left_length = Bwd.length left.context
@@ -310,8 +318,8 @@ end = struct
         | LinkageElem.FieldDefinition field -> FieldDefinition field
         | LinkageElem.RecursorDefinition definition ->
             RecursorDefinition definition
-        | LinkageElem.PrincipleDefinition principle -> 
-          LinkageElem.PrincipleDefinition principle 
+        | LinkageElem.PrincipleDefinition principle ->
+            LinkageElem.PrincipleDefinition principle
       in
       (name, elem)
     in
@@ -339,6 +347,11 @@ end = struct
           | None, _ -> (name, elem) :: go base derived
           | Some (_, delem), derived -> (
               match (elem, delem) with
+              (* TODO: fix recursive concatenation for recursor stuff *)
+              | ( LinkageElem.RecursorDefinition _,
+                  LinkageElem.RecursorDefinition rderived ) ->
+                  (name, LinkageElem.RecursorDefinition rderived)
+                  :: go base derived
               | ( LinkageElem.InductiveDefinition ibase,
                   LinkageElem.InductiveDefinition iderived ) ->
                   let elem =
@@ -363,6 +376,8 @@ end = struct
                   (name, elem) :: go base derived
               | FieldDefinition _, FieldDefinition _ ->
                   Errors.fail ~info:"Field name conflict"
+              | PrincipleDefinition _, PrincipleDefinition p ->
+                 (name, PrincipleDefinition p) :: go base derived
               | _ -> Errors.fail ~info:"Wrong concatenation arguments"))
     in
     let fields = go (Bwd.to_list base.fields) (Bwd.to_list derived.fields) in

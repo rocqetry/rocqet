@@ -1,5 +1,10 @@
+val motive_of : Names.Id.t -> Names.Id.t
+val internal_name : Names.Id.t -> Names.Id.t
+val recursor_type : inductive:Names.Id.t -> string -> Names.Id.t
+val handler_type : Names.Id.t -> Names.Id.t
 
 val point_qualid : Names.Id.t -> Libnames.qualid -> Libnames.qualid
+val path_to_prefix : Libnames.qualid -> Libnames.qualid option * Names.Id.t
 
 val replace_qualid_root :
   source:Names.Id.t ->

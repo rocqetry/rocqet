@@ -67,16 +67,18 @@ END
 VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "Family" ident(derived) "extends" reference(base) ] ->  { Entry.family_extends ~derived ~base }
 
+(* | [ "Test" reference(ident) ] -> { Entry.test ident } *)
+
 | [ "Family" ident(name) ] -> { Entry.family name }
 
 | [ "FInductive" mutind_defs(inductive_definition) ] -> { Entry.finductive inductive_definition }
 
 | [ "FEnd" ident(scope_name) ] -> { Entry.fend scope_name }
 
-| [ "FRecursor" induction_decls(ind_decls)
+(* | [ "FRecursor" induction_decls(ind_decls)
       "using" reference_ip(rec_mod)
       "by" ident(suffix) ] ->
-   { Entry.frecursor ~ind_decls ~rec_mod ~suffix:(Types.RecKind.of_name suffix) }
+   { Entry.frecursor ~ind_decls ~rec_mod ~suffix:(Types.RecKind.of_name suffix) }*)
 
 | [ "FDefinition" ident(name) ":" llconstr_ip(body_type) ":=" llconstr_ip(body_expr)  ] ->
    { Entry.definition ~name ~body_type ~body_expr}

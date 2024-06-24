@@ -29,25 +29,29 @@ let family_extends ~derived ~base =
         close = Family.close_family;
       }
 
-let frecursor ~ind_decls ~rec_mod ~suffix =
+(* let frecursor ~ind_decls ~rec_mod ~suffix =
   PluginScopes.ensure_in_scope ~scope:PluginCmd.Family;
-  Recursion.add_recursor ~ind_decls ~rec_mod ~suffix
+  Recursion.add_recursor ~ind_decls ~rec_mod ~suffix*)
 
-let definition ~name ~body_type ~body_expr = 
+let definition ~name ~body_type ~body_expr =
   Definition.add_definition ~name ~body_type body_expr
 
-let frecursion 
-      ~(name : Names.Id.t)
-      ~(inductive : Libnames.qualid)
-      ~(motive : Constrexpr.constr_expr)
-      ~(suffix: RecKind.t) = 
+let frecursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
+    ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t) =
   Recursion.open_recursion ~name ~inductive ~motive ~suffix;
-  PluginScopes.push    
+  PluginScopes.push
     PluginCmdScope.
-      {
-        name;
-        command = PluginCmd.Recursion;
-        close = Recursion.close_recursion;
-      }  
-  
+      { name; command = PluginCmd.Recursion; close = Recursion.close_recursion }
+
 let frecursion_handler = Recursion.add_handler
+
+(* let close module_name =
+  let open Codegen.VernacBackend in
+  close_module ~module_name |> run |> ignore *)
+
+(* let test ident =
+  let _prefix, base = Naming.path_to_prefix ident in
+  let open Codegen.VernacBackend in
+  open_module ~module_name:base ~parameters:[] |> run |> ignore;
+  close base;
+  Printf.printf "Base: %s" (Names.Id.to_string base) *)
