@@ -232,7 +232,9 @@ module rec LinkageElem : sig
       }
     | RecursorDefinition of {
         names : Names.Id.t list;
-        handlers : Names.Id.t list;        
+        motives : Constrexpr.constr_expr list;
+        handler_types : (Names.Id.t * Constrexpr.constr_expr) list;
+        handler_cases : (Names.Id.t * Constrexpr.constr_expr) list;
         inductive : VernacInductive.t;
         recursor_module : Libnames.qualid;
         motive_module : CompiledModule.t;
@@ -317,7 +319,11 @@ end = struct
               }
         | LinkageElem.FieldDefinition field -> FieldDefinition field
         | LinkageElem.RecursorDefinition definition ->
-            RecursorDefinition definition
+            let motives = 
+              definition.motives 
+              |> List.map (Naming.replace_qualid_root ~source ~target)
+            in 
+            RecursorDefinition { definition with motives }
         | LinkageElem.PrincipleDefinition principle ->
             LinkageElem.PrincipleDefinition principle
       in

@@ -93,9 +93,10 @@ module rec LinkageElem : sig
         compiled_impl : CompiledModuleType.t;
       }
     | RecursorDefinition of {
-        names : Names.Id.t list;
-        handlers : Names.Id.t list;
-        (* ind_names : Names.Id.t list; *)
+        names : Names.Id.t list;        
+        motives : Constrexpr.constr_expr list;
+        handler_types : (Names.Id.t * Constrexpr.constr_expr) list;
+        handler_cases : (Names.Id.t * Constrexpr.constr_expr) list;        
         inductive : VernacInductive.t;
         recursor_module : Libnames.qualid;
         motive_module : CompiledModule.t;

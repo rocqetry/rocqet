@@ -29,12 +29,14 @@ module Ctx = struct
   type t = {
     parameters : (Names.Id.t * Constrexpr.module_ast) list;
     handler_types : (Names.Id.t * Constrexpr.constr_expr) list;
+    handler_cases : (Names.Id.t * Constrexpr.constr_expr) list;
     module_name : Names.Id.t;
     compiled_context : CompiledModuleType.t;
     name : Names.Id.t;
     inductive : VernacInductive.t;
     provenance : Linkage.t;
     motive : CompiledModule.t;
+    motive_expr : Constrexpr.constr_expr list;
     suffix : RecKind.t;
   }
 
@@ -47,71 +49,12 @@ module Ctx = struct
 
   let clear () = store := None
   let update recursion_data = store := Some recursion_data
-end
 
-(* let add_recursor ~ind_decls ~rec_mod ~suffix =
-  let rec split3 = function
-    | [] -> ([], [], [])
-    | (x, y, z) :: l ->
-        let xs, ys, zs = split3 l in
-        (x :: xs, y :: ys, z :: zs)
-  in
-  let rec lookup_inductive name context =
-    let f (linkage : Linkage.t) (found_name, elem) =
-      match elem with
-      | LinkageElem.InductiveDefinition { inductive; _ }
-        when Names.Id.equal found_name name ->
-          Some (inductive, linkage)
-      | _ -> None
-    in
-    match context with
-    | LinkageCtx.Toplevel linkage -> linkage.fields |> Bwd.find_map (f linkage)
-    | LinkageCtx.Nested (context, linkage) -> (
-        match linkage.fields |> Bwd.find_map (f linkage) with
-        | None -> lookup_inductive name context
-        | Some result -> Some result)
-  in
-  let names, ind_names, motives = split3 ind_decls in
-  let recursor_name = List.hd names in
-  Inheritance.inherit_dependencies ~prefix:recursor_name;
-  let context = Context.get () in
-  let compiled_context, parameters =
-    Codegen.compile_linkage_context ~field_name:recursor_name context
-  in
-  let family_name = Context.family_name context in
-  let motive_module =
-    Codegen.compile_motives ~names ~motives ~ctx:parameters ~family_name
-  in
-  let compiled_signature =
-    Codegen.compile_recursor_signature ~names ~motive_module ~ctx:parameters
-      ~family_name
-  in
-  let inductive, linkage =
-    (* No mutual inductive yet *)
-    let name = ind_names |> List.hd |> Libnames.qualid_basename in
-    match lookup_inductive name context with
-    | None -> Errors.fail ~info:"Unbound inductive"
-    | Some result -> result
-  in
-  let compiled_impl =
-    Codegen.compile_recursor_implementation ~inductive ~linkage ~names ~rec_mod
-      ~motive_module ~suffix ~ctx:parameters ~family_name
-  in
-  let elem =
-    LinkageElem.RecursorDefinition
-      {
-        names;
-        inductive;
-        handlers = [];
-        recursor_module = rec_mod;
-        motive_module;
-        suffix;
-        compiled_context;
-        compiled_signature;
-        compiled_impl;
-      }
-  in
-  Context.add_field ~name:recursor_name ~elem*)
+  let add_handler_case name expr = 
+    let ctx = get () in 
+    let ctx = { ctx with handler_cases = (name, expr) :: ctx.handler_cases } in 
+    update ctx
+end
 
 let close_recursion () =
   let Ctx.
@@ -125,13 +68,14 @@ let close_recursion () =
           provenance;
           parameters;
           module_name;
+          handler_cases;
+          motive_expr;
           _;
         } =
     Ctx.get ()
   in      
   module_name |> ignore;
-  let module_name = M.end_module () in
-  let handlers = handler_types |> List.map fst in 
+  let module_name = M.end_module () in  
   let compiled_signature = 
     Codegen.compile_recursor_signature 
         ~names:[name]
@@ -144,7 +88,7 @@ let close_recursion () =
       ~inductive      
       ~provenance 
       ~recursor_name:name
-      ~handlers
+      ~handlers:(handler_types |> List.map fst)
       ~suffix
       ~ctx:parameters
       ~handler_cases:module_name
@@ -152,39 +96,21 @@ let close_recursion () =
   let elem =
     LinkageElem.RecursorDefinition
       {
+        handler_cases;
         names = [ name ];
         inductive;
         recursor_module = module_name;
         motive_module = motive;
+        motives = motive_expr;
         compiled_signature;
         compiled_impl;
         compiled_context;
         suffix;
-        handlers;
+        handler_types;
       }
   in
   Context.add_field ~name ~elem;
   Ctx.clear ()
-
-let include_handler_types (provenance : Linkage.t) (recursor: CompiledRecursor.t) = 
-    let open Codegen.VernacBackend in 
-    recursor.compiled_handlers
-    |> List.map (fun (_case_name, handler_module) ->
-           let arguments =
-             let family =
-               provenance.name |> Naming.self_version
-               |> Libnames.qualid_of_ident
-             in
-             Linkage.context_parameters provenance @ [ family ]
-           in
-           let module_expr =
-             Termutils.apply_module
-               ~functor_expr:(Termutils.ident_to_module_expr handler_module)
-               ~arguments
-           in
-           let* _ = include_module ~module_expr in
-           return ())
-    |> flatmap |> run
 
 let handler_types_table name (recursor : CompiledRecursor.t) = 
   let motive = Naming.motive_of name in 
@@ -214,11 +140,11 @@ let open_recursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:module_name context
   in
-  let motive = Resolver.resolve_constrexpr ~context ~expression:motive in
+  let motive_expr = Resolver.resolve_constrexpr ~context ~expression:motive in
   let motive = 
     Codegen.compile_motives 
       ~names:[name] 
-      ~motives:[motive] 
+      ~motives:[motive_expr] 
       ~ctx:parameters 
       ~family_name:name
   in
@@ -227,8 +153,8 @@ let open_recursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in    
   let _module_name = M.start_module module_name parameters in
-  include_handler_types provenance recursor;  
   let open Codegen.VernacBackend in 
+  run @@ Codegen.include_handler_types provenance recursor;    
   let applied_motive =
         Termutils.apply_module
           ~functor_expr:(Termutils.ident_to_module_expr motive)
@@ -240,12 +166,14 @@ let open_recursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     Ctx.
       {
         parameters;
+        handler_cases = [];
         suffix;
         handler_types;        
         module_name;
         name;        
         compiled_context;
         motive;
+        motive_expr = [motive_expr];
         inductive;
         provenance;
       }
@@ -258,8 +186,9 @@ let add_handler ~name ~handler =
   | None -> Errors.fail ~info:"Unbound Constructor"
   | Some ty ->
       let open Codegen.VernacBackend in
-      let name =
+      let case_name =
         Nameops.add_prefix (Names.Id.to_string recursion_ctx.name) name
       in
-      define_term ~name ~ty handler |> run
+      Ctx.add_handler_case name handler;
+      define_term ~name:case_name ~ty handler |> run
 

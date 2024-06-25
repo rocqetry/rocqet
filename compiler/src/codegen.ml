@@ -917,6 +917,68 @@ let compile_definition ~(name : Names.Id.t)
       return ())
   |> run
 
+let include_handler_types 
+      (provenance : Linkage.t) 
+      (recursor: CompiledRecursor.t) = 
+    let open VernacBackend in 
+    recursor.compiled_handlers
+    |> List.map (fun (_case_name, handler_module) ->
+           let arguments =
+             let family =
+               provenance.name |> Naming.self_version
+               |> Libnames.qualid_of_ident
+             in
+             Linkage.context_parameters provenance @ [ family ]
+           in
+           let module_expr =
+             Termutils.apply_module
+               ~functor_expr:(Termutils.ident_to_module_expr handler_module)
+               ~arguments
+           in
+           let* _ = include_module ~module_expr in
+           return ())
+    |> flatmap
+
+let compile_handler_cases
+      ~name 
+      ~(context: LinkageCtx.t)
+      ~parameters 
+      ~motive 
+      ~(handler_cases : (Names.Id.t * Constrexpr.constr_expr) list)
+      ~(handler_types : (Names.Id.t * Constrexpr.constr_expr) list)
+      ~(provenance : Linkage.t) 
+      ~(recursor : CompiledRecursor.t) = 
+  let family = context |> Env.Context.family_name |> Names.Id.to_string in  
+  let module_name =
+    let name = Nameops.add_suffix (Nameops.add_prefix family name) "Cases" in
+    let name = Names.Id.to_string name in
+    Naming.fresh_name ~prefix:name
+  in
+  let open VernacBackend in 
+  run @@ 
+    define_module ~module_name ~parameters ~body:(fun arguments -> 
+      let applied_motive =
+        Termutils.apply_module
+          ~functor_expr:(Termutils.ident_to_module_expr motive)
+          ~arguments
+      in
+      let* _ = include_module ~module_expr:applied_motive in
+      let* _ = include_handler_types provenance recursor in 
+      let* _ = 
+        handler_cases 
+        |> List.map (fun (case_name, case) -> 
+               match List.assoc_opt case_name handler_types with 
+               | None -> 
+                  Errors.fail ~info:(Printf.sprintf "Unbound constructor %s" (Names.Id.to_string name))
+               | Some ty -> 
+                  let name =
+                     Nameops.add_prefix (Names.Id.to_string name) case_name
+                  in
+                  define_term ~name ~ty case)                                                
+        |> flatmap
+      in 
+      return ())  
+
 (* We should be keeping track of a context *)
 let rec recompute_linkage (linkage : Linkage.t) =
   let lookup (linkage : Linkage.t) name =
@@ -1044,20 +1106,44 @@ let rec recompute_linkage (linkage : Linkage.t) =
         in
         (compiled_recursors := CompiledRecursors.{ compiled_context; recursors });
         next_linkage
-    | LinkageElem.RecursorDefinition { names; inductive; suffix; motive_module; recursor_module; _ } -> 
+    | LinkageElem.RecursorDefinition 
+          { handler_cases; 
+            handler_types;
+            names; inductive; 
+            suffix; 
+            motives; _ } -> 
        let name = List.hd names in 
+       let context = (LinkageCtx.Toplevel linkage) in 
        let compiled_context, parameters =
           compile_linkage_context ~field_name:name
-            (LinkageCtx.Toplevel linkage)
-        in
+            context 
+       in       
        let inductive_name = VernacInductive.extract_inductive_name inductive in
        let _inductive, compiled_recursors, provenance = 
          Env.Context.lookup_inductive_for_recursion 
            ~name:(Libnames.qualid_of_ident inductive_name)
-           (LinkageCtx.Toplevel linkage)
-       in 
+           context
+       in
+       let motive_module = 
+             compile_motives 
+               ~names:[name] 
+               ~motives
+               ~ctx:parameters 
+               ~family_name:name
+        in
        let recursor = RecursorStore.find suffix compiled_recursors.recursors in       
        let handlers = recursor.compiled_handlers |> List.map fst in 
+       let recursor_module = 
+         compile_handler_cases 
+           ~name
+           ~parameters
+           ~handler_cases
+           ~handler_types
+           ~context
+           ~motive:motive_module
+           ~provenance 
+           ~recursor
+       in 
        let compiled_signature = 
           compile_recursor_signature 
               ~names:[name]
@@ -1078,6 +1164,8 @@ let rec recompute_linkage (linkage : Linkage.t) =
        let elem =
          LinkageElem.RecursorDefinition
          {
+           handler_cases;
+           motives;
            names = [ name ];
            inductive;
            recursor_module;
@@ -1086,7 +1174,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
            compiled_impl;
            compiled_context;
            suffix;
-           handlers;
+           handler_types;
          }
        in
        { linkage with fields = Bwd.Snoc (linkage.fields, (name, elem)) }       
