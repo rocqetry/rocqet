@@ -34,6 +34,9 @@ val frecursion :
   suffix:RecKind.t ->
   unit
 
+(* Handle an `FRecursion ...` extension *)
+val frecursion_extension : name:Names.Id.t -> unit 
+
 (* Handle a `Case ... := ...` *)
 val frecursion_handler :
   name:Names.Id.t -> handler:Constrexpr.constr_expr -> unit

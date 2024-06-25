@@ -130,7 +130,8 @@ let handler_types_table name (recursor : CompiledRecursor.t) =
 
 let open_recursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t) =
-  let context = Context.get () in
+  Inheritance.inherit_dependencies ~prefix:name;
+  let context = Context.get () in  
   let family = context |> Context.family_name |> Names.Id.to_string in  
   let module_name =
     let name = Nameops.add_suffix (Nameops.add_prefix family name) "Cases" in
@@ -151,7 +152,7 @@ let open_recursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
   let inductive, compiled_recursors, provenance = 
     Context.lookup_inductive_for_recursion ~name:inductive context 
   in
-  let recursor = RecursorStore.find suffix compiled_recursors.recursors in    
+  let recursor = RecursorStore.find suffix compiled_recursors.recursors in
   let _module_name = M.start_module module_name parameters in
   let open Codegen.VernacBackend in 
   run @@ Codegen.include_handler_types provenance recursor;    
@@ -174,6 +175,78 @@ let open_recursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
         compiled_context;
         motive;
         motive_expr = [motive_expr];
+        inductive;
+        provenance;
+      }
+  in
+  Ctx.update recursion_ctx
+
+let open_recursion_extension ~name = 
+  let context = Context.get () in
+  let linkage = Context.family_linkage context in
+  let further_elem =
+    Context.further_bound_linkage_elem context ~field:name
+  in
+  let base_elem = Context.base_linkage_elem context ~field:name in
+  let inductive, motives, handler_cases, suffix = 
+     match (further_elem, base_elem) with 
+     | None, Some (base, RecursorDefinition { inductive; suffix; motives; handler_cases; _ }) -> 
+        let source = Naming.self_version base.name in 
+        let target = Naming.self_version linkage.name in
+        let path_subtitution = Naming.replace_qualid_root ~source ~target in 
+        let motives = motives |> List.map path_subtitution in 
+        let handler_cases = handler_cases |> List.map (fun (name, expr) -> name, path_subtitution expr) in 
+        let inductive = inductive |> VernacInductive.extract_inductive_name in 
+        inductive, motives, handler_cases, suffix
+     | _ -> Errors.fail ~info:"Not yet implemented"
+  in 
+  let module_name =
+    let family = Names.Id.to_string linkage.name in 
+    let name = Nameops.add_suffix (Nameops.add_prefix family name) "Cases" in
+    let name = Names.Id.to_string name in
+    Naming.fresh_name ~prefix:name
+  in  
+  let compiled_context, parameters =
+    Codegen.compile_linkage_context ~field_name:module_name context
+  in  
+  let motive = 
+    Codegen.compile_motives 
+      ~names:[name] 
+      ~motives
+      ~ctx:parameters 
+      ~family_name:name
+  in
+  let inductive, compiled_recursors, provenance = 
+    let inductive = Libnames.qualid_of_ident inductive in 
+    Context.lookup_inductive_for_recursion ~name:inductive context 
+  in
+  let recursor = RecursorStore.find suffix compiled_recursors.recursors in    
+  let open Codegen.VernacBackend in   
+  let handler_types =  handler_types_table name recursor in
+  let recursor_module = 
+    Codegen.compile_handler_cases 
+      ~name ~context ~motive ~handler_cases ~handler_types ~parameters
+      ~provenance ~recursor
+  in
+  let _module_name = M.start_module module_name parameters in
+  let previous_cases =
+        Termutils.apply_module
+          ~functor_expr:(Termutils.ident_to_module_expr recursor_module)
+          ~arguments:(parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
+      in
+  let _ = include_module ~module_expr:previous_cases |> run in
+  let recursion_ctx =
+    Ctx.
+      {
+        parameters;
+        handler_cases;
+        suffix;
+        handler_types;        
+        module_name;
+        name;        
+        compiled_context;
+        motive;
+        motive_expr = motives;
         inductive;
         provenance;
       }

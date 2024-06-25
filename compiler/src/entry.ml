@@ -43,15 +43,12 @@ let frecursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     PluginCmdScope.
       { name; command = PluginCmd.Recursion; close = Recursion.close_recursion }
 
+let frecursion_extension ~(name : Names.Id.t) =   
+  Recursion.open_recursion_extension ~name;
+  PluginScopes.push
+    PluginCmdScope.
+      { name; command = PluginCmd.Recursion; close = Recursion.close_recursion }
+
 let frecursion_handler = Recursion.add_handler
 
-(* let close module_name =
-  let open Codegen.VernacBackend in
-  close_module ~module_name |> run |> ignore *)
 
-(* let test ident =
-  let _prefix, base = Naming.path_to_prefix ident in
-  let open Codegen.VernacBackend in
-  open_module ~module_name:base ~parameters:[] |> run |> ignore;
-  close base;
-  Printf.printf "Base: %s" (Names.Id.to_string base) *)

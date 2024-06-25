@@ -346,6 +346,14 @@ end = struct
             (result, (hd, elem) :: rest)
     in
     let rec go base derived =
+      let remove_duplicates lst =
+         let rec aux seen = function
+           | [] -> []
+           | hd :: tl ->
+               if List.mem hd seen then aux seen tl else hd :: aux (hd :: seen) tl
+         in
+         aux [] lst
+      in
       match base with
       | [] -> derived
       | (name, elem) :: base -> (
@@ -354,10 +362,14 @@ end = struct
           | Some (_, delem), derived -> (
               match (elem, delem) with
               (* TODO: fix recursive concatenation for recursor stuff *)
-              | ( LinkageElem.RecursorDefinition _,
+              | ( LinkageElem.RecursorDefinition rbase,
                   LinkageElem.RecursorDefinition rderived ) ->
-                  (name, LinkageElem.RecursorDefinition rderived)
-                  :: go base derived
+                  let handler_cases = rbase.handler_cases @ rderived.handler_cases in                   
+                  let handler_cases = remove_duplicates handler_cases in 
+                  (name, 
+                   LinkageElem.RecursorDefinition 
+                     { rderived  with handler_cases; })
+                    :: go base derived
               | ( LinkageElem.InductiveDefinition ibase,
                   LinkageElem.InductiveDefinition iderived ) ->
                   let elem =

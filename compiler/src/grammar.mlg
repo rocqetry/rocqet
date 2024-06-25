@@ -67,18 +67,11 @@ END
 VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "Family" ident(derived) "extends" reference(base) ] ->  { Entry.family_extends ~derived ~base }
 
-(* | [ "Test" reference(ident) ] -> { Entry.test ident } *)
-
 | [ "Family" ident(name) ] -> { Entry.family name }
 
 | [ "FInductive" mutind_defs(inductive_definition) ] -> { Entry.finductive inductive_definition }
 
 | [ "FEnd" ident(scope_name) ] -> { Entry.fend scope_name }
-
-(* | [ "FRecursor" induction_decls(ind_decls)
-      "using" reference_ip(rec_mod)
-      "by" ident(suffix) ] ->
-   { Entry.frecursor ~ind_decls ~rec_mod ~suffix:(Types.RecKind.of_name suffix) }*)
 
 | [ "FDefinition" ident(name) ":" llconstr_ip(body_type) ":=" llconstr_ip(body_expr)  ] ->
    { Entry.definition ~name ~body_type ~body_expr}
@@ -87,7 +80,10 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
                "about" reference_ip(inductive)
                "motive" llconstr_ip(motive)
                "by" ident(reckind)  ] ->  
-{ Entry.frecursion ~name ~inductive ~motive ~suffix:(Types.RecKind.of_name reckind) }
+   { Entry.frecursion ~name ~inductive ~motive ~suffix:(Types.RecKind.of_name reckind) }
+
+| [ "FRecursion" ident(name) ] -> 
+   { Entry.frecursion_extension ~name } 
 
 | [ "Case" ident(name) ":=" constr(handler) ] -> 
    {  Entry.frecursion_handler ~name ~handler }

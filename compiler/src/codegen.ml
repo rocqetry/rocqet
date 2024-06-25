@@ -963,7 +963,7 @@ let compile_handler_cases
           ~arguments
       in
       let* _ = include_module ~module_expr:applied_motive in
-      let* _ = include_handler_types provenance recursor in 
+      let* _ = include_handler_types provenance recursor in      
       let* _ = 
         handler_cases 
         |> List.map (fun (case_name, case) -> 
