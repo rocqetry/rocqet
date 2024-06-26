@@ -274,6 +274,8 @@ and Linkage : sig
 
   val concatenate_recursive_prefix :
     prefix:Names.Id.t -> derived:t -> base:t -> t
+  val pointwise_concatenate_recursive_prefix : 
+    prefix:Names.Id.t -> derived:t -> base:t -> t
 end = struct
   type t = {
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
@@ -360,15 +362,16 @@ end = struct
           match pick name derived with
           | None, _ -> (name, elem) :: go base derived
           | Some (_, delem), derived -> (
-              match (elem, delem) with
-              (* TODO: fix recursive concatenation for recursor stuff *)
+              match (elem, delem) with              
               | ( LinkageElem.RecursorDefinition rbase,
                   LinkageElem.RecursorDefinition rderived ) ->
                   let handler_cases = rbase.handler_cases @ rderived.handler_cases in                   
                   let handler_cases = remove_duplicates handler_cases in 
+                  let handler_types = rbase.handler_types @ rderived.handler_types in
+                  let handler_types = remove_duplicates handler_types in 
                   (name, 
                    LinkageElem.RecursorDefinition 
-                     { rderived  with handler_cases; })
+                     { rderived  with handler_cases; handler_types; })
                     :: go base derived
               | ( LinkageElem.InductiveDefinition ibase,
                   LinkageElem.InductiveDefinition iderived ) ->
@@ -442,13 +445,27 @@ end = struct
     in
     calculate_dependencies base.fields
 
-  let concatenate_recursive_prefix ~prefix ~(derived : Linkage.t)
+  let pointwise_concatenate_recursive_prefix ~prefix ~(derived : Linkage.t)
       ~(base : Linkage.t) =
+    let rec extract_prefix fields =
+      match fields with
+      | Bwd.Emp -> fields
+      | Bwd.Snoc (fields, (found_name, _)) 
+           when Names.Id.equal found_name prefix -> fields
+      | Bwd.Snoc (fields, _) -> extract_prefix fields
+    in
+    let derived = { derived with fields = extract_prefix derived.fields } in 
+    let base = { base with fields = extract_prefix base.fields } in 
+    concatenate_recursive ~derived ~base
+
+  let concatenate_recursive_prefix ~prefix ~(derived : Linkage.t)
+      ~(base : Linkage.t) =        
     let rec calculate_dependencies fields =
       match fields with
-      | Bwd.Emp -> derived
+      | Bwd.Emp ->         
+         concatenate_recursive ~base ~derived
       | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
-        ->
+        ->         
           concatenate_recursive ~base:{ base with fields } ~derived
       | Bwd.Snoc (fields, _) -> calculate_dependencies fields
     in

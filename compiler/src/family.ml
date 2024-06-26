@@ -72,11 +72,11 @@ let close_family () : unit =
       let linkage =
         match linkage.base with
         | None -> linkage
-        | Some base_linkage ->
+        | Some base_linkage ->           
             let base_linkage =
               Linkage.path_subtitution base_linkage
-                ~source:(Linkage.top_most_self_name base_linkage)
-                ~target:(Linkage.top_most_self_name linkage)
+                ~source:(Naming.self_version base_linkage.name)
+                ~target:(Naming.self_version linkage.name)
             in
             Linkage.concatenate_recursive ~base:base_linkage ~derived:linkage
       in

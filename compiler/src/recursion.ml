@@ -181,7 +181,16 @@ let open_recursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
   in
   Ctx.update recursion_ctx
 
+let remove_duplicates lst =
+  let rec aux seen = function
+    | [] -> []
+    | hd :: tl ->
+        if List.mem hd seen then aux seen tl else hd :: aux (hd :: seen) tl
+  in
+  aux [] lst
+
 let open_recursion_extension ~name = 
+  Inheritance.inherit_dependencies ~prefix:name;
   let context = Context.get () in
   let linkage = Context.family_linkage context in
   let further_elem =
@@ -198,6 +207,33 @@ let open_recursion_extension ~name =
         let handler_cases = handler_cases |> List.map (fun (name, expr) -> name, path_subtitution expr) in 
         let inductive = inductive |> VernacInductive.extract_inductive_name in 
         inductive, motives, handler_cases, suffix
+     | Some (further, RecursorDefinition { inductive; suffix; motives; handler_cases; _ }), None -> 
+        let source = Linkage.top_most_self_name further in 
+        let target = Linkage.top_most_self_name linkage in
+        let path_subtitution = Naming.replace_qualid_root ~source ~target in 
+        let motives = motives |> List.map path_subtitution in 
+        let handler_cases = handler_cases |> List.map (fun (name, expr) -> name, path_subtitution expr) in 
+        let inductive = inductive |> VernacInductive.extract_inductive_name in 
+        inductive, motives, handler_cases, suffix
+     | Some (further, RecursorDefinition frec), Some (base, RecursorDefinition _) -> 
+        let source = Linkage.top_most_self_name further in 
+        let target = Linkage.top_most_self_name linkage in
+        let path_subtitution = Naming.replace_qualid_root ~source ~target in 
+        let motives = frec.motives |> List.map path_subtitution in 
+        let handler_cases_further = 
+          frec.handler_cases 
+          |> List.map (fun (name, expr) -> name, path_subtitution expr) 
+        in 
+        let handler_cases_base = 
+          let source = Naming.self_version base.name in 
+          let target = Naming.self_version linkage.name in
+          let path_subtitution = Naming.replace_qualid_root ~source ~target in 
+          frec.handler_cases 
+          |> List.map (fun (name, expr) -> name, path_subtitution expr) 
+        in        
+        let handler_cases = remove_duplicates (handler_cases_base @ handler_cases_further) in 
+        let inductive = frec.inductive |> VernacInductive.extract_inductive_name in 
+        inductive, motives, handler_cases, frec.suffix
      | _ -> Errors.fail ~info:"Not yet implemented"
   in 
   let module_name =

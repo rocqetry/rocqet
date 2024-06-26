@@ -48,14 +48,14 @@ let inherit_dependencies ~prefix =
             ~target:(Naming.self_version linkage.name)
         in
         let base =
-          Linkage.concatenate_recursive_prefix ~prefix ~base:further
+          Linkage.pointwise_concatenate_recursive_prefix ~prefix ~base:further
             ~derived:base
         in
-        let base = { base with name = further.name } in
+        let base = { base with name = further.name } in        
         let base = Codegen.recompute_linkage base in
         let linkage =
           Linkage.concatenate_recursive_prefix ~prefix ~derived:linkage ~base
-        in
+        in        
         Codegen.recompute_linkage linkage
   in
   Context.replace ~linkage

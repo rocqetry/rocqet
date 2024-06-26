@@ -968,8 +968,11 @@ let compile_handler_cases
         handler_cases 
         |> List.map (fun (case_name, case) -> 
                match List.assoc_opt case_name handler_types with 
-               | None -> 
-                  Errors.fail ~info:(Printf.sprintf "Unbound constructor %s" (Names.Id.to_string name))
+               | None ->                   
+                  Errors.fail 
+                    ~info:(Printf.sprintf 
+                             "Couldn't find handler type for %s" 
+                             (Names.Id.to_string case_name))
                | Some ty -> 
                   let name =
                      Nameops.add_prefix (Names.Id.to_string name) case_name

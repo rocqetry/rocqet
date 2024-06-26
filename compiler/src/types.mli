@@ -131,6 +131,8 @@ and Linkage : sig
 
   val concatenate_recursive_prefix :
     prefix:Names.Id.t -> derived:t -> base:t -> t
+  val pointwise_concatenate_recursive_prefix :
+    prefix:Names.Id.t -> derived:t -> base:t -> t
 end
 
 and LinkageCtx : sig
