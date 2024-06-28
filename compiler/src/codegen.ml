@@ -1137,7 +1137,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
           compile_linkage_context ~field_name:name context
         in
         let inductive_name = VernacInductive.extract_inductive_name inductive in
-        let _inductive, compiled_recursors, provenance =
+        let inductive, compiled_recursors, provenance =
           Env.Context.lookup_inductive_for_recursion
             ~name:(Libnames.qualid_of_ident inductive_name)
             context
