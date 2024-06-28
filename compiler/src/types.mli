@@ -93,10 +93,10 @@ module rec LinkageElem : sig
         compiled_impl : CompiledModuleType.t;
       }
     | RecursorDefinition of {
-        names : Names.Id.t list;        
+        names : Names.Id.t list;
         motives : Constrexpr.constr_expr list;
         handler_types : (Names.Id.t * Constrexpr.constr_expr) list;
-        handler_cases : (Names.Id.t * Constrexpr.constr_expr) list;        
+        handler_cases : (Names.Id.t * Constrexpr.constr_expr) list;
         inductive : VernacInductive.t;
         recursor_module : Libnames.qualid;
         motive_module : CompiledModule.t;
@@ -131,6 +131,7 @@ and Linkage : sig
 
   val concatenate_recursive_prefix :
     prefix:Names.Id.t -> derived:t -> base:t -> t
+
   val pointwise_concatenate_recursive_prefix :
     prefix:Names.Id.t -> derived:t -> base:t -> t
 end

@@ -7,11 +7,12 @@ let add_definition ~name ?body_type body_expr =
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:name context
   in
-  let body_expr = Resolver.resolve_constrexpr ~context ~expression:body_expr in 
-  let body_type = 
-    body_type 
-    |> Option.map (fun expression -> Resolver.resolve_constrexpr ~context ~expression) 
-  in 
+  let body_expr = Resolver.resolve_constrexpr ~context ~expression:body_expr in
+  let body_type =
+    body_type
+    |> Option.map (fun expression ->
+           Resolver.resolve_constrexpr ~context ~expression)
+  in
   let compiled_impl =
     Codegen.compile_definition ~name ?body_type ~body_expr parameters
   in

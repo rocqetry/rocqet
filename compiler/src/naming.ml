@@ -3,9 +3,12 @@
 
 let motive_of name = Nameops.add_prefix "__motiveT" name
 let internal_name name = Nameops.add_prefix "__internal_" name
-let recursor_type ~inductive suffix =   
-   Nameops.add_prefix "__recursor_type_" (Nameops.add_suffix inductive suffix)
-let handler_type name =  Nameops.add_prefix "__handler_type_" name
+let recursor_type ~inductive suffix =
+  Nameops.add_prefix "__recursor_type_" (Nameops.add_suffix inductive suffix)
+let handler_type name = Nameops.add_prefix "__handler_type_" name
+let handler_name ~recursor ~case = 
+  Names.Id.to_string recursor ^ Names.Id.to_string case
+  |> Names.Id.of_string
 
 let point_qualid (f : Names.Id.t) (path : Libnames.qualid) : Libnames.qualid =
   let path, base = Libnames.repr_qualid path in
@@ -18,7 +21,7 @@ let _point_optionqualid (f : Names.Id.t) (path : Libnames.qualid option) :
   | None -> Libnames.qualid_of_ident f
   | Some x -> point_qualid f x
 
-let _qualid_point_ (path : Libnames.qualid option) (f : Names.Id.t) :
+let qualid_point (path : Libnames.qualid option) (f : Names.Id.t) :
     Libnames.qualid =
   match path with
   | Some path ->

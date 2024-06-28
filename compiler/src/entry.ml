@@ -30,11 +30,11 @@ let family_extends ~derived ~base =
       }
 
 (* let frecursor ~ind_decls ~rec_mod ~suffix =
-  PluginScopes.ensure_in_scope ~scope:PluginCmd.Family;
-  Recursion.add_recursor ~ind_decls ~rec_mod ~suffix*)
+   PluginScopes.ensure_in_scope ~scope:PluginCmd.Family;
+   Recursion.add_recursor ~ind_decls ~rec_mod ~suffix*)
 
-let definition ~name ~body_type ~body_expr =
-  Definition.add_definition ~name ~body_type body_expr
+let definition ~name ?body_type body_expr =
+  Definition.add_definition ~name ?body_type body_expr
 
 let frecursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t) =
@@ -43,12 +43,10 @@ let frecursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     PluginCmdScope.
       { name; command = PluginCmd.Recursion; close = Recursion.close_recursion }
 
-let frecursion_extension ~(name : Names.Id.t) =   
+let frecursion_extension ~(name : Names.Id.t) =
   Recursion.open_recursion_extension ~name;
   PluginScopes.push
     PluginCmdScope.
       { name; command = PluginCmd.Recursion; close = Recursion.close_recursion }
 
 let frecursion_handler = Recursion.add_handler
-
-

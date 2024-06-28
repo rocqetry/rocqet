@@ -22,8 +22,8 @@ val fend : Names.Id.t -> unit
 (* Handle a `FDefinition ... : ... = ...` command *)
 val definition :
   name:Names.Id.t ->
-  body_type:Constrexpr.constr_expr ->
-  body_expr:Constrexpr.constr_expr ->
+  ?body_type:Constrexpr.constr_expr ->
+  Constrexpr.constr_expr ->
   unit
 
 (* Handle an `FRecursion ...` *)
@@ -35,7 +35,7 @@ val frecursion :
   unit
 
 (* Handle an `FRecursion ...` extension *)
-val frecursion_extension : name:Names.Id.t -> unit 
+val frecursion_extension : name:Names.Id.t -> unit
 
 (* Handle a `Case ... := ...` *)
 val frecursion_handler :

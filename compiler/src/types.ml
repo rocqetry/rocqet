@@ -274,7 +274,8 @@ and Linkage : sig
 
   val concatenate_recursive_prefix :
     prefix:Names.Id.t -> derived:t -> base:t -> t
-  val pointwise_concatenate_recursive_prefix : 
+
+  val pointwise_concatenate_recursive_prefix :
     prefix:Names.Id.t -> derived:t -> base:t -> t
 end = struct
   type t = {
@@ -319,12 +320,22 @@ end = struct
                   VernacInductive.path_subtitution definition.inductive ~source
                     ~target;
               }
-        | LinkageElem.FieldDefinition field -> FieldDefinition field
+        | LinkageElem.FieldDefinition field -> 
+           let body_expr = 
+             Naming.replace_qualid_root 
+               ~source ~target
+               field.body_expr 
+           in
+           let body_type = 
+             field.body_type 
+             |> Option.map (Naming.replace_qualid_root ~source ~target)
+           in 
+           FieldDefinition { field with body_expr; body_type }
         | LinkageElem.RecursorDefinition definition ->
-            let motives = 
-              definition.motives 
+            let motives =
+              definition.motives
               |> List.map (Naming.replace_qualid_root ~source ~target)
-            in 
+            in
             RecursorDefinition { definition with motives }
         | LinkageElem.PrincipleDefinition principle ->
             LinkageElem.PrincipleDefinition principle
@@ -349,12 +360,13 @@ end = struct
     in
     let rec go base derived =
       let remove_duplicates lst =
-         let rec aux seen = function
-           | [] -> []
-           | hd :: tl ->
-               if List.mem hd seen then aux seen tl else hd :: aux (hd :: seen) tl
-         in
-         aux [] lst
+        let rec aux seen = function
+          | [] -> []
+          | hd :: tl ->
+              if List.mem hd seen then aux seen tl
+              else hd :: aux (hd :: seen) tl
+        in
+        aux [] lst
       in
       match base with
       | [] -> derived
@@ -362,17 +374,21 @@ end = struct
           match pick name derived with
           | None, _ -> (name, elem) :: go base derived
           | Some (_, delem), derived -> (
-              match (elem, delem) with              
+              match (elem, delem) with
               | ( LinkageElem.RecursorDefinition rbase,
                   LinkageElem.RecursorDefinition rderived ) ->
-                  let handler_cases = rbase.handler_cases @ rderived.handler_cases in                   
-                  let handler_cases = remove_duplicates handler_cases in 
-                  let handler_types = rbase.handler_types @ rderived.handler_types in
-                  let handler_types = remove_duplicates handler_types in 
-                  (name, 
-                   LinkageElem.RecursorDefinition 
-                     { rderived  with handler_cases; handler_types; })
-                    :: go base derived
+                  let handler_cases =
+                    rbase.handler_cases @ rderived.handler_cases
+                  in
+                  let handler_cases = remove_duplicates handler_cases in
+                  let handler_types =
+                    rbase.handler_types @ rderived.handler_types
+                  in
+                  let handler_types = remove_duplicates handler_types in
+                  ( name,
+                    LinkageElem.RecursorDefinition
+                      { rderived with handler_cases; handler_types } )
+                  :: go base derived
               | ( LinkageElem.InductiveDefinition ibase,
                   LinkageElem.InductiveDefinition iderived ) ->
                   let elem =
@@ -398,7 +414,7 @@ end = struct
               | FieldDefinition _, FieldDefinition _ ->
                   Errors.fail ~info:"Field name conflict"
               | PrincipleDefinition _, PrincipleDefinition p ->
-                 (name, PrincipleDefinition p) :: go base derived
+                  (name, PrincipleDefinition p) :: go base derived
               | _ -> Errors.fail ~info:"Wrong concatenation arguments"))
     in
     let fields = go (Bwd.to_list base.fields) (Bwd.to_list derived.fields) in
@@ -437,35 +453,35 @@ end = struct
   let concatenate_prefix ~prefix ~(derived : Linkage.t) ~(base : Linkage.t) =
     let rec calculate_dependencies fields =
       match fields with
-      | Bwd.Emp -> derived
+      | Bwd.Emp -> concatenate ~derived ~base
       | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
         ->
           concatenate ~base:{ base with fields } ~derived
       | Bwd.Snoc (fields, _) -> calculate_dependencies fields
     in
     calculate_dependencies base.fields
-
+  
   let pointwise_concatenate_recursive_prefix ~prefix ~(derived : Linkage.t)
       ~(base : Linkage.t) =
     let rec extract_prefix fields =
       match fields with
       | Bwd.Emp -> fields
-      | Bwd.Snoc (fields, (found_name, _)) 
-           when Names.Id.equal found_name prefix -> fields
+      | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
+        ->
+          fields
       | Bwd.Snoc (fields, _) -> extract_prefix fields
     in
-    let derived = { derived with fields = extract_prefix derived.fields } in 
-    let base = { base with fields = extract_prefix base.fields } in 
+    let derived = { derived with fields = extract_prefix derived.fields } in
+    let base = { base with fields = extract_prefix base.fields } in
     concatenate_recursive ~derived ~base
 
   let concatenate_recursive_prefix ~prefix ~(derived : Linkage.t)
-      ~(base : Linkage.t) =        
+      ~(base : Linkage.t) =
     let rec calculate_dependencies fields =
       match fields with
-      | Bwd.Emp ->         
-         concatenate_recursive ~base ~derived
+      | Bwd.Emp -> concatenate_recursive ~base ~derived
       | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
-        ->         
+        ->
           concatenate_recursive ~base:{ base with fields } ~derived
       | Bwd.Snoc (fields, _) -> calculate_dependencies fields
     in

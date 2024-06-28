@@ -72,7 +72,7 @@ let close_family () : unit =
       let linkage =
         match linkage.base with
         | None -> linkage
-        | Some base_linkage ->           
+        | Some base_linkage ->
             let base_linkage =
               Linkage.path_subtitution base_linkage
                 ~source:(Naming.self_version base_linkage.name)
@@ -84,9 +84,7 @@ let close_family () : unit =
       Context.destructive_update None;
 
       (* Note that we only want to do this when late binding of family names
-         happens in the linkage *)
-
-      (* TODO: *)
+         happens in the linkage *)      
       let linkage = Codegen.recompute_linkage linkage in
       Codegen.compile_linkage linkage |> ignore;
       Linkages.add linkage

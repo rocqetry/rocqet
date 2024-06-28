@@ -21,11 +21,12 @@ module Context : sig
 
   val lookup_linkage_elem :
     LinkageCtx.t -> Libnames.qualid -> (LinkageElem.t * Linkage.t) option
-  val lookup_inductive_for_recursion : 
-    name:Libnames.qualid -> 
-    LinkageCtx.t -> 
+
+  val lookup_inductive_for_recursion :
+    name:Libnames.qualid ->
+    LinkageCtx.t ->
     VernacInductive.t * CompiledRecursors.t * Linkage.t
-  
+
   val family_name : LinkageCtx.t -> Names.Id.t
   val family_linkage : LinkageCtx.t -> Linkage.t
   val add_field : name:Names.Id.t -> elem:LinkageElem.t -> unit

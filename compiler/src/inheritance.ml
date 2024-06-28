@@ -1,6 +1,7 @@
 open Env
 open Types
 
+
 (* This updates the context so you must call Context.get again after using this *)
 let inherit_dependencies ~prefix =
   let context = Context.get () in
@@ -47,15 +48,25 @@ let inherit_dependencies ~prefix =
             ~source:(Naming.self_version base.name)
             ~target:(Naming.self_version linkage.name)
         in
+        (* base.fields |> Bwd.Bwd.iter (fun (n, _) -> Printf.printf "B: %s\n" (Names.Id.to_string n)); *)
+        (* let base =
+          Linkage.pointwise_concatenate_recursive_prefix 
+            ~prefix 
+            ~base:further
+            ~derived:base
+        in*)
         let base =
-          Linkage.pointwise_concatenate_recursive_prefix ~prefix ~base:further
+          Linkage.concatenate_recursive             
+            ~base:further
             ~derived:base
         in
-        let base = { base with name = further.name } in        
+        (* base.fields |> Bwd.Bwd.iter (fun (n, _) -> Printf.printf "A: %s\n" (Names.Id.to_string n));
+        failwith "" |> ignore;*)
+        let base = { base with name = further.name } in
         let base = Codegen.recompute_linkage base in
         let linkage =
           Linkage.concatenate_recursive_prefix ~prefix ~derived:linkage ~base
-        in        
+        in
         Codegen.recompute_linkage linkage
   in
   Context.replace ~linkage

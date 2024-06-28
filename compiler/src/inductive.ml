@@ -103,9 +103,7 @@ let add_inductive_definition inductive =
       }
   in
   let name = Nameops.add_suffix inductive_name "IndPrinciple" in
-  Context.add_field
-    ~name
-    ~elem:principle;
+  Context.add_field ~name ~elem:principle;
   let recursors =
     Codegen.compile_recursors ~ind_def:inductive ~recursors ~ctx:parameters
       ~family_name

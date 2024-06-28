@@ -132,8 +132,8 @@ module Context = struct
           | Some (elem, linkage) -> Some (elem, linkage))
     in
     go context
-  
-  let lookup_inductive_for_recursion ~name context = 
+
+  let lookup_inductive_for_recursion ~name context =
     match lookup_linkage_elem context name with
     | Some
         ( LinkageElem.InductiveDefinition { inductive; compiled_recursors; _ },
