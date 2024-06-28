@@ -15,22 +15,20 @@ open Bwd
 let rec linear_ctx_mapping context =
   let f (linkage : Linkage.t) (name, elem) =
     match elem with
-    | LinkageElem.RecursorDefinition { names; handler_cases; _ } ->        
-       let recursor = names |> List.hd in 
-       handler_cases 
-       |> List.map fst 
-       |> List.map (fun case -> Naming.handler_name ~recursor ~case)
-       |> List.map (fun name -> (name, Naming.self_version linkage.name))
+    | LinkageElem.RecursorDefinition { names; handler_cases; _ } ->
+        let recursor = names |> List.hd in
+        handler_cases |> List.map fst
+        |> List.map (fun case -> Naming.handler_name ~recursor ~case)
+        |> List.map (fun name -> (name, Naming.self_version linkage.name))
     | LinkageElem.InductiveDefinition { inductive; _ } ->
         let names =
-          inductive 
-          |> VernacInductive.extract_all_names_with_type
+          inductive |> VernacInductive.extract_all_names_with_type
           |> List.concat_map (fun (_, constrs) ->
                  constrs
                  |> List.map (fun (name, _) ->
                         (name, Naming.self_version linkage.name)))
         in
-        (name, Naming.self_version linkage.name) :: names    
+        (name, Naming.self_version linkage.name) :: names
     | _ -> [ (name, Naming.self_version linkage.name) ]
   in
   match context with

@@ -81,11 +81,9 @@ let _compile_computational_recursor_behaviour elem provenance parameters =
         in
         constructors |> List.map fst
       in
-      let recursor =  names |> List.hd in 
+      let recursor = names |> List.hd in
       let name_axiom_pairs : (Names.Id.t * Constrexpr.constr_expr) list =
-        Termutils.generate_computational_axioms 
-          ~provenance 
-          ~constructors 
+        Termutils.generate_computational_axioms ~provenance ~constructors
           ~recursor
       in
       let open Codegen.VernacBackend in
@@ -98,14 +96,15 @@ let _compile_computational_recursor_behaviour elem provenance parameters =
                flatmap (List.map for_each_pair name_axiom_pairs))
       in
       let compiled_implementation =
-         run @@
-         define_module ~module_name:(Naming.fresh_name ~prefix:module_name) ~parameters         
-         ~body:(fun _ctx -> 
-           let for_each_pair (name, ty) =
-             thunk (construct_term_using_proof ~name ~proof:auto_tactic ~ty) in 
-           flatmap (List.map for_each_pair name_axiom_pairs))
-      in 
-      compiled_signature, compiled_implementation
+        run
+        @@ define_module ~module_name:(Naming.fresh_name ~prefix:module_name)
+             ~parameters ~body:(fun _ctx ->
+               let for_each_pair (name, ty) =
+                 thunk (construct_term_using_proof ~name ~proof:auto_tactic ~ty)
+               in
+               flatmap (List.map for_each_pair name_axiom_pairs))
+      in
+      (compiled_signature, compiled_implementation)
   | _ -> Errors.fail ~info:"Expected a recursor definition"
 
 let close_recursion () =
@@ -129,22 +128,16 @@ let close_recursion () =
   Typechecking.check_exhaustive ~name ~inductive ~handlers:handler_cases;
   module_name |> ignore;
   let module_name = M.end_module () in
-  let handlers = handler_types |> List.map fst in 
+  let handlers = handler_types |> List.map fst in
   let compiled_signature =
-    Codegen.compile_recursor_signature 
-      ~provenance
-      ~handlers
-      ~names:[ name ] 
-      ~motive_module:motive
-      ~handler_cases:module_name
-      ~ctx:parameters 
+    Codegen.compile_recursor_signature ~provenance ~handlers ~names:[ name ]
+      ~motive_module:motive ~handler_cases:module_name ~ctx:parameters
       ~family_name:name
   in
   let compiled_impl =
     Codegen.compile_recursor_implementation ~inductive ~provenance
-      ~recursor_name:name
-      ~handlers
-      ~suffix ~ctx:parameters ~handler_cases:module_name
+      ~recursor_name:name ~handlers ~suffix ~ctx:parameters
+      ~handler_cases:module_name
   in
   let elem =
     LinkageElem.RecursorDefinition

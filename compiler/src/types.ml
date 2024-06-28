@@ -320,17 +320,15 @@ end = struct
                   VernacInductive.path_subtitution definition.inductive ~source
                     ~target;
               }
-        | LinkageElem.FieldDefinition field -> 
-           let body_expr = 
-             Naming.replace_qualid_root 
-               ~source ~target
-               field.body_expr 
-           in
-           let body_type = 
-             field.body_type 
-             |> Option.map (Naming.replace_qualid_root ~source ~target)
-           in 
-           FieldDefinition { field with body_expr; body_type }
+        | LinkageElem.FieldDefinition field ->
+            let body_expr =
+              Naming.replace_qualid_root ~source ~target field.body_expr
+            in
+            let body_type =
+              field.body_type
+              |> Option.map (Naming.replace_qualid_root ~source ~target)
+            in
+            FieldDefinition { field with body_expr; body_type }
         | LinkageElem.RecursorDefinition definition ->
             let motives =
               definition.motives
@@ -460,7 +458,7 @@ end = struct
       | Bwd.Snoc (fields, _) -> calculate_dependencies fields
     in
     calculate_dependencies base.fields
-  
+
   let pointwise_concatenate_recursive_prefix ~prefix ~(derived : Linkage.t)
       ~(base : Linkage.t) =
     let rec extract_prefix fields =

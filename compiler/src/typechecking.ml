@@ -1,27 +1,27 @@
 open Env
 open Types
+
 (* Exhaustiveness checking *)
-let check_exhaustive ~name ~inductive ~handlers = 
+let check_exhaustive ~name ~inductive ~handlers =
   let constructors =
-        let _, constructors =
-          inductive |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs
-        in
-        constructors |> List.map fst
+    let _, constructors =
+      inductive |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs
+    in
+    constructors |> List.map fst
   in
-  constructors 
-  |> List.iter (fun constructor -> 
-       match List.assoc_opt constructor handlers with 
-       | Some _ -> ()
-       | None -> 
-          let info = 
-            Printf.sprintf 
-              "The pattern matching in %s is not exhaustive. \
-               Here is an example of a case that has no handler: %s"
-               (Names.Id.to_string name) (Names.Id.to_string constructor)
-          in
-          Errors.fail ~info)
-
-
+  constructors
+  |> List.iter (fun constructor ->
+         match List.assoc_opt constructor handlers with
+         | Some _ -> ()
+         | None ->
+             let info =
+               Printf.sprintf
+                 "The pattern matching in %s is not exhaustive. Here is an \
+                  example of a case that has no handler: %s"
+                 (Names.Id.to_string name)
+                 (Names.Id.to_string constructor)
+             in
+             Errors.fail ~info)
 
 (* "Typechecking" for families
 

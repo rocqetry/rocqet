@@ -160,15 +160,17 @@ module Context = struct
 
   (* Add the field to the current linkage *)
   let add_field ~name ~elem =
-    let context = get () in 
-    let _ = 
-      match lookup_linkage_elem context (Libnames.qualid_of_ident name) with 
-      | Some _ -> 
-         Errors.fail 
-           ~info:"This element has already been defined or it has been previously inherited"
+    let context = get () in
+    let _ =
+      match lookup_linkage_elem context (Libnames.qualid_of_ident name) with
+      | Some _ ->
+          Errors.fail
+            ~info:
+              "This element has already been defined or it has been previously \
+               inherited"
       | _ -> ()
-    in 
-    match context with    
+    in
+    match context with
     | LinkageCtx.Toplevel linkage ->
         let fields = linkage.fields <: (name, elem) in
         let ctx = LinkageCtx.Toplevel { linkage with fields } in

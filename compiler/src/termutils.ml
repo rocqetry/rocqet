@@ -21,101 +21,124 @@ let reflect_checked_term trm =
   Constrextern.extern_constr env sigma (EConstr.of_constr trm)
 
 (* Call by name reduction *)
-let cbn_type_check t : Constr.t =   
-  let env = Global.env() in 
-  let sigma = Evd.from_env env in 
-  let (sigma, internalized) = Constrintern.interp_constr_evars env sigma t in    
-  let normalized_intern = Cbn.norm_cbn RedFlags.allnolet env sigma internalized in
-  let normalized_intern = EConstr.to_constr sigma normalized_intern in   
+let cbn_type_check t : Constr.t =
+  let env = Global.env () in
+  let sigma = Evd.from_env env in
+  let sigma, internalized = Constrintern.interp_constr_evars env sigma t in
+  let normalized_intern =
+    Cbn.norm_cbn RedFlags.allnolet env sigma internalized
+  in
+  let normalized_intern = EConstr.to_constr sigma normalized_intern in
   normalized_intern
 
-type local_binder_expr_assume = 
+type local_binder_expr_assume =
   Names.lname list * Constrexpr.binder_kind * Constrexpr.constr_expr
 
 (* Verbatim from FPOP *)
-let collect_argument_and_ret_of_type 
-      (f : Constrexpr.constr_expr) 
-    : (local_binder_expr_assume * Constrexpr.constr_expr) list * 
-      Constrexpr.constr_expr =
-    let open Constrexpr in 
-    let open Constrexpr_ops in 
-    let isDepProd {CAst.v = t; _} = match t with | CProdN _ -> true | _ -> false in
-    let isArrow {CAst.v = t; _} = match t with | CNotation (_, (_, "_ -> _"), _) -> true | _ -> false in
-    let destDepProd {CAst.v = t; _} = 
-      match t with 
-      | CProdN (al, b) -> 
-         (* assert_cerror (fun _ ->List.length al = 1); *) 
-         (al, b)
-      | _ -> Errors.fail ~info:"Expected a CProdN" 
-    in 
-    let destArrow {CAst.v = t; _} = 
-      match t with 
-      | CNotation (_ ,(_, "_ -> _"), ([domain; codomain], _, _, _)) -> (domain, codomain) 
-      | _ -> Errors.fail ~info:"Expected a CNotation" 
-    in
-    let give_name ({CAst.v = n; _} : Names.lname) : Names.Id.t =
-      match n with 
-      | Names.Anonymous -> Naming.fresh_name ~prefix:"arg"
-      | Names.Name n -> n 
-    in 
-    let local_binders_to_list_of_local_binder 
-          (e : local_binder_expr) : (local_binder_expr_assume * Constrexpr.constr_expr) list  = 
-      match e with 
-      | CLocalAssum (l, k, b) -> 
-        List.map (fun x -> 
-                    let x = give_name x in 
-                      ([CAst.make (Names.Name x)], k, b), 
-                      mkRefC (Libnames.qualid_of_ident x) ) l  
-      | _ -> Errors.fail ~info:"Expected a CLocalAssum" 
-    in
-    let ret : Constrexpr.constr_expr option ref = ref None in 
-    let rec collect_argument (f : Constrexpr.constr_expr) : (((local_binder_expr_assume) * Constrexpr.constr_expr) list) =
-      match f with 
-      | f when (isDepProd f) ->
-        let parameters, body = destDepProd f in 
-        let all_parameters = List.map local_binders_to_list_of_local_binder parameters in 
-        let all_parameters = List.flatten all_parameters in 
-        all_parameters @ (collect_argument body)
-      | f when (isArrow f) -> 
-        let domain, codomain = destArrow f in 
+let collect_argument_and_ret_of_type (f : Constrexpr.constr_expr) :
+    (local_binder_expr_assume * Constrexpr.constr_expr) list
+    * Constrexpr.constr_expr =
+  let open Constrexpr in
+  let open Constrexpr_ops in
+  let isDepProd { CAst.v = t; _ } =
+    match t with CProdN _ -> true | _ -> false
+  in
+  let isArrow { CAst.v = t; _ } =
+    match t with CNotation (_, (_, "_ -> _"), _) -> true | _ -> false
+  in
+  let destDepProd { CAst.v = t; _ } =
+    match t with
+    | CProdN (al, b) ->
+        (* assert_cerror (fun _ ->List.length al = 1); *)
+        (al, b)
+    | _ -> Errors.fail ~info:"Expected a CProdN"
+  in
+  let destArrow { CAst.v = t; _ } =
+    match t with
+    | CNotation (_, (_, "_ -> _"), ([ domain; codomain ], _, _, _)) ->
+        (domain, codomain)
+    | _ -> Errors.fail ~info:"Expected a CNotation"
+  in
+  let give_name ({ CAst.v = n; _ } : Names.lname) : Names.Id.t =
+    match n with
+    | Names.Anonymous -> Naming.fresh_name ~prefix:"arg"
+    | Names.Name n -> n
+  in
+  let local_binders_to_list_of_local_binder (e : local_binder_expr) :
+      (local_binder_expr_assume * Constrexpr.constr_expr) list =
+    match e with
+    | CLocalAssum (l, k, b) ->
+        List.map
+          (fun x ->
+            let x = give_name x in
+            ( ([ CAst.make (Names.Name x) ], k, b),
+              mkRefC (Libnames.qualid_of_ident x) ))
+          l
+    | _ -> Errors.fail ~info:"Expected a CLocalAssum"
+  in
+  let ret : Constrexpr.constr_expr option ref = ref None in
+  let rec collect_argument (f : Constrexpr.constr_expr) :
+      (local_binder_expr_assume * Constrexpr.constr_expr) list =
+    match f with
+    | f when isDepProd f ->
+        let parameters, body = destDepProd f in
+        let all_parameters =
+          List.map local_binders_to_list_of_local_binder parameters
+        in
+        let all_parameters = List.flatten all_parameters in
+        all_parameters @ collect_argument body
+    | f when isArrow f ->
+        let domain, codomain = destArrow f in
         let newname = Naming.fresh_name ~prefix:"arg" in
-        let binder = (([CAst.make (Names.Name newname)], Default Glob_term.Explicit, domain)) in 
-        (binder, mkRefC (Libnames.qualid_of_ident newname))::collect_argument codomain 
-      | x -> 
-        ret := (Some x);
+        let binder =
+          ( [ CAst.make (Names.Name newname) ],
+            Default Glob_term.Explicit,
+            domain )
+        in
+        (binder, mkRefC (Libnames.qualid_of_ident newname))
+        :: collect_argument codomain
+    | x ->
+        ret := Some x;
         []
-      in 
-    let res = collect_argument f in 
-    match !ret with 
-    | None -> Errors.fail ~info:"Expected Some"
-    | Some res2 -> (res, res2)
+  in
+  let res = collect_argument f in
+  match !ret with
+  | None -> Errors.fail ~info:"Expected Some"
+  | Some res2 -> (res, res2)
 
-
-(* a functional r will be lead to 
-    forall ..., (r ..) = (r ..)
-    and do type check
-  then we return 
-  [forall ...] and [r ..]
+(* a functional r will be lead to
+     forall ..., (r ..) = (r ..)
+     and do type check
+   then we return
+   [forall ...] and [r ..]
 *)
-let extract_variables_and_apply (r : Constrexpr.constr_expr) 
-     : (local_binder_expr_assume * Constrexpr.constr_expr) list * 
-       Constrexpr.constr_expr =
+let extract_variables_and_apply (r : Constrexpr.constr_expr) :
+    (local_binder_expr_assume * Constrexpr.constr_expr) list
+    * Constrexpr.constr_expr =
   (* let open Constrexpr in  *)
-  let open Constrexpr_ops in 
-  let typeofr = reflect_checked_term @@ checked_type_of r in 
+  let open Constrexpr_ops in
+  let typeofr = reflect_checked_term @@ checked_type_of r in
   let all_binders_and_args = fst @@ collect_argument_and_ret_of_type typeofr in
-  let all_args = List.map snd all_binders_and_args in 
+  let all_args = List.map snd all_binders_and_args in
   (* let eq_cstr = Coqlib.lib_ref "core.eq.refl" in *)
-  let fully_applied_r = mkAppC (r, all_args) in 
-  let _ = 
+  let fully_applied_r = mkAppC (r, all_args) in
+  let _ =
     (* sanity type checking *)
     (* Now we construct (r ...) = (r ...) and wrap with universal quanitifer *)
-    let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in 
-    let id_on_fully_applied_r =  mkAppC (eq_cstr, [fully_applied_r;fully_applied_r]) in  
-    let all_binders = List.map fst all_binders_and_args in 
-    let res = List.fold_right (fun (a, b, c) body -> mkProdC (a,b,c, body)) all_binders id_on_fully_applied_r in 
-    checked_type_of res 
-  in 
+    let eq_cstr =
+      mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq"
+    in
+    let id_on_fully_applied_r =
+      mkAppC (eq_cstr, [ fully_applied_r; fully_applied_r ])
+    in
+    let all_binders = List.map fst all_binders_and_args in
+    let res =
+      List.fold_right
+        (fun (a, b, c) body -> mkProdC (a, b, c, body))
+        all_binders id_on_fully_applied_r
+    in
+    checked_type_of res
+  in
   (all_binders_and_args, fully_applied_r)
 
 let ident_to_module_expr ident = CAst.make (Constrexpr.CMident ident)
@@ -127,72 +150,70 @@ let apply_module ~(functor_expr : Constrexpr.module_ast)
     (fun op x -> CAst.make (CMapply (op, x)))
     functor_expr arguments
 
-let calculate_computational_axiom_for_constructor 
-      ~recursor_name
-      ~recursor_path 
-      ~constructor_name 
-      ~constructor_path = 
-  let open Constrexpr_ops in 
-  let constructor_params, fully_applied_constr = 
-    extract_variables_and_apply (mkRefC constructor_path) 
-  in 
-  let recursor_params, _ = 
-    recursor_path
-    |> mkRefC
-    |> checked_type_of
-    |> reflect_checked_term
+let calculate_computational_axiom_for_constructor ~recursor_name ~recursor_path
+    ~constructor_name ~constructor_path =
+  let open Constrexpr_ops in
+  let constructor_params, fully_applied_constr =
+    extract_variables_and_apply (mkRefC constructor_path)
+  in
+  let recursor_params, _ =
+    recursor_path |> mkRefC |> checked_type_of |> reflect_checked_term
     |> collect_argument_and_ret_of_type
   in
-  let recursor_parameter_wo_first = List.tl recursor_params in 
+  let recursor_parameter_wo_first = List.tl recursor_params in
   let recursor_remained_arguments = List.map snd recursor_parameter_wo_first in
-  let params = 
-    constructor_params @ recursor_parameter_wo_first 
-  in 
-  let recursor_applied = mkAppC ((mkRefC recursor_path),fully_applied_constr::recursor_remained_arguments) in  
-  let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in 
-  let id_on_fully_applied_r =  mkAppC (eq_cstr, [recursor_applied;recursor_applied]) in
-   let closed_recursor_applied = 
-    List.fold_right (fun (a, b, c) body -> mkProdC (a,b,c, body)) (List.map fst params) id_on_fully_applied_r  
-  in 
+  let params = constructor_params @ recursor_parameter_wo_first in
+  let recursor_applied =
+    mkAppC
+      (mkRefC recursor_path, fully_applied_constr :: recursor_remained_arguments)
+  in
+  let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in
+  let id_on_fully_applied_r =
+    mkAppC (eq_cstr, [ recursor_applied; recursor_applied ])
+  in
+  let closed_recursor_applied =
+    List.fold_right
+      (fun (a, b, c) body -> mkProdC (a, b, c, body))
+      (List.map fst params) id_on_fully_applied_r
+  in
   (* The final axiom is an equation *)
-  let equation = 
-    let reflected = 
-      closed_recursor_applied 
-      |> cbn_type_check 
-      |> reflect_checked_term 
-    in     
-    let _, body = collect_argument_and_ret_of_type reflected in   
-    let destEq {CAst.v = t; _} = 
-      match t with 
-      | Constrexpr.CNotation (_ ,(_, "_ = _"), ([lhs; rhs], _, _, _)) -> (lhs, rhs) 
+  let equation =
+    let reflected =
+      closed_recursor_applied |> cbn_type_check |> reflect_checked_term
+    in
+    let _, body = collect_argument_and_ret_of_type reflected in
+    let destEq { CAst.v = t; _ } =
+      match t with
+      | Constrexpr.CNotation (_, (_, "_ = _"), ([ lhs; rhs ], _, _, _)) ->
+          (lhs, rhs)
       | _ -> Errors.fail ~info:"Expected CNotation"
     in
-    let normalized, _ = destEq body in 
-    let id_on_applied_and_normalized = mkAppC (eq_cstr, [recursor_applied;normalized]) in 
-    List.fold_right (fun (a, b, c) body -> mkProdC (a,b,c, body)) (List.map fst params) id_on_applied_and_normalized 
-  in 
-  let equation_name = 
-    Names.Id.to_string recursor_name ^ "_" ^ 
-    Names.Id.to_string constructor_name ^ "_eq" 
-    |> Names.Id.of_string
-  in 
-  equation_name, equation
-
-let generate_computational_axioms 
-      ~provenance ~constructors ~recursor =
-  let prefix =
-    Libnames.qualid_of_ident (Naming.self_version provenance)
+    let normalized, _ = destEq body in
+    let id_on_applied_and_normalized =
+      mkAppC (eq_cstr, [ recursor_applied; normalized ])
+    in
+    List.fold_right
+      (fun (a, b, c) body -> mkProdC (a, b, c, body))
+      (List.map fst params) id_on_applied_and_normalized
   in
+  let equation_name =
+    Names.Id.to_string recursor_name
+    ^ "_"
+    ^ Names.Id.to_string constructor_name
+    ^ "_eq"
+    |> Names.Id.of_string
+  in
+  (equation_name, equation)
+
+let generate_computational_axioms ~provenance ~constructors ~recursor =
+  let prefix = Libnames.qualid_of_ident (Naming.self_version provenance) in
   let recursor_name = recursor in
   let recursor_path = Libnames.qualid_of_ident recursor in
-  let constructors = 
-     constructors
-     |> List.map (fun name -> name, Naming.qualid_point (Some prefix) name)
+  let constructors =
+    constructors
+    |> List.map (fun name -> (name, Naming.qualid_point (Some prefix) name))
   in
-  constructors 
-  |> List.map (fun (constructor_name, constructor_path) -> 
-         calculate_computational_axiom_for_constructor
-           ~recursor_name
-           ~recursor_path
-           ~constructor_name 
-           ~constructor_path)
+  constructors
+  |> List.map (fun (constructor_name, constructor_path) ->
+         calculate_computational_axiom_for_constructor ~recursor_name
+           ~recursor_path ~constructor_name ~constructor_path)

@@ -90,7 +90,7 @@ module VernacBackend = struct
   let try_ expr : unit t = (List.map (fun x -> TrySilent x) expr, ())
 
   let thunk (e : unit -> unit t) : unit t =
-    ([ Thunk (fun () -> fst @@ e ()) ], ())   
+    ([ Thunk (fun () -> fst @@ e ()) ], ())
 
   let bind (x : 'a t) (f : 'a -> 'b t) : 'b t =
     let x_data, x' = x in
@@ -246,8 +246,7 @@ module VernacBackend = struct
               Declaremods.NoInline,
               [ (NoCoercion, ([ fname_ ], ty)) ] )))
 
-  let construct_term_using_proof 
-      ~(name : Names.Id.t)
+  let construct_term_using_proof ~(name : Names.Id.t)
       ~(proof : Ltac_plugin.Tacexpr.raw_tactic_expr)
       ~(ty : Constrexpr.constr_expr) () : unit t =
     let open Ltac_plugin in
@@ -255,9 +254,7 @@ module VernacBackend = struct
     (* Construct proof for it *)
     let env = Global.env () in
     let evd = Evd.from_env env in
-    let evd, type_checked_goal =
-      Constrintern.interp_constr_evars env evd ty
-    in
+    let evd, type_checked_goal = Constrintern.interp_constr_evars env evd ty in
     let info = Declare.Info.make () in
     let cinfo = Declare.CInfo.make ~name ~typ:type_checked_goal () in
     let is_starting_plain = true in
@@ -578,15 +575,10 @@ let compile_motives ~(names : Names.Id.t list)
       |> flatmap)
   |> run
 
-let compile_recursor_signature 
-    ~(names : Names.Id.t list)
-    ~(motive_module : CompiledModule.t)
-    ~(handler_cases : CompiledModule.t)
-    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
-    ~(provenance : Linkage.t)
-    ~(handlers : Names.Id.t list)
-    ~family_name :
-    CompiledModuleType.t =
+let compile_recursor_signature ~(names : Names.Id.t list)
+    ~(motive_module : CompiledModule.t) ~(handler_cases : CompiledModule.t)
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~(provenance : Linkage.t)
+    ~(handlers : Names.Id.t list) ~family_name : CompiledModuleType.t =
   let module_name =
     Naming.module_name_of ~family_name (Naming.concat_names names)
   in
@@ -600,12 +592,11 @@ let compile_recursor_signature
   motive_module |> ignore;
   define_moduletype ~module_name ~parameters:ctx ~body:(fun ctx ->
       (* let applied_motive =
-        Termutils.apply_module
-          ~functor_expr:(Termutils.ident_to_module_expr motive_module)
-          ~arguments:ctx
-      in
-      let* _ = include_module ~module_expr:applied_motive in*)
-
+           Termutils.apply_module
+             ~functor_expr:(Termutils.ident_to_module_expr motive_module)
+             ~arguments:ctx
+         in
+         let* _ = include_module ~module_expr:applied_motive in*)
       let handler_cases =
         Termutils.apply_module
           ~functor_expr:(Termutils.ident_to_module_expr handler_cases)
@@ -613,51 +604,49 @@ let compile_recursor_signature
       in
       let* _ = include_module ~module_expr:handler_cases in
       let* _ =
-      names
-      |> List.map (fun name ->
-             let open Constrexpr_ops in
-             let motiveT = Naming.motive_of name |> mkIdentC in
-             (* This is evaluated inside the module, hence the thunk *)
-             thunk (fun () ->
-                 let parameter_count =
-                   motiveT |> Termutils.checked_type_of
-                   |> get_product_parameter_count
-                 in
-                 let vars =
-                   List.init parameter_count (fun x -> x + 1)
-                   |> List.map (fun x ->
-                          "v" ^ string_of_int x |> Names.Id.of_string)
-                 in
-                 let binders =
-                   vars
-                   |> List.map (fun var ->
-                          let open Constrexpr in
-                          CLocalAssum
-                            ( [ CAst.make @@ Names.Name.mk_name var ],
-                              Default Glob_term.Explicit,
-                              CAst.make @@ CHole None ))
-                 in
-                 let func_body = mkAppC (motiveT, vars |> List.map mkIdentC) in
-                 let prod_type = mkProdCN binders func_body in
-                 assume_parameter ~name ~ty:prod_type))
-      |> flatmap 
-      in 
+        names
+        |> List.map (fun name ->
+               let open Constrexpr_ops in
+               let motiveT = Naming.motive_of name |> mkIdentC in
+               (* This is evaluated inside the module, hence the thunk *)
+               thunk (fun () ->
+                   let parameter_count =
+                     motiveT |> Termutils.checked_type_of
+                     |> get_product_parameter_count
+                   in
+                   let vars =
+                     List.init parameter_count (fun x -> x + 1)
+                     |> List.map (fun x ->
+                            "v" ^ string_of_int x |> Names.Id.of_string)
+                   in
+                   let binders =
+                     vars
+                     |> List.map (fun var ->
+                            let open Constrexpr in
+                            CLocalAssum
+                              ( [ CAst.make @@ Names.Name.mk_name var ],
+                                Default Glob_term.Explicit,
+                                CAst.make @@ CHole None ))
+                   in
+                   let func_body =
+                     mkAppC (motiveT, vars |> List.map mkIdentC)
+                   in
+                   let prod_type = mkProdCN binders func_body in
+                   assume_parameter ~name ~ty:prod_type))
+        |> flatmap
+      in
       (* Computational Axioms *)
-      let* _ = 
-      thunk
-        (fun () -> 
-          let recursor = names |> List.hd in          
-          let result = 
-            Termutils.generate_computational_axioms 
-                ~provenance:provenance.name
-                ~constructors:handlers
-                ~recursor
-          in           
-          result 
-          |> List.map (fun (name, ty) -> 
-                 postulate_axiom ~name ~ty) 
-          |> flatmap |> run;
-          return ())
+      let* _ =
+        thunk (fun () ->
+            let recursor = names |> List.hd in
+            let result =
+              Termutils.generate_computational_axioms
+                ~provenance:provenance.name ~constructors:handlers ~recursor
+            in
+            result
+            |> List.map (fun (name, ty) -> postulate_axiom ~name ~ty)
+            |> flatmap |> run;
+            return ())
       in
       return ())
   |> run
@@ -701,33 +690,31 @@ let compile_recursor_implementation ~inductive ~(provenance : Linkage.t)
 
     (* Generate the computational behaviour: *)
     let constructors =
-        let _, constructors =
-          inductive |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs
-        in
-        constructors |> List.map fst
-      in        
-    let auto_tactic (* : Tacexpr.raw_tactic_expr*) =
-        let open Ltac_plugin in
-        CAst.make
-          (Tacexpr.TacArg
-             (Tacexpr.TacCall
-                (CAst.make
-                   (Libnames.qualid_of_ident (Names.Id.of_string "eauto"), []))))
+      let _, constructors =
+        inductive |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs
+      in
+      constructors |> List.map fst
     in
-    let* _ = 
-      thunk
-        (fun () -> 
-          let result = 
-            Termutils.generate_computational_axioms 
-                ~provenance:provenance.name
-                ~constructors
-                ~recursor:recursor_name 
-          in           
-          result 
-          |> List.map (fun (name, ty) -> construct_term_using_proof ~name ~proof:auto_tactic ~ty ()) 
+    let auto_tactic (* : Tacexpr.raw_tactic_expr*) =
+      let open Ltac_plugin in
+      CAst.make
+        (Tacexpr.TacArg
+           (Tacexpr.TacCall
+              (CAst.make
+                 (Libnames.qualid_of_ident (Names.Id.of_string "eauto"), []))))
+    in
+    let* _ =
+      thunk (fun () ->
+          let result =
+            Termutils.generate_computational_axioms ~provenance:provenance.name
+              ~constructors ~recursor:recursor_name
+          in
+          result
+          |> List.map (fun (name, ty) ->
+                 construct_term_using_proof ~name ~proof:auto_tactic ~ty ())
           |> flatmap |> run;
           return ())
-    in    
+    in
     return ()
   in
   run (define_module ~module_name ~parameters:ctx ~body:f)
@@ -1154,11 +1141,8 @@ let rec recompute_linkage (linkage : Linkage.t) =
             ~context ~motive:motive_module ~provenance ~recursor
         in
         let compiled_signature =
-          compile_recursor_signature 
-            ~provenance
-            ~handlers
-            ~handler_cases:recursor_module
-            ~names:[ name ] ~motive_module
+          compile_recursor_signature ~provenance ~handlers
+            ~handler_cases:recursor_module ~names:[ name ] ~motive_module
             ~ctx:parameters ~family_name:name
         in
         let compiled_impl =
