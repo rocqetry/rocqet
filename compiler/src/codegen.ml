@@ -90,7 +90,7 @@ module VernacBackend = struct
   let try_ expr : unit t = (List.map (fun x -> TrySilent x) expr, ())
 
   let thunk (e : unit -> unit t) : unit t =
-    ([ Thunk (fun () -> fst @@ e ()) ], ())
+    ([ Thunk (fun () -> fst @@ e ()) ], ())   
 
   let bind (x : 'a t) (f : 'a -> 'b t) : 'b t =
     let x_data, x' = x in
@@ -582,7 +582,10 @@ let compile_recursor_signature
     ~(names : Names.Id.t list)
     ~(motive_module : CompiledModule.t)
     ~(handler_cases : CompiledModule.t)
-    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
+    ~(provenance : Linkage.t)
+    ~(handlers : Names.Id.t list)
+    ~family_name :
     CompiledModuleType.t =
   let module_name =
     Naming.module_name_of ~family_name (Naming.concat_names names)
@@ -609,7 +612,7 @@ let compile_recursor_signature
           ~arguments:ctx
       in
       let* _ = include_module ~module_expr:handler_cases in
-      
+      let* _ =
       names
       |> List.map (fun name ->
              let open Constrexpr_ops in
@@ -637,7 +640,26 @@ let compile_recursor_signature
                  let func_body = mkAppC (motiveT, vars |> List.map mkIdentC) in
                  let prod_type = mkProdCN binders func_body in
                  assume_parameter ~name ~ty:prod_type))
-      |> flatmap)
+      |> flatmap 
+      in 
+      (* Computational Axioms *)
+      let* _ = 
+      thunk
+        (fun () -> 
+          let recursor = names |> List.hd in          
+          let result = 
+            Termutils.generate_computational_axioms 
+                ~provenance:provenance.name
+                ~constructors:handlers
+                ~recursor
+          in           
+          result 
+          |> List.map (fun (name, ty) -> 
+                 postulate_axiom ~name ~ty) 
+          |> flatmap |> run;
+          return ())
+      in
+      return ())
   |> run
 
 let compile_recursor_implementation ~inductive ~(provenance : Linkage.t)
@@ -676,78 +698,39 @@ let compile_recursor_implementation ~inductive ~(provenance : Linkage.t)
     in
     let* _ = include_module ~module_expr in
     let* _ = define_term ~name:recursor_name recursor in
+
+    (* Generate the computational behaviour: *)
+    let constructors =
+        let _, constructors =
+          inductive |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs
+        in
+        constructors |> List.map fst
+      in        
+    let auto_tactic (* : Tacexpr.raw_tactic_expr*) =
+        let open Ltac_plugin in
+        CAst.make
+          (Tacexpr.TacArg
+             (Tacexpr.TacCall
+                (CAst.make
+                   (Libnames.qualid_of_ident (Names.Id.of_string "eauto"), []))))
+    in
+    let* _ = 
+      thunk
+        (fun () -> 
+          let result = 
+            Termutils.generate_computational_axioms 
+                ~provenance:provenance.name
+                ~constructors
+                ~recursor:recursor_name 
+          in           
+          result 
+          |> List.map (fun (name, ty) -> construct_term_using_proof ~name ~proof:auto_tactic ~ty ()) 
+          |> flatmap |> run;
+          return ())
+    in    
     return ()
   in
   run (define_module ~module_name ~parameters:ctx ~body:f)
-
-(* let compile_recursor_implementation ~(names : Names.Id.t list)
-     ~(inductive : VernacInductive.t) ~(linkage : Linkage.t)
-     ~(*The provenance of this inductive *)
-     (rec_mod : Libnames.qualid) ~(motive_module : CompiledModule.t)
-     ~(suffix : RecKind.t) ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
-     ~(family_name : Names.Id.t) : CompiledModule.t =
-   let _qualid_point_ path f =
-     match path with
-     | Some path ->
-         let path, base = Libnames.repr_qualid path in
-         let path = base :: Names.DirPath.repr path in
-         let path = Names.DirPath.make path in
-         Libnames.make_qualid path f
-     | None -> Libnames.qualid_of_ident f
-   in
-   let module_name =
-     Naming.module_name_of ~family_name (Naming.concat_names names)
-   in
-   let ((_, ({ CAst.v = ind_name; _ }, _)), _, _, all_cst), _ =
-     inductive |> List.hd
-   in
-   let recursor_name = Nameops.add_suffix ind_name (RecKind.to_string suffix) in
-   let _name_of_type_of_recursor =
-     Naming.recursor_type ~inductive:ind_name (RecKind.to_string suffix)
-   in
-   let recursor_path =
-     let prefix = Names.DirPath.make [ Naming.self_version linkage.name ] in
-     Libnames.make_qualid prefix recursor_name
-   in
-   let all_cst =
-     match all_cst with
-     | Vernacexpr.Constructors csts -> csts
-     | _ -> Errors.fail ~info:"Records are not yet supported"
-   in
-   let all_cst =
-     List.map (fun (_, (y, _)) -> CAst.with_val (fun x -> x) y) all_cst
-   in
-   let all_projection_test =
-     List.map (fun z -> _qualid_point_ (Some rec_mod) z) all_cst
-   in
-   let recursor_construction =
-     let open Constrexpr_ops in
-     let recursor = mkRefC recursor_path in
-     (* raw term of recursor construction will have the motive in the context *)
-     let motiveName =
-       mkIdentC @@ Naming.motive_of (List.hd names)
-     in
-     let recur_handlers = List.map mkRefC all_projection_test in
-     let all_args = motiveName :: recur_handlers in
-     let applied_rec = mkAppC (recursor, all_args) in
-     applied_rec
-   in
-   let open VernacBackend in
-   define_module ~module_name ~parameters:ctx ~body:(fun ctx ->
-       let applied_motive =
-         Termutils.apply_module
-           ~functor_expr:(Termutils.ident_to_module_expr motive_module)
-           ~arguments:ctx
-       in
-       let* _ = include_module ~module_expr:applied_motive in
-       names
-       |> List.map (fun name ->
-              (* This is evaluated inside the module, hence the thunk *)
-              thunk (fun () ->
-                  let* _ = define_term ~name recursor_construction in
-                  return ()))
-       |> flatmap)
-   |> run*)
 
 let compile_linkage_context ~field_name (context : LinkageCtx.t) :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
@@ -1159,6 +1142,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
             ~name:(Libnames.qualid_of_ident inductive_name)
             context
         in
+        (* We can check for exhaustivity here *)
         let motive_module =
           compile_motives ~names:[ name ] ~motives ~ctx:parameters
             ~family_name:name
@@ -1171,6 +1155,8 @@ let rec recompute_linkage (linkage : Linkage.t) =
         in
         let compiled_signature =
           compile_recursor_signature 
+            ~provenance
+            ~handlers
             ~handler_cases:recursor_module
             ~names:[ name ] ~motive_module
             ~ctx:parameters ~family_name:name

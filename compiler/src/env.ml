@@ -160,15 +160,20 @@ module Context = struct
 
   (* Add the field to the current linkage *)
   let add_field ~name ~elem =
-    match !store with
-    | None ->
-        Errors.fail
-          ~info:"You need to open a linkage context in order to add a field"
-    | Some (LinkageCtx.Toplevel linkage) ->
+    let context = get () in 
+    let _ = 
+      match lookup_linkage_elem context (Libnames.qualid_of_ident name) with 
+      | Some _ -> 
+         Errors.fail 
+           ~info:"This element has already been defined or it has been previously inherited"
+      | _ -> ()
+    in 
+    match context with    
+    | LinkageCtx.Toplevel linkage ->
         let fields = linkage.fields <: (name, elem) in
         let ctx = LinkageCtx.Toplevel { linkage with fields } in
         store := Some ctx
-    | Some (LinkageCtx.Nested (upper, linkage)) ->
+    | LinkageCtx.Nested (upper, linkage) ->
         let fields = linkage.fields <: (name, elem) in
         let linkage = Linkage.{ linkage with fields } in
         let ctx = LinkageCtx.Nested (upper, linkage) in

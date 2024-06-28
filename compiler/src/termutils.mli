@@ -29,3 +29,9 @@ val apply_module :
   functor_expr:Constrexpr.module_ast ->
   arguments:Libnames.qualid list ->
   Constrexpr.module_ast
+
+val generate_computational_axioms : 
+      provenance:Names.Id.t -> 
+      constructors:Names.Id.t list ->
+      recursor:Names.Id.t -> 
+      (Names.Id.t * Constrexpr.constr_expr) list

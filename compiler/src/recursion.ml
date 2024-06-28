@@ -56,76 +56,6 @@ module Ctx = struct
     update ctx
 end
 
-let calculate_computational_axiom_for_constructor 
-      ~recursor_name
-      ~recursor_path 
-      ~constructor_name 
-      ~constructor_path = 
-  let open Constrexpr_ops in 
-  let constructor_params, fully_applied_constr = 
-    Termutils.extract_variables_and_apply (mkRefC constructor_path) 
-  in 
-  let recursor_params, _ = 
-    recursor_path
-    |> mkRefC
-    |> Termutils.checked_type_of
-    |> Termutils.reflect_checked_term
-    |> Termutils.collect_argument_and_ret_of_type
-  in
-  let recursor_parameter_wo_first = List.tl recursor_params in 
-  let recursor_remained_arguments = List.map snd recursor_parameter_wo_first in
-  let params = 
-    constructor_params @ recursor_parameter_wo_first 
-  in 
-  let recursor_applied = mkAppC ((mkRefC recursor_path),fully_applied_constr::recursor_remained_arguments) in
-  let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in 
-  let id_on_fully_applied_r =  mkAppC (eq_cstr, [recursor_applied;recursor_applied]) in
-   let closed_recursor_applied = 
-    List.fold_right (fun (a, b, c) body -> mkProdC (a,b,c, body)) (List.map fst params) id_on_fully_applied_r  
-  in 
-  (* The final axiom is an equation *)
-  let equation = 
-    let reflected = 
-      closed_recursor_applied 
-      |> Termutils.cbn_type_check 
-      |> Termutils.reflect_checked_term 
-    in     
-    let _, body = Termutils.collect_argument_and_ret_of_type reflected in   
-    let destEq {CAst.v = t; _} = 
-      match t with 
-      | Constrexpr.CNotation (_ ,(_, "_ = _"), ([lhs; rhs], _, _, _)) -> (lhs, rhs) 
-      | _ -> Errors.fail ~info:"Expected CNotation"
-    in
-    let normalized, _ = destEq body in 
-    let id_on_applied_and_normalized = mkAppC (eq_cstr, [recursor_applied;normalized]) in 
-    List.fold_right (fun (a, b, c) body -> mkProdC (a,b,c, body)) (List.map fst params) id_on_applied_and_normalized 
-  in 
-  let equation_name = 
-    Names.Id.to_string recursor_name ^ "_" ^ 
-    Names.Id.to_string constructor_name ^ "_eq" 
-    |> Names.Id.of_string
-  in 
-  equation_name, equation
-
-let generate_computational_axioms provenance constructors recursor =
-  let prefix =
-    Libnames.qualid_of_ident (Naming.self_version provenance)
-  in
-  let recursor_name = recursor in
-  let recursor_path = Libnames.qualid_of_ident recursor in
-  let constructors = 
-     constructors
-     |> List.map (fun (name, _) -> name, Naming.qualid_point (Some prefix) name)
-  in
-  constructors 
-  |> List.map (fun (constructor_name, constructor_path) -> 
-         calculate_computational_axiom_for_constructor
-           ~recursor_name
-           ~recursor_path
-           ~constructor_name 
-           ~constructor_path)  
-
-
 let _compile_computational_recursor_behaviour elem provenance parameters =
   match elem with
   | LinkageElem.RecursorDefinition { names; inductive; _ } ->
@@ -149,11 +79,14 @@ let _compile_computational_recursor_behaviour elem provenance parameters =
         let _, constructors =
           inductive |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs
         in
-        constructors
+        constructors |> List.map fst
       in
       let recursor =  names |> List.hd in 
       let name_axiom_pairs : (Names.Id.t * Constrexpr.constr_expr) list =
-        generate_computational_axioms provenance constructors recursor
+        Termutils.generate_computational_axioms 
+          ~provenance 
+          ~constructors 
+          ~recursor
       in
       let open Codegen.VernacBackend in
       let compiled_signature =
@@ -193,10 +126,14 @@ let close_recursion () =
         } =
     Ctx.get ()
   in
+  (* We can check for exhaustivity here *)
   module_name |> ignore;
   let module_name = M.end_module () in
+  let handlers = handler_types |> List.map fst in 
   let compiled_signature =
     Codegen.compile_recursor_signature 
+      ~provenance
+      ~handlers
       ~names:[ name ] 
       ~motive_module:motive
       ~handler_cases:module_name
@@ -206,7 +143,7 @@ let close_recursion () =
   let compiled_impl =
     Codegen.compile_recursor_implementation ~inductive ~provenance
       ~recursor_name:name
-      ~handlers:(handler_types |> List.map fst)
+      ~handlers
       ~suffix ~ctx:parameters ~handler_cases:module_name
   in
   let elem =

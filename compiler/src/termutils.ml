@@ -126,3 +126,73 @@ let apply_module ~(functor_expr : Constrexpr.module_ast)
   List.fold_left
     (fun op x -> CAst.make (CMapply (op, x)))
     functor_expr arguments
+
+let calculate_computational_axiom_for_constructor 
+      ~recursor_name
+      ~recursor_path 
+      ~constructor_name 
+      ~constructor_path = 
+  let open Constrexpr_ops in 
+  let constructor_params, fully_applied_constr = 
+    extract_variables_and_apply (mkRefC constructor_path) 
+  in 
+  let recursor_params, _ = 
+    recursor_path
+    |> mkRefC
+    |> checked_type_of
+    |> reflect_checked_term
+    |> collect_argument_and_ret_of_type
+  in
+  let recursor_parameter_wo_first = List.tl recursor_params in 
+  let recursor_remained_arguments = List.map snd recursor_parameter_wo_first in
+  let params = 
+    constructor_params @ recursor_parameter_wo_first 
+  in 
+  let recursor_applied = mkAppC ((mkRefC recursor_path),fully_applied_constr::recursor_remained_arguments) in  
+  let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in 
+  let id_on_fully_applied_r =  mkAppC (eq_cstr, [recursor_applied;recursor_applied]) in
+   let closed_recursor_applied = 
+    List.fold_right (fun (a, b, c) body -> mkProdC (a,b,c, body)) (List.map fst params) id_on_fully_applied_r  
+  in 
+  (* The final axiom is an equation *)
+  let equation = 
+    let reflected = 
+      closed_recursor_applied 
+      |> cbn_type_check 
+      |> reflect_checked_term 
+    in     
+    let _, body = collect_argument_and_ret_of_type reflected in   
+    let destEq {CAst.v = t; _} = 
+      match t with 
+      | Constrexpr.CNotation (_ ,(_, "_ = _"), ([lhs; rhs], _, _, _)) -> (lhs, rhs) 
+      | _ -> Errors.fail ~info:"Expected CNotation"
+    in
+    let normalized, _ = destEq body in 
+    let id_on_applied_and_normalized = mkAppC (eq_cstr, [recursor_applied;normalized]) in 
+    List.fold_right (fun (a, b, c) body -> mkProdC (a,b,c, body)) (List.map fst params) id_on_applied_and_normalized 
+  in 
+  let equation_name = 
+    Names.Id.to_string recursor_name ^ "_" ^ 
+    Names.Id.to_string constructor_name ^ "_eq" 
+    |> Names.Id.of_string
+  in 
+  equation_name, equation
+
+let generate_computational_axioms 
+      ~provenance ~constructors ~recursor =
+  let prefix =
+    Libnames.qualid_of_ident (Naming.self_version provenance)
+  in
+  let recursor_name = recursor in
+  let recursor_path = Libnames.qualid_of_ident recursor in
+  let constructors = 
+     constructors
+     |> List.map (fun name -> name, Naming.qualid_point (Some prefix) name)
+  in
+  constructors 
+  |> List.map (fun (constructor_name, constructor_path) -> 
+         calculate_computational_axiom_for_constructor
+           ~recursor_name
+           ~recursor_path
+           ~constructor_name 
+           ~constructor_path)
