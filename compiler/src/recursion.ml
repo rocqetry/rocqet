@@ -126,7 +126,7 @@ let close_recursion () =
         } =
     Ctx.get ()
   in
-  (* We can check for exhaustivity here *)
+  Typechecking.check_exhaustive ~name ~inductive ~handlers:handler_cases;
   module_name |> ignore;
   let module_name = M.end_module () in
   let handlers = handler_types |> List.map fst in 

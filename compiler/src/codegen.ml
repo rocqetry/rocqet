@@ -1142,7 +1142,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
             ~name:(Libnames.qualid_of_ident inductive_name)
             context
         in
-        (* We can check for exhaustivity here *)
+        Typechecking.check_exhaustive ~name ~inductive ~handlers:handler_cases;
         let motive_module =
           compile_motives ~names:[ name ] ~motives ~ctx:parameters
             ~family_name:name
