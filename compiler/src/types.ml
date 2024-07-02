@@ -409,8 +409,8 @@ end = struct
                     LinkageElem.FamilyDefinition { ibase with linkage }
                   in
                   (name, elem) :: go base derived
-              | FieldDefinition _, FieldDefinition _ ->
-                  Errors.fail ~info:"Field name conflict"
+              | FieldDefinition _, FieldDefinition f ->
+                  (name, FieldDefinition f) :: go base derived
               | PrincipleDefinition _, PrincipleDefinition p ->
                   (name, PrincipleDefinition p) :: go base derived
               | _ -> Errors.fail ~info:"Wrong concatenation arguments"))
