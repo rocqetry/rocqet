@@ -1,6 +1,8 @@
 open Types
 open Env
 
+module B = Backend.Vernac
+
 (* For some reason, the VernacBackend doesn't seem to work
    if modules are not closed immediately?
 *)
@@ -56,57 +58,6 @@ module Ctx = struct
     update ctx
 end
 
-let _compile_computational_recursor_behaviour elem provenance parameters =
-  match elem with
-  | LinkageElem.RecursorDefinition { names; inductive; _ } ->
-      let module_name =
-        let inductive_name =
-          inductive |> VernacInductive.extract_inductive_name
-          |> Names.Id.to_string
-        in
-        let name = names |> List.hd |> Names.Id.to_string in
-        name ^ inductive_name
-      in
-      let auto_tactic (* : Tacexpr.raw_tactic_expr*) =
-        let open Ltac_plugin in
-        CAst.make
-          (Tacexpr.TacArg
-             (Tacexpr.TacCall
-                (CAst.make
-                   (Libnames.qualid_of_ident (Names.Id.of_string "eauto"), []))))
-      in
-      let constructors =
-        let _, constructors =
-          inductive |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs
-        in
-        constructors |> List.map fst
-      in
-      let recursor = names |> List.hd in
-      let name_axiom_pairs : (Names.Id.t * Constrexpr.constr_expr) list =
-        Termutils.generate_computational_axioms ~provenance ~constructors
-          ~recursor
-      in
-      let open Codegen.VernacBackend in
-      let compiled_signature =
-        run
-        @@ define_moduletype
-             ~module_name:(Naming.fresh_name ~prefix:module_name) ~parameters
-             ~body:(fun _ctx ->
-               let for_each_pair (name, ty) = assume_parameter ~name ~ty in
-               flatmap (List.map for_each_pair name_axiom_pairs))
-      in
-      let compiled_implementation =
-        run
-        @@ define_module ~module_name:(Naming.fresh_name ~prefix:module_name)
-             ~parameters ~body:(fun _ctx ->
-               let for_each_pair (name, ty) =
-                 thunk (construct_term_using_proof ~name ~proof:auto_tactic ~ty)
-               in
-               flatmap (List.map for_each_pair name_axiom_pairs))
-      in
-      (compiled_signature, compiled_implementation)
-  | _ -> Errors.fail ~info:"Expected a recursor definition"
-
 let close_recursion () =
   let Ctx.
         {
@@ -130,12 +81,12 @@ let close_recursion () =
   let module_name = M.end_module () in
   let handlers = handler_types |> List.map fst in
   let compiled_signature =
-    Codegen.compile_recursor_signature ~provenance ~handlers ~names:[ name ]
+    Codegen.compile_recursive_definition_signature ~provenance ~handlers ~names:[ name ]
       ~motive_module:motive ~handler_cases:module_name ~ctx:parameters
       ~family_name:name
   in
   let compiled_impl =
-    Codegen.compile_recursor_implementation ~inductive ~provenance
+    Codegen.compile_recursive_definition_implementation ~inductive ~provenance
       ~recursor_name:name ~handlers ~suffix ~ctx:parameters
       ~handler_cases:module_name
   in
@@ -196,16 +147,15 @@ let open_recursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     Context.lookup_inductive_for_recursion ~name:inductive context
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
-  let _module_name = M.start_module module_name parameters in
-  let open Codegen.VernacBackend in
-  run @@ Codegen.include_handler_types provenance recursor;
+  let _module_name = M.start_module module_name parameters in  
+  B.run @@ Codegen.include_handler_types provenance recursor;
   let applied_motive =
     Termutils.apply_module
       ~functor_expr:(Termutils.ident_to_module_expr motive)
       ~arguments:
         (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
   in
-  let _ = include_module ~module_expr:applied_motive |> run in
+  let _ = B.run (B.include_module ~module_expr:applied_motive)  in
   let handler_types = handler_types_table name recursor in
   let recursion_ctx =
     Ctx.
@@ -314,8 +264,7 @@ let open_recursion_extension ~name =
     let inductive = Libnames.qualid_of_ident inductive in
     Context.lookup_inductive_for_recursion ~name:inductive context
   in
-  let recursor = RecursorStore.find suffix compiled_recursors.recursors in
-  let open Codegen.VernacBackend in
+  let recursor = RecursorStore.find suffix compiled_recursors.recursors in  
   let handler_types = handler_types_table name recursor in
   let recursor_module =
     Codegen.compile_handler_cases ~name ~context ~motive ~handler_cases
@@ -328,7 +277,7 @@ let open_recursion_extension ~name =
       ~arguments:
         (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
   in
-  let _ = include_module ~module_expr:previous_cases |> run in
+  let _ = B.run (B.include_module ~module_expr:previous_cases) in 
   let recursion_ctx =
     Ctx.
       {
@@ -351,10 +300,9 @@ let add_handler ~name ~handler =
   let recursion_ctx = Ctx.get () in
   match List.assoc_opt name recursion_ctx.handler_types with
   | None -> Errors.fail ~info:"Unbound Constructor"
-  | Some ty ->
-      let open Codegen.VernacBackend in
+  | Some ty ->      
       let case_name =
         Naming.handler_name ~recursor:recursion_ctx.name ~case:name
       in
       Ctx.add_handler_case name handler;
-      define_term ~name:case_name ~ty handler |> run
+      B.run (B.define_term ~name:case_name ~ty handler)

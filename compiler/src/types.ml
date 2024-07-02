@@ -47,14 +47,14 @@ module VernacInductive = struct
     ind_def |> extract_all_names |> List.hd |> fst
 
   (* Create a "definition mapping" *)
-  let definition_mapping ~prefix ind_def =
+  let definition_mapping ind_def =
     let all_names_with_type =
       let type_decls, constr_decls =
         ind_def |> extract_all_names_with_type |> List.split
       in
       type_decls @ List.concat constr_decls
     in
-    let prefix_with_internal = Nameops.add_prefix prefix in
+    let prefix_with_internal = Naming.internal_name in 
     let apply_subst_expr =
       let all_original_names = all_names_with_type |> List.map fst in
       let map_name_newname =

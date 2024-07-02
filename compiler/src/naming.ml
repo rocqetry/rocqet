@@ -3,10 +3,8 @@
 
 let motive_of name = Nameops.add_prefix "__motiveT" name
 let internal_name name = Nameops.add_prefix "__internal_" name
-
 let recursor_type ~inductive suffix =
   Nameops.add_prefix "__recursor_type_" (Nameops.add_suffix inductive suffix)
-
 let handler_type name = Nameops.add_prefix "__handler_type_" name
 
 let handler_name ~recursor ~case =
