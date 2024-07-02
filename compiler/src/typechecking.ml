@@ -1,3 +1,28 @@
+open Env
+open Types
+
+(* Exhaustiveness checking *)
+let check_exhaustive ~name ~inductive ~handlers =
+  let constructors =
+    let _, constructors =
+      inductive |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs
+    in
+    constructors |> List.map fst
+  in
+  constructors
+  |> List.iter (fun constructor ->
+         match List.assoc_opt constructor handlers with
+         | Some _ -> ()
+         | None ->
+             let info =
+               Printf.sprintf
+                 "The pattern matching in %s is not exhaustive. Here is an \
+                  example of a case that has no handler: %s"
+                 (Names.Id.to_string name)
+                 (Names.Id.to_string constructor)
+             in
+             Errors.fail ~info)
+
 (* "Typechecking" for families
 
    This ensures that a "family structure" is preserved across nested
@@ -27,9 +52,6 @@
 
    This check ensures that the structure of `Dataflow.Lang` is preserved across
    the nested inheritance boundary (in particular, further binding). *)
-
-open Env
-open Types
 
 let rec check ~(further_base : Linkage.t) ~(base : Linkage.t) =
   (* Physical equality? *)

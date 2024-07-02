@@ -38,9 +38,13 @@ module VernacInductive = struct
            in
            ((ind_name, ty), cstrs))
 
+  let extract_all_names ind_def =
+    ind_def
+    |> List.map (fun (ind, _) -> ind |> extract_type_and_cstrs)
+    |> List.map (fun ((ind_name, _), cstrs) -> (ind_name, List.map fst cstrs))
+
   let extract_inductive_name ind_def =
-    let (type_name, _), _ = ind_def |> extract_all_names_with_type |> List.hd in
-    type_name
+    ind_def |> extract_all_names |> List.hd |> fst
 
   (* Create a "definition mapping" *)
   let definition_mapping ~prefix ind_def =
@@ -64,7 +68,8 @@ module VernacInductive = struct
              ind_type,
              csts ),
            decl_notations ) :
-          Vernacexpr.inductive_expr * Vernacexpr.notation_declaration list) =
+          Vernacexpr.inductive_expr * Vernacexpr.notation_declaration list) :
+        Vernacexpr.inductive_expr * Vernacexpr.notation_declaration list =
       let ind_type_name = CAst.map prefix_with_internal ind_type_name in
       let ind_type = Option.map apply_subst_expr ind_type in
       match csts with
@@ -155,6 +160,51 @@ module CompiledModuleType = struct
   type t = Libnames.qualid
 end
 
+module RecKind = struct
+  type t = Ind | IndComplete | Rec | Rect
+
+  let compare r1 r2 =
+    match (r1, r2) with
+    | Ind, Ind -> 0
+    | IndComplete, IndComplete -> 0
+    | Rec, Rec -> 0
+    | Rect, Rect -> 0
+    | _ -> -1
+
+  let to_string = function
+    | Ind -> "_ind"
+    | IndComplete -> "_ind_comp"
+    | Rec -> "_rec"
+    | Rect -> "_rect"
+
+  let of_string = function
+    | "_ind" -> Ind
+    | "_ind_comp" -> IndComplete
+    | "_rec" -> Rec
+    | "_rect" -> Rect
+    | _ -> Errors.fail ~info:"Unknown RecKind"
+
+  let of_name name = name |> Names.Id.to_string |> of_string
+end
+
+module RecursorStore = Map.Make (RecKind)
+
+module CompiledRecursor = struct
+  type t = {
+    inductive_names : Names.Id.t list;
+    compiled_recursor : CompiledModuleType.t;
+    compiled_handlers : (Names.Id.t * CompiledModuleType.t) list;
+  }
+end
+
+module CompiledRecursors = struct
+  type t = {
+    (* TODO: do we need to keep track of the context? *)
+    compiled_context : CompiledModuleType.t;
+    recursors : CompiledRecursor.t RecursorStore.t;
+  }
+end
+
 (* Linkages *)
 
 (* A Linkage element is the "type" of a single field in a family *)
@@ -166,12 +216,38 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
+        compiled_recursors : CompiledRecursors.t ref;
       }
     | FamilyDefinition of {
         linkage : Linkage.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
+      }
+    | FieldDefinition of {
+        body_expr : Constrexpr.constr_expr;
+        body_type : Constrexpr.constr_expr option;
+        compiled_context : CompiledModuleType.t;
+        compiled_impl : CompiledModuleType.t;
+      }
+    | RecursorDefinition of {
+        names : Names.Id.t list;
+        motives : Constrexpr.constr_expr list;
+        handler_types : (Names.Id.t * Constrexpr.constr_expr) list;
+        handler_cases : (Names.Id.t * Constrexpr.constr_expr) list;
+        inductive : VernacInductive.t;
+        recursor_module : Libnames.qualid;
+        motive_module : CompiledModule.t;
+        suffix : RecKind.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
+      }
+    | PrincipleDefinition of {
+        compiled_context : CompiledModuleType.t;
+        inductive : VernacInductive.t;
+        compiled_impl : CompiledModule.t;
+        compiled_signature : CompiledModuleType.t;
       }
 end =
   LinkageElem
@@ -184,6 +260,7 @@ and Linkage : sig
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
+  val context_parameters : t -> Libnames.qualid list
   val context_match : t -> t -> [ `Equal | `Less | `More ]
   val top_most_self_name : t -> Names.Id.t
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
@@ -197,6 +274,9 @@ and Linkage : sig
 
   val concatenate_recursive_prefix :
     prefix:Names.Id.t -> derived:t -> base:t -> t
+
+  val pointwise_concatenate_recursive_prefix :
+    prefix:Names.Id.t -> derived:t -> base:t -> t
 end = struct
   type t = {
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
@@ -204,6 +284,11 @@ end = struct
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
+
+  let context_parameters linkage =
+    linkage.context |> Bwd.map fst
+    |> Bwd.map Libnames.qualid_of_ident
+    |> Bwd.to_list
 
   let context_match left right =
     let left_length = Bwd.length left.context
@@ -235,6 +320,23 @@ end = struct
                   VernacInductive.path_subtitution definition.inductive ~source
                     ~target;
               }
+        | LinkageElem.FieldDefinition field ->
+            let body_expr =
+              Naming.replace_qualid_root ~source ~target field.body_expr
+            in
+            let body_type =
+              field.body_type
+              |> Option.map (Naming.replace_qualid_root ~source ~target)
+            in
+            FieldDefinition { field with body_expr; body_type }
+        | LinkageElem.RecursorDefinition definition ->
+            let motives =
+              definition.motives
+              |> List.map (Naming.replace_qualid_root ~source ~target)
+            in
+            RecursorDefinition { definition with motives }
+        | LinkageElem.PrincipleDefinition principle ->
+            LinkageElem.PrincipleDefinition principle
       in
       (name, elem)
     in
@@ -255,6 +357,15 @@ end = struct
             (result, (hd, elem) :: rest)
     in
     let rec go base derived =
+      let remove_duplicates lst =
+        let rec aux seen = function
+          | [] -> []
+          | hd :: tl ->
+              if List.mem hd seen then aux seen tl
+              else hd :: aux (hd :: seen) tl
+        in
+        aux [] lst
+      in
       match base with
       | [] -> derived
       | (name, elem) :: base -> (
@@ -262,6 +373,20 @@ end = struct
           | None, _ -> (name, elem) :: go base derived
           | Some (_, delem), derived -> (
               match (elem, delem) with
+              | ( LinkageElem.RecursorDefinition rbase,
+                  LinkageElem.RecursorDefinition rderived ) ->
+                  let handler_cases =
+                    rbase.handler_cases @ rderived.handler_cases
+                  in
+                  let handler_cases = remove_duplicates handler_cases in
+                  let handler_types =
+                    rbase.handler_types @ rderived.handler_types
+                  in
+                  let handler_types = remove_duplicates handler_types in
+                  ( name,
+                    LinkageElem.RecursorDefinition
+                      { rderived with handler_cases; handler_types } )
+                  :: go base derived
               | ( LinkageElem.InductiveDefinition ibase,
                   LinkageElem.InductiveDefinition iderived ) ->
                   let elem =
@@ -284,6 +409,10 @@ end = struct
                     LinkageElem.FamilyDefinition { ibase with linkage }
                   in
                   (name, elem) :: go base derived
+              | FieldDefinition _, FieldDefinition _ ->
+                  Errors.fail ~info:"Field name conflict"
+              | PrincipleDefinition _, PrincipleDefinition p ->
+                  (name, PrincipleDefinition p) :: go base derived
               | _ -> Errors.fail ~info:"Wrong concatenation arguments"))
     in
     let fields = go (Bwd.to_list base.fields) (Bwd.to_list derived.fields) in
@@ -322,7 +451,7 @@ end = struct
   let concatenate_prefix ~prefix ~(derived : Linkage.t) ~(base : Linkage.t) =
     let rec calculate_dependencies fields =
       match fields with
-      | Bwd.Emp -> derived
+      | Bwd.Emp -> concatenate ~derived ~base
       | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
         ->
           concatenate ~base:{ base with fields } ~derived
@@ -330,11 +459,25 @@ end = struct
     in
     calculate_dependencies base.fields
 
+  let pointwise_concatenate_recursive_prefix ~prefix ~(derived : Linkage.t)
+      ~(base : Linkage.t) =
+    let rec extract_prefix fields =
+      match fields with
+      | Bwd.Emp -> fields
+      | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
+        ->
+          fields
+      | Bwd.Snoc (fields, _) -> extract_prefix fields
+    in
+    let derived = { derived with fields = extract_prefix derived.fields } in
+    let base = { base with fields = extract_prefix base.fields } in
+    concatenate_recursive ~derived ~base
+
   let concatenate_recursive_prefix ~prefix ~(derived : Linkage.t)
       ~(base : Linkage.t) =
     let rec calculate_dependencies fields =
       match fields with
-      | Bwd.Emp -> derived
+      | Bwd.Emp -> concatenate_recursive ~base ~derived
       | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
         ->
           concatenate_recursive ~base:{ base with fields } ~derived
@@ -353,7 +496,7 @@ end =
 (* A single plugin command *)
 (* e.g Family A. ... *)
 module PluginCmd = struct
-  type t = Family
+  type t = Family | Recursion
 end
 
 (* A scope is a plugin command enriched with a name and a "closing" handler *)

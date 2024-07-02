@@ -15,6 +15,11 @@ open Bwd
 let rec linear_ctx_mapping context =
   let f (linkage : Linkage.t) (name, elem) =
     match elem with
+    | LinkageElem.RecursorDefinition { names; handler_cases; _ } ->
+        let recursor = names |> List.hd in
+        handler_cases |> List.map fst
+        |> List.map (fun case -> Naming.handler_name ~recursor ~case)
+        |> List.map (fun name -> (name, Naming.self_version linkage.name))
     | LinkageElem.InductiveDefinition { inductive; _ } ->
         let names =
           inductive |> VernacInductive.extract_all_names_with_type

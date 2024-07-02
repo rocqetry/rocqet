@@ -28,3 +28,25 @@ let family_extends ~derived ~base =
         command = PluginCmd.Family;
         close = Family.close_family;
       }
+
+(* let frecursor ~ind_decls ~rec_mod ~suffix =
+   PluginScopes.ensure_in_scope ~scope:PluginCmd.Family;
+   Recursion.add_recursor ~ind_decls ~rec_mod ~suffix*)
+
+let definition ~name ?body_type body_expr =
+  Definition.add_definition ~name ?body_type body_expr
+
+let frecursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
+    ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t) =
+  Recursion.open_recursion ~name ~inductive ~motive ~suffix;
+  PluginScopes.push
+    PluginCmdScope.
+      { name; command = PluginCmd.Recursion; close = Recursion.close_recursion }
+
+let frecursion_extension ~(name : Names.Id.t) =
+  Recursion.open_recursion_extension ~name;
+  PluginScopes.push
+    PluginCmdScope.
+      { name; command = PluginCmd.Recursion; close = Recursion.close_recursion }
+
+let frecursion_handler = Recursion.add_handler

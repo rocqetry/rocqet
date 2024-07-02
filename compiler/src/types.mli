@@ -17,6 +17,7 @@ module VernacInductive : sig
     * (Names.Id.t * Constrexpr.constr_expr) list)
     list
 
+  val extract_all_names : t -> (Names.Id.t * Names.Id.t list) list
   val extract_inductive_name : t -> Names.Id.t
 
   val definition_mapping :
@@ -36,8 +37,34 @@ module CompiledModuleType : sig
   type t = Libnames.qualid
 end
 
+module RecKind : sig
+  type t = Ind | IndComplete | Rec | Rect
+
+  val compare : t -> t -> int
+  val to_string : t -> string
+  val of_string : string -> t
+  val of_name : Names.Id.t -> t
+end
+
+module RecursorStore : Map.S with type key = RecKind.t
+
+module CompiledRecursor : sig
+  type t = {
+    inductive_names : Names.Id.t list;
+    compiled_recursor : CompiledModuleType.t;
+    compiled_handlers : (Names.Id.t * CompiledModuleType.t) list;
+  }
+end
+
+module CompiledRecursors : sig
+  type t = {
+    compiled_context : CompiledModuleType.t;
+    recursors : CompiledRecursor.t RecursorStore.t;
+  }
+end
+
 module PluginCmd : sig
-  type t = Family
+  type t = Family | Recursion
 end
 
 module PluginCmdScope : sig
@@ -51,12 +78,38 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
+        compiled_recursors : CompiledRecursors.t ref;
       }
     | FamilyDefinition of {
         linkage : Linkage.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
+      }
+    | FieldDefinition of {
+        body_expr : Constrexpr.constr_expr;
+        body_type : Constrexpr.constr_expr option;
+        compiled_context : CompiledModuleType.t;
+        compiled_impl : CompiledModuleType.t;
+      }
+    | RecursorDefinition of {
+        names : Names.Id.t list;
+        motives : Constrexpr.constr_expr list;
+        handler_types : (Names.Id.t * Constrexpr.constr_expr) list;
+        handler_cases : (Names.Id.t * Constrexpr.constr_expr) list;
+        inductive : VernacInductive.t;
+        recursor_module : Libnames.qualid;
+        motive_module : CompiledModule.t;
+        suffix : RecKind.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
+      }
+    | PrincipleDefinition of {
+        compiled_context : CompiledModuleType.t;
+        inductive : VernacInductive.t;
+        compiled_impl : CompiledModule.t;
+        compiled_signature : CompiledModuleType.t;
       }
 end
 
@@ -68,6 +121,7 @@ and Linkage : sig
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
+  val context_parameters : t -> Libnames.qualid list
   val context_match : t -> t -> [ `Equal | `Less | `More ]
   val top_most_self_name : t -> Names.Id.t
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
@@ -76,6 +130,9 @@ and Linkage : sig
   val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
 
   val concatenate_recursive_prefix :
+    prefix:Names.Id.t -> derived:t -> base:t -> t
+
+  val pointwise_concatenate_recursive_prefix :
     prefix:Names.Id.t -> derived:t -> base:t -> t
 end
 

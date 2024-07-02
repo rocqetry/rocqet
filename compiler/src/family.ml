@@ -48,7 +48,7 @@ let open_family_with_base ~name ~base =
               }
           in
           let context = LinkageCtx.Nested (context, linkage) in
-          Typing.check_further_binding_structure context;
+          Typechecking.check_further_binding_structure context;
           Context.destructive_update (Some context)
       | None ->
           let linkage =
@@ -61,7 +61,7 @@ let open_family_with_base ~name ~base =
               }
           in
           let context = LinkageCtx.Toplevel linkage in
-          Typing.check_further_binding_structure context;
+          Typechecking.check_further_binding_structure context;
           Context.destructive_update (Some context))
 
 (* Close a family *)
@@ -75,13 +75,14 @@ let close_family () : unit =
         | Some base_linkage ->
             let base_linkage =
               Linkage.path_subtitution base_linkage
-                ~source:(Linkage.top_most_self_name base_linkage)
-                ~target:(Linkage.top_most_self_name linkage)
+                ~source:(Naming.self_version base_linkage.name)
+                ~target:(Naming.self_version linkage.name)
             in
             Linkage.concatenate_recursive ~base:base_linkage ~derived:linkage
       in
       (* store := None; *)
       Context.destructive_update None;
+
       (* Note that we only want to do this when late binding of family names
          happens in the linkage *)
       let linkage = Codegen.recompute_linkage linkage in
@@ -143,7 +144,7 @@ let close_family () : unit =
       in
       (* Again should not do this all the time: *)
       let linkage = Codegen.recompute_linkage linkage in
-      let signature = Codegen.compile_nested_linkage_signature linkage in
+      let signature = Codegen.compile_linkage_signature linkage in
       let impl = Codegen.compile_nested_linkage linkage in
       let elem =
         let compiled_context =

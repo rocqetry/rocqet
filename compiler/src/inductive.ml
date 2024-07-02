@@ -66,12 +66,46 @@ let add_inductive_definition inductive =
     Codegen.compile_inductive_signature ~ind_def:inductive ~ctx:parameters
       ~family_name
   in
-  let compiled_impl =
+  let compiled_impl, recursors =
     Codegen.compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
       ~family_name
   in
+  let compiled_recursors =
+    ref CompiledRecursors.{ compiled_context; recursors = RecursorStore.empty }
+  in
   let elem =
     LinkageElem.InductiveDefinition
-      { inductive; compiled_context; compiled_impl; compiled_signature }
+      {
+        inductive;
+        compiled_context;
+        compiled_impl;
+        compiled_signature;
+        compiled_recursors;
+      }
   in
-  Context.add_field ~name:inductive_name ~elem
+  Context.add_field ~name:inductive_name ~elem;
+  let context = Context.get () in
+  let compiled_context, parameters =
+    Codegen.compile_linkage_context ~field_name:inductive_name context
+  in
+  let principle_signature =
+    Codegen.compile_principle_signature ~ind_def:inductive ~recursors
+      ~ctx:parameters ~family_name
+  in
+  let principle_impl = Codegen.compile_principle_implementation parameters in
+  let principle =
+    LinkageElem.PrincipleDefinition
+      {
+        compiled_context;
+        inductive;
+        compiled_signature = principle_signature;
+        compiled_impl = principle_impl;
+      }
+  in
+  let name = Nameops.add_suffix inductive_name "IndPrinciple" in
+  Context.add_field ~name ~elem:principle;
+  let recursors =
+    Codegen.compile_recursors ~ind_def:inductive ~recursors ~ctx:parameters
+      ~family_name
+  in
+  compiled_recursors := CompiledRecursors.{ compiled_context; recursors }

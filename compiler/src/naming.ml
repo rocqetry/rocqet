@@ -1,6 +1,17 @@
 (* These functions are copied verbatim from
    https://github.com/DKXXXL/FPOP/blob/main/src/utils.ml#L407*)
 
+let motive_of name = Nameops.add_prefix "__motiveT" name
+let internal_name name = Nameops.add_prefix "__internal_" name
+
+let recursor_type ~inductive suffix =
+  Nameops.add_prefix "__recursor_type_" (Nameops.add_suffix inductive suffix)
+
+let handler_type name = Nameops.add_prefix "__handler_type_" name
+
+let handler_name ~recursor ~case =
+  Names.Id.to_string recursor ^ Names.Id.to_string case |> Names.Id.of_string
+
 let point_qualid (f : Names.Id.t) (path : Libnames.qualid) : Libnames.qualid =
   let path, base = Libnames.repr_qualid path in
   let newpath = List.append (Names.DirPath.repr path) [ f ] in
@@ -12,7 +23,7 @@ let _point_optionqualid (f : Names.Id.t) (path : Libnames.qualid option) :
   | None -> Libnames.qualid_of_ident f
   | Some x -> point_qualid f x
 
-let _qualid_point_ (path : Libnames.qualid option) (f : Names.Id.t) :
+let qualid_point (path : Libnames.qualid option) (f : Names.Id.t) :
     Libnames.qualid =
   match path with
   | Some path ->
@@ -50,6 +61,14 @@ let path_to_list (path : Libnames.qualid) : Names.Id.t list =
   let prefix, base = Libnames.repr_qualid path in
   let prefix = List.rev (Names.DirPath.repr prefix) in
   prefix @ [ base ]
+
+(* Say path = A.B.C.D, we want (A.B.C, D) *)
+let path_to_prefix (path : Libnames.qualid) :
+    Libnames.qualid option * Names.Id.t =
+  let prefix, base = Libnames.repr_qualid path in
+  match Names.DirPath.repr prefix with
+  | [] -> (None, base)
+  | _ -> (Some (Libnames.qualid_of_dirpath prefix), base)
 
 (* extract a path into (name "." path) *)
 let to_name_qualid (path : Libnames.qualid) : Names.Id.t * Libnames.qualid =
@@ -107,6 +126,23 @@ let rename_ind_constructors (constructors : Vernacexpr.constructor_expr list)
   in
   constructors |> List.map rename_one_ind_constructor
 
+(* Adapted from Constexpr_ops.replace_vars_constr_expr to add paths. *)
+let add_path_constr_expr path l r =
+  let open Constrexpr_ops in
+  let open Constrexpr in
+  let open Libnames in
+  let rec go l r =
+    match r with
+    | { CAst.loc; v = CRef (qid, us) } as x when qualid_is_ident qid ->
+        let id = qualid_basename qid in
+        if Names.Id.Set.mem id l then
+          CAst.make ?loc
+          @@ CRef (make_qualid ?loc (Names.DirPath.make [ path ]) id, us)
+        else x
+    | cn -> map_constr_expr_with_binders Names.Id.Set.remove go l cn
+  in
+  go l r
+
 let self_version = Nameops.add_prefix "self__"
 
 let unique_id =
@@ -131,3 +167,13 @@ let name_map_with f =
   List.fold_left
     (fun acc name -> Names.Id.Map.add name (f name) acc)
     Names.Id.Map.empty
+
+let inv_name_map_with f =
+  List.fold_left
+    (fun acc name -> Names.Id.Map.add (f name) name acc)
+    Names.Id.Map.empty
+
+let concat_names names =
+  names
+  |> List.map Names.Id.to_string
+  |> List.sort String.compare |> String.concat "_" |> Names.Id.of_string
