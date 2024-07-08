@@ -1,6 +1,7 @@
 (* FInduction implementation for extensible proofs *)
 open Env
 open Types
+module B = Backend.Vernac
 
 (* Private store *)
 module Ctx = struct
@@ -12,11 +13,42 @@ module Ctx = struct
     motive : Constrexpr.constr_expr;
     goal : Constrexpr.constr_expr;
     inductive : VernacInductive.t;
+    (* This is the module where the implementation will go into *)
+    module_name : Names.Id.t;
+    provenance : Linkage.t;
+    recursor : CompiledRecursor.t;
   }
 
   let store = Summary.ref ~name:"TheoremCtx" (None : t option)
   let update data = store := Some data
+
+  let get () =
+    match !store with
+    | None -> Errors.fail ~info:"There is no theorem context open"
+    | Some store -> store
 end
+
+let prepare_proving () =
+  let Ctx.
+        {
+          module_name;
+          parameters;
+          provenance;
+          recursor;
+          compiled_motive;
+          _;
+        } =
+    Ctx.get ()
+  in
+  let _ = B.run @@ B.open_module ~module_name ~parameters in
+  let _ = B.run @@ Codegen.include_handler_types provenance recursor in
+  let applied_motive =
+    Termutils.apply_module
+      ~functor_expr:(Termutils.ident_to_module_expr compiled_motive)
+      ~arguments:
+        (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
+  in
+  B.run (B.include_module ~module_expr:applied_motive)
 
 let handler_types_table name (recursor : CompiledRecursor.t) =
   let motive = Naming.motive_of name in
@@ -46,7 +78,7 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     Codegen.compile_motives ~names:[ name ] ~ctx:parameters ~motives:[ motive ]
       ~family_name
   in
-  let inductive, compiled_recursors, _provenance =
+  let inductive, compiled_recursors, provenance =
     Context.lookup_inductive_for_recursion ~name:inductive context
   in
   let suffix = RecKind.IndComplete in
@@ -73,16 +105,20 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     in
     List.fold_right __prod all_applied_recur __True
   in
+  let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in
   let ctx =
     Ctx.
       {
         name;
+        module_name;
         goal;
         inductive;
         compiled_context;
         compiled_motive;
         motive;
         parameters;
+        provenance;
+        recursor;
       }
   in
   Ctx.update ctx

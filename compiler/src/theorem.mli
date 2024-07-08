@@ -3,3 +3,5 @@ val open_theorem :
   inductive:Libnames.qualid ->
   motive:Constrexpr.constr_expr ->
   unit
+
+val close_theorem : unit -> unit
