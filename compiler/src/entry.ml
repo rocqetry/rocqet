@@ -53,4 +53,7 @@ let frecursion_handler = Recursion.add_handler
 
 let finduction ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     ~(motive : Constrexpr.constr_expr) =
-  Theorem.open_theorem ~name ~inductive ~motive
+  Theorem.open_theorem ~name ~inductive ~motive;
+  PluginScopes.push
+    PluginCmdScope.
+      { name; command = PluginCmd.Induction; close = Theorem.close_theorem }

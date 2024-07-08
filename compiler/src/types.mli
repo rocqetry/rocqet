@@ -62,7 +62,7 @@ module CompiledRecursors : sig
 end
 
 module PluginCmd : sig
-  type t = Family | Recursion
+  type t = Family | Recursion | Induction
 end
 
 module PluginCmdScope : sig
