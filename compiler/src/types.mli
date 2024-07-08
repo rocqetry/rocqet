@@ -113,8 +113,7 @@ module rec LinkageElem : sig
         names : Names.Id.t list;
         motives : Constrexpr.constr_expr list;
         inductive : VernacInductive.t; 
-        handler_types : (Names.Id.t * Constrexpr.constr_expr) list;
-        handler_cases : (Names.Id.t * Constrexpr.constr_expr) list;
+        handlers : (Names.Id.t * Constrexpr.constr_expr) list;
         compiled_handlers : CompiledModule.t;
         compiled_context : CompiledModuleType.t; 
         compiled_impl : CompiledModule.t; 

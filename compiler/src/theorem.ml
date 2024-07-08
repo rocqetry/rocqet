@@ -173,6 +173,7 @@ let close_theorem () =
   let Ctx.
         {
           name;
+          motive;
           compiled_motive;
           goal;
           goal_name;
@@ -181,6 +182,7 @@ let close_theorem () =
           inductive;
           parameters;
           provenance;
+          compiled_context;
           _;
         } =
     Ctx.get ()
@@ -223,19 +225,19 @@ let close_theorem () =
       implemented_case_names_handlers
   in
   let _ = B.run @@ B.flatmap define_implemented_case_names_handlers in
-  let module_name_expr = B.run @@ B.close_module ~module_name in
+  let compiled_handlers = B.run @@ B.close_module ~module_name in
   let the_motive = Naming.motive_of name in
   let impl_name = Naming.fresh_name ~prefix:(Names.Id.to_string module_name) in
   let compiled_impl =
     B.(
       run
       @@ define_module ~module_name:impl_name ~parameters ~body:(fun ctx ->
-             let applied_motive =
+             let module_expr =
                Termutils.apply_module
-                 ~functor_expr:(Termutils.ident_to_module_expr module_name_expr)
+                 ~functor_expr:(Termutils.ident_to_module_expr compiled_handlers)
                  ~arguments:ctx
              in
-             let* _ = B.include_module ~module_expr:applied_motive in
+             let* _ = B.include_module ~module_expr in
              let args = the_motive :: handler_names in
              let args =
                args |> List.map Libnames.qualid_of_ident |> List.map mkRefC
@@ -256,7 +258,19 @@ let close_theorem () =
   let family_name = Context.family_name (Context.get ()) in 
   let compiled_signature =
     Codegen.compile_recursive_definition_signature ~names:[ name ]
-      ~motive_module:compiled_motive ~handler_cases:module_name_expr
+      ~motive_module:compiled_motive ~handler_cases:compiled_handlers
       ~ctx:parameters ~provenance ~handlers:handler_names ~family_name
   in
-  Errors.fail ~info:"TODO"
+  let elem = 
+    LinkageElem.TheoremDefinition { 
+        names = [ name ]; 
+        inductive;
+        compiled_impl; 
+        compiled_signature; 
+        compiled_context;
+        motives = [ motive ];
+        compiled_handlers;
+        handlers;
+    }
+  in 
+  Context.add_field ~name ~elem
