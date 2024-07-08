@@ -170,7 +170,21 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
   Ctx.update ctx
 
 let close_theorem () =
-  let Ctx.{ name; goal; goal_name; module_name; handlers; inductive; _ } = Ctx.get () in
+  let Ctx.
+        {
+          name;
+          compiled_motive;
+          goal;
+          goal_name;
+          module_name;
+          handlers;
+          inductive;
+          parameters;
+          provenance;
+          _;
+        } =
+    Ctx.get ()
+  in
   let postfix = RecKind.IndComplete in
   let open Constrexpr_ops in
   let coq_fst x =
@@ -191,29 +205,58 @@ let close_theorem () =
     in
     mkAppC (snd, [ x ])
   in
-  let rec _proj_each_case_handlers 
-             (all_recur_names : Names.Id.t list) 
-             (acc_case_handlers : Constrexpr.constr_expr)  = 
-    match all_recur_names with 
-    | [] -> [] 
-    | h :: t -> 
-      (h , coq_fst acc_case_handlers) :: _proj_each_case_handlers t (coq_snd acc_case_handlers) 
-  in 
-  let handler_names = handlers |> List.map fst in 
-  let implemented_case_names_handlers = _proj_each_case_handlers handler_names (mkIdentC goal_name) in 
-   let define_implemented_case_names_handlers =
-      List.map (fun (x,y) -> B.define_term ~name:x y) 
-        implemented_case_names_handlers 
-   in 
- let _ = B.run @@ B.flatmap define_implemented_case_names_handlers in
- let the_motive = Naming.motive_of name in
- let args = the_motive :: handler_names in 
- let args = 
-   args 
-   |> List.map Libnames.qualid_of_ident 
-   |> List.map mkRefC
- in 
- let inductive = inductive |> VernacInductive.extract_inductive_name in 
- let inductive_principle = inductive |> Libnames.qualid_of_ident |> mkRefC in
- let inductive_proof = mkAppC (inductive_principle, args) in 
- Errors.fail ~info:"TODO"
+  let rec _proj_each_case_handlers (all_recur_names : Names.Id.t list)
+      (acc_case_handlers : Constrexpr.constr_expr) =
+    match all_recur_names with
+    | [] -> []
+    | h :: t ->
+        (h, coq_fst acc_case_handlers)
+        :: _proj_each_case_handlers t (coq_snd acc_case_handlers)
+  in
+  let handler_names = handlers |> List.map fst in
+  let implemented_case_names_handlers =
+    _proj_each_case_handlers handler_names (mkIdentC goal_name)
+  in
+  let define_implemented_case_names_handlers =
+    List.map
+      (fun (x, y) -> B.define_term ~name:x y)
+      implemented_case_names_handlers
+  in
+  let _ = B.run @@ B.flatmap define_implemented_case_names_handlers in
+  let module_name_expr = B.run @@ B.close_module ~module_name in
+  let the_motive = Naming.motive_of name in
+  let impl_name = Naming.fresh_name ~prefix:(Names.Id.to_string module_name) in
+  let compiled_impl =
+    B.(
+      run
+      @@ define_module ~module_name:impl_name ~parameters ~body:(fun ctx ->
+             let applied_motive =
+               Termutils.apply_module
+                 ~functor_expr:(Termutils.ident_to_module_expr module_name_expr)
+                 ~arguments:ctx
+             in
+             let* _ = B.include_module ~module_expr:applied_motive in
+             let args = the_motive :: handler_names in
+             let args =
+               args |> List.map Libnames.qualid_of_ident |> List.map mkRefC
+             in
+             let inductive =
+               inductive |> VernacInductive.extract_inductive_name
+             in             
+             let kind = RecKind.to_string postfix in
+             let inductive_principle = 
+               Naming.principle_name ~inductive ~kind 
+               |> Libnames.qualid_of_ident
+               |> mkRefC                                                                  
+             in 
+             let inductive_proof = mkAppC (inductive_principle, args) in
+             let* _ = define_term ~name ~ty:goal inductive_proof in
+             return ()))
+  in
+  let family_name = Context.family_name (Context.get ()) in 
+  let compiled_signature =
+    Codegen.compile_recursive_definition_signature ~names:[ name ]
+      ~motive_module:compiled_motive ~handler_cases:module_name_expr
+      ~ctx:parameters ~provenance ~handlers:handler_names ~family_name
+  in
+  Errors.fail ~info:"TODO"
