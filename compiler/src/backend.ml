@@ -1,7 +1,6 @@
 open Types
 (* Code generation backend *)
 
-
 (** Code generation backend by writing and interpreting Vernacular commands explicitly *)
 module Vernac = struct
   type expr =
@@ -51,7 +50,7 @@ module Vernac = struct
 
   let vernac_ expr : unit t = ([ Original expr ], ())
   (* let vernacs_ exprs : unit t = (List.map (fun x -> Original x) exprs, ())
-  let try_ expr : unit t = (List.map (fun x -> TrySilent x) expr, ()) *)
+     let try_ expr : unit t = (List.map (fun x -> TrySilent x) expr, ()) *)
 
   let thunk (e : unit -> unit t) : unit t =
     ([ Thunk (fun () -> fst @@ e ()) ], ())
@@ -106,8 +105,8 @@ module Vernac = struct
               DefineBody ([], None, expr, ty) )))
 
   let open_module ~(module_name : Names.Id.t)
-      ~(parameters : (Names.Id.t * Constrexpr.module_ast) list) : CompiledModule.t t
-      =
+      ~(parameters : (Names.Id.t * Constrexpr.module_ast) list) :
+      CompiledModule.t t =
     let modname_ = CAst.make module_name in
     let parameters_ =
       List.map

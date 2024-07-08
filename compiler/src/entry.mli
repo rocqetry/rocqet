@@ -41,4 +41,8 @@ val frecursion_extension : name:Names.Id.t -> unit
 val frecursion_handler :
   name:Names.Id.t -> handler:Constrexpr.constr_expr -> unit
 
-(* val test : Libnames.qualid -> unit *)
+val finduction :
+  name:Names.Id.t ->
+  inductive:Libnames.qualid ->
+  motive:Constrexpr.constr_expr ->
+  unit

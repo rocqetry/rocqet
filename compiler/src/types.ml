@@ -54,7 +54,7 @@ module VernacInductive = struct
       in
       type_decls @ List.concat constr_decls
     in
-    let prefix_with_internal = Naming.internal_name in 
+    let prefix_with_internal = Naming.internal_name in
     let apply_subst_expr =
       let all_original_names = all_names_with_type |> List.map fst in
       let map_name_newname =
