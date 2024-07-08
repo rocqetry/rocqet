@@ -346,6 +346,12 @@ end = struct
               |> List.map (Naming.replace_qualid_root ~source ~target)
             in
             RecursorDefinition { definition with motives }
+        | LinkageElem.TheoremDefinition definition ->
+            let motives =
+              definition.motives
+              |> List.map (Naming.replace_qualid_root ~source ~target)
+            in
+           TheoremDefinition { definition with motives }
         | LinkageElem.PrincipleDefinition principle ->
             LinkageElem.PrincipleDefinition principle
       in

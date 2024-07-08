@@ -469,6 +469,11 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
   | Bwd.Snoc
       ( _,
         ( _,
+          LinkageElem.TheoremDefinition
+            { compiled_context; compiled_signature; _ } ) )
+  | Bwd.Snoc
+      ( _,
+        ( _,
           LinkageElem.FamilyDefinition
             { compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
@@ -522,6 +527,7 @@ let compile_linkage (linkage : Linkage.t) =
     match fields with
     | Bwd.Emp -> B.return ()
     | Bwd.Snoc (fields, (_, LinkageElem.RecursorDefinition { compiled_impl; _ }))
+    | Bwd.Snoc (fields, (_, LinkageElem.TheoremDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
     | Bwd.Snoc
         (fields, (_, LinkageElem.PrincipleDefinition { compiled_impl; _ }))
@@ -598,6 +604,11 @@ let compile_linkage_signature linkage =
         ( _,
           ( _,
             LinkageElem.PrincipleDefinition
+              { compiled_context; compiled_signature; _ } ) )
+    | Bwd.Snoc
+        ( _,
+          ( _,
+            LinkageElem.TheoremDefinition
               { compiled_context; compiled_signature; _ } ) )
     | Bwd.Snoc
         ( _,
@@ -834,6 +845,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
         in
         (compiled_recursors := CompiledRecursors.{ compiled_context; recursors });
         next_linkage
+    | LinkageElem.TheoremDefinition { names = _; _ } -> Errors.fail ~info:"TODO"
     | LinkageElem.RecursorDefinition
         { handler_cases; handler_types; names; inductive; suffix; motives; _ }
       ->
