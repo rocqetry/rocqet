@@ -12,6 +12,7 @@ module Ctx = struct
     compiled_motive : CompiledModuleType.t;
     motive : Constrexpr.constr_expr;
     goal : Constrexpr.constr_expr;
+    goal_name : Names.Id.t;
     inductive : VernacInductive.t;
     (* This is the module where the implementation will go into *)
     module_name : Names.Id.t;
@@ -29,15 +30,8 @@ module Ctx = struct
 end
 
 let prepare_proving () =
-  let Ctx.
-        {
-          module_name;
-          parameters;
-          provenance;
-          recursor;
-          compiled_motive;
-          _;
-        } =
+  let Ctx.{ module_name; parameters; provenance; recursor; compiled_motive; _ }
+      =
     Ctx.get ()
   in
   let _ = B.run @@ B.open_module ~module_name ~parameters in
@@ -49,6 +43,47 @@ let prepare_proving () =
         (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
   in
   B.run (B.include_module ~module_expr:applied_motive)
+
+let start_proving () =
+  let Ctx.{ goal; goal_name; _ } = Ctx.get () in
+  let env = Global.env () in
+  let sigma = Evd.from_env env in
+  let sigma, checked_goal = Termutils.internalize env goal sigma in
+  let info = Declare.Info.make () in
+  let cinfo = Declare.CInfo.make ~name:goal_name ~typ:checked_goal () in
+  let ongoing_proof = Declare.Proof.start ~info ~cinfo sigma in
+  (* These tactics are defined in Loader.v *)
+  let open Ltac_plugin in 
+  let unfold_first_level =
+    let __unfold_motive_helper =
+      CAst.make
+        (Tacexpr.TacArg
+           (Tacexpr.TacCall
+              (CAst.make
+                 ( Libnames.qualid_of_ident
+                     (Names.Id.of_string "__unfold_ftheorem_motive"),
+                   [] ))))
+    in
+    Tacinterp.interp __unfold_motive_helper
+  in
+  let unfold_nonsplit =
+    let __unfold_motive_helper =
+      CAst.make
+        (Tacexpr.TacArg
+           (Tacexpr.TacCall
+              (CAst.make
+                 ( Libnames.qualid_of_ident
+                     (Names.Id.of_string "__unfold_ftheorem_motive_nested"),
+                   [] ))))
+    in
+    Tacinterp.interp __unfold_motive_helper
+  in
+  let repeat_split = Tacticals.tclREPEAT (Tactics.split_with_bindings false [Tactypes.NoBindings]) in
+  let repeat_split_then_unfold = Tacticals.tclTHEN repeat_split unfold_first_level in
+  let split = false in 
+  let starting_operation = if split then repeat_split_then_unfold else unfold_nonsplit in
+  let ongoing_proof, _ = Declare.Proof.by starting_operation ongoing_proof in
+  ongoing_proof
 
 let handler_types_table name (recursor : CompiledRecursor.t) =
   let motive = Naming.motive_of name in
@@ -106,12 +141,14 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     List.fold_right __prod all_applied_recur __True
   in
   let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in
+  let goal_name = Naming.fresh_name ~prefix:"Goal" in
   let ctx =
     Ctx.
       {
         name;
         module_name;
         goal;
+        goal_name;
         inductive;
         compiled_context;
         compiled_motive;
@@ -123,4 +160,7 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
   in
   Ctx.update ctx
 
-let close_theorem () = ()
+let close_theorem () = 
+  let Ctx.{ name; goal; module_name; _ } = Ctx.get ()  in 
+  
+  ()
