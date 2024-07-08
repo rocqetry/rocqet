@@ -90,4 +90,9 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "Case" ident(name) ":=" constr(handler) ] -> 
    {  Entry.frecursion_handler ~name ~handler }
+
+| [ "FInduction" ident(name) 
+                "about" reference_ip(inductive) 
+                "motive"  llconstr_ip(motive) ] ->
+   {  Entry.finduction ~name ~inductive ~motive }
 END
