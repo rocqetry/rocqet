@@ -167,6 +167,7 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
         recursor;
       }
   in
+  prepare_proving ();
   Ctx.update ctx
 
 let close_theorem () =
@@ -234,7 +235,8 @@ let close_theorem () =
       @@ define_module ~module_name:impl_name ~parameters ~body:(fun ctx ->
              let module_expr =
                Termutils.apply_module
-                 ~functor_expr:(Termutils.ident_to_module_expr compiled_handlers)
+                 ~functor_expr:
+                   (Termutils.ident_to_module_expr compiled_handlers)
                  ~arguments:ctx
              in
              let* _ = B.include_module ~module_expr in
@@ -244,33 +246,33 @@ let close_theorem () =
              in
              let inductive =
                inductive |> VernacInductive.extract_inductive_name
-             in             
+             in
              let kind = RecKind.to_string postfix in
-             let inductive_principle = 
-               Naming.principle_name ~inductive ~kind 
-               |> Libnames.qualid_of_ident
-               |> mkRefC                                                                  
-             in 
+             let inductive_principle =
+               Naming.principle_name ~inductive ~kind
+               |> Libnames.qualid_of_ident |> mkRefC
+             in
              let inductive_proof = mkAppC (inductive_principle, args) in
              let* _ = define_term ~name ~ty:goal inductive_proof in
              return ()))
   in
-  let family_name = Context.family_name (Context.get ()) in 
+  let family_name = Context.family_name (Context.get ()) in
   let compiled_signature =
     Codegen.compile_recursive_definition_signature ~names:[ name ]
       ~motive_module:compiled_motive ~handler_cases:compiled_handlers
       ~ctx:parameters ~provenance ~handlers:handler_names ~family_name
   in
-  let elem = 
-    LinkageElem.TheoremDefinition { 
-        names = [ name ]; 
+  let elem =
+    LinkageElem.TheoremDefinition
+      {
+        names = [ name ];
         inductive;
-        compiled_impl; 
-        compiled_signature; 
+        compiled_impl;
+        compiled_signature;
         compiled_context;
         motives = [ motive ];
         compiled_handlers;
         handlers;
-    }
-  in 
+      }
+  in
   Context.add_field ~name ~elem

@@ -46,3 +46,5 @@ val finduction :
   inductive:Libnames.qualid ->
   motive:Constrexpr.constr_expr ->
   unit
+
+val fproof : unit -> Declare.Proof.t

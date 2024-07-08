@@ -5,3 +5,4 @@ val open_theorem :
   unit
 
 val close_theorem : unit -> unit
+val start_proving : unit -> Declare.Proof.t

@@ -13,8 +13,7 @@ let handler_type name = Nameops.add_prefix "__handler_type_" name
 let handler_name ~recursor ~case =
   Names.Id.to_string recursor ^ Names.Id.to_string case |> Names.Id.of_string
 
-let principle_name ~inductive ~kind =
-  Nameops.add_suffix inductive kind
+let principle_name ~inductive ~kind = Nameops.add_suffix inductive kind
 
 let point_qualid (f : Names.Id.t) (path : Libnames.qualid) : Libnames.qualid =
   let path, base = Libnames.repr_qualid path in

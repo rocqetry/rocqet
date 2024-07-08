@@ -1,4 +1,3 @@
-
 val motive_of : Names.Id.t -> Names.Id.t
 val internal_name : Names.Id.t -> Names.Id.t
 val recursor_type : inductive:Names.Id.t -> string -> Names.Id.t

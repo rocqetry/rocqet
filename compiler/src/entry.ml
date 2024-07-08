@@ -29,10 +29,6 @@ let family_extends ~derived ~base =
         close = Family.close_family;
       }
 
-(* let frecursor ~ind_decls ~rec_mod ~suffix =
-   PluginScopes.ensure_in_scope ~scope:PluginCmd.Family;
-   Recursion.add_recursor ~ind_decls ~rec_mod ~suffix*)
-
 let definition ~name ?body_type body_expr =
   Definition.add_definition ~name ?body_type body_expr
 
@@ -57,3 +53,5 @@ let finduction ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
   PluginScopes.push
     PluginCmdScope.
       { name; command = PluginCmd.Induction; close = Theorem.close_theorem }
+
+let fproof () = Theorem.start_proving ()

@@ -109,16 +109,16 @@ module rec LinkageElem : sig
         compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
       }
-    | TheoremDefinition of { 
+    | TheoremDefinition of {
         names : Names.Id.t list;
         motives : Constrexpr.constr_expr list;
-        inductive : VernacInductive.t; 
+        inductive : VernacInductive.t;
         handlers : (Names.Id.t * Constrexpr.constr_expr) list;
         compiled_handlers : CompiledModule.t;
-        compiled_context : CompiledModuleType.t; 
-        compiled_impl : CompiledModule.t; 
+        compiled_context : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
-     }
+      }
 end
 
 and Linkage : sig

@@ -249,14 +249,14 @@ module rec LinkageElem : sig
         compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
       }
-    | TheoremDefinition of { 
+    | TheoremDefinition of {
         names : Names.Id.t list;
         motives : Constrexpr.constr_expr list;
-        inductive : VernacInductive.t; 
+        inductive : VernacInductive.t;
         handlers : (Names.Id.t * Constrexpr.constr_expr) list;
         compiled_handlers : CompiledModule.t;
-        compiled_context : CompiledModuleType.t; 
-        compiled_impl : CompiledModule.t; 
+        compiled_context : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
       }
 end =
@@ -350,7 +350,7 @@ end = struct
               definition.motives
               |> List.map (Naming.replace_qualid_root ~source ~target)
             in
-           TheoremDefinition { definition with motives }
+            TheoremDefinition { definition with motives }
         | LinkageElem.PrincipleDefinition principle ->
             LinkageElem.PrincipleDefinition principle
       in

@@ -845,9 +845,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
         in
         (compiled_recursors := CompiledRecursors.{ compiled_context; recursors });
         next_linkage
-
     | LinkageElem.TheoremDefinition { names = _; _ } -> Errors.fail ~info:"TODO"
-
     | LinkageElem.RecursorDefinition
         { handler_cases; handler_types; names; inductive; suffix; motives; _ }
       ->
