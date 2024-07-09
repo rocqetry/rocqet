@@ -28,6 +28,8 @@ module Ctx = struct
     match !store with
     | None -> Errors.fail ~info:"There is no theorem context open"
     | Some store -> store
+
+  let clear () = store := None
 end
 
 let prepare_proving () =
@@ -167,8 +169,96 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
         recursor;
       }
   in
-  prepare_proving ();
-  Ctx.update ctx
+  Ctx.update ctx; 
+  prepare_proving ()
+
+let open_theorem_extension ~name =
+  Inheritance.inherit_dependencies ~prefix:name;
+  let context = Context.get () in
+  let compiled_context, parameters =
+    Codegen.compile_linkage_context ~field_name:name context
+  in
+  let family_name = Context.family_name context in
+  let linkage = Context.family_linkage context in
+  let base_elem = Context.base_linkage_elem context ~field:name in
+  let inductive, motives, inherited_handlers =
+    match base_elem with
+    | Some (base, LinkageElem.TheoremDefinition { inductive; motives; handlers; _ }) ->       
+       let source = Naming.self_version base.name in
+       let target = Naming.self_version linkage.name in
+        let path_subtitution = Naming.replace_qualid_root ~source ~target in
+        let motives = motives |> List.map path_subtitution in
+        let handlers =
+          handlers
+          |> List.map (fun (name, expr) -> (name, path_subtitution expr))
+        in
+       inductive, motives, handlers
+    | _ -> Errors.fail ~info:"Expected to inherit a Theorem"
+  in 
+  let motives = Resolver.resolve_constrexpr_list ~context ~expressions:motives in
+  let compiled_motive =
+    Codegen.compile_motives ~names:[ name ] ~ctx:parameters ~motives
+      ~family_name
+  in
+  let inductive, compiled_recursors, provenance =
+    let name =
+      inductive
+      |> VernacInductive.extract_inductive_name
+      |> Libnames.qualid_of_ident
+    in 
+    Context.lookup_inductive_for_recursion ~name context
+  in
+  let suffix = RecKind.IndComplete in
+  let recursor = RecursorStore.find suffix compiled_recursors.recursors in
+  let handlers = handler_types_table name recursor in
+  let implementing_handlers = 
+    let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
+    let inherited_handlers = List.map fst inherited_handlers in 
+    List.filter (fun (x, _) -> not (inside x inherited_handlers)) handlers
+  in 
+  let goal =
+    let open Constrexpr_ops in
+    let the_motive =
+      name |> Naming.motive_of |> Libnames.qualid_of_ident |> mkRefC
+    in
+    let __True = mkIdentC (Names.Id.of_string "True") in
+    let __prod l r =
+      let using_prod_or_conj =
+        match suffix with RecKind.IndComplete -> "and" | _ -> "prod"
+      in
+      mkAppC (mkIdentC (Names.Id.of_string using_prod_or_conj), [ l; r ])
+    in
+    let all_recur_name =
+      List.map (fun (name, _) -> Naming.handler_type name) implementing_handlers
+    in
+    let all_recur_ = List.map mkIdentC all_recur_name in
+    let all_applied_recur =
+      List.map (fun x -> mkAppC (x, [ the_motive ])) all_recur_
+    in
+    List.fold_right __prod all_applied_recur __True
+  in
+  let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in
+  let goal_name = Naming.fresh_name ~prefix:"Goal" in
+  let motive = List.hd motives in
+  let ctx =
+    Ctx.
+      {
+        name;
+        module_name;
+        handlers;
+        goal;
+        goal_name;
+        inductive;
+        compiled_context;
+        compiled_motive;
+        motive;
+        parameters;
+        provenance;
+        recursor;
+      }
+  in
+  Ctx.update ctx; 
+  prepare_proving ()  
 
 let close_theorem () =
   let Ctx.
@@ -275,4 +365,5 @@ let close_theorem () =
         handlers;
       }
   in
-  Context.add_field ~name ~elem
+  Context.add_field ~name ~elem;
+  Ctx.clear ()

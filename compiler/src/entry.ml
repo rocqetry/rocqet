@@ -1,6 +1,7 @@
 open Types
 open Env
-(* The entry point to the plugin's functionalities *)
+
+(* The entry point to the language *)
 
 let finductive inductive_definitions =
   PluginScopes.ensure_in_scope ~scope:PluginCmd.Family;
@@ -53,5 +54,8 @@ let finduction ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
   PluginScopes.push
     PluginCmdScope.
       { name; command = PluginCmd.Induction; close = Theorem.close_theorem }
+
+let finduction_extension ~(name : Names.Id.t) =
+  Theorem.open_theorem_extension ~name
 
 let fproof () = Theorem.start_proving ()

@@ -74,6 +74,10 @@ let resolve_constrexpr ~(context : LinkageCtx.t) ~expression =
   let mapping = linear_ctx_mapping context in
   replace_qualid_path mapping expression
 
+let resolve_constrexpr_list ~(context : LinkageCtx.t) ~expressions =
+  expressions
+  |> List.map (fun expression -> resolve_constrexpr ~context ~expression)
+
 let resolve_inductive ~context ~inductive =
   let resolve_constructor
       ((u, paramty, tyty, cstrty) : Vernacexpr.inductive_expr) :

@@ -97,6 +97,9 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
                 "about" reference_ip(inductive) 
                 "motive"  llconstr_ip(motive) ] ->
    {  Entry.finduction ~name ~inductive ~motive }
+
+| [ "FInduction" ident(fname)] ->
+   { }
 END
 
 VERNAC COMMAND EXTEND FamilyPolyProof CLASSIFIED BY { _in_proof_mode } STATE open_proof
