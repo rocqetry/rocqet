@@ -252,6 +252,8 @@ module rec LinkageElem : sig
     | TheoremDefinition of {
         names : Names.Id.t list;
         motives : Constrexpr.constr_expr list;
+        goal : Constrexpr.constr_expr;
+        suffix : RecKind.t;
         inductive : VernacInductive.t;
         handlers : (Names.Id.t * Constrexpr.constr_expr) list;
         compiled_handlers : CompiledModule.t;

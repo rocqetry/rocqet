@@ -4,8 +4,6 @@ val open_theorem :
   motive:Constrexpr.constr_expr ->
   unit
 
-val open_theorem_extension :
-  name:Names.Id.t -> unit
-
+val open_theorem_extension : name:Names.Id.t -> unit
 val close_theorem : unit -> unit
 val start_proving : unit -> Declare.Proof.t

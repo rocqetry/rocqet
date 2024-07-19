@@ -50,5 +50,4 @@ val finduction :
 
 (* Handle a `FInduction ...` extension *)
 val finduction_extension : name:Names.Id.t -> unit
-
 val fproof : unit -> Declare.Proof.t

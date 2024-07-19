@@ -84,7 +84,7 @@ let close_recursion () =
   let compiled_signature =
     Codegen.compile_recursive_definition_signature ~provenance ~handlers
       ~names:[ name ] ~motive_module:motive ~handler_cases:module_name
-      ~ctx:parameters ~family_name:name
+      ~ctx:parameters ~family_name:name ~computational_behaviour:`Exposed
   in
   let compiled_impl =
     Codegen.compile_recursive_definition_implementation ~inductive ~provenance
@@ -109,22 +109,6 @@ let close_recursion () =
   in
   Context.add_field ~name ~elem;
   Ctx.clear ()
-
-let handler_types_table name (recursor : CompiledRecursor.t) =
-  let motive = Naming.motive_of name in
-  recursor.compiled_handlers
-  |> List.map (fun (handler_name, _) ->
-         let motive_term =
-           Constrexpr_ops.mkRefC (Libnames.qualid_of_ident motive)
-         in
-         let handler_type = Naming.handler_type handler_name in
-         let handler_type =
-           Constrexpr_ops.mkRefC (Libnames.qualid_of_ident handler_type)
-         in
-         let handler_type =
-           Constrexpr_ops.mkAppC (handler_type, [ motive_term ])
-         in
-         (handler_name, handler_type))
 
 let open_recursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t) =
@@ -157,7 +141,7 @@ let open_recursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
         (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
   in
   let _ = B.run (B.include_module ~module_expr:applied_motive) in
-  let handler_types = handler_types_table name recursor in
+  let handler_types = Termutils.handler_types_table name recursor in
   let recursion_ctx =
     Ctx.
       {
@@ -266,7 +250,7 @@ let open_recursion_extension ~name =
     Context.lookup_inductive_for_recursion ~name:inductive context
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
-  let handler_types = handler_types_table name recursor in
+  let handler_types = Termutils.handler_types_table name recursor in
   let recursor_module =
     Codegen.compile_handler_cases ~name ~context ~motive ~handler_cases
       ~handler_types ~parameters ~provenance ~recursor

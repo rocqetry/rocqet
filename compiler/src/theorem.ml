@@ -19,6 +19,7 @@ module Ctx = struct
     provenance : Linkage.t;
     recursor : CompiledRecursor.t;
     handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+    suffix : RecKind.t;
   }
 
   let store = Summary.ref ~name:"TheoremCtx" (None : t option)
@@ -95,22 +96,6 @@ let start_proving () =
   let ongoing_proof, _ = Declare.Proof.by starting_operation ongoing_proof in
   ongoing_proof
 
-let handler_types_table name (recursor : CompiledRecursor.t) =
-  let motive = Naming.motive_of name in
-  recursor.compiled_handlers
-  |> List.map (fun (handler_name, _) ->
-         let motive_term =
-           Constrexpr_ops.mkRefC (Libnames.qualid_of_ident motive)
-         in
-         let handler_type = Naming.handler_type handler_name in
-         let handler_type =
-           Constrexpr_ops.mkRefC (Libnames.qualid_of_ident handler_type)
-         in
-         let handler_type =
-           Constrexpr_ops.mkAppC (handler_type, [ motive_term ])
-         in
-         (handler_name, handler_type))
-
 let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     ~(motive : Constrexpr.constr_expr) =
   let context = Context.get () in
@@ -128,27 +113,10 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
   in
   let suffix = RecKind.IndComplete in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
-  let handlers = handler_types_table name recursor in
+  let handlers = Termutils.handler_types_table name recursor in
   let goal =
-    let open Constrexpr_ops in
-    let the_motive =
-      name |> Naming.motive_of |> Libnames.qualid_of_ident |> mkRefC
-    in
-    let __True = mkIdentC (Names.Id.of_string "True") in
-    let __prod l r =
-      let using_prod_or_conj =
-        match suffix with RecKind.IndComplete -> "and" | _ -> "prod"
-      in
-      mkAppC (mkIdentC (Names.Id.of_string using_prod_or_conj), [ l; r ])
-    in
-    let all_recur_name =
-      List.map (fun (name, _) -> Naming.handler_type name) handlers
-    in
-    let all_recur_ = List.map mkIdentC all_recur_name in
-    let all_applied_recur =
-      List.map (fun x -> mkAppC (x, [ the_motive ])) all_recur_
-    in
-    List.fold_right __prod all_applied_recur __True
+    Termutils.calculate_inductive_proof_goal ~theorem_name:name
+      ~handlers:(List.map fst handlers) ~suffix
   in
   let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in
   let goal_name = Naming.fresh_name ~prefix:"Goal" in
@@ -167,9 +135,10 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
         parameters;
         provenance;
         recursor;
+        suffix;
       }
   in
-  Ctx.update ctx; 
+  Ctx.update ctx;
   prepare_proving ()
 
 let open_theorem_extension ~name =
@@ -183,59 +152,46 @@ let open_theorem_extension ~name =
   let base_elem = Context.base_linkage_elem context ~field:name in
   let inductive, motives, inherited_handlers =
     match base_elem with
-    | Some (base, LinkageElem.TheoremDefinition { inductive; motives; handlers; _ }) ->       
-       let source = Naming.self_version base.name in
-       let target = Naming.self_version linkage.name in
+    | Some
+        (base, LinkageElem.TheoremDefinition { inductive; motives; handlers; _ })
+      ->
+        let source = Naming.self_version base.name in
+        let target = Naming.self_version linkage.name in
         let path_subtitution = Naming.replace_qualid_root ~source ~target in
         let motives = motives |> List.map path_subtitution in
         let handlers =
           handlers
           |> List.map (fun (name, expr) -> (name, path_subtitution expr))
         in
-       inductive, motives, handlers
+        (inductive, motives, handlers)
     | _ -> Errors.fail ~info:"Expected to inherit a Theorem"
-  in 
-  let motives = Resolver.resolve_constrexpr_list ~context ~expressions:motives in
+  in
+  let motives =
+    Resolver.resolve_constrexpr_list ~context ~expressions:motives
+  in
   let compiled_motive =
     Codegen.compile_motives ~names:[ name ] ~ctx:parameters ~motives
       ~family_name
   in
   let inductive, compiled_recursors, provenance =
     let name =
-      inductive
-      |> VernacInductive.extract_inductive_name
+      inductive |> VernacInductive.extract_inductive_name
       |> Libnames.qualid_of_ident
-    in 
+    in
     Context.lookup_inductive_for_recursion ~name context
   in
   let suffix = RecKind.IndComplete in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
-  let handlers = handler_types_table name recursor in
-  let implementing_handlers = 
+  let handlers = Termutils.handler_types_table name recursor in
+  let implementing_handlers =
     let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
-    let inherited_handlers = List.map fst inherited_handlers in 
+    let inherited_handlers = List.map fst inherited_handlers in
     List.filter (fun (x, _) -> not (inside x inherited_handlers)) handlers
-  in 
+  in
   let goal =
-    let open Constrexpr_ops in
-    let the_motive =
-      name |> Naming.motive_of |> Libnames.qualid_of_ident |> mkRefC
-    in
-    let __True = mkIdentC (Names.Id.of_string "True") in
-    let __prod l r =
-      let using_prod_or_conj =
-        match suffix with RecKind.IndComplete -> "and" | _ -> "prod"
-      in
-      mkAppC (mkIdentC (Names.Id.of_string using_prod_or_conj), [ l; r ])
-    in
-    let all_recur_name =
-      List.map (fun (name, _) -> Naming.handler_type name) implementing_handlers
-    in
-    let all_recur_ = List.map mkIdentC all_recur_name in
-    let all_applied_recur =
-      List.map (fun x -> mkAppC (x, [ the_motive ])) all_recur_
-    in
-    List.fold_right __prod all_applied_recur __True
+    Termutils.calculate_inductive_proof_goal ~theorem_name:name
+      ~handlers:(List.map fst implementing_handlers)
+      ~suffix
   in
   let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in
   let goal_name = Naming.fresh_name ~prefix:"Goal" in
@@ -255,10 +211,11 @@ let open_theorem_extension ~name =
         parameters;
         provenance;
         recursor;
+        suffix;
       }
   in
-  Ctx.update ctx; 
-  prepare_proving ()  
+  Ctx.update ctx;
+  prepare_proving ()
 
 let close_theorem () =
   let Ctx.
@@ -274,95 +231,56 @@ let close_theorem () =
           parameters;
           provenance;
           compiled_context;
+          suffix;
           _;
         } =
     Ctx.get ()
   in
-  let postfix = RecKind.IndComplete in
   let open Constrexpr_ops in
-  let coq_fst x =
-    let fst =
-      let using_prod_or_conj =
-        match postfix with RecKind.IndComplete -> "proj1" | _ -> "fst"
-      in
-      mkRefC @@ Libnames.qualid_of_ident (Names.Id.of_string using_prod_or_conj)
-    in
-    mkAppC (fst, [ x ])
-  in
-  let coq_snd x =
-    let snd =
-      let using_prod_or_conj =
-        match postfix with RecKind.IndComplete -> "proj2" | _ -> "snd"
-      in
-      mkRefC @@ Libnames.qualid_of_ident (Names.Id.of_string using_prod_or_conj)
-    in
-    mkAppC (snd, [ x ])
-  in
-  let rec _proj_each_case_handlers (all_recur_names : Names.Id.t list)
-      (acc_case_handlers : Constrexpr.constr_expr) =
-    match all_recur_names with
-    | [] -> []
-    | h :: t ->
-        (h, coq_fst acc_case_handlers)
-        :: _proj_each_case_handlers t (coq_snd acc_case_handlers)
-  in
   let handler_names = handlers |> List.map fst in
   let implemented_case_names_handlers =
-    _proj_each_case_handlers handler_names (mkIdentC goal_name)
+    Termutils.extract_handlers_from_inductive_proof handler_names
+      (mkIdentC goal_name) suffix
   in
-  let define_implemented_case_names_handlers =
+  let inherited_handlers =
+    List.map (fun (x, y) -> B.define_term ~name:x y) handlers
+  in
+  let implemented_handlers =
     List.map
       (fun (x, y) -> B.define_term ~name:x y)
       implemented_case_names_handlers
   in
-  let _ = B.run @@ B.flatmap define_implemented_case_names_handlers in
+  let _ = B.run @@ B.flatmap inherited_handlers in
+  let _ = B.run @@ B.flatmap implemented_handlers in
   let compiled_handlers = B.run @@ B.close_module ~module_name in
   let the_motive = Naming.motive_of name in
   let impl_name = Naming.fresh_name ~prefix:(Names.Id.to_string module_name) in
   let compiled_impl =
-    B.(
-      run
-      @@ define_module ~module_name:impl_name ~parameters ~body:(fun ctx ->
-             let module_expr =
-               Termutils.apply_module
-                 ~functor_expr:
-                   (Termutils.ident_to_module_expr compiled_handlers)
-                 ~arguments:ctx
-             in
-             let* _ = B.include_module ~module_expr in
-             let args = the_motive :: handler_names in
-             let args =
-               args |> List.map Libnames.qualid_of_ident |> List.map mkRefC
-             in
-             let inductive =
-               inductive |> VernacInductive.extract_inductive_name
-             in
-             let kind = RecKind.to_string postfix in
-             let inductive_principle =
-               Naming.principle_name ~inductive ~kind
-               |> Libnames.qualid_of_ident |> mkRefC
-             in
-             let inductive_proof = mkAppC (inductive_principle, args) in
-             let* _ = define_term ~name ~ty:goal inductive_proof in
-             return ()))
+    Codegen.compile_theorem_implementation ~name:impl_name ~parameters
+      ~compiled_handlers ~motive_name:the_motive
+      ~inductive_name:(VernacInductive.extract_inductive_name inductive)
+      ~suffix ~goal ~handler_names
   in
   let family_name = Context.family_name (Context.get ()) in
   let compiled_signature =
     Codegen.compile_recursive_definition_signature ~names:[ name ]
       ~motive_module:compiled_motive ~handler_cases:compiled_handlers
       ~ctx:parameters ~provenance ~handlers:handler_names ~family_name
+      ~computational_behaviour:`Hidden
   in
   let elem =
     LinkageElem.TheoremDefinition
       {
         names = [ name ];
+        goal;
         inductive;
         compiled_impl;
         compiled_signature;
         compiled_context;
         motives = [ motive ];
         compiled_handlers;
-        handlers;
+        handlers = handlers @ implemented_case_names_handlers;
+        suffix;
       }
   in
   Context.add_field ~name ~elem;

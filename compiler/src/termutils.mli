@@ -1,3 +1,5 @@
+open Types
+
 val global_env : unit -> Evd.evar_map * Environ.env
 
 val internalize :
@@ -34,3 +36,18 @@ val generate_computational_axioms :
   constructors:Names.Id.t list ->
   recursor:Names.Id.t ->
   (Names.Id.t * Constrexpr.constr_expr) list
+
+val handler_types_table :
+  Names.Id.t -> CompiledRecursor.t -> (Names.Id.t * Constrexpr.constr_expr) list
+
+val extract_handlers_from_inductive_proof :
+  Names.Id.t list ->
+  Constrexpr.constr_expr ->
+  RecKind.t ->
+  (Names.Id.t * Constrexpr.constr_expr) list
+
+val calculate_inductive_proof_goal :
+  theorem_name:Names.Id.t ->
+  handlers:Names.Id.t list ->
+  suffix:RecKind.t ->
+  Constrexpr.constr_expr

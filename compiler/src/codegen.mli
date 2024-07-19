@@ -50,6 +50,7 @@ val compile_recursive_definition_signature :
   provenance:Linkage.t ->
   handlers:Names.Id.t list ->
   family_name:Names.Id.t ->
+  computational_behaviour:[ `Exposed | `Hidden ] ->
   CompiledModuleType.t
 
 val compile_recursive_definition_implementation :
@@ -73,6 +74,18 @@ val compile_handler_cases :
   handler_types:(Names.Id.t * Constrexpr.constr_expr) list ->
   provenance:Linkage.t ->
   recursor:CompiledRecursor.t ->
+  CompiledModule.t
+
+(* FInduction *)
+val compile_theorem_implementation :
+  name:Names.Id.t ->
+  parameters:(Names.Id.t * Constrexpr.module_ast) list ->
+  compiled_handlers:CompiledModule.t ->
+  motive_name:Names.Id.t ->
+  inductive_name:Names.Id.t ->
+  suffix:RecKind.t ->
+  goal:Constrexpr.constr_expr ->
+  handler_names:Names.Id.t list ->
   CompiledModule.t
 
 (* Compiling Linkage Contexts *)
