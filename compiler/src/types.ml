@@ -405,6 +405,16 @@ end = struct
                     LinkageElem.RecursorDefinition
                       { rderived with handler_cases; handler_types } )
                   :: go base derived
+              | ( LinkageElem.TheoremDefinition rbase,
+                  LinkageElem.TheoremDefinition rderived ) ->
+                  let handler_cases =
+                    rbase.handlers @ rderived.handlers
+                  in
+                  let handlers = remove_duplicates handler_cases in                  
+                  ( name,
+                    LinkageElem.TheoremDefinition
+                      { rderived with handlers; } )
+                  :: go base derived
               | ( LinkageElem.InductiveDefinition ibase,
                   LinkageElem.InductiveDefinition iderived ) ->
                   let elem =
