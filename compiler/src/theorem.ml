@@ -141,6 +141,14 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
   Ctx.update ctx;
   prepare_proving ()
 
+let remove_duplicates lst =
+  let rec aux seen = function
+    | [] -> []
+    | hd :: tl ->
+        if List.mem hd seen then aux seen tl else hd :: aux (hd :: seen) tl
+  in
+  aux [] lst
+
 let open_theorem_extension ~name =
   Inheritance.inherit_dependencies ~prefix:name;
   let context = Context.get () in
@@ -149,11 +157,13 @@ let open_theorem_extension ~name =
   in
   let family_name = Context.family_name context in
   let linkage = Context.family_linkage context in
+  let further_elem = Context.further_bound_linkage_elem context ~field:name in
   let base_elem = Context.base_linkage_elem context ~field:name in
-  let inductive, motives, inherited_handlers =
-    match base_elem with
-    | Some
-        (base, LinkageElem.TheoremDefinition { inductive; motives; handlers; _ })
+  let inductive, motives, inherited_handlers, suffix =
+    match (further_elem, base_elem) with
+    | (None,
+       Some
+        (base, LinkageElem.TheoremDefinition { inductive; motives; handlers; suffix; _ }))
       ->
         let source = Naming.self_version base.name in
         let target = Naming.self_version linkage.name in
@@ -163,8 +173,44 @@ let open_theorem_extension ~name =
           handlers
           |> List.map (fun (name, expr) -> (name, path_subtitution expr))
         in
-        (inductive, motives, handlers)
-    | _ -> Errors.fail ~info:"Expected to inherit a Theorem"
+        (inductive, motives, handlers, suffix)
+    | ( Some
+          ( further,
+            TheoremDefinition { inductive; suffix; motives; handlers; _ }
+          ),
+        None ) ->
+        let source = Linkage.top_most_self_name further in
+        let target = Linkage.top_most_self_name linkage in
+        let path_subtitution = Naming.replace_qualid_root ~source ~target in
+        let motives = motives |> List.map path_subtitution in
+        let handler_cases =
+          handlers
+          |> List.map (fun (name, expr) -> (name, path_subtitution expr))
+        in        
+        (inductive, motives, handler_cases, suffix)
+    | Some (further, TheoremDefinition { motives; inductive; handlers = further_handlers; suffix; _}),
+      Some (base, TheoremDefinition { handlers = base_handlers; _ })
+      ->
+        let source = Linkage.top_most_self_name further in
+        let target = Linkage.top_most_self_name linkage in
+        let path_subtitution = Naming.replace_qualid_root ~source ~target in
+        let motives = motives |> List.map path_subtitution in
+        let handler_cases_further =
+          further_handlers
+          |> List.map (fun (name, expr) -> (name, path_subtitution expr))
+        in
+        let handler_cases_base =
+          let source = Naming.self_version base.name in
+          let target = Naming.self_version linkage.name in
+          let path_subtitution = Naming.replace_qualid_root ~source ~target in
+          base_handlers
+          |> List.map (fun (name, expr) -> (name, path_subtitution expr))
+        in
+        let handler_cases =
+          remove_duplicates (handler_cases_base @ handler_cases_further)
+        in        
+        (inductive, motives, handler_cases, suffix)
+    | _ -> Errors.fail ~info:"Expected to inherit an FInduction"
   in
   let motives =
     Resolver.resolve_constrexpr_list ~context ~expressions:motives
@@ -180,7 +226,6 @@ let open_theorem_extension ~name =
     in
     Context.lookup_inductive_for_recursion ~name context
   in
-  let suffix = RecKind.IndComplete in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
   let handlers = Termutils.handler_types_table name recursor in
   let implementing_handlers =
