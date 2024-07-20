@@ -206,7 +206,7 @@ let open_recursion_extension ~name =
         in
         let inductive = inductive |> VernacInductive.extract_inductive_name in
         (inductive, motives, handler_cases, suffix)
-    | Some (further, RecursorDefinition frec), Some (base, RecursorDefinition _)
+    | Some (further, RecursorDefinition frec), Some (base, RecursorDefinition brec)
       ->
         let source = Linkage.top_most_self_name further in
         let target = Linkage.top_most_self_name linkage in
@@ -220,7 +220,7 @@ let open_recursion_extension ~name =
           let source = Naming.self_version base.name in
           let target = Naming.self_version linkage.name in
           let path_subtitution = Naming.replace_qualid_root ~source ~target in
-          frec.handler_cases
+          brec.handler_cases
           |> List.map (fun (name, expr) -> (name, path_subtitution expr))
         in
         let handler_cases =
@@ -230,7 +230,7 @@ let open_recursion_extension ~name =
           frec.inductive |> VernacInductive.extract_inductive_name
         in
         (inductive, motives, handler_cases, frec.suffix)
-    | _ -> Errors.fail ~info:"Not yet implemented"
+    | _ -> Errors.fail ~info:"Expected to inherit an FRecrusion"
   in
   let module_name =
     let family = Names.Id.to_string linkage.name in
