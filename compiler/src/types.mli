@@ -20,9 +20,8 @@ module VernacInductive : sig
   val extract_all_names : t -> (Names.Id.t * Names.Id.t list) list
   val extract_inductive_name : t -> Names.Id.t
 
-  val definition_mapping :    
-    t ->
-    t * (Names.Id.t * Constrexpr.constr_expr * Constrexpr.constr_expr) list
+  val definition_mapping :
+    t -> t * (Names.Id.t * Constrexpr.constr_expr * Constrexpr.constr_expr) list
 
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
   val concatenate : base:t -> derived:t -> t
@@ -63,7 +62,7 @@ module CompiledRecursors : sig
 end
 
 module PluginCmd : sig
-  type t = Family | Recursion
+  type t = Family | Recursion | Induction
 end
 
 module PluginCmdScope : sig
@@ -107,6 +106,18 @@ module rec LinkageElem : sig
     | PrincipleDefinition of {
         compiled_context : CompiledModuleType.t;
         inductive : VernacInductive.t;
+        compiled_impl : CompiledModule.t;
+        compiled_signature : CompiledModuleType.t;
+      }
+    | TheoremDefinition of {
+        names : Names.Id.t list;
+        motives : Constrexpr.constr_expr list;
+        goal : Constrexpr.constr_expr;
+        suffix : RecKind.t;
+        inductive : VernacInductive.t;
+        handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+        compiled_handlers : CompiledModule.t;
+        compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
       }

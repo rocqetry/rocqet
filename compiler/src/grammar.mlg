@@ -38,6 +38,8 @@ DECLARE PLUGIN "nfpop.plugin"
     to_entry "test_second_token_about" begin
       lk_ident >> lk_kw "about"
     end
+
+ let _in_proof_mode _ = Vernacextend.(VtStartProof (Doesn'tGuaranteeOpacity,[]))
 }
 
 GRAMMAR EXTEND Gram
@@ -90,4 +92,19 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "Case" ident(name) ":=" constr(handler) ] -> 
    {  Entry.frecursion_handler ~name ~handler }
+
+| [ "FInduction" ident(name) 
+                "about" reference_ip(inductive) 
+                "motive"  llconstr_ip(motive) ] ->
+   {  Entry.finduction ~name ~inductive ~motive }
+
+| [ "FInduction" ident(name)] ->
+   { Entry.finduction_extension ~name }
+
+| [ "FQed"] ->
+   { Entry.fqed () }
+END
+
+VERNAC COMMAND EXTEND FamilyPolyProof CLASSIFIED BY { _in_proof_mode } STATE open_proof
+| ["FProof"] -> { Entry.fproof () }
 END

@@ -54,7 +54,7 @@ module VernacInductive = struct
       in
       type_decls @ List.concat constr_decls
     in
-    let prefix_with_internal = Naming.internal_name in 
+    let prefix_with_internal = Naming.internal_name in
     let apply_subst_expr =
       let all_original_names = all_names_with_type |> List.map fst in
       let map_name_newname =
@@ -207,8 +207,9 @@ end
 
 (* Linkages *)
 
-(* A Linkage element is the "type" of a single field in a family *)
-(* I use "type" becuase it is not really a type *)
+(** A [LinkageElem] represents all information there is to know about afield
+    in a family. This information includes compiled implemetations, signatures,
+    contexts, expressions, etc. *)
 module rec LinkageElem : sig
   type t =
     | InductiveDefinition of {
@@ -246,6 +247,18 @@ module rec LinkageElem : sig
     | PrincipleDefinition of {
         compiled_context : CompiledModuleType.t;
         inductive : VernacInductive.t;
+        compiled_impl : CompiledModule.t;
+        compiled_signature : CompiledModuleType.t;
+      }
+    | TheoremDefinition of {
+        names : Names.Id.t list;
+        motives : Constrexpr.constr_expr list;
+        goal : Constrexpr.constr_expr;
+        suffix : RecKind.t;
+        inductive : VernacInductive.t;
+        handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+        compiled_handlers : CompiledModule.t;
+        compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
       }
@@ -335,6 +348,12 @@ end = struct
               |> List.map (Naming.replace_qualid_root ~source ~target)
             in
             RecursorDefinition { definition with motives }
+        | LinkageElem.TheoremDefinition definition ->
+            let motives =
+              definition.motives
+              |> List.map (Naming.replace_qualid_root ~source ~target)
+            in
+            TheoremDefinition { definition with motives }
         | LinkageElem.PrincipleDefinition principle ->
             LinkageElem.PrincipleDefinition principle
       in
@@ -386,6 +405,16 @@ end = struct
                   ( name,
                     LinkageElem.RecursorDefinition
                       { rderived with handler_cases; handler_types } )
+                  :: go base derived
+              | ( LinkageElem.TheoremDefinition rbase,
+                  LinkageElem.TheoremDefinition rderived ) ->
+                  let handler_cases =
+                    rbase.handlers @ rderived.handlers
+                  in
+                  let handlers = remove_duplicates handler_cases in                  
+                  ( name,
+                    LinkageElem.TheoremDefinition
+                      { rderived with handlers; } )
                   :: go base derived
               | ( LinkageElem.InductiveDefinition ibase,
                   LinkageElem.InductiveDefinition iderived ) ->
@@ -496,7 +525,7 @@ end =
 (* A single plugin command *)
 (* e.g Family A. ... *)
 module PluginCmd = struct
-  type t = Family | Recursion
+  type t = Family | Recursion | Induction
 end
 
 (* A scope is a plugin command enriched with a name and a "closing" handler *)

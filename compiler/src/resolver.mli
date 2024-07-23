@@ -5,6 +5,11 @@ val resolve_constrexpr :
   expression:Constrexpr.constr_expr ->
   Constrexpr.constr_expr
 
+val resolve_constrexpr_list :
+  context:LinkageCtx.t ->
+  expressions:Constrexpr.constr_expr list ->
+  Constrexpr.constr_expr list
+
 val resolve_inductive :
   context:LinkageCtx.t -> inductive:VernacInductive.t -> VernacInductive.t
 

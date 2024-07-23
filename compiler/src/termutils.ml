@@ -1,4 +1,6 @@
-(* From https://github.com/tlringer/plugin-tutorial/blob/main/src/termutils.ml *)
+open Types
+
+(* Some functions are from https://github.com/tlringer/plugin-tutorial/blob/main/src/termutils.ml *)
 
 (** Get the global environment *)
 let global_env () =
@@ -22,12 +24,11 @@ let reflect_checked_term trm =
 
 (* Call by name reduction *)
 let cbn_type_check t : Constr.t =
-  let env = Global.env () in
-  let sigma = Evd.from_env env in
+  let sigma, env = global_env () in
   let sigma, internalized = Constrintern.interp_constr_evars env sigma t in
   let normalized_intern =
-    Cbn.norm_cbn RedFlags.allnolet env sigma internalized
-  in
+    Cbn.norm_cbn RedFlags.all env sigma internalized
+  in  
   let normalized_intern = EConstr.to_constr sigma normalized_intern in
   normalized_intern
 
@@ -150,6 +151,7 @@ let apply_module ~(functor_expr : Constrexpr.module_ast)
     (fun op x -> CAst.make (CMapply (op, x)))
     functor_expr arguments
 
+(* This has to be called with recursor_path and constructor_path exposed *)
 let calculate_computational_axiom_for_constructor ~recursor_name ~recursor_path
     ~constructor_name ~constructor_path =
   let open Constrexpr_ops in
@@ -167,7 +169,7 @@ let calculate_computational_axiom_for_constructor ~recursor_name ~recursor_path
     mkAppC
       (mkRefC recursor_path, fully_applied_constr :: recursor_remained_arguments)
   in
-  let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in
+  let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in  
   let id_on_fully_applied_r =
     mkAppC (eq_cstr, [ recursor_applied; recursor_applied ])
   in
@@ -180,7 +182,7 @@ let calculate_computational_axiom_for_constructor ~recursor_name ~recursor_path
   let equation =
     let reflected =
       closed_recursor_applied |> cbn_type_check |> reflect_checked_term
-    in
+    in       
     let _, body = collect_argument_and_ret_of_type reflected in
     let destEq { CAst.v = t; _ } =
       match t with
@@ -191,11 +193,11 @@ let calculate_computational_axiom_for_constructor ~recursor_name ~recursor_path
     let normalized, _ = destEq body in
     let id_on_applied_and_normalized =
       mkAppC (eq_cstr, [ recursor_applied; normalized ])
-    in
+    in    
     List.fold_right
       (fun (a, b, c) body -> mkProdC (a, b, c, body))
       (List.map fst params) id_on_applied_and_normalized
-  in
+  in  
   let equation_name =
     Names.Id.to_string recursor_name
     ^ "_"
@@ -217,3 +219,80 @@ let generate_computational_axioms ~provenance ~constructors ~recursor =
   |> List.map (fun (constructor_name, constructor_path) ->
          calculate_computational_axiom_for_constructor ~recursor_name
            ~recursor_path ~constructor_name ~constructor_path)
+
+(* Given a recursor name and a compiled recursor return the type
+   each handler is supposed to be *)
+let handler_types_table name (recursor : CompiledRecursor.t) =
+  let motive = Naming.motive_of name in
+  recursor.compiled_handlers
+  |> List.map (fun (handler_name, _) ->
+         let motive_term =
+           Constrexpr_ops.mkRefC (Libnames.qualid_of_ident motive)
+         in
+         let handler_type = Naming.handler_type handler_name in
+         let handler_type =
+           Constrexpr_ops.mkRefC (Libnames.qualid_of_ident handler_type)
+         in
+         let handler_type =
+           Constrexpr_ops.mkAppC (handler_type, [ motive_term ])
+         in
+         (handler_name, handler_type))
+
+let rec extract_handlers_from_inductive_proof
+    (all_recur_names : Names.Id.t list)
+    (acc_case_handlers : Constrexpr.constr_expr) (suffix : RecKind.t) =
+  let coq_fst x =
+    let open Constrexpr_ops in
+    let fst =
+      let using_prod_or_conj =
+        match suffix with RecKind.IndComplete -> "proj1" | _ -> "fst"
+      in
+      mkRefC @@ Libnames.qualid_of_ident (Names.Id.of_string using_prod_or_conj)
+    in
+    mkAppC (fst, [ x ])
+  in
+  let coq_snd x =
+    let open Constrexpr_ops in
+    let snd =
+      let using_prod_or_conj =
+        match suffix with RecKind.IndComplete -> "proj2" | _ -> "snd"
+      in
+      mkRefC @@ Libnames.qualid_of_ident (Names.Id.of_string using_prod_or_conj)
+    in
+    mkAppC (snd, [ x ])
+  in
+  match all_recur_names with
+  | [] -> []
+  | h :: t ->
+      (h, coq_fst acc_case_handlers)
+      :: extract_handlers_from_inductive_proof t
+           (coq_snd acc_case_handlers)
+           suffix
+
+let calculate_inductive_proof_goal 
+    ~(handler_type_prefix : Names.Id.t)
+    ~(theorem_name : Names.Id.t)
+    ~(handler_names : Names.Id.t list) 
+    ~(suffix : RecKind.t) =
+  let open Constrexpr_ops in
+  let the_motive =
+    theorem_name |> Naming.motive_of |> Libnames.qualid_of_ident |> mkRefC
+  in
+  let __True = mkIdentC (Names.Id.of_string "True") in
+  let __prod l r =
+    let using_prod_or_conj =
+      match suffix with RecKind.IndComplete -> "and" | _ -> "prod"
+    in
+    mkAppC (mkIdentC (Names.Id.of_string using_prod_or_conj), [ l; r ])
+  in
+  let all_recur_name =    
+    let prefix x =      
+      Libnames.make_qualid (Names.DirPath.make [ handler_type_prefix; ]) x
+    in 
+    List.map (fun name -> prefix (Naming.handler_type name)) handler_names
+  in
+  let all_recur_ = List.map mkRefC all_recur_name in
+  let all_applied_recur =
+    List.map (fun x -> mkAppC (x, [ the_motive ])) all_recur_
+  in
+  List.fold_right __prod all_applied_recur __True
