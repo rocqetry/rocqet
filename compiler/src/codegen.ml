@@ -552,8 +552,7 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
   | Bwd.Snoc
       ( _,
         ( _,
-          LinkageElem.PrincipleDefinition
-            (* Exposed parameter *)
+          LinkageElem.PrincipleDefinition            
             { compiled_context; compiled_impl = compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
@@ -683,18 +682,19 @@ let compile_linkage_signature linkage =
     | Bwd.Snoc
         ( _,
           ( _,
-            LinkageElem.FieldDefinition
+            LinkageElem.FieldDefinition              
               { compiled_context; compiled_impl = compiled_signature; _ } ) )
     | Bwd.Snoc
         ( _,
           ( _,
+            (* Exposed parameter *)
             LinkageElem.InductiveDefinition
-              { compiled_context; compiled_signature; _ } ) )
+              { compiled_context; compiled_impl = compiled_signature; _ } ) )
     | Bwd.Snoc
         ( _,
           ( _,
             LinkageElem.PrincipleDefinition
-              { compiled_context; compiled_signature; _ } ) )
+              { compiled_context; compiled_impl = compiled_signature; _ } ) )
     | Bwd.Snoc
         ( _,
           ( _,
