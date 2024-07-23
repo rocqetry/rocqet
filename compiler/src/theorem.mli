@@ -7,3 +7,4 @@ val open_theorem :
 val open_theorem_extension : name:Names.Id.t -> unit
 val close_theorem : unit -> unit
 val start_proving : unit -> Declare.Proof.t
+val end_proving : unit -> unit

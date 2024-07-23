@@ -47,7 +47,8 @@ val extract_handlers_from_inductive_proof :
   (Names.Id.t * Constrexpr.constr_expr) list
 
 val calculate_inductive_proof_goal :
+  handler_type_prefix:Names.Id.t ->
   theorem_name:Names.Id.t ->
-  handlers:Names.Id.t list ->
+  handler_names:Names.Id.t list ->
   suffix:RecKind.t ->
   Constrexpr.constr_expr

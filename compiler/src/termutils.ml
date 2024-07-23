@@ -27,8 +27,8 @@ let cbn_type_check t : Constr.t =
   let sigma, env = global_env () in
   let sigma, internalized = Constrintern.interp_constr_evars env sigma t in
   let normalized_intern =
-    Cbn.norm_cbn RedFlags.allnolet env sigma internalized
-  in
+    Cbn.norm_cbn RedFlags.all env sigma internalized
+  in  
   let normalized_intern = EConstr.to_constr sigma normalized_intern in
   normalized_intern
 
@@ -151,6 +151,7 @@ let apply_module ~(functor_expr : Constrexpr.module_ast)
     (fun op x -> CAst.make (CMapply (op, x)))
     functor_expr arguments
 
+(* This has to be called with recursor_path and constructor_path exposed *)
 let calculate_computational_axiom_for_constructor ~recursor_name ~recursor_path
     ~constructor_name ~constructor_path =
   let open Constrexpr_ops in
@@ -168,12 +169,7 @@ let calculate_computational_axiom_for_constructor ~recursor_name ~recursor_path
     mkAppC
       (mkRefC recursor_path, fully_applied_constr :: recursor_remained_arguments)
   in
-  let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in
-  (* let right =
-       mkRefC @@
-         Libnames.qualid_of_ident @@
-           Nameops.add_suffix recursor_name (Names.Id.to_string constructor_name)
-     in *)
+  let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in  
   let id_on_fully_applied_r =
     mkAppC (eq_cstr, [ recursor_applied; recursor_applied ])
   in
@@ -186,11 +182,7 @@ let calculate_computational_axiom_for_constructor ~recursor_name ~recursor_path
   let equation =
     let reflected =
       closed_recursor_applied |> cbn_type_check |> reflect_checked_term
-    in
-    (* let sigma, env = global_env () in
-       let display = Pp.string_of_ppcmds @@ Ppconstr.pr_constr_expr env sigma reflected in
-       Printf.printf "Display: %s\n" display;
-       failwith "" |> ignore; *)
+    in       
     let _, body = collect_argument_and_ret_of_type reflected in
     let destEq { CAst.v = t; _ } =
       match t with
@@ -201,17 +193,11 @@ let calculate_computational_axiom_for_constructor ~recursor_name ~recursor_path
     let normalized, _ = destEq body in
     let id_on_applied_and_normalized =
       mkAppC (eq_cstr, [ recursor_applied; normalized ])
-    in
-    (* let sigma, env = global_env () in
-       let result =
-         Pp.string_of_ppcmds @@  Ppconstr.pr_constr_expr env sigma normalized
-       in
-       Printf.printf "Result: %s\n" result;
-       failwith "" |> ignore;*)
+    in    
     List.fold_right
       (fun (a, b, c) body -> mkProdC (a, b, c, body))
       (List.map fst params) id_on_applied_and_normalized
-  in
+  in  
   let equation_name =
     Names.Id.to_string recursor_name
     ^ "_"
@@ -283,8 +269,11 @@ let rec extract_handlers_from_inductive_proof
            (coq_snd acc_case_handlers)
            suffix
 
-let calculate_inductive_proof_goal ~(theorem_name : Names.Id.t)
-    ~(handlers : Names.Id.t list) ~(suffix : RecKind.t) =
+let calculate_inductive_proof_goal 
+    ~(handler_type_prefix : Names.Id.t)
+    ~(theorem_name : Names.Id.t)
+    ~(handler_names : Names.Id.t list) 
+    ~(suffix : RecKind.t) =
   let open Constrexpr_ops in
   let the_motive =
     theorem_name |> Naming.motive_of |> Libnames.qualid_of_ident |> mkRefC
@@ -296,10 +285,13 @@ let calculate_inductive_proof_goal ~(theorem_name : Names.Id.t)
     in
     mkAppC (mkIdentC (Names.Id.of_string using_prod_or_conj), [ l; r ])
   in
-  let all_recur_name =
-    List.map (fun name -> Naming.handler_type name) handlers
+  let all_recur_name =    
+    let prefix x =      
+      Libnames.make_qualid (Names.DirPath.make [ handler_type_prefix; ]) x
+    in 
+    List.map (fun name -> prefix (Naming.handler_type name)) handler_names
   in
-  let all_recur_ = List.map mkIdentC all_recur_name in
+  let all_recur_ = List.map mkRefC all_recur_name in
   let all_applied_recur =
     List.map (fun x -> mkAppC (x, [ the_motive ])) all_recur_
   in

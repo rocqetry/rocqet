@@ -2,30 +2,10 @@ open Types
 open Env
 
 (* TODO: This module should not know about the Vernac backend *)
-module B = Backend.Vernac
-
-(* For some reason, the Vernac backend doesn't seem to work
-   if modules are not closed immediately?
-*)
-module M = struct
-  let start_module (name : Names.Id.t)
-      (parameters : (Names.Id.t * Constrexpr.module_ast) list) =
-    let export = Some (Lib.Export, Libobject.unfiltered) in
-    let modified_parameters =
-      parameters
-      |> List.map (fun (name, ty) ->
-             ([ CAst.make name ], (ty, Declaremods.NoInline)))
-    in
-    let module_path =
-      Declaremods.start_module export name modified_parameters
-        (Declaremods.Check [])
-    in
-    module_path |> Names.ModPath.to_string |> Libnames.qualid_of_string
-
-  let end_module () =
-    let module_path = Declaremods.end_module () in
-    module_path |> Names.ModPath.to_string |> Libnames.qualid_of_string
-end
+module VB = Backend.Vernac
+(* We need this becuase for some reason, VB doesn't seem to work 
+   if modules are not closed immediately(?) *)
+module DB = Backend.Declare
 
 (* Private store *)
 module Ctx = struct
@@ -79,18 +59,19 @@ let close_recursion () =
   in
   Typechecking.check_exhaustive ~name ~inductive ~handlers:handler_cases;
   module_name |> ignore;
-  let module_name = M.end_module () in
+  let module_name = DB.end_module () in
   let handlers = handler_types |> List.map fst in
-  let compiled_signature =
-    Codegen.compile_recursive_definition_signature ~provenance ~handlers
-      ~names:[ name ] ~motive_module:motive ~handler_cases:module_name
-      ~ctx:parameters ~family_name:name ~computational_behaviour:`Exposed
-  in
-  let compiled_impl =
+  let compiled_impl, computational_axioms =
     Codegen.compile_recursive_definition_implementation ~inductive ~provenance
       ~recursor_name:name ~handlers ~suffix ~ctx:parameters
       ~handler_cases:module_name
   in
+  let compiled_signature =
+    Codegen.compile_recursive_definition_signature ~provenance ~handlers
+      ~names:[ name ] ~motive_module:motive ~handler_cases:module_name
+      ~ctx:parameters ~family_name:name ~computational_behaviour:`Exposed
+      ~computational_axioms
+  in  
   let elem =
     LinkageElem.RecursorDefinition
       {
@@ -132,15 +113,15 @@ let open_recursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     Context.lookup_inductive_for_recursion ~name:inductive context
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
-  let _module_name = M.start_module module_name parameters in
-  B.run @@ Codegen.include_handler_types provenance recursor;
+  let _module_name = DB.start_module module_name parameters in
+  VB.run @@ Codegen.include_handler_types provenance recursor;
   let applied_motive =
     Termutils.apply_module
       ~functor_expr:(Termutils.ident_to_module_expr motive)
       ~arguments:
         (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
   in
-  let _ = B.run (B.include_module ~module_expr:applied_motive) in
+  let _ = VB.(run (include_module ~module_expr:applied_motive)) in
   let handler_types = Termutils.handler_types_table name recursor in
   let recursion_ctx =
     Ctx.
@@ -251,18 +232,26 @@ let open_recursion_extension ~name =
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
   let handler_types = Termutils.handler_types_table name recursor in
+  let compiled_handler_types = Codegen.aggregate_handler_types recursor parameters in 
   let recursor_module =
-    Codegen.compile_handler_cases ~name ~context ~motive ~handler_cases
-      ~handler_types ~parameters ~provenance ~recursor
+    Codegen.compile_handler_cases
+      ~name 
+      ~context ~motive 
+      ~handler_cases
+      ~handler_types 
+      ~compiled_handler_types
+      ~parameters 
+      ~provenance
+      ~recursor
   in
-  let _module_name = M.start_module module_name parameters in
+  let _module_name = DB.start_module module_name parameters in
   let previous_cases =
     Termutils.apply_module
       ~functor_expr:(Termutils.ident_to_module_expr recursor_module)
       ~arguments:
         (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
   in
-  let _ = B.run (B.include_module ~module_expr:previous_cases) in
+  let _ = VB.(run @@ include_module ~module_expr:previous_cases) in
   let recursion_ctx =
     Ctx.
       {
@@ -290,4 +279,4 @@ let add_handler ~name ~handler =
         Naming.handler_name ~recursor:recursion_ctx.name ~case:name
       in
       Ctx.add_handler_case name handler;
-      B.run (B.define_term ~name:case_name ~ty handler)
+      VB.run (VB.define_term ~name:case_name ~ty handler)

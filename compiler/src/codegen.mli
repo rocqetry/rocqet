@@ -3,6 +3,13 @@ open Types
 (* TODO: We should not expose this here *)
 module B = Backend.Vernac
 
+(* Module compilation helpers *)
+val wrap_module:
+    module_name:Names.Id.t -> 
+    inner_module:CompiledModule.t -> 
+    ctx:(Names.Id.t * Constrexpr.module_ast) list -> 
+    CompiledModule.t
+
 (* Compiling inductive definitions *)
 val compile_inductive_signature :
   ind_def:VernacInductive.t ->
@@ -51,6 +58,7 @@ val compile_recursive_definition_signature :
   handlers:Names.Id.t list ->
   family_name:Names.Id.t ->
   computational_behaviour:[ `Exposed | `Hidden ] ->
+  computational_axioms:(Names.Id.t * Constrexpr.constr_expr) list ->
   CompiledModuleType.t
 
 val compile_recursive_definition_implementation :
@@ -61,7 +69,7 @@ val compile_recursive_definition_implementation :
   suffix:RecKind.t ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
   handler_cases:CompiledModule.t ->
-  CompiledModule.t
+  CompiledModule.t * (Names.Id.t * Constrexpr.constr_expr) list
 
 val include_handler_types : Linkage.t -> CompiledRecursor.t -> unit B.t
 
@@ -72,8 +80,14 @@ val compile_handler_cases :
   motive:CompiledModule.t ->
   handler_cases:(Names.Id.t * Constrexpr.constr_expr) list ->
   handler_types:(Names.Id.t * Constrexpr.constr_expr) list ->
+  compiled_handler_types:CompiledModule.t ->
   provenance:Linkage.t ->
   recursor:CompiledRecursor.t ->
+  CompiledModule.t
+
+val aggregate_handler_types : 
+  CompiledRecursor.t -> 
+  (Names.Id.t * Constrexpr.module_ast) list ->
   CompiledModule.t
 
 (* FInduction *)
@@ -85,6 +99,7 @@ val compile_theorem_implementation :
   inductive_name:Names.Id.t ->
   suffix:RecKind.t ->
   goal:Constrexpr.constr_expr ->
+  provenance:Linkage.t ->
   handler_names:Names.Id.t list ->
   CompiledModule.t
 

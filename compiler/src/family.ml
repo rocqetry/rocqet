@@ -93,9 +93,7 @@ let close_family () : unit =
       let base = Context.base_linkage context in
       let linkage =
         match (further_base, base) with
-        | None, None ->
-            (* failwith "" |> ignore;*)
-            linkage
+        | None, None -> linkage
         | Some further, Some base ->
             let base =
               match Linkage.context_match base linkage with

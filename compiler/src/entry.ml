@@ -58,4 +58,8 @@ let finduction ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
 let finduction_extension ~(name : Names.Id.t) =
   Theorem.open_theorem_extension ~name
 
+(* FProof *)
 let fproof () = Theorem.start_proving ()
+
+(* FQed *)
+let fqed () = Theorem.end_proving ()

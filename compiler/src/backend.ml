@@ -1,7 +1,7 @@
 open Types
 (* Code generation backend *)
 
-(** Code generation backend by writing and interpreting Vernacular commands explicitly *)
+(** "Vernacular Backend": Code generation backend by writing and interpreting Vernacular commands explicitly *)
 module Vernac = struct
   type expr =
     | Original of Vernacexpr.vernac_expr
@@ -71,6 +71,10 @@ module Vernac = struct
     let expr, result = computation in
     emit_list expr;
     result
+
+  let end_proof (goal : Names.Id.t) : unit t =
+    let open Vernacexpr in 
+    vernac_ @@ VernacSynPure (VernacEndProof (Proved (Transparent, Some (CAst.make goal))))
 
   let define_inductive (ind_def : VernacInductive.t) : unit t =
     let open Vernacexpr in
@@ -246,4 +250,25 @@ module Vernac = struct
     let opaque = Vernacexpr.Opaque in
     let _ = Declare.Proof.save_regular ~proof ~opaque ~idopt:None in
     return ()
+end
+
+(** "Declare Backend": Code generation backend by mutating the internal state of Coq's "contexts" *)
+module Declare = struct
+  let start_module (name : Names.Id.t)
+      (parameters : (Names.Id.t * Constrexpr.module_ast) list) =
+    let export = Some (Lib.Export, Libobject.unfiltered) in
+    let modified_parameters =
+      parameters
+      |> List.map (fun (name, ty) ->
+             ([ CAst.make name ], (ty, Declaremods.NoInline)))
+    in
+    let module_path =
+      Declaremods.start_module export name modified_parameters
+        (Declaremods.Check [])
+    in
+    module_path |> Names.ModPath.to_string |> Libnames.qualid_of_string
+
+  let end_module () =
+    let module_path = Declaremods.end_module () in
+    module_path |> Names.ModPath.to_string |> Libnames.qualid_of_string
 end

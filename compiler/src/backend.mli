@@ -10,6 +10,9 @@ module Vernac : sig
   val return : 'a -> 'a t
   val flatmap : 'a t list -> unit t
   val run : 'a t -> 'a
+  
+  val end_proof : Names.Id.t -> unit t
+  
   val define_inductive : VernacInductive.t -> unit t
 
   val define_inductive_scheme :
@@ -53,3 +56,12 @@ module Vernac : sig
     unit ->
     unit t
 end
+
+module Declare : sig 
+  val start_module : 
+    Names.Id.t -> 
+    (Names.Id.t * Constrexpr.module_ast) list -> 
+    CompiledModule.t
+
+  val end_module : unit -> CompiledModule.t
+end 

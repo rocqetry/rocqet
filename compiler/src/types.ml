@@ -207,8 +207,9 @@ end
 
 (* Linkages *)
 
-(* A Linkage element is the "type" of a single field in a family *)
-(* I use "type" becuase it is not really a type *)
+(** A [LinkageElem] represents all information there is to know about afield
+    in a family. This information includes compiled implemetations, signatures,
+    contexts, expressions, etc. *)
 module rec LinkageElem : sig
   type t =
     | InductiveDefinition of {
