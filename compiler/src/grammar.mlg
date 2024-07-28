@@ -108,6 +108,11 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "FRecursion" ident(name) ":" argument_flist(args) ] -> 
    { Entry.frecursion_elegant name args }
+(* Default case is by _rec *)
+| [ "FRecursion" ident(name) 
+               "about" reference_ip(inductive)
+               "motive" llconstr_ip(motive) ] ->  
+   { Entry.frecursion ~name ~inductive ~motive ~suffix:Types.RecKind.Rec }
 
 | [ "FRecursion" ident(name) ] -> 
    { Entry.frecursion_extension ~name } 
