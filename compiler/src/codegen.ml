@@ -174,7 +174,7 @@ let compile_recursors ~(ind_def : VernacInductive.t)
       let name_set = all_type_names @ relevant_cstrs |> Names.Id.Set.of_list in
       Naming.add_path_constr_expr path_to_add name_set recursor
     in
-    let rec_handlers =
+    let handlers =
       (* Copied from FPOP almost verbatim: *)
       let from_recursor_type_to_subcase_handlers_constructor
           (cstname : Names.Id.t list) (recursor : Constrexpr.constr_expr) :
@@ -218,7 +218,7 @@ let compile_recursors ~(ind_def : VernacInductive.t)
       from_recursor_type_to_subcase_handlers_constructor relevant_cstrs recursor
     in
     let compiled_handlers =
-      rec_handlers
+      handlers
       |> List.map (fun (case_name, raw_ty) ->
              let handler_type_name = Naming.handler_type case_name in
              let module_name =
@@ -245,7 +245,7 @@ let compile_recursors ~(ind_def : VernacInductive.t)
                in
                return ()))
     in
-    CompiledRecursor.{ inductive_names; compiled_recursor; compiled_handlers }
+    CompiledRecursor.{ inductive_names; compiled_recursor; handlers; compiled_handlers }
   in
   recursors |> RecursorStore.mapi compile_one_recursor
 
