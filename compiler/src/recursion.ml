@@ -142,9 +142,7 @@ let rec find_reachable_path ~path ~name =
 let make_module_path head path = 
   let head = (Libnames.qualid_of_ident head) in   
     List.fold_left 
-      (fun module_path x -> Naming.qualid_point (Some module_path) x) 
-      head
-      path 
+      (fun module_path x -> Naming.qualid_point (Some module_path) x) head path 
 
 let calculate_rec_principle_prefix inductive_path context = 
   let current_family = context |> Context.family_name |> Naming.self_version in
@@ -353,14 +351,13 @@ let open_recursion_extension ~name =
     Codegen.compile_motives ~names:[ name ] ~motives ~ctx:parameters
       ~family_name:name
   in
-  let inductive, compiled_recursors, provenance =
-    let inductive = Libnames.qualid_of_ident inductive in
-    Context.lookup_inductive_for_recursion ~name:inductive context
+  let inductive, compiled_recursors, provenance =    
+    Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
   let handler_types = Termutils.handler_types_table name recursor in
   let compiled_handler_types =
-    Codegen.aggregate_handler_types recursor parameters
+    Codegen.aggregate_handler_types context provenance inductive_path recursor parameters
   in
   let recursor_module =
     Codegen.compile_handler_cases ~name ~context ~motive ~handler_cases

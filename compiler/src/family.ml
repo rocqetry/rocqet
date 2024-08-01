@@ -28,7 +28,8 @@ let open_family name =
       Context.destructive_update (Some (LinkageCtx.Toplevel linkage))
 
 let open_family_with_base ~name ~base =
-  match Context.lookup base with
+  let context = Context.get_store () in  
+  match Context.lookup context base with
   | None -> Errors.fail ~info:"Unbound Family Name"
   | Some base_linkage -> (
       match Context.get_store () with

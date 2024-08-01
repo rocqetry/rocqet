@@ -76,7 +76,7 @@ module Context = struct
     | None -> Errors.fail ~info:"There is no current context"
     | Some context -> context
 
-  let lookup (path : Libnames.qualid) =
+  let lookup context (path : Libnames.qualid) =
     let path = Naming.path_to_list path in
     let name = List.hd path in
     let rec walk context =
@@ -105,8 +105,13 @@ module Context = struct
           | linkage -> linkage)
     in
     let rest = List.tl path in
+    (* let linkage =
+      match walk context with
+      | None -> Linkages.lookup name
+      | Some context -> Some context
+    in*)
     let linkage =
-      match !store with
+      match context with
       | None -> Linkages.lookup name
       | Some context -> walk context
     in
@@ -115,13 +120,13 @@ module Context = struct
     | path ->
         Option.bind linkage (fun linkage -> walk_down_linkage linkage path)
 
-  let lookup_linkage_elem context (path : Libnames.qualid) =
-    (* Handle paths later *)
+  let lookup_linkage_elem context (path : Libnames.qualid) =    
     let family, name = Naming.path_to_prefix path in
     let result =
-      match Option.bind family lookup with
-      | None -> None
-      | Some linkage ->
+      match Option.bind family (lookup (Some context)) with
+      | None ->          
+         None
+      | Some linkage ->         
           linkage.fields
           |> Bwd.find_map (fun (found_name, elem) ->
                  if Names.Id.equal name found_name then Some (elem, linkage)
@@ -151,10 +156,10 @@ module Context = struct
         ( LinkageElem.InductiveDefinition { inductive; compiled_recursors; _ },
           linkage ) ->
         (inductive, !compiled_recursors, linkage)
-    | Some (LinkageElem.FamilyDefinition { linkage = _; _ }, _) ->
-        failwith "Got family but expected inductive"
-    | None -> failwith "Not found at all"
-    | _ -> Errors.fail ~info:"Unbound inductive type "
+    | Some _ -> Errors.fail ~info:"Expected an inductive type"            
+    | None -> 
+       let info = Printf.sprintf "Unbound inductive type: %s" (Pretty.pretty_qualid name) in 
+       Errors.fail ~info
 
   let family_name context =
     match context with

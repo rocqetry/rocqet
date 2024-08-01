@@ -85,6 +85,9 @@ val compile_handler_cases :
   CompiledModule.t
 
 val aggregate_handler_types :
+  LinkageCtx.t -> 
+  Linkage.t -> 
+  Libnames.qualid ->
   CompiledRecursor.t ->
   (Names.Id.t * Constrexpr.module_ast) list ->
   CompiledModule.t

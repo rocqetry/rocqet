@@ -17,8 +17,9 @@ end
 module Context : sig
   val get : unit -> LinkageCtx.t
   val get_store : unit -> LinkageCtx.t option
-  val lookup : Libnames.qualid -> Linkage.t option
 
+  
+  val lookup : LinkageCtx.t option -> Libnames.qualid -> Linkage.t option
   val lookup_linkage_elem :
     LinkageCtx.t -> Libnames.qualid -> (LinkageElem.t * Linkage.t) option
 
