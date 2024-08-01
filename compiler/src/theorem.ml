@@ -1,4 +1,4 @@
-(* FInduction implementation for extensible proofs *)
+(* Core implementation for extensible proofs *)
 open Env
 open Types
 
@@ -391,7 +391,7 @@ let close_theorem () =
   let compiled_signature =
     Codegen.compile_recursive_definition_signature ~names:[ name ]
       ~motive_module:compiled_motive ~handler_cases:compiled_handlers
-      ~ctx:parameters ~provenance ~handlers:handler_names ~family_name
+      ~ctx:parameters ~family_name
       ~computational_behaviour:`Hidden ~computational_axioms:[]
   in
   let elem =

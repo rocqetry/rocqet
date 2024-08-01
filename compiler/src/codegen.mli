@@ -53,9 +53,7 @@ val compile_recursive_definition_signature :
   names:Names.Id.t list ->
   motive_module:CompiledModule.t ->
   handler_cases:CompiledModule.t ->
-  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-  provenance:Linkage.t ->
-  handlers:Names.Id.t list ->
+  ctx:(Names.Id.t * Constrexpr.module_ast) list ->  
   family_name:Names.Id.t ->
   computational_behaviour:[ `Exposed | `Hidden ] ->
   computational_axioms:(Names.Id.t * Constrexpr.constr_expr) list ->
@@ -66,7 +64,8 @@ val compile_recursive_definition_implementation :
   provenance:Linkage.t ->
   recursor_name:Names.Id.t ->
   handlers:Names.Id.t list ->
-  suffix:RecKind.t ->
+  rec_principle_prefix:Libnames.qualid option ->
+  suffix:RecKind.t ->  
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
   handler_cases:CompiledModule.t ->
   CompiledModule.t * (Names.Id.t * Constrexpr.constr_expr) list

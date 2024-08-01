@@ -317,15 +317,14 @@ let compile_motives ~(names : Names.Id.t list)
                 B.define_term ~name motive)
          |> B.flatmap)
 
-let compile_recursive_definition_signature ~(names : Names.Id.t list)
+let compile_recursive_definition_signature 
+    ~(names : Names.Id.t list)
     ~(motive_module : CompiledModule.t) ~(handler_cases : CompiledModule.t)
-    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~(provenance : Linkage.t)
-    ~(handlers : Names.Id.t list) ~family_name
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)    
+    ~family_name
     ~(computational_behaviour : [ `Exposed | `Hidden ])
     ~(computational_axioms : (Names.Id.t * Constrexpr.constr_expr) list) :
-    CompiledModuleType.t =
-  provenance |> ignore;
-  handlers |> ignore;
+    CompiledModuleType.t =  
   let module_name =
     Naming.module_name_of ~family_name (Naming.concat_names names)
   in
@@ -394,8 +393,13 @@ let compile_recursive_definition_signature ~(names : Names.Id.t list)
            return ()))
 
 (* Return the compiled module and the generated computation behaviour *)
-let compile_recursive_definition_implementation ~inductive
-    ~(provenance : Linkage.t) ~recursor_name ~handlers ~suffix ~ctx
+let compile_recursive_definition_implementation 
+     ~inductive
+    ~(provenance : Linkage.t) 
+    ~recursor_name 
+    ~handlers 
+    ~(rec_principle_prefix : Libnames.qualid option)
+    ~suffix ~ctx
     ~(handler_cases : CompiledModule.t) :
     CompiledModule.t * (Names.Id.t * Constrexpr.constr_expr) list =
   let module_name = Naming.fresh_name ~prefix:"RecImpl" in
@@ -417,12 +421,13 @@ let compile_recursive_definition_implementation ~inductive
       let recursor =
         Nameops.add_suffix inductive_name (RecKind.to_string suffix)
       in
-      let recursor_path =
+      let recursor_path = Naming.qualid_point rec_principle_prefix recursor in
+      (*let recursor_path =
         let prefix =
           Names.DirPath.make [ Naming.self_version provenance.name ]
         in
         Libnames.make_qualid prefix recursor
-      in
+      in*)
       let motive =
         recursor_name |> Naming.motive_of |> Libnames.qualid_of_ident
         |> Constrexpr_ops.mkRefC
@@ -452,7 +457,9 @@ let compile_recursive_definition_implementation ~inductive
     let* () =
       thunk (fun () ->
           let result =
-            Termutils.generate_computational_axioms ~provenance:provenance.name
+            Termutils.generate_computational_axioms 
+              ~prefix:rec_principle_prefix
+              ~provenance:provenance.name
               ~constructors ~recursor:recursor_name
           in
           computational_axioms := result;
@@ -1037,7 +1044,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
         let compiled_signature =
           compile_recursive_definition_signature ~names:[ name ]
             ~motive_module:compiled_motive ~handler_cases:compiled_handlers
-            ~ctx:parameters ~provenance ~handlers:(List.map fst handlers)
+            ~ctx:parameters
             ~family_name ~computational_behaviour:`Hidden
             ~computational_axioms:[]
         in
@@ -1059,6 +1066,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
         { linkage with fields = Bwd.Snoc (linkage.fields, (name, elem)) }
     | LinkageElem.RecursorDefinition
         {
+          inductive_path;
           handler_cases;
           handler_types;
           names;
@@ -1094,13 +1102,16 @@ let rec recompute_linkage (linkage : Linkage.t) =
             ~compiled_handler_types ~context ~motive:motive_module ~provenance
             ~recursor
         in
+        let rec_principle_prefix = Some (Libnames.qualid_of_ident @@ Naming.self_version @@ linkage.name) in 
         let compiled_impl, computational_axioms =
-          compile_recursive_definition_implementation ~inductive ~provenance
+          compile_recursive_definition_implementation
+            ~rec_principle_prefix
+            ~inductive ~provenance
             ~recursor_name:name ~handlers ~suffix ~ctx:parameters
             ~handler_cases:recursor_module
         in
         let compiled_signature =
-          compile_recursive_definition_signature ~provenance ~handlers
+          compile_recursive_definition_signature
             ~handler_cases:recursor_module ~names:[ name ] ~motive_module
             ~ctx:parameters ~family_name:name ~computational_behaviour:`Exposed
             ~computational_axioms
@@ -1109,6 +1120,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
           LinkageElem.RecursorDefinition
             {
               handler_cases;
+              inductive_path;
               motives;
               names = [ name ];
               inductive;

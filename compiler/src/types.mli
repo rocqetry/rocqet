@@ -50,6 +50,7 @@ module CompiledRecursor : sig
   type t = {
     inductive_names : Names.Id.t list;
     compiled_recursor : CompiledModuleType.t;
+    handlers : (Names.Id.t * Constrexpr.constr_expr) list;
     compiled_handlers : (Names.Id.t * CompiledModuleType.t) list;
   }
 end
@@ -96,6 +97,7 @@ module rec LinkageElem : sig
         handler_types : (Names.Id.t * Constrexpr.constr_expr) list;
         handler_cases : (Names.Id.t * Constrexpr.constr_expr) list;
         inductive : VernacInductive.t;
+        inductive_path : Libnames.qualid;
         recursor_module : Libnames.qualid;
         motive_module : CompiledModule.t;
         suffix : RecKind.t;

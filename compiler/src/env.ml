@@ -117,7 +117,16 @@ module Context = struct
 
   let lookup_linkage_elem context (path : Libnames.qualid) =
     (* Handle paths later *)
-    let _family, name = Naming.path_to_prefix path in
+    let family, name = Naming.path_to_prefix path in
+    let result =
+      match Option.bind family lookup with
+      | None -> None
+      | Some linkage ->
+          linkage.fields
+          |> Bwd.find_map (fun (found_name, elem) ->
+                 if Names.Id.equal name found_name then Some (elem, linkage)
+                 else None)
+    in
     let rec go context =
       match context with
       | LinkageCtx.Toplevel linkage ->
@@ -134,7 +143,7 @@ module Context = struct
           | None -> go context
           | Some (elem, linkage) -> Some (elem, linkage))
     in
-    go context
+    match family with None -> go context | Some _ -> result
 
   let lookup_inductive_for_recursion ~name context =
     match lookup_linkage_elem context name with
@@ -142,6 +151,9 @@ module Context = struct
         ( LinkageElem.InductiveDefinition { inductive; compiled_recursors; _ },
           linkage ) ->
         (inductive, !compiled_recursors, linkage)
+    | Some (LinkageElem.FamilyDefinition { linkage = _; _ }, _) ->
+        failwith "Got family but expected inductive"
+    | None -> failwith "Not found at all"
     | _ -> Errors.fail ~info:"Unbound inductive type "
 
   let family_name context =
