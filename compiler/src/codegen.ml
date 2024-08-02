@@ -790,15 +790,41 @@ let make_module_path head path =
     List.fold_left 
       (fun module_path x -> Naming.qualid_point (Some module_path) x) head path
 
+let calculate_containing_family 
+      (current_linkage : Linkage.t) 
+      (inductive_linkage : Linkage.t) =   
+  let current_parameters = Bwd.to_list current_linkage.context in 
+  let inductive_parameters = Bwd.to_list inductive_linkage.context in
+  let rec go previous current inductive = 
+    match current, inductive with 
+    | [], _ | _, [] -> previous
+    | (c, _) :: current, (i, _) :: inductive -> 
+       if Names.Id.equal c i then go (Some c) current inductive 
+       else previous
+  in 
+  match go None current_parameters inductive_parameters with 
+  | None -> Naming.self_version current_linkage.name
+  | Some name -> name
+
+let calculate_rec_principle_prefix inductive_path context provenance =  
+  let current_linkage = context |> Env.Context.family_linkage in 
+  let containing_family = calculate_containing_family current_linkage provenance in
+  let path = 
+    inductive_path 
+    |> Naming.path_to_list 
+    |> remove_last     
+  in
+  make_module_path containing_family path
+
 let aggregate_handler_types 
       (context : LinkageCtx.t)
       (provenance : Linkage.t)
       (inductive_path : Libnames.qualid)
       (recursor : CompiledRecursor.t) 
       parameters =
-  let current_family = context |> Env.Context.family_name |> Naming.self_version in
-  (* TODO: The containing family is not always the current family *)
-  let containing_family = current_family in
+  let current_family = context |> Env.Context.family_name |> Naming.self_version in  
+  let current_linkage = context |> Env.Context.family_linkage in 
+  let containing_family = calculate_containing_family current_linkage provenance in  
   let reachable_parameters = 
     context 
     |> Env.Context.family_linkage 
@@ -917,17 +943,6 @@ let compile_handler_cases ~name ~(context : LinkageCtx.t) ~parameters ~motive
            |> flatmap
          in
          return ())
-
-let calculate_rec_principle_prefix inductive_path context = 
-  let current_family = context |> Env.Context.family_name |> Naming.self_version in
-  (* TODO: The containing family is not always the current family *)
-  let containing_family = current_family in
-  let path = 
-    inductive_path 
-    |> Naming.path_to_list 
-    |> remove_last     
-  in
-  make_module_path containing_family path
 
 (* We should be keeping track of a context *)
 let rec recompute_linkage (linkage : Linkage.t) =
@@ -1179,7 +1194,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
             ~compiled_handler_types ~context ~motive:motive_module ~provenance
             ~recursor
         in
-        let rec_principle_prefix = Some (calculate_rec_principle_prefix inductive_path context) in 
+        let rec_principle_prefix = Some (calculate_rec_principle_prefix inductive_path context provenance) in 
         let compiled_impl, computational_axioms =
           compile_recursive_definition_implementation
             ~rec_principle_prefix

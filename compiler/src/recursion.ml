@@ -144,10 +144,25 @@ let make_module_path head path =
     List.fold_left 
       (fun module_path x -> Naming.qualid_point (Some module_path) x) head path 
 
-let calculate_rec_principle_prefix inductive_path context = 
-  let current_family = context |> Context.family_name |> Naming.self_version in
-  (* TODO: The containing family is not always the current family *)
-  let containing_family = current_family in
+let calculate_containing_family 
+      (current_linkage : Linkage.t) 
+      (inductive_linkage : Linkage.t) =   
+  let current_parameters = Bwd.to_list current_linkage.context in 
+  let inductive_parameters = Bwd.to_list inductive_linkage.context in
+  let rec go previous current inductive = 
+    match current, inductive with 
+    | [], _ | _, [] -> previous
+    | (c, _) :: current, (i, _) :: inductive -> 
+       if Names.Id.equal c i then go (Some c) current inductive 
+       else previous
+  in 
+  match go None current_parameters inductive_parameters with 
+  | None -> Naming.self_version current_linkage.name
+  | Some name -> name
+
+let calculate_rec_principle_prefix inductive_path context provenance =  
+  let current_linkage = context |> Context.family_linkage in 
+  let containing_family = calculate_containing_family current_linkage provenance in
   let path = 
     inductive_path 
     |> Naming.path_to_list 
@@ -162,9 +177,9 @@ let include_handler_types
     (provenance : Linkage.t)
     (inductive_path : Libnames.qualid)
     (recursor : CompiledRecursor.t) =  
-  let current_family = context |> Context.family_name |> Naming.self_version in
-  (* TODO: The containing family is not always the current family *)
-  let containing_family = current_family in
+  let current_family = context |> Context.family_name |> Naming.self_version in    
+  let current_linkage = context |> Context.family_linkage in 
+  let containing_family = calculate_containing_family current_linkage provenance in
   let reachable_parameters = 
     context 
     |> Context.family_linkage 
@@ -260,8 +275,8 @@ let open_recursion
         motive_expr = [ motive_expr ];
         inductive;
         provenance;
-        arguments;
-        rec_principle_prefix = Some (calculate_rec_principle_prefix inductive_path context);
+        arguments;        
+        rec_principle_prefix = Some (calculate_rec_principle_prefix inductive_path context provenance);
       }
   in
   Ctx.update recursion_ctx
@@ -387,8 +402,8 @@ let open_recursion_extension ~name =
         inductive;
         inductive_path;
         provenance;
-        arguments;
-        rec_principle_prefix = Some (calculate_rec_principle_prefix inductive_path context);
+        arguments;        
+        rec_principle_prefix = Some (calculate_rec_principle_prefix inductive_path context provenance);
       }
   in
   Ctx.update recursion_ctx
