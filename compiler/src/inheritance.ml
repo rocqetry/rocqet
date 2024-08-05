@@ -14,7 +14,7 @@ let inherit_dependencies ~prefix =
         let base =
           match Linkage.context_match base linkage with
           | `Less | `More ->
-              Codegen.recompute_linkage { base with context = linkage.context }
+              Codegen.compute_linkage None { base with context = linkage.context }
           | `Equal -> base
         in
         let base =
@@ -34,7 +34,7 @@ let inherit_dependencies ~prefix =
         let base =
           match Linkage.context_match base linkage with
           | `Less | `More ->
-              Codegen.recompute_linkage { base with context = linkage.context }
+              Codegen.compute_linkage None { base with context = linkage.context }
           | `Equal -> base
         in
         let further =
@@ -49,10 +49,10 @@ let inherit_dependencies ~prefix =
         in
         let base = Linkage.concatenate_recursive ~base:further ~derived:base in
         let base = { base with name = further.name } in
-        let base = Codegen.recompute_linkage base in
+        let base = Codegen.compute_linkage None base in
         let linkage =
           Linkage.concatenate_recursive_prefix ~prefix ~derived:linkage ~base
         in
-        Codegen.recompute_linkage linkage
+        Codegen.compute_linkage None linkage
   in
   Context.replace ~linkage
