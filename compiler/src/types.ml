@@ -328,11 +328,14 @@ end = struct
         | LinkageElem.MetaDataSection metadata ->
             LinkageElem.MetaDataSection metadata
         | LinkageElem.FamilyDefinition family ->
-            LinkageElem.FamilyDefinition
-              {
-                family with
-                linkage = path_subtitution family.linkage ~source ~target;
-              }
+           let g (name, expr) = 
+             if Names.Id.equal source name 
+             then (target, expr) 
+             else (name, expr) 
+           in           
+           let context = family.linkage.context |> Bwd.map g in
+           let linkage = { (path_subtitution family.linkage ~source ~target) with context } in           
+           LinkageElem.FamilyDefinition { family with linkage }
         | LinkageElem.InductiveDefinition definition ->
             LinkageElem.InductiveDefinition
               {
@@ -367,7 +370,7 @@ end = struct
       in
       (name, elem)
     in
-    let fields = linkage.fields |> Bwd.map f in
+    let fields = linkage.fields |> Bwd.map f in    
     { linkage with fields }
 
   (* Deep concatenation *)
