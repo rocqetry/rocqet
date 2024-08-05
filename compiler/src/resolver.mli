@@ -1,5 +1,10 @@
 open Types
 
+val resolve_qualid : 
+  context:LinkageCtx.t ->
+  qualid:Libnames.qualid -> 
+  Libnames.qualid
+
 val resolve_constrexpr :
   context:LinkageCtx.t ->
   expression:Constrexpr.constr_expr ->
