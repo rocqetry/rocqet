@@ -1,6 +1,5 @@
 open Types
 open Env
-open Bwd
 
 (* TODO: This module should not know about the Vernac backend *)
 module VB = Backend.Vernac
@@ -125,105 +124,6 @@ let close_recursion () =
   Context.add_field ~name ~elem;
   Ctx.clear ()
 
-let rec remove_last lst =
-  match lst with
-  | [] -> failwith "Empty list"
-  | [_] -> []
-  | x :: xs -> x :: remove_last xs
-
-let rec find_reachable_path ~path ~name = 
-  match path with 
-  | [] -> Errors.fail ~info:"Reachable path not found"  
-  | x :: path -> 
-     if Names.Id.equal (Naming.self_version x) name then 
-       [Naming.un_self_version name]
-     else x :: find_reachable_path ~path ~name
-
-let make_module_path head path = 
-  let head = (Libnames.qualid_of_ident head) in   
-    List.fold_left 
-      (fun module_path x -> Naming.qualid_point (Some module_path) x) head path 
-
-let calculate_containing_family 
-      (current_linkage : Linkage.t) 
-      (inductive_linkage : Linkage.t) =   
-  let current_parameters = Bwd.to_list current_linkage.context in 
-  let inductive_parameters = Bwd.to_list inductive_linkage.context in
-  let rec go previous current inductive = 
-    match current, inductive with 
-    | [], _ | _, [] -> previous
-    | (c, _) :: current, (i, _) :: inductive -> 
-       if Names.Id.equal c i then go (Some c) current inductive 
-       else previous
-  in 
-  match go None current_parameters inductive_parameters with 
-  | None -> Naming.self_version current_linkage.name
-  | Some name -> name
-
-let calculate_rec_principle_prefix inductive_path context provenance =  
-  let current_linkage = context |> Context.family_linkage in 
-  let containing_family = calculate_containing_family current_linkage provenance in
-  let path = 
-    inductive_path 
-    |> Naming.path_to_list 
-    |> remove_last     
-  in
-  make_module_path containing_family path
-
-(* X.Y.ty *)
-(* Include Yty__handler_type_ty_unit回66 self__STLC self__X self__Y. *)
-let include_handler_types 
-    (context : LinkageCtx.t)
-    (provenance : Linkage.t)
-    (inductive_path : Libnames.qualid)
-    (recursor : CompiledRecursor.t) =  
-  let current_family = context |> Context.family_name |> Naming.self_version in    
-  let current_linkage = context |> Context.family_linkage in 
-  let containing_family = calculate_containing_family current_linkage provenance in
-  let reachable_parameters = 
-    context 
-    |> Context.family_linkage 
-    |> fun linkage -> linkage.context    
-    |> Bwd.to_list
-    |> List.map fst 
-  in  
-  let reachable_parameters = reachable_parameters @ [ current_family ] in
-  let is_reacheable name = 
-    reachable_parameters |> List.exists (Names.Id.equal name)
-  in
-  (* [X, Y] *)
-  let path = inductive_path |> Naming.path_to_list |> remove_last in
-  let normalize_arguments arguments = 
-    arguments 
-    |> List.map (fun name ->           
-           if is_reacheable name then              
-             (Libnames.qualid_of_ident name)
-           else 
-               let reacheable_path = find_reachable_path ~path ~name in 
-               make_module_path containing_family reacheable_path)    
-  in   
-  let open VB in
-  let* () = 
-     recursor.compiled_handlers
-     |> List.map (fun (_case_name, handler_module) ->
-            let arguments =
-              let family =
-                provenance.name |> Naming.self_version 
-              in
-              let parameters = provenance.context |> Bwd.to_list |> List.map fst in 
-              parameters @ [ family ]
-            in         
-            let module_expr =
-              Termutils.apply_module
-                ~functor_expr:(Termutils.ident_to_module_expr handler_module)
-                ~arguments:(normalize_arguments arguments)
-            in
-            let* _ = include_module ~module_expr in
-            return ())
-     |> flatmap
-  in
-  return ()
-
 let open_recursion 
     ~(name : Names.Id.t) 
     ~(inductive_path : Libnames.qualid)
@@ -251,7 +151,12 @@ let open_recursion
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
   let _module_name = DB.start_module module_name parameters in
-  VB.run @@ include_handler_types context provenance inductive_path recursor;
+  VB.run @@
+    Codegen.include_handler_types
+      ~context
+      ~inductive_provenance:provenance 
+      ~inductive_path 
+      ~recursor ;
   let applied_motive =
     Termutils.apply_module
       ~functor_expr:(Termutils.ident_to_module_expr motive)
@@ -260,6 +165,13 @@ let open_recursion
   in
   let _ = VB.(run (include_module ~module_expr:applied_motive)) in
   let handler_types = Termutils.handler_types_table name recursor in
+  let rec_principle_prefix = 
+    Some (
+        Codegen.calculate_rec_principle_prefix 
+          ~inductive_path 
+          ~context 
+          ~inductive_provenance:provenance)
+  in 
   let recursion_ctx =
     Ctx.
       {
@@ -276,7 +188,7 @@ let open_recursion
         inductive;
         provenance;
         arguments;        
-        rec_principle_prefix = Some (calculate_rec_principle_prefix inductive_path context provenance);
+        rec_principle_prefix;
       }
   in
   Ctx.update recursion_ctx
@@ -370,7 +282,7 @@ let open_recursion_extension ~name =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
-  let handler_types = Termutils.handler_types_table name recursor in
+  let handler_types = Termutils.handler_types_table name recursor in  
   let compiled_handler_types =
     Codegen.aggregate_handler_types context provenance inductive_path recursor parameters
   in
@@ -387,6 +299,13 @@ let open_recursion_extension ~name =
         (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
   in
   let _ = VB.(run @@ include_module ~module_expr:previous_cases) in
+  let rec_principle_prefix = 
+    Some (
+        Codegen.calculate_rec_principle_prefix 
+          ~inductive_path 
+          ~context 
+          ~inductive_provenance:provenance)
+  in
   let recursion_ctx =
     Ctx.
       {
@@ -403,7 +322,7 @@ let open_recursion_extension ~name =
         inductive_path;
         provenance;
         arguments;        
-        rec_principle_prefix = Some (calculate_rec_principle_prefix inductive_path context provenance);
+        rec_principle_prefix;
       }
   in
   Ctx.update recursion_ctx
@@ -488,8 +407,21 @@ let replace_recursor ~(recursor : Names.Id.t) (c : Constrexpr.constr_expr) =
 
 let add_handler ~name ~arguments ~handler =
   let recursion_ctx = Ctx.get () in
+  let context = Context.get () in
+  let handler = Resolver.resolve_constrexpr ~context ~expression:handler in
   match List.assoc_opt name recursion_ctx.handler_types with
-  | None -> Errors.fail ~info:"Unbound Constructor"
+  | None -> 
+     let names = 
+       recursion_ctx.handler_types 
+       |> List.map fst 
+       |> List.map Names.Id.to_string
+       |> String.concat ", "
+     in 
+     let info = 
+       Printf.sprintf "Unbound constructor %s. Avaiable constructors are %s"  
+         (Names.Id.to_string name) names
+     in 
+     Errors.fail ~info
   | Some ty ->
       let case_name =
         Naming.handler_name ~recursor:recursion_ctx.name ~case:name
