@@ -49,7 +49,7 @@ let open_family_with_base ~name ~base =
               }
           in
           let context = LinkageCtx.Nested (context, linkage) in
-          Typechecking.check_further_binding_structure context;
+          Checks.check_further_binding_structure context;
           Context.destructive_update (Some context)
       | None ->
           let linkage =
@@ -62,7 +62,7 @@ let open_family_with_base ~name ~base =
               }
           in
           let context = LinkageCtx.Toplevel linkage in
-          Typechecking.check_further_binding_structure context;
+          Checks.check_further_binding_structure context;
           Context.destructive_update (Some context))
 
 (* Close a family *)

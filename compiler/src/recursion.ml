@@ -65,7 +65,7 @@ let close_recursion () =
         } =
     Ctx.get ()
   in
-  Typechecking.check_exhaustive ~name ~inductive ~handlers:handler_cases;
+  Checks.check_exhaustive ~name ~inductive ~handlers:handler_cases;
   module_name |> ignore;
   let module_name = DB.end_module () in
   let handlers = handler_types |> List.map fst in

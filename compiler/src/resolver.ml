@@ -81,8 +81,7 @@ let resolve_qualid ~(context : LinkageCtx.t) ~qualid =
   in   
   match List.assoc_opt name dict with
   | Some new_root -> Naming.point_qualid new_root qualid
-  | None -> qualid
-  
+  | None -> qualid 
 
 let resolve_constrexpr ~(context : LinkageCtx.t) ~expression =
   let mapping = linear_ctx_mapping context in

@@ -1203,7 +1203,7 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
             ~name:inductive_path
             context
         in
-        Typechecking.check_exhaustive ~name ~inductive ~handlers:handler_cases;
+        Checks.check_exhaustive ~name ~inductive ~handlers:handler_cases;
         let motive_module =
           compile_motives ~names:[ name ] ~motives ~ctx:parameters
             ~family_name:name
