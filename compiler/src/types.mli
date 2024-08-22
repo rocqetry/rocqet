@@ -142,7 +142,12 @@ and Linkage : sig
   val context_parameters : t -> Libnames.qualid list
   val context_match : t -> t -> [ `Equal | `Less | `More ]
   val top_most_self_name : t -> Names.Id.t
+
+  val path_substitution_elem :
+    LinkageElem.t -> source:Names.Id.t -> target:Names.Id.t -> LinkageElem.t
+
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
+  val concatenate_elem : LinkageElem.t -> LinkageElem.t -> LinkageElem.t
   val concatenate_recursive : derived:t -> base:t -> t
   val concatenate : derived:t -> base:t -> t
   val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t

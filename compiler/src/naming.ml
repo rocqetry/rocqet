@@ -149,17 +149,15 @@ let add_path_constr_expr path l r =
 let self_version = Nameops.add_prefix "self__"
 
 (* Strip self__ from the prefix of a name *)
-let un_self_version name = 
-  let s = Names.Id.to_string name in 
-    if String.starts_with ~prefix:"self__" s then 
-       let newbeginning = 
-         String.sub s
-           (String.length "self__") 
-           ((String.length s) - (String.length "self__")) 
-       in 
-       Names.Id.of_string newbeginning  
-    else 
-      name
+let un_self_version name =
+  let s = Names.Id.to_string name in
+  if String.starts_with ~prefix:"self__" s then
+    let newbeginning =
+      String.sub s (String.length "self__")
+        (String.length s - String.length "self__")
+    in
+    Names.Id.of_string newbeginning
+  else name
 
 let unique_id =
   let counter = Summary.ref ~name:"FreshCounter" 0 in

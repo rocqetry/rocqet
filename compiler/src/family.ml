@@ -28,7 +28,7 @@ let open_family name =
       Context.destructive_update (Some (LinkageCtx.Toplevel linkage))
 
 let open_family_with_base ~name ~base =
-  let context = Context.get_store () in  
+  let context = Context.get_store () in
   match Context.lookup context base with
   | None -> Errors.fail ~info:"Unbound Family Name"
   | Some base_linkage -> (
@@ -90,8 +90,25 @@ let close_family () : unit =
       Codegen.compile_linkage linkage |> ignore;
       Linkages.add linkage
   | LinkageCtx.Nested (upper, linkage) as context ->
-      let further_base = Context.further_bound_linkage context in
+      (* let further_base = Context.further_bound_linkage context in*)
       let base = Context.base_linkage context in
+      let further_subst further =
+        Linkage.path_subtitution further
+          ~source:(Linkage.top_most_self_name further)
+          ~target:(Linkage.top_most_self_name linkage)
+       in
+       let further = Context.further_bound_linkage context in
+       let further_base =
+         match further with
+         | [] -> None
+         | x :: xs ->
+             let f further furthers =
+               Linkage.concatenate ~derived:(further_subst further) ~base:furthers
+             in
+             Some
+               (Codegen.compute_linkage None
+             (List.fold_right f xs (further_subst x)))
+       in
       let linkage =
         match (further_base, base) with
         | None, None -> linkage
@@ -103,11 +120,11 @@ let close_family () : unit =
                     { base with context = linkage.context }
               | `Equal -> base
             in
-            let further =
+            (* let further =
               Linkage.path_subtitution further
                 ~source:(Linkage.top_most_self_name further)
                 ~target:(Linkage.top_most_self_name linkage)
-            in
+            in*)
             let base =
               Linkage.path_subtitution base
                 ~source:(Naming.self_version base.name)

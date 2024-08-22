@@ -53,7 +53,7 @@ val compile_recursive_definition_signature :
   names:Names.Id.t list ->
   motive_module:CompiledModule.t ->
   handler_cases:CompiledModule.t ->
-  ctx:(Names.Id.t * Constrexpr.module_ast) list ->  
+  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
   family_name:Names.Id.t ->
   computational_behaviour:[ `Exposed | `Hidden ] ->
   computational_axioms:(Names.Id.t * Constrexpr.constr_expr) list ->
@@ -65,23 +65,23 @@ val compile_recursive_definition_implementation :
   recursor_name:Names.Id.t ->
   handlers:Names.Id.t list ->
   rec_principle_prefix:Libnames.qualid option ->
-  suffix:RecKind.t ->  
+  suffix:RecKind.t ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
   handler_cases:CompiledModule.t ->
   CompiledModule.t * (Names.Id.t * Constrexpr.constr_expr) list
 
-val include_handler_types : 
-    context:LinkageCtx.t -> 
-    inductive_provenance:Linkage.t ->
-    inductive_path:Libnames.qualid -> 
-    recursor:CompiledRecursor.t -> 
-    unit B.t
+val include_handler_types :
+  context:LinkageCtx.t ->
+  inductive_provenance:Linkage.t ->
+  inductive_path:Libnames.qualid ->
+  recursor:CompiledRecursor.t ->
+  unit B.t
 
-val calculate_rec_principle_prefix : 
-  inductive_path:Libnames.qualid -> 
-  context:LinkageCtx.t -> 
-  inductive_provenance:Linkage.t -> 
-  Libnames.qualid 
+val calculate_rec_principle_prefix :
+  inductive_path:Libnames.qualid ->
+  context:LinkageCtx.t ->
+  inductive_provenance:Linkage.t ->
+  Libnames.qualid
 
 val compile_handler_cases :
   name:Names.Id.t ->
@@ -96,8 +96,8 @@ val compile_handler_cases :
   CompiledModule.t
 
 val aggregate_handler_types :
-  LinkageCtx.t -> 
-  Linkage.t -> 
+  LinkageCtx.t ->
+  Linkage.t ->
   Libnames.qualid ->
   CompiledRecursor.t ->
   (Names.Id.t * Constrexpr.module_ast) list ->

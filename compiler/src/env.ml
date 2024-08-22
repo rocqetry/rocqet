@@ -48,14 +48,24 @@ module Context = struct
   let store = Summary.ref ~name:"LinkageContext" (None : LinkageCtx.t option)
   let get_store () = !store
 
-  let rec walk_up_linkage_context context =
+  (* All possible ways to walk up, stopping at a family with a base *)
+  let rec walk_up_linkage_context context :
+      (Names.Id.t Bwd.t * Linkage.t) option list =
     match context with
     | LinkageCtx.Toplevel linkage ->
-        linkage.base |> Option.map (fun base -> (Bwd.Emp, base))
+        [ linkage.base |> Option.map (fun base -> (Bwd.Emp, base)) ]
     | LinkageCtx.Nested (upper, linkage) ->
-        walk_up_linkage_context upper
-        |> Option.map (fun (path, base) ->
-               (Bwd.Snoc (path, linkage.name), base))
+        let result =
+          walk_up_linkage_context upper
+          |> List.map (fun almost ->
+                 almost
+                 |> Option.map (fun (path, base) ->
+                        (Bwd.Snoc (path, linkage.name), base)))
+        in
+        let current =
+          linkage.base |> Option.map (fun base -> (Bwd.Emp, base))
+        in
+        current :: result
 
   let rec walk_down_linkage (linkage : Linkage.t) path : Linkage.t option =
     match path with
@@ -106,10 +116,10 @@ module Context = struct
     in
     let rest = List.tl path in
     (* let linkage =
-      match walk context with
-      | None -> Linkages.lookup name
-      | Some context -> Some context
-    in*)
+         match walk context with
+         | None -> Linkages.lookup name
+         | Some context -> Some context
+       in*)
     let linkage =
       match context with
       | None -> Linkages.lookup name
@@ -120,13 +130,12 @@ module Context = struct
     | path ->
         Option.bind linkage (fun linkage -> walk_down_linkage linkage path)
 
-  let lookup_linkage_elem context (path : Libnames.qualid) =    
+  let lookup_linkage_elem context (path : Libnames.qualid) =
     let family, name = Naming.path_to_prefix path in
     let result =
       match Option.bind family (lookup (Some context)) with
-      | None ->          
-         None
-      | Some linkage ->         
+      | None -> None
+      | Some linkage ->
           linkage.fields
           |> Bwd.find_map (fun (found_name, elem) ->
                  if Names.Id.equal name found_name then Some (elem, linkage)
@@ -156,10 +165,13 @@ module Context = struct
         ( LinkageElem.InductiveDefinition { inductive; compiled_recursors; _ },
           linkage ) ->
         (inductive, !compiled_recursors, linkage)
-    | Some _ -> Errors.fail ~info:"Expected an inductive type"            
-    | None -> 
-       let info = Printf.sprintf "Unbound inductive type: %s" (Pretty.pretty_qualid name) in 
-       Errors.fail ~info
+    | Some _ -> Errors.fail ~info:"Expected an inductive type"
+    | None ->
+        let info =
+          Printf.sprintf "Unbound inductive type: %s"
+            (Pretty.pretty_qualid name)
+        in
+        Errors.fail ~info
 
   let family_name context =
     match context with
@@ -203,13 +215,17 @@ module Context = struct
 
   let destructive_update new_store = store := new_store
 
-  let further_bound_linkage context =
+  let further_bound_linkage context : Linkage.t list =
     match context with
-    | LinkageCtx.Toplevel _ -> None
-    | LinkageCtx.Nested (_, _) -> (
-        match walk_up_linkage_context context with
-        | None -> None
-        | Some (path, parent) -> walk_down_linkage parent (path |> Bwd.to_list))
+    | LinkageCtx.Toplevel _ -> []
+    | LinkageCtx.Nested (_, _) ->
+        context |> walk_up_linkage_context
+        |> List.filter_map (function
+             | None -> None
+             | Some (path, parent) ->
+                 walk_down_linkage parent (path |> Bwd.to_list))
+        (* |> List.tl*)
+  (* We don't want to include the current family's base, as that is not a further bound linkage *)
 
   let base_linkage context =
     match context with
@@ -224,11 +240,12 @@ module Context = struct
     in
     context |> base_linkage |> Option.map lookup |> Option.flatten
 
-  let further_bound_linkage_elem context ~field =
+  let further_bound_linkage_elem context ~field :
+      (Linkage.t * LinkageElem.t) list =
     let lookup (linkage : Linkage.t) =
       linkage.fields
       |> Bwd.find_opt (fun (name, _) -> Names.Id.equal name field)
       |> Option.map (fun (_, elem) -> (linkage, elem))
     in
-    context |> further_bound_linkage |> Option.map lookup |> Option.flatten
+    context |> further_bound_linkage |> List.filter_map lookup
 end

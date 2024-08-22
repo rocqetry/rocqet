@@ -17,9 +17,8 @@ end
 module Context : sig
   val get : unit -> LinkageCtx.t
   val get_store : unit -> LinkageCtx.t option
-
-  
   val lookup : LinkageCtx.t option -> Libnames.qualid -> Linkage.t option
+
   val lookup_linkage_elem :
     LinkageCtx.t -> Libnames.qualid -> (LinkageElem.t * Linkage.t) option
 
@@ -31,14 +30,14 @@ module Context : sig
   val family_name : LinkageCtx.t -> Names.Id.t
   val family_linkage : LinkageCtx.t -> Linkage.t
   val add_field : name:Names.Id.t -> elem:LinkageElem.t -> unit
-  val further_bound_linkage : LinkageCtx.t -> Linkage.t option
+  val further_bound_linkage : LinkageCtx.t -> Linkage.t list
   val base_linkage : LinkageCtx.t -> Linkage.t option
 
   val base_linkage_elem :
     LinkageCtx.t -> field:Names.Id.t -> (Linkage.t * LinkageElem.t) option
 
   val further_bound_linkage_elem :
-    LinkageCtx.t -> field:Names.Id.t -> (Linkage.t * LinkageElem.t) option
+    LinkageCtx.t -> field:Names.Id.t -> (Linkage.t * LinkageElem.t) list
 
   val replace : linkage:Linkage.t -> unit
   val destructive_update : LinkageCtx.t option -> unit

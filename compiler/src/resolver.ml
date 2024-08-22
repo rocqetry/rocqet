@@ -17,12 +17,12 @@ let rec linear_ctx_mapping context =
     match elem with
     | LinkageElem.RecursorDefinition { names; handler_cases; _ } ->
         let recursor = names |> List.hd in
-        let names = 
-           handler_cases |> List.map fst
-           |> List.map (fun case -> Naming.handler_name ~recursor ~case)
-           |> List.map (fun name -> (name, Naming.self_version linkage.name))
-        in 
-         (recursor, Naming.self_version linkage.name) :: names
+        let names =
+          handler_cases |> List.map fst
+          |> List.map (fun case -> Naming.handler_name ~recursor ~case)
+          |> List.map (fun name -> (name, Naming.self_version linkage.name))
+        in
+        (recursor, Naming.self_version linkage.name) :: names
     | LinkageElem.InductiveDefinition { inductive; _ } ->
         let names =
           inductive |> VernacInductive.extract_all_names_with_type
@@ -75,13 +75,13 @@ let rec replace_qualid_path dict r =
 
 let resolve_qualid ~(context : LinkageCtx.t) ~qualid =
   let dict = linear_ctx_mapping context in
-  let name = 
+  let name =
     if Libnames.qualid_is_ident qualid then Libnames.qualid_basename qualid
-    else qualid |> Naming.to_name_optionqualid |> fst      
-  in   
+    else qualid |> Naming.to_name_optionqualid |> fst
+  in
   match List.assoc_opt name dict with
   | Some new_root -> Naming.point_qualid new_root qualid
-  | None -> qualid 
+  | None -> qualid
 
 let resolve_constrexpr ~(context : LinkageCtx.t) ~expression =
   let mapping = linear_ctx_mapping context in

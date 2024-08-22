@@ -1,9 +1,7 @@
 open Types
 
-val resolve_qualid : 
-  context:LinkageCtx.t ->
-  qualid:Libnames.qualid -> 
-  Libnames.qualid
+val resolve_qualid :
+  context:LinkageCtx.t -> qualid:Libnames.qualid -> Libnames.qualid
 
 val resolve_constrexpr :
   context:LinkageCtx.t ->
@@ -16,9 +14,7 @@ val resolve_constrexpr_list :
   Constrexpr.constr_expr list
 
 val resolve_inductive :
-  context:LinkageCtx.t ->
-  inductive:VernacInductive.t ->
-  VernacInductive.t
+  context:LinkageCtx.t -> inductive:VernacInductive.t -> VernacInductive.t
 
 (* The linkage will be resolved by construction, otherwise how did it
    get created? *)
