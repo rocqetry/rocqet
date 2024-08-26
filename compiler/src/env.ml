@@ -9,7 +9,7 @@ module PluginScopes = struct
 
   let push scope =
     match peek () with
-    | None | Some { command = PluginCmd.(Family | Recursion | Induction); _ } ->
+    | None | Some { command = PluginCmd.(Family | Recursion | Induction | MetaData); _ } ->
         scopes := scope :: !scopes
 
   (* Basically, the caller wants to close the scope with

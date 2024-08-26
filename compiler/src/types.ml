@@ -521,7 +521,7 @@ end =
 (* A single plugin command *)
 (* e.g Family A. ... *)
 module PluginCmd = struct
-  type t = Family | Recursion | Induction
+  type t = Family | Recursion | Induction | MetaData
 end
 
 (* A scope is a plugin command enriched with a name and a "closing" handler *)
