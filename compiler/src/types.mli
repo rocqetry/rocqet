@@ -122,6 +122,11 @@ module rec LinkageElem : sig
         compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
       }
+    | MetaDataSection of {
+        name : Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
+    }
 end
 
 and Linkage : sig
