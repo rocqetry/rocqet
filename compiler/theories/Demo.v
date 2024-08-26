@@ -1,5 +1,19 @@
 From NFPOP Require Import Loader.
 
+Family Meta.
+   MetaData _b.
+       Definition add (x : nat) := x.
+   FEnd _b.
+   
+   FDefinition b := self__Meta.add.
+
+   MetaData _x. 
+       Definition y := self__Meta.b.
+   FEnd _x.
+FEnd Meta.
+
+Print Meta.
+
 Notation ident := nat.
 
 Family T.
