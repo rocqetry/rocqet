@@ -35,9 +35,9 @@ let open_metadata name =
   let ctx = Ctx.{ name; compiled_impl; compiled_context; } in 
   Ctx.update ctx
 
-let close_metadata () = 
-  let _ = DB.end_module () in
+let close_metadata () =   
   let Ctx.{ name; compiled_impl; compiled_context } = Ctx.get () in 
+  let _ = DB.end_module () in
   let elem = 
     LinkageElem.MetaDataSection { name; compiled_impl; compiled_context } in 
   Context.add_field ~name ~elem;
