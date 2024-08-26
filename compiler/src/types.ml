@@ -265,7 +265,7 @@ module rec LinkageElem : sig
         name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
-    }
+      }
 end =
   LinkageElem
 
@@ -323,8 +323,8 @@ end = struct
     let f (name, elem) =
       let elem =
         match elem with
-        | LinkageElem.MetaDataSection metadata -> 
-           LinkageElem.MetaDataSection metadata
+        | LinkageElem.MetaDataSection metadata ->
+            LinkageElem.MetaDataSection metadata
         | LinkageElem.FamilyDefinition family ->
             LinkageElem.FamilyDefinition
               {

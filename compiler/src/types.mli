@@ -126,7 +126,7 @@ module rec LinkageElem : sig
         name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
-    }
+      }
 end
 
 and Linkage : sig

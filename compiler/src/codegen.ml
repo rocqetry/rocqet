@@ -697,7 +697,7 @@ let compile_linkage_signature linkage =
     | Bwd.Snoc
         ( _,
           ( _,
-            LinkageElem.FieldDefinition              
+            LinkageElem.FieldDefinition
               { compiled_context; compiled_impl = compiled_signature; _ } ) )
     | Bwd.Snoc
         ( _,
@@ -876,8 +876,8 @@ let rec recompute_linkage (linkage : Linkage.t) =
             { body_expr; body_type; compiled_context; compiled_impl }
         in
         { linkage with fields = Bwd.Snoc (linkage.fields, (name, elem)) }
-    | LinkageElem.MetaDataSection _ ->           
-       { linkage with fields = Bwd.Snoc (linkage.fields, (name, field)) }
+    | LinkageElem.MetaDataSection _ ->
+        { linkage with fields = Bwd.Snoc (linkage.fields, (name, field)) }
     | LinkageElem.FamilyDefinition { linkage = nested_linkage; _ } ->
         (* Late binding of family names *)
         let nested_linkage =

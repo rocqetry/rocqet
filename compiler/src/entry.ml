@@ -30,15 +30,11 @@ let family_extends ~derived ~base =
         close = Family.close_family;
       }
 
-let metadata name = 
-  Metadata.open_metadata name; 
+let metadata name =
+  Metadata.open_metadata name;
   PluginScopes.push
     PluginCmdScope.
-      {
-         name; 
-         command = PluginCmd.MetaData; 
-         close = Metadata.close_metadata;
-      }
+      { name; command = PluginCmd.MetaData; close = Metadata.close_metadata }
 
 let definition ~name ?body_type body_expr =
   Definition.add_definition ~name ?body_type body_expr
