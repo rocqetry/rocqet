@@ -270,8 +270,6 @@ let open_recursion_extension ~name =
   in
   Ctx.update recursion_ctx
 
-let g = Genarg.make0 
-
 let add_handler ~name ~arguments ~handler =    
   let recursion_ctx = Ctx.get () in
   match List.assoc_opt name recursion_ctx.handler_types with
