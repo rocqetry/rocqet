@@ -290,22 +290,22 @@ let extend_argumets_with_inductive_case
   in
   let rec unflatten (c : Constrexpr.constr_expr) =     
     match c.v with     
-    | Constrexpr.CProdN (l, body) ->        
+    (*| Constrexpr.CProdN (l, body) ->        
        let ty = l |> List.hd in 
        (match ty with          
        | Constrexpr.CLocalAssum (_, _, ty) -> 
           (match ty.v with 
           | Constrexpr.CRef (ty_name, _) -> ty_name.v :: unflatten body
           | _ -> Errors.fail ~info:"Expected reference")
-       | _ -> Errors.fail ~info:"Expected local assume")    
+       | _ -> Errors.fail ~info:"Expected local assume")*)    
     | CNotation (_, (_, "_ -> _"), ([ domain; codomain ], _, _, _)) -> 
        (match domain.v with 
-          | Constrexpr.CRef (ty_name, _) -> ty_name.v :: unflatten codomain
-          | _ -> Errors.fail ~info:"Expected reference")       
+       | Constrexpr.CRef (ty_name, _) -> ty_name.v :: unflatten codomain
+       | _ -> Errors.fail ~info:"Expected reference")
     | _ -> 
-       let sigma, env = Termutils.global_env () in 
+       (* let sigma, env = Termutils.global_env () in 
        let result = Ppconstr.pr_constr_expr env sigma c in 
-       Printf.printf "%s\n" (Pp.string_of_ppcmds result);       
+       Printf.printf "%s\n" (Pp.string_of_ppcmds result); *)
        []
   in
   let types = unflatten constructor_type in  
@@ -313,12 +313,35 @@ let extend_argumets_with_inductive_case
   let result = List.combine arguments types in 
   result 
   |> List.concat_map (fun (arg, ty) -> 
-       let r = Names.Id.to_string recursor ^ "_" ^ Names.Id.to_string arg in 
+       let r = Names.Id.to_string recursor ^ "_" ^ Names.Id.to_string arg in
        let r  = Names.Id.of_string r in 
-       if ty = ind_name.v then 
-       [arg; r] 
-       else 
-         [arg])
+       if ty = ind_name.v then [arg; r] else [arg])
+
+
+(* Given a recursor name `r` and an argument `n` 
+   replace the expression r n (i.e r applied to n) with the 
+   variable r_n *)
+let replace_recursor 
+      ~(recursor : Names.Id.t)      
+      (c : Constrexpr.constr_expr) = 
+    let recursor_qualid = Libnames.qualid_of_ident recursor in    
+    let rec aux _ (c : Constrexpr.constr_expr) = 
+    match c.v with 
+    | CApp (f, args) -> 
+        (match f.v with 
+        | CRef (ref_name, _) when ref_name.v = recursor_qualid.v ->             
+            (match args with 
+            | ( { v = CRef (n, _); _ } ,_) :: args -> 
+               let name = n |> Naming.path_to_list |> List.hd in 
+               let r = Names.Id.to_string recursor ^ "_" ^ Names.Id.to_string name in
+               let r  = Libnames.qualid_of_string r in 
+               let r = Constrexpr_ops.mkRefC r in                
+               Constrexpr_ops.mkAppC (r, (List.map fst args))
+            | _ -> Constrexpr_ops.map_constr_expr_with_binders (fun _ _ -> ()) aux () c)
+        | _ -> Constrexpr_ops.map_constr_expr_with_binders (fun _ _ -> ()) aux () c)
+    | _ -> Constrexpr_ops.map_constr_expr_with_binders (fun _ _ -> ()) aux () c
+  in 
+  aux () c
   
 
 let add_handler ~name ~arguments ~handler =    
@@ -328,21 +351,20 @@ let add_handler ~name ~arguments ~handler =
   | Some ty ->
       let case_name =
         Naming.handler_name ~recursor:recursion_ctx.name ~case:name
-      in
-      let arguments = 
+      in      
+      let handler =         
         match arguments with 
-        | None -> []
-        | Some arguments -> arguments
+        | None -> handler
+        | Some arguments -> 
+           let arguments = 
+             extend_argumets_with_inductive_case 
+               ~recursor:recursion_ctx.name 
+               ~constructor:name
+               ~arguments
+               ~inductive:recursion_ctx.inductive
+           in      
+           let handler = replace_recursor ~recursor:recursion_ctx.name handler in 
+        Termutils.mk_lambda arguments handler 
       in 
-      (* We want to check the type to see where we need to add the 
-         recursor *)
-      let arguments = 
-        extend_argumets_with_inductive_case 
-          ~recursor:recursion_ctx.name 
-          ~constructor:name
-          ~arguments
-          ~inductive:recursion_ctx.inductive
-      in 
-      let handler = Termutils.mk_lambda arguments handler in 
       Ctx.add_handler_case name handler;
       VB.run (VB.define_term ~name:case_name ~ty handler)
