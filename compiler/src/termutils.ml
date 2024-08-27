@@ -296,3 +296,14 @@ let calculate_inductive_proof_goal
     List.map (fun x -> mkAppC (x, [ the_motive ])) all_recur_
   in
   List.fold_right __prod all_applied_recur __True
+
+let mk_lambda arguments body = 
+  let f (n : Names.Id.t) =     
+     Constrexpr.CLocalPattern 
+       (CAst.make 
+          (Constrexpr.CPatAtom 
+             (Some (Libnames.qualid_of_ident n))))
+  in   
+  let arguments = List.map f arguments in   
+  List.fold_right (fun arg body -> Constrexpr_ops.mkLambdaCN [arg] body) arguments body
+
