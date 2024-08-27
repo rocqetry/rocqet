@@ -270,6 +270,57 @@ let open_recursion_extension ~name =
   in
   Ctx.update recursion_ctx
 
+let extend_argumets_with_inductive_case 
+      ~(recursor : Names.Id.t)
+      ~(constructor : Names.Id.t) 
+      ~(arguments : Names.Id.t list) 
+      ~(inductive : VernacInductive.t) = 
+  (* TODO: We will need all the names for the case of 
+     mutual recursion *)
+  let ind_name = VernacInductive.extract_inductive_name inductive |> Libnames.qualid_of_ident in 
+  let constructor_type  = 
+    inductive 
+    |> List.map (fun (inductive_expr, _) -> inductive_expr |> VernacInductive.extract_type_and_cstrs) 
+    |> List.find_map (fun (_, ctrs) -> List.assoc_opt constructor ctrs)
+  in   
+  let constructor_type = 
+    match constructor_type with 
+    | None -> Errors.fail ~info:"Couldn't find constructor"
+    | Some c -> c 
+  in
+  let rec unflatten (c : Constrexpr.constr_expr) =     
+    match c.v with     
+    | Constrexpr.CProdN (l, body) ->        
+       let ty = l |> List.hd in 
+       (match ty with          
+       | Constrexpr.CLocalAssum (_, _, ty) -> 
+          (match ty.v with 
+          | Constrexpr.CRef (ty_name, _) -> ty_name.v :: unflatten body
+          | _ -> Errors.fail ~info:"Expected reference")
+       | _ -> Errors.fail ~info:"Expected local assume")    
+    | CNotation (_, (_, "_ -> _"), ([ domain; codomain ], _, _, _)) -> 
+       (match domain.v with 
+          | Constrexpr.CRef (ty_name, _) -> ty_name.v :: unflatten codomain
+          | _ -> Errors.fail ~info:"Expected reference")       
+    | _ -> 
+       let sigma, env = Termutils.global_env () in 
+       let result = Ppconstr.pr_constr_expr env sigma c in 
+       Printf.printf "%s\n" (Pp.string_of_ppcmds result);       
+       []
+  in
+  let types = unflatten constructor_type in  
+  Printf.printf "type length : %d\n" (List.length types);
+  let result = List.combine arguments types in 
+  result 
+  |> List.concat_map (fun (arg, ty) -> 
+       let r = Names.Id.to_string recursor ^ "_" ^ Names.Id.to_string arg in 
+       let r  = Names.Id.of_string r in 
+       if ty = ind_name.v then 
+       [arg; r] 
+       else 
+         [arg])
+  
+
 let add_handler ~name ~arguments ~handler =    
   let recursion_ctx = Ctx.get () in
   match List.assoc_opt name recursion_ctx.handler_types with
@@ -282,6 +333,15 @@ let add_handler ~name ~arguments ~handler =
         match arguments with 
         | None -> []
         | Some arguments -> arguments
+      in 
+      (* We want to check the type to see where we need to add the 
+         recursor *)
+      let arguments = 
+        extend_argumets_with_inductive_case 
+          ~recursor:recursion_ctx.name 
+          ~constructor:name
+          ~arguments
+          ~inductive:recursion_ctx.inductive
       in 
       let handler = Termutils.mk_lambda arguments handler in 
       Ctx.add_handler_case name handler;
