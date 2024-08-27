@@ -68,7 +68,7 @@ ARGUMENT EXTEND induction_decls
 END
 
 ARGUMENT EXTEND ne_entry_list_comma
-| [ ne_preident_list_sep(arguments, ",") ] -> { List.map Names.Id.of_string arguments }
+| [ preident_list_sep(arguments, ",") ] -> { List.map Names.Id.of_string arguments }
 END
 
 VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
@@ -100,8 +100,6 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "Case" ident(name) ":=" constr(handler) ] -> 
    {  Entry.frecursion_handler ~name ~arguments:None ~handler }
-
-(* | [ "Case" list1ident(names) ":=" constr(handler) ] -> { Entry.test names } *)
 
 | [ "FInduction" ident(name) 
                 "about" reference_ip(inductive) 
