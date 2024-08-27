@@ -13,6 +13,6 @@ val open_recursion_extension : name:Names.Id.t -> unit
 
 val add_handler: 
   name:Names.Id.t -> 
-  arguments:Names.Id.t list -> 
+  arguments:Names.Id.t list option -> 
   handler:Constrexpr.constr_expr -> 
   unit

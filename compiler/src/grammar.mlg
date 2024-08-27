@@ -13,7 +13,7 @@ DECLARE PLUGIN "nfpop.plugin"
     Genarg.create_arg "coq_ind_sig"
 
   let wit_list1ident : (Names.Id.t list, Util.Empty.t, Util.Empty.t) Genarg.genarg_type =
-    Genarg.create_arg "list1ident_ty"
+    Genarg.create_arg "list1ident_ty"  
 
   let wit_reference_ip : (Libnames.qualid, Util.Empty.t, Util.Empty.t) Genarg.genarg_type =
     Genarg.create_arg "reference_ip"
@@ -45,7 +45,7 @@ DECLARE PLUGIN "nfpop.plugin"
 GRAMMAR EXTEND Gram
 GLOBAL: mutind_defs llconstr_ip gallina_ext list1ident reference_ip;
   list1ident :
-    [[ listid = LIST1 ident -> { listid }]];
+    [[ listid = LIST1 ident -> { listid }]];  
   mutind_defs :
     [[ indl = LIST1 inductive_or_record_definition SEP "with" -> { indl } ]];
   llconstr_ip :
@@ -91,7 +91,10 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
    { Entry.frecursion_extension ~name } 
 
 | [ "Case" ident(name) list1ident(arguments) ":=" constr(handler) ] -> 
-   {  Entry.frecursion_handler ~name ~arguments ~handler }
+   {  Entry.frecursion_handler ~name ~arguments:(Some arguments) ~handler }
+
+| [ "Case" ident(name) ":=" constr(handler) ] -> 
+   {  Entry.frecursion_handler ~name ~arguments:None ~handler }
 
 (* | [ "Case" list1ident(names) ":=" constr(handler) ] -> { Entry.test names } *)
 

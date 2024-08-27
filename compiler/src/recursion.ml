@@ -270,7 +270,9 @@ let open_recursion_extension ~name =
   in
   Ctx.update recursion_ctx
 
-let add_handler ~name ~arguments ~handler =  
+let g = Genarg.make0 
+
+let add_handler ~name ~arguments ~handler =    
   let recursion_ctx = Ctx.get () in
   match List.assoc_opt name recursion_ctx.handler_types with
   | None -> Errors.fail ~info:"Unbound Constructor"
@@ -278,6 +280,11 @@ let add_handler ~name ~arguments ~handler =
       let case_name =
         Naming.handler_name ~recursor:recursion_ctx.name ~case:name
       in
+      let arguments = 
+        match arguments with 
+        | None -> []
+        | Some arguments -> arguments
+      in 
       let handler = Termutils.mk_lambda arguments handler in 
       Ctx.add_handler_case name handler;
       VB.run (VB.define_term ~name:case_name ~ty handler)

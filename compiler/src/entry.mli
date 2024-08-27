@@ -40,7 +40,7 @@ val frecursion_extension : name:Names.Id.t -> unit
 (* Handle a `Case ... := ...` *)
 val frecursion_handler :
   name:Names.Id.t -> 
-  arguments:Names.Id.t list -> 
+  arguments:Names.Id.t list option -> 
   handler:Constrexpr.constr_expr -> unit
 
 (* Handle an `FInduction ...` *)
@@ -55,6 +55,3 @@ val finduction_extension : name:Names.Id.t -> unit
 
 val fproof : unit -> Declare.Proof.t
 val fqed : unit ->  unit
-
-
-(* val test : Names.Id.t list -> unit*)

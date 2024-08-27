@@ -303,7 +303,7 @@ let mk_lambda arguments body =
        (CAst.make 
           (Constrexpr.CPatAtom 
              (Some (Libnames.qualid_of_ident n))))
-  in   
+  in  
   let arguments = List.map f arguments in   
   List.fold_right (fun arg body -> Constrexpr_ops.mkLambdaCN [arg] body) arguments body
 
