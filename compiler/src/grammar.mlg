@@ -1,4 +1,5 @@
 DECLARE PLUGIN "nfpop.plugin"
+(* https://github.com/coq/coq/blob/master/dev/doc/parsing.md *)
 
 {
   [@@@warning "-27"]
@@ -7,13 +8,13 @@ DECLARE PLUGIN "nfpop.plugin"
   open Pvernac.Vernac_
   open Pcoq.Constr
   open Pcoq.Prim
-  open Ltac_plugin
+  open Ltac_plugin  
 
   let wit_mutind_defs : (Types.VernacInductive.t, Util.Empty.t, Util.Empty.t) Genarg.genarg_type =
     Genarg.create_arg "coq_ind_sig"
 
   let wit_list1ident : (Names.Id.t list, Util.Empty.t, Util.Empty.t) Genarg.genarg_type =
-    Genarg.create_arg "list1ident_ty"  
+    Genarg.create_arg "list1ident_ty"
 
   let wit_reference_ip : (Libnames.qualid, Util.Empty.t, Util.Empty.t) Genarg.genarg_type =
     Genarg.create_arg "reference_ip"
@@ -66,6 +67,10 @@ ARGUMENT EXTEND induction_decls
   { ind_decls }
 END
 
+ARGUMENT EXTEND ne_entry_list_comma
+| [ ne_preident_list_sep(arguments, ",") ] -> { List.map Names.Id.of_string arguments }
+END
+
 VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "Family" ident(derived) "extends" reference(base) ] ->  { Entry.family_extends ~derived ~base }
 
@@ -90,7 +95,7 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "FRecursion" ident(name) ] -> 
    { Entry.frecursion_extension ~name } 
 
-| [ "Case" ident(name) "(" list1ident(arguments) ")" ":=" constr(handler) ] -> 
+| [ "Case" ident(name) "(" ne_entry_list_comma(arguments) ")" ":=" constr(handler) ] -> 
    {  Entry.frecursion_handler ~name ~arguments:(Some arguments) ~handler }
 
 | [ "Case" ident(name) ":=" constr(handler) ] -> 
