@@ -26,9 +26,7 @@ let reflect_checked_term trm =
 let cbn_type_check t : Constr.t =
   let sigma, env = global_env () in
   let sigma, internalized = Constrintern.interp_constr_evars env sigma t in
-  let normalized_intern =
-    Cbn.norm_cbn RedFlags.all env sigma internalized
-  in  
+  let normalized_intern = Cbn.norm_cbn RedFlags.all env sigma internalized in
   let normalized_intern = EConstr.to_constr sigma normalized_intern in
   normalized_intern
 
@@ -169,7 +167,7 @@ let calculate_computational_axiom_for_constructor ~recursor_name ~recursor_path
     mkAppC
       (mkRefC recursor_path, fully_applied_constr :: recursor_remained_arguments)
   in
-  let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in  
+  let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in
   let id_on_fully_applied_r =
     mkAppC (eq_cstr, [ recursor_applied; recursor_applied ])
   in
@@ -182,7 +180,7 @@ let calculate_computational_axiom_for_constructor ~recursor_name ~recursor_path
   let equation =
     let reflected =
       closed_recursor_applied |> cbn_type_check |> reflect_checked_term
-    in       
+    in
     let _, body = collect_argument_and_ret_of_type reflected in
     let destEq { CAst.v = t; _ } =
       match t with
@@ -193,11 +191,11 @@ let calculate_computational_axiom_for_constructor ~recursor_name ~recursor_path
     let normalized, _ = destEq body in
     let id_on_applied_and_normalized =
       mkAppC (eq_cstr, [ recursor_applied; normalized ])
-    in    
+    in
     List.fold_right
       (fun (a, b, c) body -> mkProdC (a, b, c, body))
       (List.map fst params) id_on_applied_and_normalized
-  in  
+  in
   let equation_name =
     Names.Id.to_string recursor_name
     ^ "_"
@@ -269,10 +267,8 @@ let rec extract_handlers_from_inductive_proof
            (coq_snd acc_case_handlers)
            suffix
 
-let calculate_inductive_proof_goal 
-    ~(handler_type_prefix : Names.Id.t)
-    ~(theorem_name : Names.Id.t)
-    ~(handler_names : Names.Id.t list) 
+let calculate_inductive_proof_goal ~(handler_type_prefix : Names.Id.t)
+    ~(theorem_name : Names.Id.t) ~(handler_names : Names.Id.t list)
     ~(suffix : RecKind.t) =
   let open Constrexpr_ops in
   let the_motive =
@@ -285,10 +281,10 @@ let calculate_inductive_proof_goal
     in
     mkAppC (mkIdentC (Names.Id.of_string using_prod_or_conj), [ l; r ])
   in
-  let all_recur_name =    
-    let prefix x =      
-      Libnames.make_qualid (Names.DirPath.make [ handler_type_prefix; ]) x
-    in 
+  let all_recur_name =
+    let prefix x =
+      Libnames.make_qualid (Names.DirPath.make [ handler_type_prefix ]) x
+    in
     List.map (fun name -> prefix (Naming.handler_type name)) handler_names
   in
   let all_recur_ = List.map mkRefC all_recur_name in
@@ -297,30 +293,31 @@ let calculate_inductive_proof_goal
   in
   List.fold_right __prod all_applied_recur __True
 
-let mk_lambda arguments body = 
-  let f (n : Names.Id.t) =     
-     Constrexpr.CLocalPattern 
-       (CAst.make 
-          (Constrexpr.CPatAtom 
-             (Some (Libnames.qualid_of_ident n))))
-  in  
-  let arguments = List.map f arguments in   
-  List.fold_right (fun arg body -> Constrexpr_ops.mkLambdaCN [arg] body) arguments body
+let mk_lambda arguments body =
+  let f (n : Names.Id.t) =
+    Constrexpr.CLocalPattern
+      (CAst.make (Constrexpr.CPatAtom (Some (Libnames.qualid_of_ident n))))
+  in
+  let arguments = List.map f arguments in
+  List.fold_right
+    (fun arg body -> Constrexpr_ops.mkLambdaCN [ arg ] body)
+    arguments body
 
-let mk_lambda_with_type arguments body = 
-  let f ((n : Names.Id.t), (ty : Constrexpr.constr_expr)) =        
-     Constrexpr.CLocalAssum 
-       ([CAst.make @@ Names.Name.mk_name n],
-        Constrexpr.Default Glob_term.Explicit, ty)
-  in  
-  let arguments = List.map f arguments in   
-  List.fold_right (fun arg body -> Constrexpr_ops.mkLambdaCN [arg] body) arguments body
+let mk_lambda_with_type arguments body =
+  let f ((n : Names.Id.t), (ty : Constrexpr.constr_expr)) =
+    Constrexpr.CLocalAssum
+      ( [ CAst.make @@ Names.Name.mk_name n ],
+        Constrexpr.Default Glob_term.Explicit,
+        ty )
+  in
+  let arguments = List.map f arguments in
+  List.fold_right
+    (fun arg body -> Constrexpr_ops.mkLambdaCN [ arg ] body)
+    arguments body
 
 (* https://github.com/uwplse/coq-plugin-lib/blob/master/src/coq/termutils/funutils.ml *)
 let rec lambda_to_prod (trm : Constrexpr.constr_expr) =
   match trm.v with
   | Constrexpr.CLambdaN (binder, body) ->
-     Constrexpr_ops.mkProdCN binder (lambda_to_prod body)      
+      Constrexpr_ops.mkProdCN binder (lambda_to_prod body)
   | _ -> trm
-
-

@@ -73,8 +73,10 @@ module Vernac = struct
     result
 
   let end_proof (goal : Names.Id.t) : unit t =
-    let open Vernacexpr in 
-    vernac_ @@ VernacSynPure (VernacEndProof (Proved (Transparent, Some (CAst.make goal))))
+    let open Vernacexpr in
+    vernac_
+    @@ VernacSynPure
+         (VernacEndProof (Proved (Transparent, Some (CAst.make goal))))
 
   let define_inductive (ind_def : VernacInductive.t) : unit t =
     let open Vernacexpr in

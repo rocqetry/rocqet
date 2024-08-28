@@ -48,8 +48,8 @@ let frecursion_extension ~(name : Names.Id.t) =
 
 let frecursion_handler = Recursion.add_handler
 
-let frecursion_elegant name args = 
-  Recursion.elegant  name args;
+let frecursion_elegant name args =
+  Recursion.elegant name args;
   PluginScopes.push
     PluginCmdScope.
       { name; command = PluginCmd.Recursion; close = Recursion.close_recursion }
