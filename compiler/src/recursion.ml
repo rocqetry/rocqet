@@ -402,16 +402,42 @@ let get_identifier (e : Constrexpr.constr_expr) =
   | Constrexpr.CRef (name, _) -> name
   | _ -> Errors.fail ~info:"Expected an identifier"
 
+let infer_inductive_suffix (i : VernacInductive.t) : RecKind.t = 
+  let open Constrexpr in 
+  let open Glob_term in
+  let (inductive_expr, _) = i |> List.hd in 
+  let (_, sort), _ = inductive_expr |> VernacInductive.extract_type_and_cstrs in 
+  let sort = Option.map (fun (e: Constrexpr.constr_expr) -> e.v) sort in  
+  match sort with   
+  | Some (CSort (UNamed (_, l))) -> 
+     let (sort_name, _) = l |> List.hd in 
+     (* Naive inference *)
+     (match sort_name with 
+     | CProp | CSProp -> RecKind.Ind
+     | CSet -> RecKind.Rec
+     | CType _ -> RecKind.Rect
+     | CRawType _ -> RecKind.Ind)     
+  | _ -> RecKind.Rec
+
 let elegant name (args : (Names.Id.t * Constrexpr.constr_expr) list) =
   let first, (_, last), middle =
     match extract args with
     | Some x -> x
     | None -> Errors.fail ~info:"Expected a list with at least two items"
   in
-  let inductive = first |> snd |> get_identifier in
+  let inductive_name = first |> snd |> get_identifier in
   let body =
     Termutils.lambda_to_prod (Termutils.mk_lambda_with_type middle last)
   in
   let motive = Termutils.mk_lambda_with_type [ first ] body in
-  open_recursion ~name ~inductive ~motive ~suffix:RecKind.Rec
+  let context = Context.get () in
+  let inductive, _, _ =
+    Context.lookup_inductive_for_recursion ~name:inductive_name context
+  in
+  let suffix = infer_inductive_suffix inductive in 
+  open_recursion 
+    ~name 
+    ~inductive:inductive_name 
+    ~motive 
+    ~suffix
     ~arguments:(List.map fst middle)
