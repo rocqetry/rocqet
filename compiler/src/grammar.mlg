@@ -76,6 +76,7 @@ ARGUMENT EXTEND argument_type
 END
 
 VERNAC ARGUMENT EXTEND argument
+  | [ llconstr_ip(t) ] -> { (Names.Id.of_string "_", t) }
   | [ "(" ident(i) ":" llconstr_ip(t) ")" ] -> { (i, t) }
 END
 

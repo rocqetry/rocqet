@@ -12,9 +12,8 @@ Family STLC.
   FInductive ty: Set :=
   | ty_unit : ty
   | ty_arrow : ty -> ty -> ty.
-       
-  (* FRecursion subst : (_ : ty) -> (ki : known_idents) -> nat. *)
-  FRecursion subst : (t : ty) -> (k : nat) -> (l : nat).
+         
+  FRecursion subst : (t : ty) -> (k : nat) -> nat.
   (* FRecursion subst about ty motive (fun (_ : ty) => nat) by _rec.*)
      Case ty_arrow (n, m) := (subst m k + subst n k).
      Case ty_unit := k.
