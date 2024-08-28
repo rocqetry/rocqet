@@ -1,16 +1,24 @@
 From NFPOP Require Import Loader.
 
+Test (x : nat) -> (y : nat).
+
+(* FRecursion subst : (t : ty) -> (ki : known_idents) -> (n : nat).*)
+
 Notation ident := nat.
+
+
 
 Family STLC.
   FInductive ty: Set :=
   | ty_unit : ty
   | ty_arrow : ty -> ty -> ty.
-     
-   FRecursion subst about ty motive (fun (_ : ty) => nat) by _rec.
-       Case ty_unit := 1.
-       Case ty_arrow := (fun _ n _ m => m + n).
-   FEnd subst.
+       
+  (* FRecursion subst : (_ : ty) -> (ki : known_idents) -> nat. *)
+  FRecursion subst : (t : ty) -> (k : nat) -> (l : nat).
+  (* FRecursion subst about ty motive (fun (_ : ty) => nat) by _rec.*)
+     Case ty_arrow (n, m) := (subst m k + subst n k).
+     Case ty_unit := k.
+  FEnd subst.
 
   FInductive tm : Set :=
   | tm_var : ident -> tm
@@ -45,7 +53,7 @@ Family STLC_prod extends STLC_bool.
     | ty_prod : ty -> ty -> ty.
 
   FRecursion subst.
-     Case ty_prod := (fun _ n _ m => m + n).
+     Case ty_prod (n, m) := (subst m k + subst n k).
   FEnd subst.
   
   FInductive tm : Set :=
