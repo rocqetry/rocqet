@@ -21,6 +21,7 @@ module Ctx = struct
     motive : CompiledModule.t;
     motive_expr : Constrexpr.constr_expr list;
     suffix : RecKind.t;
+    arguments : Names.Id.t list; (* the name of the arguments to this FRecursion *)
   }
 
   let store = Summary.ref ~name:"RecursionCtx" (None : t option)
@@ -53,6 +54,7 @@ let close_recursion () =
           module_name;
           handler_cases;
           motive_expr;
+          arguments;
           _;
         } =
     Ctx.get ()
@@ -86,13 +88,14 @@ let close_recursion () =
         compiled_context;
         suffix;
         handler_types;
+        arguments;
       }
   in
   Context.add_field ~name ~elem;
   Ctx.clear ()
 
 let open_recursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
-    ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t) =
+    ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t) ~(arguments : Names.Id.t list) =
   Inheritance.inherit_dependencies ~prefix:name;
   let context = Context.get () in
   let family = context |> Context.family_name |> Names.Id.to_string in
@@ -137,6 +140,7 @@ let open_recursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
         motive_expr = [ motive_expr ];
         inductive;
         provenance;
+        arguments;
       }
   in
   Ctx.update recursion_ctx
@@ -155,12 +159,12 @@ let open_recursion_extension ~name =
   let linkage = Context.family_linkage context in
   let further_elem = Context.further_bound_linkage_elem context ~field:name in
   let base_elem = Context.base_linkage_elem context ~field:name in
-  let inductive, motives, handler_cases, suffix =
+  let inductive, motives, handler_cases, suffix, arguments =
     match (further_elem, base_elem) with
     | ( None,
         Some
           ( base,
-            RecursorDefinition { inductive; suffix; motives; handler_cases; _ }
+            RecursorDefinition { inductive; suffix; motives; handler_cases; arguments; _ }
           ) ) ->
         let source = Naming.self_version base.name in
         let target = Naming.self_version linkage.name in
@@ -171,10 +175,10 @@ let open_recursion_extension ~name =
           |> List.map (fun (name, expr) -> (name, path_subtitution expr))
         in
         let inductive = inductive |> VernacInductive.extract_inductive_name in
-        (inductive, motives, handler_cases, suffix)
+        (inductive, motives, handler_cases, suffix, arguments)
     | ( Some
           ( further,
-            RecursorDefinition { inductive; suffix; motives; handler_cases; _ }
+            RecursorDefinition { inductive; suffix; motives; handler_cases; arguments; _ }
           ),
         None ) ->
         let source = Linkage.top_most_self_name further in
@@ -186,7 +190,7 @@ let open_recursion_extension ~name =
           |> List.map (fun (name, expr) -> (name, path_subtitution expr))
         in
         let inductive = inductive |> VernacInductive.extract_inductive_name in
-        (inductive, motives, handler_cases, suffix)
+        (inductive, motives, handler_cases, suffix, arguments)
     | Some (further, RecursorDefinition frec), Some (base, RecursorDefinition brec)
       ->
         let source = Linkage.top_most_self_name further in
@@ -210,7 +214,7 @@ let open_recursion_extension ~name =
         let inductive =
           frec.inductive |> VernacInductive.extract_inductive_name
         in
-        (inductive, motives, handler_cases, frec.suffix)
+        (inductive, motives, handler_cases, frec.suffix, frec.arguments)
     | _ -> Errors.fail ~info:"Expected to inherit an FRecrusion"
   in
   let module_name =
@@ -266,6 +270,7 @@ let open_recursion_extension ~name =
         motive_expr = motives;
         inductive;
         provenance;
+        arguments;
       }
   in
   Ctx.update recursion_ctx
@@ -342,7 +347,6 @@ let replace_recursor
     | _ -> Constrexpr_ops.map_constr_expr_with_binders (fun _ _ -> ()) aux () c
   in 
   aux () c
-  
 
 let add_handler ~name ~arguments ~handler =    
   let recursion_ctx = Ctx.get () in
@@ -354,7 +358,10 @@ let add_handler ~name ~arguments ~handler =
       in      
       let handler =         
         match arguments with 
-        | None -> handler
+        | None -> 
+           let handler = replace_recursor ~recursor:recursion_ctx.name handler in 
+           let handler = Termutils.mk_lambda recursion_ctx.arguments handler in
+           handler
         | Some arguments -> 
            let arguments = 
              extend_argumets_with_inductive_case 
@@ -362,9 +369,40 @@ let add_handler ~name ~arguments ~handler =
                ~constructor:name
                ~arguments
                ~inductive:recursion_ctx.inductive
-           in      
+           in
            let handler = replace_recursor ~recursor:recursion_ctx.name handler in 
-        Termutils.mk_lambda arguments handler 
+           let handler = Termutils.mk_lambda recursion_ctx.arguments handler in
+        Termutils.mk_lambda arguments handler
       in 
       Ctx.add_handler_case name handler;
       VB.run (VB.define_term ~name:case_name ~ty handler)
+
+let extract = function
+  | [] -> None  (* Empty list case *)
+  | [_] -> None  (* Single element list case *)
+  | x :: xs ->
+      let rec last_and_rest = function
+        | [] -> failwith "This case should never happen due to previous pattern matching"
+        | [last] -> (last, [])
+        | y :: ys ->
+            let (last, rest) = last_and_rest ys in
+            (last, y :: rest)
+      in
+      let (last, middle) = last_and_rest xs in
+      Some (x, last, middle)
+
+let get_identifier (e : Constrexpr.constr_expr) = 
+  match e.v with 
+  | Constrexpr.CRef (name, _) -> name 
+  | _ -> Errors.fail ~info:"Expected an identifier"
+
+let elegant name (args : (Names.Id.t * Constrexpr.constr_expr) list) =     
+  let first, (_, last), middle = 
+    match extract args with 
+    | Some x -> x 
+    | None -> Errors.fail ~info:"Expected a list with at least two items"
+  in
+  let inductive = first |> snd |> get_identifier in 
+  let body = Termutils.lambda_to_prod (Termutils.mk_lambda_with_type middle last) in 
+  let motive = Termutils.mk_lambda_with_type [first] body in 
+  open_recursion ~name ~inductive ~motive ~suffix:RecKind.Rec ~arguments:(List.map fst middle)

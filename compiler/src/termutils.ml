@@ -307,3 +307,20 @@ let mk_lambda arguments body =
   let arguments = List.map f arguments in   
   List.fold_right (fun arg body -> Constrexpr_ops.mkLambdaCN [arg] body) arguments body
 
+let mk_lambda_with_type arguments body = 
+  let f ((n : Names.Id.t), (ty : Constrexpr.constr_expr)) =        
+     Constrexpr.CLocalAssum 
+       ([CAst.make @@ Names.Name.mk_name n],
+        Constrexpr.Default Glob_term.Explicit, ty)
+  in  
+  let arguments = List.map f arguments in   
+  List.fold_right (fun arg body -> Constrexpr_ops.mkLambdaCN [arg] body) arguments body
+
+(* https://github.com/uwplse/coq-plugin-lib/blob/master/src/coq/termutils/funutils.ml *)
+let rec lambda_to_prod (trm : Constrexpr.constr_expr) =
+  match trm.v with
+  | Constrexpr.CLambdaN (binder, body) ->
+     Constrexpr_ops.mkProdCN binder (lambda_to_prod body)      
+  | _ -> trm
+
+

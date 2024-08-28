@@ -71,7 +71,22 @@ ARGUMENT EXTEND ne_entry_list_comma
 | [ preident_list_sep(arguments, ",") ] -> { List.map Names.Id.of_string arguments }
 END
 
+ARGUMENT EXTEND argument_type
+| [ "(" ident(i) ":" llconstr_ip(t)  ")" ne_constr_list(l) ] -> { (i, t) }
+END
+
+VERNAC ARGUMENT EXTEND argument
+  | [ "(" ident(i) ":" llconstr_ip(t) ")" ] -> { (i, t) }
+END
+
+VERNAC ARGUMENT EXTEND argument_flist
+  | [ argument(arg) ] -> { [arg] }
+  | [ argument(arg) "->" argument_flist(rest) ] -> { arg :: rest }
+END
+
 VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
+| [ "Test" argument_flist(l) ] -> { () }
+
 | [ "Family" ident(derived) "extends" reference(base) ] ->  { Entry.family_extends ~derived ~base }
 
 | [ "Family" ident(name) ] -> { Entry.family name }
@@ -91,6 +106,9 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
                "motive" llconstr_ip(motive)
                "by" ident(reckind)  ] ->  
    { Entry.frecursion ~name ~inductive ~motive ~suffix:(Types.RecKind.of_name reckind) }
+
+| [ "FRecursion" ident(name) ":" argument_flist(args) ] -> 
+   { Entry.frecursion_elegant name args }
 
 | [ "FRecursion" ident(name) ] -> 
    { Entry.frecursion_extension ~name } 

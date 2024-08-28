@@ -1040,7 +1040,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
         in
         { linkage with fields = Bwd.Snoc (linkage.fields, (name, elem)) }
     | LinkageElem.RecursorDefinition
-        { handler_cases; handler_types; names; inductive; suffix; motives; _ }
+        { handler_cases; handler_types; names; inductive; suffix; motives; arguments; _ }
       ->
         let name = List.hd names in
         let context = LinkageCtx.Toplevel linkage in
@@ -1092,6 +1092,7 @@ let rec recompute_linkage (linkage : Linkage.t) =
               compiled_context;
               suffix;
               handler_types;
+              arguments;
             }
         in
         { linkage with fields = Bwd.Snoc (linkage.fields, (name, elem)) }

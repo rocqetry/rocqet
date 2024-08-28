@@ -43,6 +43,12 @@ val frecursion_handler :
   arguments:Names.Id.t list option -> 
   handler:Constrexpr.constr_expr -> unit
 
+(* New FRecursion syntax *)
+val frecursion_elegant: 
+  Names.Id.t -> 
+  (Names.Id.t * Constrexpr.constr_expr) list -> 
+  unit
+
 (* Handle an `FInduction ...` *)
 val finduction :
   name:Names.Id.t ->
