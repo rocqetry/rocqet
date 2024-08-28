@@ -4,11 +4,11 @@ open Types
 module B = Backend.Vernac
 
 (* Module compilation helpers *)
-val wrap_module:
-    module_name:Names.Id.t -> 
-    inner_module:CompiledModule.t -> 
-    ctx:(Names.Id.t * Constrexpr.module_ast) list -> 
-    CompiledModule.t
+val wrap_module :
+  module_name:Names.Id.t ->
+  inner_module:CompiledModule.t ->
+  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
+  CompiledModule.t
 
 (* Compiling inductive definitions *)
 val compile_inductive_signature :
@@ -85,8 +85,8 @@ val compile_handler_cases :
   recursor:CompiledRecursor.t ->
   CompiledModule.t
 
-val aggregate_handler_types : 
-  CompiledRecursor.t -> 
+val aggregate_handler_types :
+  CompiledRecursor.t ->
   (Names.Id.t * Constrexpr.module_ast) list ->
   CompiledModule.t
 

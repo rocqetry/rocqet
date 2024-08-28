@@ -52,3 +52,14 @@ val calculate_inductive_proof_goal :
   handler_names:Names.Id.t list ->
   suffix:RecKind.t ->
   Constrexpr.constr_expr
+
+val mk_lambda :
+  Names.Id.t list -> Constrexpr.constr_expr -> Constrexpr.constr_expr
+
+val mk_lambda_with_type :
+  (Names.Id.t * Constrexpr.constr_expr) list ->
+  Constrexpr.constr_expr ->
+  Constrexpr.constr_expr
+
+(* fun (x : ...) -> forall (x : ...) *)
+val lambda_to_prod : Constrexpr.constr_expr -> Constrexpr.constr_expr

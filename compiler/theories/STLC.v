@@ -3,14 +3,14 @@ From NFPOP Require Import Loader.
 Notation ident := nat.
 
 Family STLC.
-  FInductive ty: Set :=
+  FInductive ty : Set :=
   | ty_unit : ty
   | ty_arrow : ty -> ty -> ty.
-     
-   FRecursion subst about ty motive (fun (_ : ty) => nat) by _rec.
-       Case ty_unit := 1.
-       Case ty_arrow := (fun _ n _ m => m + n).
-   FEnd subst.
+         
+  FRecursion subst : (t : ty) -> (k : nat) -> nat.  
+     Case ty_arrow (n, m) := (subst m k + subst n k).
+     Case ty_unit := k.
+  FEnd subst.
 
   FInductive tm : Set :=
   | tm_var : ident -> tm
@@ -20,8 +20,6 @@ Family STLC.
   | val_abs : ident -> tm -> val
   | val_unit: val.
 FEnd STLC.
-
-(* Print STLCsubstCases回17.*)
 
 Family STLC_bool extends STLC.
   FInductive ty : Set :=
@@ -45,7 +43,7 @@ Family STLC_prod extends STLC_bool.
     | ty_prod : ty -> ty -> ty.
 
   FRecursion subst.
-     Case ty_prod := (fun _ n _ m => m + n).
+     Case ty_prod (n, m) := (subst m k + subst n k).
   FEnd subst.
   
   FInductive tm : Set :=

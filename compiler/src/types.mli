@@ -102,6 +102,7 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
+        arguments : Names.Id.t list;
       }
     | PrincipleDefinition of {
         compiled_context : CompiledModuleType.t;

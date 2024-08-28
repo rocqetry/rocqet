@@ -14,9 +14,7 @@ module VernacInductive = struct
           ind_type,
           cstrlist ) =
       inductive
-    in
-    (* assert_cerror ~einfo:"Doesn't Support Inductive Parameter yet"
-       (fun _ -> fst ind_params = [] && snd ind_params = None); *)
+    in    
     let each_constr ((_flags, (cname, cty)) : Vernacexpr.constructor_expr) =
       (cname.v, cty)
     in
@@ -243,6 +241,7 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
+        arguments : Names.Id.t list;
       }
     | PrincipleDefinition of {
         compiled_context : CompiledModuleType.t;
@@ -408,13 +407,10 @@ end = struct
                   :: go base derived
               | ( LinkageElem.TheoremDefinition rbase,
                   LinkageElem.TheoremDefinition rderived ) ->
-                  let handler_cases =
-                    rbase.handlers @ rderived.handlers
-                  in
-                  let handlers = remove_duplicates handler_cases in                  
+                  let handler_cases = rbase.handlers @ rderived.handlers in
+                  let handlers = remove_duplicates handler_cases in
                   ( name,
-                    LinkageElem.TheoremDefinition
-                      { rderived with handlers; } )
+                    LinkageElem.TheoremDefinition { rderived with handlers } )
                   :: go base derived
               | ( LinkageElem.InductiveDefinition ibase,
                   LinkageElem.InductiveDefinition iderived ) ->

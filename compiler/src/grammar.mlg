@@ -1,4 +1,5 @@
 DECLARE PLUGIN "nfpop.plugin"
+(* https://github.com/coq/coq/blob/master/dev/doc/parsing.md *)
 
 {
   [@@@warning "-27"]
@@ -7,7 +8,7 @@ DECLARE PLUGIN "nfpop.plugin"
   open Pvernac.Vernac_
   open Pcoq.Constr
   open Pcoq.Prim
-  open Ltac_plugin
+  open Ltac_plugin  
 
   let wit_mutind_defs : (Types.VernacInductive.t, Util.Empty.t, Util.Empty.t) Genarg.genarg_type =
     Genarg.create_arg "coq_ind_sig"
@@ -45,7 +46,7 @@ DECLARE PLUGIN "nfpop.plugin"
 GRAMMAR EXTEND Gram
 GLOBAL: mutind_defs llconstr_ip gallina_ext list1ident reference_ip;
   list1ident :
-    [[ listid = LIST1 ident -> { listid }]];
+    [[ listid = LIST1 ident -> { listid }]];  
   mutind_defs :
     [[ indl = LIST1 inductive_or_record_definition SEP "with" -> { indl } ]];
   llconstr_ip :
@@ -64,6 +65,24 @@ END
 ARGUMENT EXTEND induction_decls
 | [ test_second_token_about ne_induction_decl_list_sep(ind_decls, "with") ] ->
   { ind_decls }
+END
+
+ARGUMENT EXTEND ne_entry_list_comma
+| [ preident_list_sep(arguments, ",") ] -> { List.map Names.Id.of_string arguments }
+END
+
+ARGUMENT EXTEND argument_type
+| [ "(" ident(i) ":" llconstr_ip(t)  ")" ne_constr_list(l) ] -> { (i, t) }
+END
+
+VERNAC ARGUMENT EXTEND argument
+  | [ llconstr_ip(t) ] -> { (Names.Id.of_string "_", t) }
+  | [ "(" ident(i) ":" llconstr_ip(t) ")" ] -> { (i, t) }
+END
+
+VERNAC ARGUMENT EXTEND argument_flist
+  | [ argument(arg) ] -> { [arg] }
+  | [ argument(arg) "->" argument_flist(rest) ] -> { arg :: rest }
 END
 
 VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
@@ -87,11 +106,17 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
                "by" ident(reckind)  ] ->  
    { Entry.frecursion ~name ~inductive ~motive ~suffix:(Types.RecKind.of_name reckind) }
 
+| [ "FRecursion" ident(name) ":" argument_flist(args) ] -> 
+   { Entry.frecursion_elegant name args }
+
 | [ "FRecursion" ident(name) ] -> 
    { Entry.frecursion_extension ~name } 
 
+| [ "Case" ident(name) "(" ne_entry_list_comma(arguments) ")" ":=" constr(handler) ] -> 
+   {  Entry.frecursion_handler ~name ~arguments:(Some arguments) ~handler }
+
 | [ "Case" ident(name) ":=" constr(handler) ] -> 
-   {  Entry.frecursion_handler ~name ~handler }
+   {  Entry.frecursion_handler ~name ~arguments:None ~handler }
 
 | [ "FInduction" ident(name) 
                 "about" reference_ip(inductive) 
