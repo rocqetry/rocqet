@@ -1,8 +1,11 @@
 From NFPOP Require Import Loader.
 
-Notation ident := nat.
 
 Family STLC.
+  MetaData _ident.
+    Definition ident := nat.
+  FEnd _ident.
+
   FInductive ty : Set :=
   | ty_unit : ty
   | ty_arrow : ty -> ty -> ty.
@@ -13,11 +16,11 @@ Family STLC.
   FEnd subst.
 
   FInductive tm : Set :=
-  | tm_var : ident -> tm
+  | tm_var : self__STLC.ident -> tm
   | tm_app : tm -> tm -> tm
   | tm_val : val -> tm
   with val : Set :=
-  | val_abs : ident -> tm -> val
+  | val_abs : self__STLC.ident -> tm -> val
   | val_unit: val.
 FEnd STLC.
 
@@ -53,3 +56,5 @@ Family STLC_prod extends STLC_bool.
   with val : Set :=
     | val_prod : val -> val -> val.
 FEnd STLC_prod.
+
+Print STLC_prod.
