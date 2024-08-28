@@ -56,5 +56,3 @@ Family STLC_prod extends STLC_bool.
   with val : Set :=
     | val_prod : val -> val -> val.
 FEnd STLC_prod.
-
-Print STLC_prod.
