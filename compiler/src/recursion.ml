@@ -76,6 +76,27 @@ let close_recursion () =
       ~ctx:parameters ~family_name:name ~computational_behaviour:`Exposed
       ~computational_axioms
   in
+  (* Feedback the defined Computational Axioms *)
+  let print_constr_expr expr =
+    let sigma, env = Termutils.global_env () in 
+    Ppconstr.pr_constr_expr env sigma expr 
+  in 
+  let print_name name = 
+    name |> Names.Id.to_string |> Pp.str 
+  in 
+  let print_single_equation (name, eq) = 
+    let open Pp in 
+    print_name name ++ Pp.str " : " ++ print_constr_expr eq 
+  in
+  let _ = 
+    let open Pp in 
+    Feedback.msg_info 
+      (str "Computational Axioms for " 
+       ++ print_name name 
+       ++ str " are defined as follows:");
+    computational_axioms
+    |> List.iter (fun eq -> Feedback.msg_info (print_single_equation eq))
+  in 
   let elem =
     LinkageElem.RecursorDefinition
       {
