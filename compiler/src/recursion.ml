@@ -432,7 +432,7 @@ let elegant name (args : (Names.Id.t * Constrexpr.constr_expr) list) =
   let suffix = infer_inductive_suffix inductive in 
   open_recursion 
     ~name 
-    ~inductive:inductive_name 
+    ~inductive_path:inductive_name 
     ~motive 
     ~suffix
     ~arguments:(List.map fst middle)
