@@ -561,6 +561,11 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
   | Bwd.Snoc
       ( _,
         ( _,
+          LinkageElem.MetaDataSection
+            { compiled_context; compiled_impl = compiled_signature; _ } ) )
+  | Bwd.Snoc
+      ( _,
+        ( _,
           LinkageElem.TheoremDefinition
             { compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
@@ -622,6 +627,7 @@ let compile_linkage (linkage : Linkage.t) =
     | Bwd.Snoc (fields, (_, LinkageElem.RecursorDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.TheoremDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
+    | Bwd.Snoc (fields, (_, LinkageElem.MetaDataSection { compiled_impl; _ }))
     | Bwd.Snoc
         (fields, (_, LinkageElem.PrincipleDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.FieldDefinition { compiled_impl; _ }))
@@ -683,6 +689,11 @@ let compile_linkage_signature linkage =
           ( _,
             LinkageElem.FamilyDefinition
               { compiled_context; compiled_signature; _ } ) )
+    | Bwd.Snoc
+        ( _,
+          ( _,
+            LinkageElem.MetaDataSection
+              { compiled_context; compiled_impl = compiled_signature; _ } ) )
     | Bwd.Snoc
         ( _,
           ( _,
@@ -865,6 +876,8 @@ let rec recompute_linkage (linkage : Linkage.t) =
             { body_expr; body_type; compiled_context; compiled_impl }
         in
         { linkage with fields = Bwd.Snoc (linkage.fields, (name, elem)) }
+    | LinkageElem.MetaDataSection _ ->
+        { linkage with fields = Bwd.Snoc (linkage.fields, (name, field)) }
     | LinkageElem.FamilyDefinition { linkage = nested_linkage; _ } ->
         (* Late binding of family names *)
         let nested_linkage =

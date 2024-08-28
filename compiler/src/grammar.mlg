@@ -128,6 +128,9 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "FQed"] ->
    { Entry.fqed () }
+
+| [ "MetaData" ident(i) ] -> { Entry.metadata i }
+
 END
 
 VERNAC COMMAND EXTEND FamilyPolyProof CLASSIFIED BY { _in_proof_mode } STATE open_proof

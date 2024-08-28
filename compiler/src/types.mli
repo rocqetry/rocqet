@@ -62,7 +62,7 @@ module CompiledRecursors : sig
 end
 
 module PluginCmd : sig
-  type t = Family | Recursion | Induction
+  type t = Family | Recursion | Induction | MetaData
 end
 
 module PluginCmdScope : sig
@@ -121,6 +121,11 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
+      }
+    | MetaDataSection of {
+        name : Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
       }
 end
 

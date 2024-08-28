@@ -6,6 +6,9 @@ val family : Names.Id.t -> unit
 (* Handle a `Family ... extends ...` command *)
 val family_extends : derived:Names.Id.t -> base:Libnames.qualid -> unit
 
+(* Handle a `Metadata ...` section *)
+val metadata : Names.Id.t -> unit
+
 (* Handle a `FInductive ... := ...` command *)
 val finductive : VernacInductive.t -> unit
 

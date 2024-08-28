@@ -261,6 +261,11 @@ module rec LinkageElem : sig
         compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
       }
+    | MetaDataSection of {
+        name : Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
+      }
 end =
   LinkageElem
 
@@ -318,6 +323,8 @@ end = struct
     let f (name, elem) =
       let elem =
         match elem with
+        | LinkageElem.MetaDataSection metadata ->
+            LinkageElem.MetaDataSection metadata
         | LinkageElem.FamilyDefinition family ->
             LinkageElem.FamilyDefinition
               {
@@ -438,6 +445,8 @@ end = struct
                   (name, FieldDefinition f) :: go base derived
               | PrincipleDefinition _, PrincipleDefinition p ->
                   (name, PrincipleDefinition p) :: go base derived
+              | MetaDataSection _, MetaDataSection m ->
+                  (name, MetaDataSection m) :: go base derived
               | _ -> Errors.fail ~info:"Wrong concatenation arguments"))
     in
     let fields = go (Bwd.to_list base.fields) (Bwd.to_list derived.fields) in
@@ -521,7 +530,7 @@ end =
 (* A single plugin command *)
 (* e.g Family A. ... *)
 module PluginCmd = struct
-  type t = Family | Recursion | Induction
+  type t = Family | Recursion | Induction | MetaData
 end
 
 (* A scope is a plugin command enriched with a name and a "closing" handler *)
