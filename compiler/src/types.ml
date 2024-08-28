@@ -445,6 +445,8 @@ end = struct
                   (name, FieldDefinition f) :: go base derived
               | PrincipleDefinition _, PrincipleDefinition p ->
                   (name, PrincipleDefinition p) :: go base derived
+              | MetaDataSection _, MetaDataSection m ->
+                  (name, MetaDataSection m) :: go base derived
               | _ -> Errors.fail ~info:"Wrong concatenation arguments"))
     in
     let fields = go (Bwd.to_list base.fields) (Bwd.to_list derived.fields) in
