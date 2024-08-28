@@ -14,9 +14,7 @@ module VernacInductive = struct
           ind_type,
           cstrlist ) =
       inductive
-    in
-    (* assert_cerror ~einfo:"Doesn't Support Inductive Parameter yet"
-       (fun _ -> fst ind_params = [] && snd ind_params = None); *)
+    in    
     let each_constr ((_flags, (cname, cty)) : Vernacexpr.constructor_expr) =
       (cname.v, cty)
     in

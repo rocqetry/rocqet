@@ -86,8 +86,6 @@ VERNAC ARGUMENT EXTEND argument_flist
 END
 
 VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
-| [ "Test" argument_flist(l) ] -> { () }
-
 | [ "Family" ident(derived) "extends" reference(base) ] ->  { Entry.family_extends ~derived ~base }
 
 | [ "Family" ident(name) ] -> { Entry.family name }
