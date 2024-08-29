@@ -17,8 +17,10 @@ let inherit_element ~field ~linkage ~context =
   in
   let further_elem =
     match further_elem with
-    | [] -> None
+    | [] ->        
+       None
     | (first_l, first_e) :: rest ->
+       failwith "further" |> ignore;
         Some
           (List.fold_right
              (fun (l, e) furthers ->
