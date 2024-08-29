@@ -50,10 +50,14 @@ let inherit_dependencies ~prefix =
   let further =
     match further with
     | [] -> None
-    | x :: xs ->
+    | x :: xs ->         
+         (* let s = Printf.sprintf "%s\n" (Names.Id.to_string x.name) in 
+         _xs |> List.iter (fun (x : Linkage.t) -> Printf.printf "%s\n" (Names.Id.to_string x.name));
+         failwith s |> ignore;*)
         let f further furthers =
           Linkage.concatenate ~derived:(further_subst further) ~base:furthers
         in
+        (* Some (further_subst x)*)
         Some
           ((* Codegen.compute_linkage None*)
              (List.fold_right f xs (further_subst x)))

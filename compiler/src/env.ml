@@ -224,7 +224,9 @@ module Context = struct
              | None -> None
              | Some (path, parent) ->
                  walk_down_linkage parent (path |> Bwd.to_list))
-        (* |> List.tl*)
+        |> function 
+        | [] -> []
+        | x -> List.tl x 
   (* We don't want to include the current family's base, as that is not a further bound linkage *)
 
   let base_linkage context =
