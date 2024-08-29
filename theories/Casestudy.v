@@ -35,11 +35,12 @@ Inductive memory_chunk : Type :=
   | Many64. (* any value *)
 
 Family Imp.
+  MetaData _val.
    Inductive val: Type :=
        | Vundef: val
        | Vint: int -> val
        | Vlong: int64 -> val
-       | Vptr: block -> ptrofs -> val.
+       | Vptr: block -> ptrofs -> val.  
    
    Definition Vzero: val := Vint Int.zero.
    Definition Vone: val := Vint Int.one.
@@ -53,6 +54,7 @@ Family Imp.
    
    Definition Vptrofs (n: ptrofs) :=
      if Archi.ptr64 then Vlong (Ptrofs.to_int64 n) else Vint (Ptrofs.to_int n).
+  FEnd _val.
 
    Inductive intsize : Type :=
       | I8: intsize

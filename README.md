@@ -1,1 +1,1 @@
-Nested family polymorphism in a proof language.
+Implementation. *Adapting* from https://github.com/DKXXXL/FPOP
