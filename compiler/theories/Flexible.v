@@ -1,0 +1,83 @@
+From NFPOP Require Import Loader.
+
+Notation ident := nat.
+ 
+Family STLCBase. 
+  Family X.
+     FInductive Ty: Set :=
+        | TUnit : Ty
+        | TArr : Ty -> Ty -> Ty.
+  FEnd X.
+
+  FRecursion subst : (t : X.Ty) -> nat. 
+     Case TUnit := 1.
+     Case TArr (domain, codomain) := (subst domain + subst codomain).
+  FEnd subst.
+FEnd STLCBase.
+
+(* Family IfExt.*)
+   Family Base extends STLCBase.
+       Family X.
+           FInductive Ty : Set := TBool : Ty.           
+       FEnd X.        
+       
+       FRecursion subst.
+            Case TBool := 2.
+       FEnd subst.
+   FEnd Base.
+   
+   Family Derived extends Base.
+   FEnd Derived.
+FEnd IfExt.
+
+Family TempSTLC extends STLCBase.
+    FInductive Ty : Set := TempExpr : Ty.
+
+    FRecursion subst.
+        Case TempExpr := 10.
+    FEnd subst.
+FEnd TempSTLC.
+
+Family Temp extends IfExt.
+    Family Base extends TempSTLC.       
+       FRecursion subst.
+       FEnd subst.
+    FEnd Base.
+FEnd Temp.
+    
+Family ArithExt. 
+   Family Base extends STLCBase.
+        FInductive Ty : Set := TNat : Ty.
+        
+        FRecursion subst.
+            Case TNat := 1.
+        FEnd subst.
+
+       FInductive Exp : Set :=
+         | EAdd : Exp -> Exp -> Exp
+       with Val : Set :=
+         | VNat : nat -> Val.
+   FEnd Base.
+   
+   Family Derived extends Base. 
+   FEnd Derived.
+FEnd ArithExt.
+
+Family IfExtBuild extends IfExt.
+    Family Base extends STLCBase.                    
+          (*FInductive B : Set := BB : Ty -> B.
+          FDefinition c := self__Base.B_rect.*)          
+          (* FInductive Ty : Set := Blah : Ty. *)
+          FRecursion subst.             
+          FEnd subst.
+          (* FDefinition A := Ty. *)
+    FEnd Base.
+FEnd IfExtBuild.
+
+Family ArithExtBuild extends ArithExt.
+   Family Base extends IfExtBuild.Derived.
+   FEnd Base.
+FEnd ArithExtBuild.
+
+Family STLCArithIf extends ArithExtBuild.Derived.
+FEnd STLCArithIf.
