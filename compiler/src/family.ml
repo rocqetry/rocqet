@@ -96,9 +96,9 @@ let close_family () : unit =
         Linkage.path_subtitution further
           ~source:(Linkage.top_most_self_name further)
           ~target:(Linkage.top_most_self_name linkage)
-       in
-       let further = Context.further_bound_linkage context in
-       let further_base =
+      in
+      let further = Context.further_bound_linkage context in
+      let further_base =
          match further with
          | [] -> None
          | x :: xs ->
@@ -106,9 +106,9 @@ let close_family () : unit =
                Linkage.concatenate ~derived:(further_subst further) ~base:furthers
              in
              Some
-               (Codegen.compute_linkage None
+               ((* Codegen.compute_linkage None*)
              (List.fold_right f xs (further_subst x)))
-       in
+      in
       let linkage =
         match (further_base, base) with
         | None, None -> linkage

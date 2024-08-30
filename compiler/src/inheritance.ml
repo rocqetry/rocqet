@@ -20,7 +20,7 @@ let inherit_element ~field ~linkage ~context =
     | [] ->        
        None
     | (first_l, first_e) :: rest ->
-       failwith "further" |> ignore;
+       (* failwith "further" |> ignore;*)
         Some
           (List.fold_right
              (fun (l, e) furthers ->

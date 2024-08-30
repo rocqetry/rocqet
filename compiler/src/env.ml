@@ -218,15 +218,20 @@ module Context = struct
   let further_bound_linkage context : Linkage.t list =
     match context with
     | LinkageCtx.Toplevel _ -> []
-    | LinkageCtx.Nested (_, _) ->
-        context |> walk_up_linkage_context
+    | LinkageCtx.Nested (_, l) ->
+        context 
+        |> walk_up_linkage_context
         |> List.filter_map (function
              | None -> None
              | Some (path, parent) ->
                  walk_down_linkage parent (path |> Bwd.to_list))
         |> function 
         | [] -> []
-        | x -> List.tl x 
+        | x :: xs -> 
+           match l.base with 
+           | None -> x :: xs 
+           | Some _ -> xs 
+           
   (* We don't want to include the current family's base, as that is not a further bound linkage *)
 
   let base_linkage context =
