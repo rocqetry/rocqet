@@ -3,44 +3,13 @@ From NFPOP Require Import Loader.
 Require Import Coq.ZArith.ZArith.
 Require Import Coqlib.
 
-(* TODO *)
-Notation int := nat.
-Notation int64 := nat.
-Notation float := nat.
-Notation float32 := nat.
-Notation Z := nat.
-Notation signature := nat.
-Notation external_function := nat.
-Notation label := nat.
-Notation mem := nat.
-Definition block : Type := positive.
-Definition ptrofs : Type := int.
-Axiom cheat : forall {X}, X.
-Notation intsize := nat.
-Axiom signedness : Type.
-Axiom calling_convention : Type.
-Axiom attr : Type.
-
-(* Common *)
-Inductive memory_chunk : Type :=
-  | Mint8signed(* 8-bit signed integer *)
-  | Mint8unsigned(* 8-bit unsigned integer *)
-  | Mint16signed(* 16-bit signed integer *)
-  | Mint16unsigned(* 16-bit unsigned integer *)
-  | Mint32(* 32-bit integer, or pointer *)
-  | Mint64(* 64-bit integer *)
-  | Mfloat32(* 32-bit single-precision float *)
-  | Mfloat64(* 64-bit double-precision float *)
-  | Many32(* any value that fits in 32 bits *)
-  | Many64. (* any value *)
-
 Family Imp.
   MetaData _val.
    Inductive val: Type :=
        | Vundef: val
        | Vint: int -> val
        | Vlong: int64 -> val
-       | Vptr: block -> ptrofs -> val.  
+       | Vptr: block -> ptrofs -> val.
    
    Definition Vzero: val := Vint Int.zero.
    Definition Vone: val := Vint Int.one.
@@ -56,7 +25,8 @@ Family Imp.
      if Archi.ptr64 then Vlong (Ptrofs.to_int64 n) else Vint (Ptrofs.to_int n).
   FEnd _val.
 
-   Inductive intsize : Type :=
+  MetaData _int.  
+  Inductive intsize : Type :=
       | I8: intsize
       | I16: intsize
       | I32: intsize
@@ -65,8 +35,10 @@ Family Imp.
    Inductive signedness : Type :=
       | Signed: signedness
       | Unsigned: signedness.   
+  FEnd _int.
 
-   Inductive type : Type :=
+  MetaData _type.
+  Inductive type : Type :=
       | Tvoid: type(* the void type *)
       | Tint: intsize -> signedness -> attr -> type(* integer types *)
       | Tlong: signedness -> attr -> type(* 64-bit integer types *)      
@@ -75,6 +47,7 @@ Family Imp.
    with typelist : Type :=
       | Tnil: typelist
       | Tcons: type -> typelist -> typelist.
+  FEnd _type.
 
    (* Definition typeconv (ty: type) : type :=
   match ty with
@@ -102,8 +75,9 @@ Family Imp.
       match env!id with Some co => co_sizeof co | None => 0 end
   end.
     *)
-
-   Inductive fundef (F : Type) : Type :=
+  
+  MetaData _common.
+  Inductive fundef (F : Type) : Type :=
       | Internal: F -> fundef
       (* | External: external_function -> typelist -> type -> calling_convention -> fundef.*)
 
@@ -115,8 +89,21 @@ Family Imp.
         prog_comp_env: composite_env;
         prog_comp_env_eq: build_composite_env prog_types = OK prog_comp_env
    }.
+  FEnd _common.
+
+  Family ClightVariant. 
+  FEnd ClightVariant.
+  
+  Family CminorVariant.
+  FEnd CminorVariant.
+  
+  Family CFGLike. 
+  FEnd CFGLike.
+  
+  Family LinearLike.
+  FEnd LinearLike.
          
-   Family C.
+  Family C.
       FInductive expr : Type :=
         | Eval (v: val) (ty: type)(* constant *)
         | Evar (x: ident) (ty: type)(* variable *)
@@ -227,13 +214,14 @@ Family Imp.
        FDefinition Sfor := fun (s1: stmt) (e2: expr) (s3: stmt) (s4: stmt) =>
          Ssequence s1 (Sloop (Ssequence (Sifthenelse e2 Sskip Sbreak) s3) s4).
        
+       MetaData _program.
        Record function : Type := mkfunction {
          fn_return: type;
          fn_callconv: calling_convention;
          fn_params: list (ident * type);
          fn_vars: list (ident * type);
          fn_temps: list (ident * type);
-         fn_body: stmt
+         fn_body: self__Clight.stmt
        }.
 
        Record program : Type := {
@@ -244,8 +232,10 @@ Family Imp.
          prog_comp_env: composite_env;
          prog_comp_env_eq: build_composite_env prog_types = OK prog_comp_env
        }.        
-
+       FEnd _program.
+       
        Family Semantics.                                        
+            MetaData _env.
             Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env }.
 
             Definition globalenv (p: program) :=
@@ -254,8 +244,9 @@ Family Imp.
             Definition env := PTree.t (block * type).
              
             Definition temp_env := PTree.t val.            
+            FEnd _env.
                         
-           FInductive eval_expr : (e: env) (le: temp_env) (m: mem) -> expr -> val -> Prop :=
+           FInductive eval_expr : (e: self__Semantics.env) (le: self__Semantics.temp_env) (m: mem) -> expr -> val -> Prop :=
                | eval_Econst_int: forall i ty,
                    eval_expr (Econst_int i ty) (Vint i)
                | eval_Etempvar: forall id ty v,
@@ -1213,69 +1204,69 @@ Family Imp.
                  eval_condexpr le (CElet a b) v2.
            
           FInductive step: state -> trace -> state -> Prop :=
-               | step_skip_seq: forall f s k sp e m,
+             | step_skip_seq: forall f s k sp e m,
                    step (State f Sskip (Kseq s k) sp e m)
                      E0 (State f s k sp e m)
-               | step_skip_block: forall f k sp e m,
+             | step_skip_block: forall f k sp e m,
                    step (State f Sskip (Kblock k) sp e m)
                      E0 (State f Sskip k sp e m)
-               | step_skip_call: forall f k sp e m m',
+             | step_skip_call: forall f k sp e m m',
                    is_call_cont k ->
                    Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
                    step (State f Sskip k (Vptr sp Ptrofs.zero) e m)
                      E0 (Returnstate Vundef k m')
 
-               | step_assign: forall f id a k sp e m v,
+             | step_assign: forall f id a k sp e m v,
                    eval_expr sp e m nil a v ->
                    step (State f (Sassign id a) k sp e m)
                      E0 (State f Sskip k sp (PTree.set id v e) m)
 
-               | step_seq: forall f s1 s2 k sp e m,
+             | step_seq: forall f s1 s2 k sp e m,
                    step (State f (Sseq s1 s2) k sp e m)
                      E0 (State f s1 (Kseq s2 k) sp e m)
 
-               | step_ifthenelse: forall f c s1 s2 k sp e m b,
+             | step_ifthenelse: forall f c s1 s2 k sp e m b,
                    eval_condexpr sp e m nil c b ->
                    step (State f (Sifthenelse c s1 s2) k sp e m)
                      E0 (State f (if b then s1 else s2) k sp e m)
 
-               | step_loop: forall f s k sp e m,
+             | step_loop: forall f s k sp e m,
                    step (State f (Sloop s) k sp e m)
                      E0 (State f s (Kseq (Sloop s) k) sp e m)
 
-               | step_block: forall f s k sp e m,
+             | step_block: forall f s k sp e m,
                    step (State f (Sblock s) k sp e m)
                      E0 (State f s (Kblock k) sp e m)
 
-               | step_exit_seq: forall f n s k sp e m,
+             | step_exit_seq: forall f n s k sp e m,
                    step (State f (Sexit n) (Kseq s k) sp e m)
                      E0 (State f (Sexit n) k sp e m)
-               | step_exit_block_0: forall f k sp e m,
+             | step_exit_block_0: forall f k sp e m,
                    step (State f (Sexit O) (Kblock k) sp e m)
                      E0 (State f Sskip k sp e m)
-               | step_exit_block_S: forall f n k sp e m,
+             | step_exit_block_S: forall f n k sp e m,
                    step (State f (Sexit (S n)) (Kblock k) sp e m)
                      E0 (State f (Sexit n) k sp e m)
 
-               | step_return_0: forall f k sp e m m',
+             | step_return_0: forall f k sp e m m',
                    Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
                    step (State f (Sreturn None) k (Vptr sp Ptrofs.zero) e m)
                      E0 (Returnstate Vundef (call_cont k) m')
-               | step_return_1: forall f a k sp e m v m',
+             | step_return_1: forall f a k sp e m v m',
                    eval_expr (Vptr sp Ptrofs.zero) e m nil a v ->
                    Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
                    step (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m)
                      E0 (Returnstate v (call_cont k) m')
 
-               | step_label: forall f lbl s k sp e m,
+             | step_label: forall f lbl s k sp e m,
                    step (State f (Slabel lbl s) k sp e m)
                      E0 (State f s k sp e m)
 
-               | step_goto: forall f lbl k sp e m s' k',
+             | step_goto: forall f lbl k sp e m s' k',
                    find_label lbl f.(fn_body) (call_cont k) = Some(s', k') ->
                    step (State f (Sgoto lbl) k sp e m)
-                     E0 (State f s' k' sp e m).           
-       FEnd Semantics.       
+                     E0 (State f s' k' sp e m).
+       FEnd Semantics.
     FEnd CminorSel.   
 
    Family RTL.
@@ -2582,15 +2573,162 @@ Family Imp.
    FEnd Tailcall.
    
    Family Inlining.
+        MetaData _context. 
+            Record context: Type := mkcontext {
+              dpc: positive;(* offset for PCs *)
+              dreg: positive;(* offset for pseudo-regs *)
+              dstk: Z;(* offset for stack references *)
+              mreg: positive;(* max pseudo-reg number *)
+              mstk: Z;(* original stack block size *)
+              retinfo: option(node * reg)(* where to branch on return *)
+            }.
+        FEnd _context. 
+
+        MetaData _shift.       
+            Definition shiftpos (p amount: positive) := Pos.pred (Pos.add p amount).
+            Definition spc (ctx: context) (pc: node) := shiftpos pc ctx.(dpc).
+        FEnd _shift.
+
+        FRecursion expand_instr : (i : RTL.instruction) -> (ctx: context) (pc: node) -> mon unit. 
+            Case Inop (s) := set_instr (spc ctx pc) (Inop (spc ctx s)). 
+            Case Iop (op, args, res, s) := 
+               set_instr (spc ctx pc)
+                (Iop (sop ctx op) (sregs ctx args) (sreg ctx res) (spc ctx s)).
+            Case Icond (cond, args, s1, s2) := 
+               set_instr (spc ctx pc)
+                (Icond (scond ctx cond) (sregs ctx args) (spc ctx s1) (spc ctx s2)).
+            Case Ireturn (or) := (match ctx.(retinfo) with
+                  | None =>
+                      set_instr (spc ctx pc) (Ireturn (option_map (sreg ctx) or))
+                  | Some rinfo =>
+                      set_instr (spc ctx pc) (inline_return ctx or rinfo)
+                  end).
    FEnd Inlining.
    
    Family Renumber.
+      MetaData _renum_pc. 
+          Definition renum_pc (pc: node) : node :=
+          match pnum!pc with
+          | Some pc' => pc'
+          | None => 1%positive(* impossible case, never exercised *)
+          end.
+      FEnd _renum_pc.
+
+      FRecursion renum_instr : (i : RTL.instruction) -> RTL.instruction. 
+          Case Inop (s) := Inop (renum_pc s). 
+          Case Iop (op, args, res, s) := Iop op args res (renum_pc s).
+          Case Icond (cond, args, s1, s2) := Icond cond args (renum_pc s1) (renum_pc s2).
+          Case Ireturn (or) := Ireturn or.
+      FEnd renum_instr.
+
+      MetaData _renum_cfg.
+          Definition renum_node (c': code) (pc: node) (i: RTL.instruction) : RTL.code :=
+          match pnum!pc with
+          | None => c'
+          | Some pc' => PTree.set pc' (renum_instr i) c'
+          end.
+
+          Definition renum_cfg (c: code) : code :=
+            PTree.fold renum_node c (PTree.empty instruction).
+      FEnd _renum_cfg.
    FEnd Renumber.
    
-   Family Constprop.
+   (* Nanopasses: 
+   1. Replace ops which have all arguments known to a single constant load operation 
+   2. Replace ops which have some arguments known to simpler ops (strength reduction)
+   3. Cast operators that have no effect are removed 
+   4. Conditional branches and multi-way branches are statically resolved into Inop instructions when possible.
+   *)
+   Family Constprop.  
+         FRecursion transf_instr : 
+             (instr: instruction) -> (f: RTL.function) -> 
+             (an: PMap.t VA.t) -> 
+            (rm: romem) -> 
+            (pc: RTL.node) -> RTL.instruction. 
+           Case Iop (op, args, res, s) := 
+              (let aargs := aregs ae args in
+              let a := eval_static_operation op aargs in
+              let s' := successor f (AE.set res a ae) s in
+              match const_for_result a with
+              | Some cop =>
+                  Iop cop nil res s'
+              | None =>
+                  let (op', args') := op_strength_reduction op args aargs in
+                  Iop op' args' res s'
+              end.)
+           Case Inop (s) := Inop s.
+           Case Icond (cond, args, s1, s2) := 
+              (let aargs := aregs ae args in
+              match resolve_branch (eval_static_condition cond aargs) with
+              | Some b =>
+                  if b then Inop s1 else Inop s2
+              | None =>
+                  let (cond', args') := cond_strength_reduction cond args aargs in
+                  Icond cond' args' s1 s2
+              end).
+           Case Ireturn (or) := Ireturn or.
+         FEnd transf_instr.
    FEnd Constprop.
    
+   (* *)
    Family CSE.
+      (* Definition transfer (f: function) (approx: PMap.t VA.t) (pc: node) (before: numbering) :=
+  match f.(fn_code)!pc with
+  | None => before
+  | Some i =>
+      match i with
+      | Inop s =>
+          before
+      | Iop op args res s =>
+          add_op before res op args
+      | Iload chunk addr args dst s =>
+          add_load before dst chunk addr args
+      | Istore chunk addr args src s =>
+          let app := approx!!pc in
+          let n := kill_loads_after_store app before chunk addr args in
+          add_store_result app n chunk addr args src
+      | Icall sig ros args res s =>
+          empty_numbering
+      | Itailcall sig ros args =>
+          empty_numbering
+      | Ibuiltin ef args res s =>
+          match ef with
+          | EF_external _ _ | EF_runtime _ _ | EF_malloc | EF_free | EF_inline_asm _ _ _ =>
+              empty_numbering
+          | EF_vstore _ =>
+              set_res_unknown (kill_all_loads before) res
+          | EF_builtin name sg =>
+              match lookup_builtin_function name sg with
+              | Some bf => set_res_unknown before res
+              | None => set_res_unknown (kill_all_loads before) res
+              end
+          | EF_memcpy sz al =>
+              match args with
+              | dst :: src :: nil =>
+                  let app := approx!!pc in
+                  let adst := aaddr_arg app dst in
+                  let asrc := aaddr_arg app src in
+                  let n := kill_loads_after_storebytes app before adst sz in
+                  set_res_unknown (add_memcpy before n asrc adst sz) res
+              | _ =>
+                  empty_numbering
+              end
+          | EF_vload _ | EF_annot _ _ _ | EF_annot_val _ _ _ | EF_debug _ _ _ =>
+              set_res_unknown before res
+          end
+      | Icond cond args ifso ifnot =>
+          before
+      | Ijumptable arg tbl =>
+          before
+      | Ireturn optarg =>
+          before
+      end
+  end.
+   Let's define this function as an FRecursion 
+*)
+  FRecursion transfer : (i : instruction) -> (f: function) -> (approx: PMap.t VA.t) -> (before: numbering) -> instruction. 
+  FEnd transfer.
+
    FEnd CSE.
    
    Family Deadcode.
@@ -2624,16 +2762,20 @@ Family Imp.
             Case Ljumptable := (fun arg tbl => fun lbl => false).
         FEnd starts_with_label.
 
+       Metadata _starts_with.
         Fixpoint starts_with (lbl: label) (k: code) {struct k} : bool :=
             match k with
             | i :: k' => if starts_with_label i then true else starts_with lbl k'
             | _ => false
             end.
+       FEnd _starts_with.
        
+       MetaData _add_branch.
         Definition add_branch (s: label) (k: code) : code :=
             if starts_with s k then k else Lgoto s :: k.
+       FEnd _add_branch.
 
-        FRecursion translate_instr about LTL.instruction motive (fun (_ : LTL.instruction) -> Linear.code -> Linear.instruction).
+       FRecursion translate_instr about LTL.instruction motive (fun (_ : LTL.instruction) -> Linear.code -> Linear.instruction).
           Case Lop := (fun op args res => fun k => Lop op args res).
           Case Lgetstack := (fun sl ofs ty r => fun => Lgetstack sl ofs ty r).
           Case Lsetstack := (fun r sl ofs ty => fun k => Lsetstack r sl ofs ty).
@@ -2644,17 +2786,20 @@ Family Imp.
                                 else
                                   Lcond cond args s1 :: add_branch s2 k).
           Case Lreturn := (fun k => Lreturn).
-        FEnd transl_instr.
-
+       FEnd transl_instr.
+       
+       MetaData _linearize_block.
        Fixpoint linearize_block (b: LTL.bblock) (k: code) : code :=
           match b with
           | nil => k
           | i :: b' => linearize_block b' (transl_instr i k)
           end.
+       FEnd _linearize_block.
    FEnd Linearize.
 
    (* Linear -> Linear *)
    Family CleanupLabels.
+       
    FEnd CleanupLabels.
 
    (* Linear -> Linear *)
