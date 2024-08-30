@@ -1,6 +1,5 @@
 From NFPOP Require Import Loader.
 
-
 Family STLC.
   MetaData _ident.
     Definition ident := nat.
@@ -21,7 +20,7 @@ Family STLC.
   | tm_val : val -> tm
   with val : Set :=
   | val_abs : self__STLC.ident -> tm -> val
-  | val_unit: val.
+  | val_unit: val.   
 FEnd STLC.
 
 Family STLC_bool extends STLC.
@@ -30,7 +29,7 @@ Family STLC_bool extends STLC.
 
   FRecursion subst.
       Case ty_bool := 1.
-  FEnd subst.    
+  FEnd subst.
 
   FInductive tm : Set :=
     | tm_if : tm -> tm -> tm -> tm
@@ -38,7 +37,7 @@ Family STLC_bool extends STLC.
     | val_true : val
     | val_false : val.
 
-  FDefinition check_handler_bool := substty_bool.
+  FDefinition check_handler_bool := self__STLC_bool.subst.
 FEnd STLC_bool.
 
 Family STLC_prod extends STLC_bool.
