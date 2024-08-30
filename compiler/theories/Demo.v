@@ -150,7 +150,8 @@ Family B10 extends A10.
    
    Family A1.
      FInductive basic : Set := extraBasic : B -> basic.
-     Family A2. FEnd A2.
+     Family A2. 
+     FEnd A2.
    FEnd A1.   
 FEnd B10.
 

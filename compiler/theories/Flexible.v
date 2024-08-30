@@ -15,10 +15,10 @@ Family STLCBase.
   FEnd subst.
 FEnd STLCBase.
 
-(* Family IfExt.*)
+Family IfExt.
    Family Base extends STLCBase.
        Family X.
-           FInductive Ty : Set := TBool : Ty.           
+           FInductive Ty : Set := TBool : Ty.
        FEnd X.        
        
        FRecursion subst.
@@ -31,7 +31,9 @@ FEnd STLCBase.
 FEnd IfExt.
 
 Family TempSTLC extends STLCBase.
+    Family X.    
     FInductive Ty : Set := TempExpr : Ty.
+    FEnd X.
 
     FRecursion subst.
         Case TempExpr := 10.
@@ -47,7 +49,9 @@ FEnd Temp.
     
 Family ArithExt. 
    Family Base extends STLCBase.
+        Family X.
         FInductive Ty : Set := TNat : Ty.
+        FEnd X.
         
         FRecursion subst.
             Case TNat := 1.
