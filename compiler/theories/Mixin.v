@@ -14,15 +14,15 @@ Family STLCBase.
 
   FInduction easy_theorem
        about Ty
-       motive (fun (t : Ty) => 1 = 1).
+       motive (fun (t : Ty) => self__STLCBase.subst t = 1).
      FProof.  
         unfold HandlerTypes回30.__handler_type_TUnit.       
         unfold HandlerTypes回30.__handler_type_TArr.
         unfold  __motiveTeasy_theorem.
        split.
-       + reflexivity.
+       + rewrite self__STLCBase.subst_TUnit_eq. unfold self__STLCBase.substTUnit. reflexivity.
        + split.
-          - intros. reflexivity.
+          - intros.  rewrite self__STLCBase.subst_TArr_eq. unfold self__STLCBase.substTArr. reflexivity.
           - apply I.
      Qed.
   FEnd easy_theorem.
