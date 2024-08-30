@@ -1,1 +1,1 @@
-Implementation. *Adapting* from https://github.com/DKXXXL/FPOP
+FPOP 2.
