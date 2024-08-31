@@ -10,7 +10,7 @@ Family STLC.
   | ty_arrow : ty -> ty -> ty.
          
   FRecursion subst : (t : ty) -> (k : nat) -> nat.  
-     Case ty_arrow (n, m) := (subst m k + subst n k).
+     Case ty_arrow n m := (subst m k + subst n k).
      Case ty_unit := k.
   FEnd subst.
 
@@ -45,7 +45,7 @@ Family STLC_prod extends STLC_bool.
     | ty_prod : ty -> ty -> ty.
 
   FRecursion subst.
-     Case ty_prod (n, m) := (subst m k + subst n k).
+     Case ty_prod n m := (subst m k + subst n k).
   FEnd subst.
   
   FInductive tm : Set :=
