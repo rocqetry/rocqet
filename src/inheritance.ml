@@ -5,15 +5,17 @@ open Types
 (* Inherit Element from both the base and *all* further bound families *)
 let inherit_element ~field ~linkage ~context =
   let further_elem = Context.further_bound_linkage_elem context ~field in
+  (* This should not be the top most linkage, but the 
+     linkage which is this further binding was found *)
   let further_subst elem l =
     Linkage.path_substitution_elem elem
       ~source:(Linkage.top_most_self_name l)
       ~target:(Linkage.top_most_self_name linkage)
-  in
+  in  
   let base_subst elem l =
     Linkage.path_substitution_elem elem
       ~source:(Naming.self_version l.Linkage.name)
-      ~target:(Naming.self_version linkage.name)
+      ~target:(Naming.self_version linkage.name) 
   in
   let further_elem =
     match further_elem with
