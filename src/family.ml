@@ -92,22 +92,27 @@ let close_family () : unit =
   | LinkageCtx.Nested (upper, linkage) as context ->
       (* let further_base = Context.further_bound_linkage context in*)
       let base = Context.base_linkage context in
-      let further_subst further =
+      let _further_subst further =
         Linkage.path_subtitution further
           ~source:(Linkage.top_most_self_name further)
           ~target:(Linkage.top_most_self_name linkage)
       in
+      let subst (target, source) l = 
+         Linkage.path_subtitution l
+           ~source:(Naming.self_version source)
+           ~target:(Naming.self_version target)
+      in 
       let further = Context.further_bound_linkage context in
       let further_base =
          match further with
          | [] -> None
-         | x :: xs ->
-             let f further furthers =
-               Linkage.concatenate ~derived:(further_subst further) ~base:furthers
+         | (m, x) :: xs ->
+             let f (m, further) furthers =
+               Linkage.concatenate ~derived:(subst m further) ~base:furthers
              in
              Some
                ((* Codegen.compute_linkage None*)
-             (List.fold_right f xs (further_subst x)))
+             (List.fold_right f xs (subst m x)))
       in
       let linkage =
         match (further_base, base) with

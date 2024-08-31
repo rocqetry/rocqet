@@ -72,7 +72,7 @@ let rec check ~(further_base : Linkage.t) ~(base : Linkage.t) =
 let check_further_binding_structure context =
   let further_bases =
     let further = Context.further_bound_linkage context in
-    List.map (fun (linkage : Linkage.t) -> linkage.base) further
+    List.map (fun (_, (linkage : Linkage.t)) -> linkage.base) further
   in
   let base = Context.base_linkage context in
   further_bases

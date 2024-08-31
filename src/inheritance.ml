@@ -7,7 +7,12 @@ let inherit_element ~field ~linkage ~context =
   let further_elem = Context.further_bound_linkage_elem context ~field in
   (* This should not be the top most linkage, but the 
      linkage which is this further binding was found *)
-  let further_subst elem l =
+  let subst (target, source) elem = 
+    Linkage.path_substitution_elem elem
+      ~source:(Naming.self_version source)
+      ~target:(Naming.self_version target)
+  in 
+  let _further_subst elem l =
     Linkage.path_substitution_elem elem
       ~source:(Linkage.top_most_self_name l)
       ~target:(Linkage.top_most_self_name linkage)
@@ -21,14 +26,14 @@ let inherit_element ~field ~linkage ~context =
     match further_elem with
     | [] ->        
        None
-    | (first_l, first_e) :: rest ->
+    | (m, _first_l, first_e) :: rest ->
        (* failwith "further" |> ignore;*)
         Some
           (List.fold_right
-             (fun (l, e) furthers ->
-               Linkage.concatenate_elem (further_subst e l) furthers)
+             (fun (m, _l, e) furthers ->
+               Linkage.concatenate_elem (subst m e) furthers)
              rest
-             (further_subst first_e first_l))
+             (subst m first_e))
   in
   let base_elem =
     Context.base_linkage_elem context ~field
@@ -45,7 +50,12 @@ let inherit_dependencies ~prefix =
   let context = Context.get () in
   let base = Context.base_linkage context in
   let linkage = Context.family_linkage context in
-  let further_subst further =
+  let subst (target, source) l = 
+    Linkage.path_subtitution l
+      ~source:(Naming.self_version source)
+      ~target:(Naming.self_version target)
+  in 
+  let _further_subst further =
     Linkage.path_subtitution further
       ~source:(Linkage.top_most_self_name further)
       ~target:(Linkage.top_most_self_name linkage)
@@ -54,17 +64,17 @@ let inherit_dependencies ~prefix =
   let further =
     match further with
     | [] -> None
-    | x :: xs ->         
+    | (m, x) :: xs ->         
          (* let s = Printf.sprintf "%s\n" (Names.Id.to_string x.name) in 
          _xs |> List.iter (fun (x : Linkage.t) -> Printf.printf "%s\n" (Names.Id.to_string x.name));
          failwith s |> ignore;*)
-        let f further furthers =
-          Linkage.concatenate ~derived:(further_subst further) ~base:furthers
+        let f (m, further) furthers =
+          Linkage.concatenate ~derived:(subst m further) ~base:furthers
         in
         (* Some (further_subst x)*)
         Some
           ((* Codegen.compute_linkage None*)
-             (List.fold_right f xs (further_subst x)))
+             (List.fold_right f xs (subst m x)))
   in
   let linkage =
     match (base, further) with

@@ -50,20 +50,21 @@ module Context = struct
 
   (* All possible ways to walk up, stopping at a family with a base *)
   let rec walk_up_linkage_context context :
-      (Names.Id.t Bwd.t * Linkage.t) option list =
+            (* path, derived, base*)
+      (Names.Id.t Bwd.t * Linkage.t * Linkage.t) option list =
     match context with
     | LinkageCtx.Toplevel linkage ->
-        [ linkage.base |> Option.map (fun base -> (Bwd.Emp, base)) ]
+        [ linkage.base |> Option.map (fun base -> (Bwd.Emp, linkage, base)) ]
     | LinkageCtx.Nested (upper, linkage) ->
         let result =
           walk_up_linkage_context upper
           |> List.map (fun almost ->
                  almost
-                 |> Option.map (fun (path, base) ->
-                        (Bwd.Snoc (path, linkage.name), base)))
+                 |> Option.map (fun (path, derived, base) ->
+                        (Bwd.Snoc (path, linkage.name), derived, base)))
         in
         let current =
-          linkage.base |> Option.map (fun base -> (Bwd.Emp, base))
+          linkage.base |> Option.map (fun base -> (Bwd.Emp, linkage, base))
         in
         current :: result
 
@@ -215,7 +216,8 @@ module Context = struct
 
   let destructive_update new_store = store := new_store
 
-  let further_bound_linkage context : Linkage.t list =
+  (* derived, base *)
+  let further_bound_linkage context : ((Names.Id.t * Names.Id.t) * Linkage.t) list =
     match context with
     | LinkageCtx.Toplevel _ -> []
     | LinkageCtx.Nested (_, l) ->
@@ -223,16 +225,18 @@ module Context = struct
         |> walk_up_linkage_context
         |> List.filter_map (function
              | None -> None
-             | Some (path, parent) ->
-                 walk_down_linkage parent (path |> Bwd.to_list))
+             | Some (path, (derived : Linkage.t), (parent : Linkage.t)) ->
+                 walk_down_linkage parent (path |> Bwd.to_list) 
+                 |> Option.map (fun further_bound -> ((derived.name, parent.name), further_bound)))
         |> function 
         | [] -> []
         | x :: xs -> 
+           (* We don't want to include the current family's base, 
+              as that is not a further bound linkage *)
            match l.base with 
            | None -> x :: xs 
            | Some _ -> xs 
-           
-  (* We don't want to include the current family's base, as that is not a further bound linkage *)
+             
 
   let base_linkage context =
     match context with
@@ -248,11 +252,11 @@ module Context = struct
     context |> base_linkage |> Option.map lookup |> Option.flatten
 
   let further_bound_linkage_elem context ~field :
-      (Linkage.t * LinkageElem.t) list =
-    let lookup (linkage : Linkage.t) =
+      ((Names.Id.t * Names.Id.t) * Linkage.t * LinkageElem.t) list =
+    let lookup (inh, (linkage : Linkage.t)) =
       linkage.fields
       |> Bwd.find_opt (fun (name, _) -> Names.Id.equal name field)
-      |> Option.map (fun (_, elem) -> (linkage, elem))
+      |> Option.map (fun (_, elem) -> (inh, linkage, elem))
     in
     context |> further_bound_linkage |> List.filter_map lookup
 end
