@@ -39,31 +39,41 @@ Family IfExt.
 FEnd IfExt.
 
 Family TempSTLC extends STLCBase.
-    Family X.    
-    FInductive Ty : Set := TempExpr : Ty.
+    Family X.
+       Family X0. 
+          FInductive Ty : Set := TempExpr : Ty.
+       FEnd X0.
     FEnd X.
 
+    Family Y. 
     FRecursion subst.
         Case TempExpr := 10.
     FEnd subst.
+    FEnd Y.
 FEnd TempSTLC.
 
 Family Temp extends IfExt.
     Family Base extends TempSTLC.       
-       FRecursion subst.
-       FEnd subst.
+       Family Y.
+          FRecursion subst.
+          FEnd subst.
+       FEnd Y.
     FEnd Base.
 FEnd Temp.
     
 Family ArithExt. 
    Family Base extends STLCBase.
         Family X.
-        FInductive Ty : Set := TNat : Ty.
+           Family X0.
+               FInductive Ty : Set := TNat : Ty.
+           FEnd X0.
         FEnd X.
         
+        Family Y.
         FRecursion subst.
             Case TNat := 1.
         FEnd subst.
+        FEnd Y.
 
        FInductive Exp : Set :=
          | EAdd : Exp -> Exp -> Exp
@@ -76,13 +86,11 @@ Family ArithExt.
 FEnd ArithExt.
 
 Family IfExtBuild extends IfExt.
-    Family Base extends STLCBase.                    
-          (*FInductive B : Set := BB : Ty -> B.
-          FDefinition c := self__Base.B_rect.*)          
-          (* FInductive Ty : Set := Blah : Ty. *)
-          FRecursion subst.             
-          FEnd subst.
-          (* FDefinition A := Ty. *)
+    Family Base extends STLCBase.                              
+          Family Y. 
+             FRecursion subst.             
+             FEnd subst.
+          FEnd Y.          
     FEnd Base.
 FEnd IfExtBuild.
 
