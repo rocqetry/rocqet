@@ -2180,7 +2180,7 @@ Family Imp.
        (* (nbrk : nat) -> if Clight.stmt terminates on break return Csharpminor.exit nbrk
           (ncnt : nat) -> if Clight.smt terminates on continue return Csharpminor.exit ncnt
         *)
-       FRecursion transl_statement about Clight.stmt motive (fun (_ : Clight.stmt) => composite_env -> type -> nat -> nat).
+      FRecursion transl_statement about Clight.stmt motive (fun (_ : Clight.stmt) => composite_env -> type -> nat -> nat).
            Case Sskip := (fun ce tyret nbrk ncnt => Csharpminor.Sskip).   
            Case Sset := (fun x b => fun ce tyret nbrk ncnt => Csharpminor.Sset x (transl_expr b)).
            Case Ssequence := (fun s1 transl_s1 s2 transl_s2 =>
@@ -2203,7 +2203,7 @@ Family Imp.
            Case Sswitch := (fun e lbls s1 transl_s1 => fun ce tyret nbrk ncnt => cheat).
            Case Slabel := (fun l s transl_s => fun ce tyret nbrk ncnt => Csharpminor.Slabel lbl (transl_s1 ce tyret nbrk ncnt)).
            Case Sgoto := (fun lbl =>  Csharpminor.Sgoto lbl).
-       FEnd transl_statement.
+      FEnd transl_statement.
        
        (* Translate function, fundef, program *)
        

@@ -1,0 +1,14 @@
+; (coq.theory
+;  (name tests)
+;  (package nfpop)
+;  (synopsis "Tests for FPOP")
+;  ;(theories ../src/Loader.v)
+;  (plugins nfpop.plugin)
+;  (flags :standard))
+
+(rule
+ (alias runtest)
+ (action (progn
+  (run coqc %{dep:STLC.v})
+  ; Add more test files here
+ )))
