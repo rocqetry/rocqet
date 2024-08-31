@@ -213,8 +213,7 @@ Family Imp.
 
        FDefinition Sfor := fun (s1: stmt) (e2: expr) (s3: stmt) (s4: stmt) =>
          Ssequence s1 (Sloop (Ssequence (Sifthenelse e2 Sskip Sbreak) s3) s4).
-       
-       MetaData _program.
+              
        Record function : Type := mkfunction {
          fn_return: type;
          fn_callconv: calling_convention;
@@ -231,11 +230,9 @@ Family Imp.
          prog_types: list composite_definition;
          prog_comp_env: composite_env;
          prog_comp_env_eq: build_composite_env prog_types = OK prog_comp_env
-       }.        
-       FEnd _program.
+       }.       
        
-       Family Semantics.                                        
-            MetaData _env.
+       Family Semantics.            
             Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env }.
 
             Definition globalenv (p: program) :=
@@ -244,11 +241,16 @@ Family Imp.
             Definition env := PTree.t (block * type).
              
             Definition temp_env := PTree.t val.            
-            FEnd _env.
                         
            FInductive eval_expr : (e: self__Semantics.env) (le: self__Semantics.temp_env) (m: mem) -> expr -> val -> Prop :=
                | eval_Econst_int: forall i ty,
                    eval_expr (Econst_int i ty) (Vint i)
+               | eval_Econst_float: forall f ty,
+                   eval_expr (Econst_float f ty) (Vfloat f)
+               | eval_Econst_single: forall f ty,
+                   eval_expr (Econst_single f ty) (Vsingle f)
+               | eval_Econst_long: forall i ty,
+                   eval_expr (Econst_long i ty) (Vlong i)
                | eval_Etempvar: forall id ty v,
                    PTree.get id le = Some v ->
                    eval_expr (Etempvar id ty) v.                       
@@ -259,47 +261,43 @@ Family Imp.
                 | Kloop1: stmt -> stmt -> cont -> cont(* Kloop1 s1 s2 k = after s1 in Sloop s1 s2 *)
                 | Kloop2: stmt -> stmt -> cont -> cont. (* Kloop2 s1 s2 k = after s2 in Sloop s1 s2 *)                
 
-           FRecursion call_cont about cont motive (fun (_ : cont) => cont).
+           FRecursion call_cont : (c : cont) -> cont.
                 Case Kstop := Kstop.
-                Case Kseq := (fun s k call_cont_k => call_cont_k).                
-                Case Kloop1 := (fun s1 s2 k call_cont_k => call_cont_k).
-                Case Kloop2 := (fun s1 s2 k call_cont_k => call_cont_k).
-            FEnd call_cont.
+                Case Kseq s k := call_cont k.
+                Case Kloop1 s1 s2 k := call_cont k.
+                Case Kloop2 s1 s2 k := call_cont k.
+           FEnd call_cont.
             
-            FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop).
+           FRecursion is_call_cont : (_ : cont) -> Prop.
                 Case Kstop := True.
-                Case Kseq := (fun s k call_cont_k => False).                
-                Case Kloop1 := (fun s1 s2 k call_cont_k => False).
-                Case Kloop2 := (fun s1 s2 k call_cont_k => False).
-            FEnd is_call_cont.
+                Case Kseq s k := False. 
+                Case Kloop1 s1 s2 k := False. 
+                Case Kloop2 s1 s2 k := False.
+           FEnd is_call_cont.
 
             Fnductive state: Type :=
                 | State : function -> stmt -> cont -> env -> temp_env -> mem -> state                    
                 | Callstate : fundef -> list val -> cont -> mem -> state                    
                 | Returnstate : val -> cont -> mem -> state.                    
             
-           FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)). 
-                Case Sskip := (fun lbl k => None)
-                Case Sassign := (fun id e lbl k => None)
-                Case Ssequence := (fun s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
-                                         match find_label_s1 lbl (Kseq s2 k) with 
+           FRecursion find_label : (s : stmt) -> (lbl: label) -> (k: cont) -> option (stmt * cont). 
+                Case Sskip := None.
+                Case Sassign id e := None.
+                Case Ssequence s1 s2 := match find_label s1 lbl (Kseq s2 k) with 
+                                        | Some sk => Some sk 
+                                        | None => find_label s2 lbl k end.                
+                Case Sifthenelse e s1 s2 := match find_label s1 lbl k with 
                                          | Some sk => Some sk 
-                                         | None => find_label_s2 lbl k end).
-                Case Sifthenelse := (fun e s1 _ s2 _ => fun lbl k => 
-                                         match find_label_s1 lbl k with 
-                                         | Some sk => Some sk 
-                                         | None => find_label_s2 lbl k end).
-                Case Sloop := (fun s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
-                                         match find_label_s1 lbl (Kloop1 s1 s2 k) with 
-                                         | Some sk => Some sk 
-                                         | None => find_label_s2 lbl (Kloop2 s1 s2 k) end).
-                Case Sblock := (fun s _ lbl k => None).
-                Case Sexit := (fun n lbl k => None).                
-                Case Sreturn := (fun _ lbl k => None).
-                Case Slabel := (fun lbl' s find_label_s => fun lbl k => 
-                                       if ident_eq lbl lbl' then 
-                                       Some(s, k) else find_label_s lbl k).
-                Case Sgoto := (fun label lbl k => None).
+                                         | None => find_label s2 lbl k end.                
+                Case Sloop s1 s2 := match find_label s1 lbl (Kloop1 s1 s2 k) with 
+                                    | Some sk => Some sk 
+                                    | None => find_label s2 lbl (Kloop2 s1 s2 k) end.
+                Case Sblock s := None.
+                Case Sexit n := None.                
+                Case Sreturn e := None.
+                Case Slabel lbl' s := if ident_eq lbl lbl' then 
+                                      Some(s, k) else find_label s lbl k.
+                Case Sgoto label := None.
            FEnd find_label.
           
            (* (e : env) (le : temp_env) (m : mem) *)
@@ -363,6 +361,10 @@ Family Imp.
                    find_label lbl f.(fn_body) (call_cont k) = Some (s', k') ->
                    step (State f (Sgoto lbl) k e le m)
                      E0 (State f s' k' e le m) 
+               | step_internal_function: forall f vargs k m e le m1,
+                     function_entry f vargs m e le m1 ->
+                     step (Callstate (Internal f) vargs k m)
+                       E0 (State f f.(fn_body) k e le m1)
 
                Inductive initial_state (p: program): state -> Prop :=
                   | initial_state_intro: forall b f m0,
@@ -377,9 +379,9 @@ Family Imp.
                   | final_state_intro: forall r m,
                       final_state (Returnstate (Vint r) Kstop m) r.
        FEnd Semantics.
-   FEnd Clight.
+  FEnd Clight.
 
-   Family Csharpminor. 
+  Family Csharpminor.
        FInductive constant : Type :=
            | Ointconst: int -> constant (* integer constant *)
            | Ofloatconst: float -> constant (* double-precision floating-point constant *)
@@ -2207,41 +2209,23 @@ Family Imp.
        
        (* Translate function, fundef, program *)
        
-       Family Correctness.
-            (* FInduction transl_expr_correct about Clight.eval motive (fun (_ : Clight.Semantics.eval_expr) => ...). 
-                
-            FEnd transl_expr_correct.
-
-            FInduction transl_step about Clight.step motive (fun (_ : Clight.Semantics.step) =>  ...):
-                forall S1 t S2, Clight.step ge S1 t S2 ->
-                forall T1, match_states S1 T1 ->
-                exists T2, plus step tge T1 t T2 /\ match_states S2 T2.
-            
-                (* case Sset := *) 
-                (* case Sskip := *)
-                (* case Ssequence := *)
-                (* case Sifthenelse := *)
-                (* case Sloop := *)
-                (* case Sbreak := *)
-                (* case Scontinue := *)
-                (* case Sreturn := *)
-                (* case Sswitch :=  *)
-                (* case Slabel := *)
-                (* case Sgoto := *)               
-            FEnd transl_step.
-            
-            FLemma transl_initial_states:
-                forall S, Clight.initial_state prog S ->
-                exists R, initial_state tprog R /\ match_states S R.
-                 (* *)
-            FEnd transl_initial_states.
-            
-            FLemma transl_final_states:
-                forall S R r,
-                match_states S R -> Clight.final_state S r -> final_state R r.
-                (* *)
-            FEnd transl_final_states.*)
-       FEnd Correctness.
+      Family Correctness.            
+          FInduction transl_step:
+            forall S1 t S2, Clight.step ge S1 t S2 ->
+            forall T1, match_states S1 T1 ->
+            exists T2, plus step tge T1 t T2 /\ match_states S2 T2.
+          FProof.
+          
+          Closing Fact transl_initial_states:
+            forall S, Clight.initial_state prog S ->
+            exists R, initial_state tprog R /\ match_states S R.
+          FProof.
+          
+          Closing Fact transl_final_states:
+            forall S R r,
+            match_states S R -> Clight.final_state S r -> final_state R r.
+          FProof.
+      FEnd Correctness.
    FEnd Cshmgen.   
    
    (* Csharpminor -> Cminor *)
