@@ -41,7 +41,7 @@ Family STLC_bool extends STLC.
     | val_true : val
     | val_false : val.
 
-  FDefinition check_handler_bool := self__STLC_bool.subst.
+  FDefinition check_handler_bool := subst.
 FEnd STLC_bool.
 
 Family STLC_prod extends STLC_bool.
