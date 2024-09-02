@@ -217,6 +217,7 @@ End BaseComp_IL_Exp.
 Module Type BaseComp_IL_Sig_Helper (self__BaseComp : BaseComp_IL_Ctx).
   Include BaseComp_IL_Exp_Ctx (self__BaseComp).
   Include BaseComp_IL_Exp (self__BaseComp).
+  (* Module Type Ty := BaseComp_IL_Ty.*)
 End BaseComp_IL_Sig_Helper.
 
 Module Type BaseComp_IL_Sig (self__BaseComp : BaseComp_IL_Ctx).

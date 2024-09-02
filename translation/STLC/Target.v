@@ -218,6 +218,8 @@ End BaseComp_IL_Exp.
 Module Type BaseComp_IL_Sig_Helper (self__BaseComp : BaseComp_IL_Ctx).
   Include BaseComp_IL_Exp_Ctx (self__BaseComp).
   Include BaseComp_IL_Exp (self__BaseComp).
+  Module Type Ty := BaseComp_IL_Ty.
+  Module Type Val := BaseComp_IL_Val.
 End BaseComp_IL_Sig_Helper.
 
 Module Type BaseComp_IL_Sig (self__BaseComp : BaseComp_IL_Ctx).
@@ -246,6 +248,8 @@ Module BaseComp_IL_Impl (self__BaseComp : BaseComp_IL_Ctx)
     Definition ELet := ELet'.
     Definition EApp := EApp'.
     Definition EHalt := EHalt'.    
+    Module Type Ty := BaseComp_IL_Ty.
+    Module Type Val := BaseComp_IL_Val.
   End IL.
 End BaseComp_IL_Impl.
 
@@ -262,7 +266,8 @@ End BaseComp_ILK_Ty_Ctx.
 Module Type BaseComp_ILK_Ty 
   (self__BaseComp : BaseComp_ILK_Ctx)
   (self__ILK : BaseComp_ILK_Ty_Ctx self__BaseComp).
-  Include BaseComp_IL_Ty (self__BaseComp) (self__ILK).
+  Include self__BaseComp.IL.Ty (self__BaseComp) (self__ILK).
+  (* Include BaseComp_IL_Ty (self__BaseComp) (self__ILK).*)
 End BaseComp_ILK_Ty.
   
 Module Type BaseComp_ILK_Val_Ctx
@@ -271,10 +276,13 @@ Module Type BaseComp_ILK_Val_Ctx
   Include BaseComp_ILK_Ty (self__BaseComp).
 End BaseComp_ILK_Val_Ctx.
 
-Module Type BaseComp_ILK_Val 
+Module Type BaseComp_ILK_Val
   (self__BaseComp : BaseComp_ILK_Ctx)
   (self__ILK : BaseComp_ILK_Val_Ctx self__BaseComp).
-  Include BaseComp_IL_Val (self__BaseComp) (self__ILK).
+  Include self__BaseComp.IL.Val (self__BaseComp) (self__ILK).
+  
+  (* Include BaseComp_IL_Val (self__BaseComp) (self__ILK).*)
+  
   (* Axiom Lam : list ident -> self.Exp -> Val. *)
 End BaseComp_ILK_Val.
 
