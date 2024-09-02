@@ -64,17 +64,12 @@ let inherit_dependencies ~prefix =
   let further =
     match further with
     | [] -> None
-    | (m, x) :: xs ->         
-         (* let s = Printf.sprintf "%s\n" (Names.Id.to_string x.name) in 
-         _xs |> List.iter (fun (x : Linkage.t) -> Printf.printf "%s\n" (Names.Id.to_string x.name));
-         failwith s |> ignore;*)
+    | (m, x) :: xs ->                  
         let f (m, further) furthers =
           Linkage.concatenate ~derived:(subst m further) ~base:furthers
-        in
-        (* Some (further_subst x)*)
+        in        
         Some
-          ((* Codegen.compute_linkage None*)
-             (List.fold_right f xs (subst m x)))
+          (List.fold_right f xs (subst m x))
   in
   let linkage =
     match (base, further) with
@@ -108,18 +103,7 @@ let inherit_dependencies ~prefix =
             ~source:(Naming.self_version base.name)
             ~target:(Naming.self_version linkage.name)
         in
-        let base = Linkage.concatenate_recursive ~base:further ~derived:base in
-        let _ = 
-          base.fields
-          |> Bwd.Bwd.iter (fun (name, elem) ->                  
-                 Printf.printf "Elem: %s\n" (Names.Id.to_string name);
-                 match elem with 
-                 | LinkageElem.FamilyDefinition { linkage; _ } -> 
-                       linkage.fields 
-                       |> Bwd.Bwd.iter (fun (name, _) -> Printf.printf "Inner Elem: %s\n" (Names.Id.to_string name))
-                 | _ -> ())
-        in
-        (* failwith "" |> ignore;*)
+        let base = Linkage.concatenate_recursive ~base:further ~derived:base in        
         let base = { base with name = further.name } in
         let base = Codegen.compute_linkage None base in
         let linkage =

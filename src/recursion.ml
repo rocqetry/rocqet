@@ -276,24 +276,12 @@ let extend_argumets_with_inductive_case ~(recursor : Names.Id.t)
     | Some c -> c
   in
   let rec unflatten (c : Constrexpr.constr_expr) =
-    match c.v with
-    (*| Constrexpr.CProdN (l, body) ->
-       let ty = l |> List.hd in
-       (match ty with
-       | Constrexpr.CLocalAssum (_, _, ty) ->
-          (match ty.v with
-          | Constrexpr.CRef (ty_name, _) -> ty_name.v :: unflatten body
-          | _ -> Errors.fail ~info:"Expected reference")
-       | _ -> Errors.fail ~info:"Expected local assume")*)
+    match c.v with    
     | CNotation (_, (_, "_ -> _"), ([ domain; codomain ], _, _, _)) -> (
         match domain.v with
         | Constrexpr.CRef (ty_name, _) -> ty_name.v :: unflatten codomain
         | _ -> Errors.fail ~info:"Expected reference")
-    | _ ->
-        (* let sigma, env = Termutils.global_env () in
-           let result = Ppconstr.pr_constr_expr env sigma c in
-           Printf.printf "%s\n" (Pp.string_of_ppcmds result); *)
-        []
+    | _ -> []
   in
   let types = unflatten constructor_type in
   Printf.printf "type length : %d\n" (List.length types);
