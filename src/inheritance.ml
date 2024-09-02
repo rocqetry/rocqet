@@ -5,35 +5,33 @@ open Types
 (* Inherit Element from both the base and *all* further bound families *)
 let inherit_element ~field ~linkage ~context =
   let further_elem = Context.further_bound_linkage_elem context ~field in
-  (* This should not be the top most linkage, but the 
+  (* This should not be the top most linkage, but the
      linkage which is this further binding was found *)
-  let subst (target, source) elem = 
+  let subst (target, source) elem =
     Linkage.path_substitution_elem elem
       ~source:(Naming.self_version source)
       ~target:(Naming.self_version target)
-  in 
+  in
   let _further_subst elem l =
     Linkage.path_substitution_elem elem
       ~source:(Linkage.top_most_self_name l)
       ~target:(Linkage.top_most_self_name linkage)
-  in  
+  in
   let base_subst elem l =
     Linkage.path_substitution_elem elem
       ~source:(Naming.self_version l.Linkage.name)
-      ~target:(Naming.self_version linkage.name) 
+      ~target:(Naming.self_version linkage.name)
   in
   let further_elem =
     match further_elem with
-    | [] ->        
-       None
+    | [] -> None
     | (m, _first_l, first_e) :: rest ->
-       (* failwith "further" |> ignore;*)
+        (* failwith "further" |> ignore;*)
         Some
           (List.fold_right
              (fun (m, _l, e) furthers ->
                Linkage.concatenate_elem (subst m e) furthers)
-             rest
-             (subst m first_e))
+             rest (subst m first_e))
   in
   let base_elem =
     Context.base_linkage_elem context ~field
@@ -50,11 +48,11 @@ let inherit_dependencies ~prefix =
   let context = Context.get () in
   let base = Context.base_linkage context in
   let linkage = Context.family_linkage context in
-  let subst (target, source) l = 
+  let subst (target, source) l =
     Linkage.path_subtitution l
       ~source:(Naming.self_version source)
       ~target:(Naming.self_version target)
-  in 
+  in
   let _further_subst further =
     Linkage.path_subtitution further
       ~source:(Linkage.top_most_self_name further)
@@ -64,12 +62,11 @@ let inherit_dependencies ~prefix =
   let further =
     match further with
     | [] -> None
-    | (m, x) :: xs ->                  
+    | (m, x) :: xs ->
         let f (m, further) furthers =
           Linkage.concatenate ~derived:(subst m further) ~base:furthers
-        in        
-        Some
-          (List.fold_right f xs (subst m x))
+        in
+        Some (List.fold_right f xs (subst m x))
   in
   let linkage =
     match (base, further) with
@@ -103,7 +100,7 @@ let inherit_dependencies ~prefix =
             ~source:(Naming.self_version base.name)
             ~target:(Naming.self_version linkage.name)
         in
-        let base = Linkage.concatenate_recursive ~base:further ~derived:base in        
+        let base = Linkage.concatenate_recursive ~base:further ~derived:base in
         let base = { base with name = further.name } in
         let base = Codegen.compute_linkage None base in
         let linkage =

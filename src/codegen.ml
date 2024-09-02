@@ -989,10 +989,10 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
         let elem =
           LinkageElem.FieldDefinition
             { body_expr; body_type; compiled_context; compiled_impl }
-        in        
+        in
         add_field ~name ~elem linkage
-    | LinkageElem.MetaDataSection m ->        
-        let elem = LinkageElem.MetaDataSection m in         
+    | LinkageElem.MetaDataSection m ->
+        let elem = LinkageElem.MetaDataSection m in
         add_field ~name ~elem linkage
     | LinkageElem.FamilyDefinition { linkage = nested_linkage; _ } ->
         (* Late binding of family names *)
@@ -1170,8 +1170,16 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
         in
         add_field ~name ~elem linkage
     | LinkageElem.RecursorDefinition
-        { inductive_path; handler_cases; handler_types; names; suffix; motives; arguments; _ }
-      ->
+        {
+          inductive_path;
+          handler_cases;
+          handler_types;
+          names;
+          suffix;
+          motives;
+          arguments;
+          _;
+        } ->
         let name = List.hd names in
         let context = linkage in
         let compiled_context, parameters =

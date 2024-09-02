@@ -41,7 +41,8 @@ let definition ~name ?body_type body_expr =
 
 let frecursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t) =
-  Recursion.open_recursion ~name ~inductive_path:inductive ~motive ~suffix ~arguments:[];
+  Recursion.open_recursion ~name ~inductive_path:inductive ~motive ~suffix
+    ~arguments:[];
   PluginScopes.push
     PluginCmdScope.
       { name; command = PluginCmd.Recursion; close = Recursion.close_recursion }

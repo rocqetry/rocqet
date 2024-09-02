@@ -97,22 +97,22 @@ let close_family () : unit =
           ~source:(Linkage.top_most_self_name further)
           ~target:(Linkage.top_most_self_name linkage)
       in
-      let subst (target, source) l = 
-         Linkage.path_subtitution l
-           ~source:(Naming.self_version source)
-           ~target:(Naming.self_version target)
-      in 
+      let subst (target, source) l =
+        Linkage.path_subtitution l
+          ~source:(Naming.self_version source)
+          ~target:(Naming.self_version target)
+      in
       let further = Context.further_bound_linkage context in
       let further_base =
-         match further with
-         | [] -> None
-         | (m, x) :: xs ->
-             let f (m, further) furthers =
-               Linkage.concatenate ~derived:(subst m further) ~base:furthers
-             in
-             Some
-               ((* Codegen.compute_linkage None*)
-             (List.fold_right f xs (subst m x)))
+        match further with
+        | [] -> None
+        | (m, x) :: xs ->
+            let f (m, further) furthers =
+              Linkage.concatenate ~derived:(subst m further) ~base:furthers
+            in
+            Some
+              ((* Codegen.compute_linkage None*)
+               List.fold_right f xs (subst m x))
       in
       let linkage =
         match (further_base, base) with
@@ -126,10 +126,10 @@ let close_family () : unit =
               | `Equal -> base
             in
             (* let further =
-              Linkage.path_subtitution further
-                ~source:(Linkage.top_most_self_name further)
-                ~target:(Linkage.top_most_self_name linkage)
-            in*)
+                 Linkage.path_subtitution further
+                   ~source:(Linkage.top_most_self_name further)
+                   ~target:(Linkage.top_most_self_name linkage)
+               in*)
             let base =
               Linkage.path_subtitution base
                 ~source:(Naming.self_version base.name)

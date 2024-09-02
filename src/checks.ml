@@ -76,12 +76,13 @@ let check_further_binding_structure context =
   in
   let base = Context.base_linkage context in
   further_bases
-  |> List.iter (fun further_base ->        
-      match (further_base, base) with
-      | Some further_base, Some base -> check ~further_base ~base
-      | Some _, None ->
-          Errors.fail
-            ~info:
-              "Type Error: further binding doesn't preserve inheritance structure."
-      | None, Some _ -> ()
-      | None, None -> ())
+  |> List.iter (fun further_base ->
+         match (further_base, base) with
+         | Some further_base, Some base -> check ~further_base ~base
+         | Some _, None ->
+             Errors.fail
+               ~info:
+                 "Type Error: further binding doesn't preserve inheritance \
+                  structure."
+         | None, Some _ -> ()
+         | None, None -> ())

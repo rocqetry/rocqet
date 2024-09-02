@@ -1,18 +1,18 @@
 (alias
-  (name runtest)
-  (deps (alias_rec all)))
+ (name runtest)
+ (deps
+  (alias_rec all)))
 
 (coq.theory
-  (name NFPOP.Tests)
-  (theories NFPOP)
-  (modules
-    Demo
-    STLC
-    STLCCompiler
-    CompCert
-    Flexible
-    Flexible_2
-    Mixin
-    Salad
-    Play
-  ))
+ (name NFPOP.Tests)
+ (theories NFPOP)
+ (modules
+  Demo
+  STLC
+  STLCCompiler
+  CompCert
+  Flexible
+  Flexible_2
+  Mixin
+  Salad
+  Play))

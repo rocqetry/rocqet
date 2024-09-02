@@ -14,7 +14,7 @@ module VernacInductive = struct
           ind_type,
           cstrlist ) =
       inductive
-    in    
+    in
     let each_constr ((_flags, (cname, cty)) : Vernacexpr.constructor_expr) =
       (cname.v, cty)
     in
@@ -329,7 +329,7 @@ end = struct
   let rec path_substitution_elem elem ~source ~target =
     match elem with
     | LinkageElem.MetaDataSection metadata ->
-       LinkageElem.MetaDataSection metadata
+        LinkageElem.MetaDataSection metadata
     | LinkageElem.FamilyDefinition family ->
         let g (name, expr) =
           if Names.Id.equal source name then (target, expr) else (name, expr)

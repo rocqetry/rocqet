@@ -81,25 +81,23 @@ let close_recursion () =
   in
   (* Feedback the defined Computational Axioms *)
   let print_constr_expr expr =
-    let sigma, env = Termutils.global_env () in 
-    Ppconstr.pr_constr_expr env sigma expr 
-  in 
-  let print_name name = 
-    name |> Names.Id.to_string |> Pp.str 
-  in 
-  let print_single_equation (name, eq) = 
-    let open Pp in 
-    print_name name ++ Pp.str " : " ++ print_constr_expr eq 
+    let sigma, env = Termutils.global_env () in
+    Ppconstr.pr_constr_expr env sigma expr
   in
-  let _ = 
-    let open Pp in 
-    Feedback.msg_info 
-      (str "Computational Axioms for " 
-       ++ print_name name 
-       ++ str " are defined as follows:");
+  let print_name name = name |> Names.Id.to_string |> Pp.str in
+  let print_single_equation (name, eq) =
+    let open Pp in
+    print_name name ++ Pp.str " : " ++ print_constr_expr eq
+  in
+  let _ =
+    let open Pp in
+    Feedback.msg_info
+      (str "Computational Axioms for "
+      ++ print_name name
+      ++ str " are defined as follows:");
     computational_axioms
     |> List.iter (fun eq -> Feedback.msg_info (print_single_equation eq))
-  in 
+  in
   let elem =
     LinkageElem.RecursorDefinition
       {
@@ -122,7 +120,8 @@ let close_recursion () =
   Ctx.clear ()
 
 let open_recursion ~(name : Names.Id.t) ~(inductive_path : Libnames.qualid)
-    ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t) ~(arguments : Names.Id.t list) =
+    ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t)
+    ~(arguments : Names.Id.t list) =
   Inheritance.inherit_dependencies ~prefix:name;
   let context = Context.get () in
   let family = context |> Context.family_name |> Names.Id.to_string in
@@ -175,7 +174,7 @@ let open_recursion ~(name : Names.Id.t) ~(inductive_path : Libnames.qualid)
         motive_expr = [ motive_expr ];
         inductive;
         provenance;
-        arguments;        
+        arguments;
         rec_principle_prefix;
       }
   in
@@ -250,7 +249,7 @@ let open_recursion_extension ~name =
         inductive;
         inductive_path;
         provenance;
-        arguments;        
+        arguments;
         rec_principle_prefix;
       }
   in
@@ -276,7 +275,7 @@ let extend_argumets_with_inductive_case ~(recursor : Names.Id.t)
     | Some c -> c
   in
   let rec unflatten (c : Constrexpr.constr_expr) =
-    match c.v with    
+    match c.v with
     | CNotation (_, (_, "_ -> _"), ([ domain; codomain ], _, _, _)) -> (
         match domain.v with
         | Constrexpr.CRef (ty_name, _) -> ty_name.v :: unflatten codomain
@@ -385,21 +384,21 @@ let get_identifier (e : Constrexpr.constr_expr) =
   | Constrexpr.CRef (name, _) -> name
   | _ -> Errors.fail ~info:"Expected an identifier"
 
-let infer_inductive_suffix (i : VernacInductive.t) : RecKind.t = 
-  let open Constrexpr in 
+let infer_inductive_suffix (i : VernacInductive.t) : RecKind.t =
+  let open Constrexpr in
   let open Glob_term in
-  let (inductive_expr, _) = i |> List.hd in 
-  let (_, sort), _ = inductive_expr |> VernacInductive.extract_type_and_cstrs in 
-  let sort = Option.map (fun (e: Constrexpr.constr_expr) -> e.v) sort in  
-  match sort with   
-  | Some (CSort (UNamed (_, l))) -> 
-     let (sort_name, _) = l |> List.hd in 
-     (* Naive inference *)
-     (match sort_name with 
-     | CProp | CSProp -> RecKind.Ind
-     | CSet -> RecKind.Rec
-     | CType _ -> RecKind.Rect
-     | CRawType _ -> RecKind.Ind)     
+  let inductive_expr, _ = i |> List.hd in
+  let (_, sort), _ = inductive_expr |> VernacInductive.extract_type_and_cstrs in
+  let sort = Option.map (fun (e : Constrexpr.constr_expr) -> e.v) sort in
+  match sort with
+  | Some (CSort (UNamed (_, l))) -> (
+      let sort_name, _ = l |> List.hd in
+      (* Naive inference *)
+      match sort_name with
+      | CProp | CSProp -> RecKind.Ind
+      | CSet -> RecKind.Rec
+      | CType _ -> RecKind.Rect
+      | CRawType _ -> RecKind.Ind)
   | _ -> RecKind.Rec
 
 let elegant name (args : (Names.Id.t * Constrexpr.constr_expr) list) =
@@ -417,10 +416,6 @@ let elegant name (args : (Names.Id.t * Constrexpr.constr_expr) list) =
   let inductive, _, _ =
     Context.lookup_inductive_for_recursion ~name:inductive_name context
   in
-  let suffix = infer_inductive_suffix inductive in 
-  open_recursion 
-    ~name 
-    ~inductive_path:inductive_name 
-    ~motive 
-    ~suffix
+  let suffix = infer_inductive_suffix inductive in
+  open_recursion ~name ~inductive_path:inductive_name ~motive ~suffix
     ~arguments:(List.map fst middle)
