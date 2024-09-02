@@ -2,42 +2,24 @@ From NFPOP Require Import Loader.
 
 Require Import Coq.ZArith.ZArith.
 Require Import Coqlib.
+Require Import Values.
+Require Import AST.
+Require Import Integers. 
+Require Import Floats.
+Require Import Errors.
+Require Import Memory.
+Require Import Globalenvs.
+Require Import Smallstep.
+Require Import Events.
+Require Import Maps.
 
-Family Imp.
-  MetaData _val.
-   Inductive val: Type :=
-       | Vundef: val
-       | Vint: int -> val
-       | Vlong: int64 -> val
-       | Vptr: block -> ptrofs -> val.
-   
-  Definition Vzero: val := Vint Int.zero.
-  Definition Vone: val := Vint Int.one.
-  Definition Vmone: val := Vint Int.mone.
-   
-  Definition Vtrue: val := Vint Int.one.
-  Definition Vfalse: val := Vint Int.zero.
-   
-  Definition Vnullptr :=
-     if Archi.ptr64 then Vlong Int64.zero else Vint Int.zero.
-   
-  Definition Vptrofs (n: ptrofs) :=
-     if Archi.ptr64 then Vlong (Ptrofs.to_int64 n) else Vint (Ptrofs.to_int n).
-  FEnd _val.
 
-  MetaData _int.  
-  Inductive intsize : Type :=
-      | I8: intsize
-      | I16: intsize
-      | I32: intsize
-      | IBool: intsize.
-
-   Inductive signedness : Type :=
-      | Signed: signedness
-      | Unsigned: signedness.   
-  FEnd _int.
-
-  MetaData _type.
+Family Imp.     
+  MetaData type.
+  Notation intsize := nat.
+  Notation signedness := nat.
+  Notation attr := nat.
+  Notation calling_convention := nat.
   Inductive type : Type :=
       | Tvoid: type(* the void type *)
       | Tint: intsize -> signedness -> attr -> type(* integer types *)
@@ -47,7 +29,7 @@ Family Imp.
    with typelist : Type :=
       | Tnil: typelist
       | Tcons: type -> typelist -> typelist.
-  FEnd _type.
+  FEnd type.
 
    (* Definition typeconv (ty: type) : type :=
   match ty with
@@ -74,22 +56,7 @@ Family Imp.
   | Tstruct id _ | Tunion id _ =>
       match env!id with Some co => co_sizeof co | None => 0 end
   end.
-    *)
-  
-  MetaData _common.
-  Inductive fundef (F : Type) : Type :=
-      | Internal: F -> fundef
-      (* | External: external_function -> typelist -> type -> calling_convention -> fundef.*)
-
-   Record program (F : Type): Type := {
-        prog_defs: list (ident * globdef fundef type);
-        prog_public: list ident;
-        prog_main: ident;
-        prog_types: list composite_definition;
-        prog_comp_env: composite_env;
-        prog_comp_env_eq: build_composite_env prog_types = OK prog_comp_env
-   }.
-  FEnd _common.
+    *)    
 
   Family ClightVariant. 
   FEnd ClightVariant.
@@ -105,44 +72,32 @@ Family Imp.
          
   Family C.
       FInductive expr : Type :=
-        | Eval (v: val) (ty: type)(* constant *)
-        | Evar (x: ident) (ty: type)(* variable *)
-        (* | Eunop (op: unary_operation) (r: expr) (ty: type)
-        | Ebinop (op: binary_operation) (r1 r2: expr) (ty: type)*)
-        | Ecast (r: expr) (ty: type)(* type cast (ty)r *)
-        | Eseqand (r1 r2: expr) (ty: type)(* sequential "and" r1 && r2 *)
-        | Eseqor (r1 r2: expr) (ty: type)(* sequential "or" r1 || r2 *)
-        | Econdition (r1 r2 r3: expr) (ty: type)(* conditional r1 ? r2 : r3 *)
-        | Esizeof (ty': type) (ty: type)(* size of a type *)
-        | Ealignof (ty': type) (ty: type)(* natural alignment of a type *)
-        | Eassign (l: expr) (r: expr) (ty: type)(* assignment l = r *)
-        | Eassignop (op: binary_operation) (l: expr) (r: expr) (tyres ty: type)
-        | Epostincr (id: incr_or_decr) (l: expr) (ty: type)
-        | Ecomma (r1 r2: expr) (ty: type)(* sequence expression r1, r2 *)
-
-        Definition Epreincr (id: incr_or_decr) (l: expr) (ty: type) :=
-          Eassignop (match id with Incr => Oadd | Decr => Osub end)
-                    l (Eval (Vint Int.one) type_int32s) (typeconv ty) ty.
+        | Eval : val -> type -> expr (* constant *)
+        | Evar : ident -> type -> expr (* variable *)        
+        | Ecast : expr -> type -> expr (* type cast (ty)r *)
+        | Eseqand : expr -> expr -> type -> expr (* sequential "and" r1 && r2 *)
+        | Eseqor : expr -> expr -> type -> expr (* sequential "or" r1 || r2 *)
+        | Econdition : expr -> expr -> expr -> type -> expr (* conditional r1 ? r2 : r3 *)
+        | Esizeof : type -> type -> expr (* size of a type *)
+        | Ealignof : type -> type -> expr (* natural alignment of a type *)
+        | Eassign : expr -> expr -> type -> expr (* assignment l = r *)                
+        | Ecomma : expr -> expr -> type -> expr. (* sequence expression r1, r2 *)                
         
-        FRecursion typeof about expr motive (fun (_ : expr) => type) by _rect.
-          Case Eval := (fun v ty => ty).
-          Case Evar := (fun x ty => ty).
-          (* Case Eunop := (fun op r typeof_r ty => ty).
-          Case Ebinop := (fun op r1 typeof_r1 r2 typeof_r2 ty => ty).*)
-          Case Ecast := (fun r typeof_r ty => ty).
-          Case Eseqand := (fun r1 typeof_r1 r2 typeof_r2 ty => ty).
-          Case Eseqor := (fun r1 typeof_r1 r2 typeof_r2 ty => ty).
-          Case Econdition := (fun r1 typeof_r1 r2 typeof_r2 r3 typeof_r3 ty => ty).
-          Case Esizeof := (fun ty' ty => type_int32s).
-          Case Ealignof := (fun ty' ty => type_int32s).
-          Case Eassign := (fun l typeof_l r typeof_r ty => ty).
-          Case Eassignop := (fun op l typeof_l r typeof_r tyres ty => ty).
-          Case Epostincr := (fun id l typeof_l ty => ty).
-          Case Ecomma := (fun r1 typeof_r1 r2 typeof_r2 ty => ty).
-        FEnd typeof.
+        FRecursion typeof : (e : expr) -> type.
+          Case Eval v ty := ty.
+          Case Evar x ty := ty.          
+          Case Ecast r ty := ty. 
+          Case Eseqand r1 r2 ty := ty. 
+          Case Eseqor r1 r2 ty := ty. 
+          Case Econdition r1 r2 r3 ty := ty.
+          Case Esizeof ty' ty := ty.
+          Case Ealignof ty' ty := ty. 
+          Case Eassign l r ty := ty.                    
+          Case Ecomma r1 r2 ty := ty.
+        FEnd typeof.      
 
-      Definition label := ident.
-
+      FDefinition label := ident.
+      
       FInductive statement : Type :=
         | Sskip : statement(* do nothing *)
         | Sdo : expr -> statement(* evaluate expression for side effects *)
@@ -157,23 +112,20 @@ Family Imp.
         | Slabel : label -> statement -> statement
         | Sgoto : label -> statement.
 
+      
+      MetaData function.
       Record function : Type := mkfunction {
-        fn_return: type;
+        fn_return: self__Imp.type;
         fn_callconv: calling_convention;
-        fn_params: list (ident * type);
-        fn_vars: list (ident * type);
-        fn_body: statement
+        fn_params: list (ident * self__Imp.type);
+        fn_vars: list (ident * self__Imp.type);
+        fn_body: self__C.statement
       }.
+      FEnd function.
 
-        Family Semantics.
-            Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env }.
-            Definition globalenv (p: program) :=
-              {| genv_genv := Genv.globalenv p; genv_cenv := p.(prog_comp_env) |}.
-
-          Definition env := PTree.t (block * type).
-          Definition empty_env: env := (PTree.empty (block * type)).
-        FEnd Semamntics. 
-   FEnd C.
+      Family Semantics.                        
+      FEnd Semantics.
+  FEnd C.
       
    Family Clight.
        FInductive expr : Type :=          
@@ -185,14 +137,17 @@ Family Imp.
           | Esizeof: type -> type -> expr (* size of a type *)
           | Ealignof: type -> type -> expr. (* alignment of a type *)                                         
        
-       FRecursion typeof about expr motive (fun (_ : expr) => type) by _rect.
-          Case Econst_int := (fun _ ty => ty).
-          Case Econst_float := (fun _ ty => ty).
-          Case Econst_single := (fun _ ty => ty).
-          Case Econst_long := (fun _ ty => ty).
-          Case Etempvar := (fun _ ty => ty).          
+       FRecursion typeof : (e : expr) -> type. 
+          Case Econst_int i ty := ty. 
+          Case Econst_float f ty := ty. 
+          Case Econst_single s ty := ty. 
+          Case Econst_long l ty := ty. 
+          Case Etempvar v ty := ty.
+          Case Esizeof ty' ty := ty.
+          Case Ealignof ty' ty := ty.
        FEnd typeof.
        
+       FDefinition label := ident.
        FInductive stmt : Type :=
            | Sskip : stmt(* do nothing *)           
            | Sset : ident -> expr -> stmt(* assignment tempvar = rvalue *)           
@@ -214,46 +169,47 @@ Family Imp.
        FDefinition Sfor := fun (s1: stmt) (e2: expr) (s3: stmt) (s4: stmt) =>
          Ssequence s1 (Sloop (Ssequence (Sifthenelse e2 Sskip Sbreak) s3) s4).
               
+       MetaData function.
        Record function : Type := mkfunction {
-         fn_return: type;
+         fn_return: self__Imp.type;
          fn_callconv: calling_convention;
-         fn_params: list (ident * type);
-         fn_vars: list (ident * type);
-         fn_temps: list (ident * type);
+         fn_params: list (ident * self__Imp.type);
+         fn_vars: list (ident * self__Imp.type);
+         fn_temps: list (ident * self__Imp.type);
          fn_body: self__Clight.stmt
        }.
-
-       Record program : Type := {
-         prog_defs: list (ident * globdef fundef type);
-         prog_public: list ident;
-         prog_main: ident;
-         prog_types: list composite_definition;
-         prog_comp_env: composite_env;
-         prog_comp_env_eq: build_composite_env prog_types = OK prog_comp_env
-       }.       
+       FEnd function.       
        
        Family Semantics.            
-            Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env }.
+            FInductive fundef : Type := 
+              | Internal : function -> fundef.
 
-            Definition globalenv (p: program) :=
-                {| genv_genv := Genv.globalenv p; genv_cenv := p.(prog_comp_env) |}.
+            MetaData genv.
+            Notation composite := nat. (* TODO *)
+            Definition composite_env : Type := PTree.t composite.
+            Record genv := { genv_genv :> Genv.t self__Semantics.fundef self__Imp.type; genv_cenv :> composite_env }.
+            FEnd genv.
+            
+            MetaData env.
+            Definition env := PTree.t (block * self__Imp.type).
+            FEnd env.
              
-            Definition env := PTree.t (block * type).
-             
+            MetaData temp_env.
             Definition temp_env := PTree.t val.            
+            FEnd temp_env.
                         
-           FInductive eval_expr : (e: self__Semantics.env) (le: self__Semantics.temp_env) (m: mem) -> expr -> val -> Prop :=
-               | eval_Econst_int: forall i ty,
-                   eval_expr (Econst_int i ty) (Vint i)
-               | eval_Econst_float: forall f ty,
-                   eval_expr (Econst_float f ty) (Vfloat f)
-               | eval_Econst_single: forall f ty,
-                   eval_expr (Econst_single f ty) (Vsingle f)
-               | eval_Econst_long: forall i ty,
-                   eval_expr (Econst_long i ty) (Vlong i)
-               | eval_Etempvar: forall id ty v,
+           FInductive eval_expr : env -> temp_env -> mem -> expr -> val -> Prop :=
+               | eval_Econst_int: forall e le m i ty,
+                   eval_expr e le m (Econst_int i ty) (Vint i)
+               | eval_Econst_float: forall e le m f ty,
+                   eval_expr e le m (Econst_float f ty) (Vfloat f)
+               | eval_Econst_single: forall e le m f ty,
+                   eval_expr e le m (Econst_single f ty) (Vsingle f)
+               | eval_Econst_long: forall e le m i ty,
+                   eval_expr e le m (Econst_long i ty) (Vlong i)
+               | eval_Etempvar: forall e le m id ty v,
                    PTree.get id le = Some v ->
-                   eval_expr (Etempvar id ty) v.                       
+                   eval_expr e le m (Etempvar id ty) v.
 
            FInductive cont: Type :=
                 | Kstop: cont
