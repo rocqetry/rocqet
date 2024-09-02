@@ -11,17 +11,17 @@ Family Imp.
        | Vlong: int64 -> val
        | Vptr: block -> ptrofs -> val.
    
-   Definition Vzero: val := Vint Int.zero.
-   Definition Vone: val := Vint Int.one.
-   Definition Vmone: val := Vint Int.mone.
+  Definition Vzero: val := Vint Int.zero.
+  Definition Vone: val := Vint Int.one.
+  Definition Vmone: val := Vint Int.mone.
    
-   Definition Vtrue: val := Vint Int.one.
-   Definition Vfalse: val := Vint Int.zero.
+  Definition Vtrue: val := Vint Int.one.
+  Definition Vfalse: val := Vint Int.zero.
    
-   Definition Vnullptr :=
+  Definition Vnullptr :=
      if Archi.ptr64 then Vlong Int64.zero else Vint Int.zero.
    
-   Definition Vptrofs (n: ptrofs) :=
+  Definition Vptrofs (n: ptrofs) :=
      if Archi.ptr64 then Vlong (Ptrofs.to_int64 n) else Vint (Ptrofs.to_int n).
   FEnd _val.
 
@@ -213,8 +213,7 @@ Family Imp.
 
        FDefinition Sfor := fun (s1: stmt) (e2: expr) (s3: stmt) (s4: stmt) =>
          Ssequence s1 (Sloop (Ssequence (Sifthenelse e2 Sskip Sbreak) s3) s4).
-       
-       MetaData _program.
+              
        Record function : Type := mkfunction {
          fn_return: type;
          fn_callconv: calling_convention;
@@ -231,11 +230,9 @@ Family Imp.
          prog_types: list composite_definition;
          prog_comp_env: composite_env;
          prog_comp_env_eq: build_composite_env prog_types = OK prog_comp_env
-       }.        
-       FEnd _program.
+       }.       
        
-       Family Semantics.                                        
-            MetaData _env.
+       Family Semantics.            
             Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env }.
 
             Definition globalenv (p: program) :=
@@ -244,11 +241,16 @@ Family Imp.
             Definition env := PTree.t (block * type).
              
             Definition temp_env := PTree.t val.            
-            FEnd _env.
                         
            FInductive eval_expr : (e: self__Semantics.env) (le: self__Semantics.temp_env) (m: mem) -> expr -> val -> Prop :=
                | eval_Econst_int: forall i ty,
                    eval_expr (Econst_int i ty) (Vint i)
+               | eval_Econst_float: forall f ty,
+                   eval_expr (Econst_float f ty) (Vfloat f)
+               | eval_Econst_single: forall f ty,
+                   eval_expr (Econst_single f ty) (Vsingle f)
+               | eval_Econst_long: forall i ty,
+                   eval_expr (Econst_long i ty) (Vlong i)
                | eval_Etempvar: forall id ty v,
                    PTree.get id le = Some v ->
                    eval_expr (Etempvar id ty) v.                       
@@ -259,47 +261,43 @@ Family Imp.
                 | Kloop1: stmt -> stmt -> cont -> cont(* Kloop1 s1 s2 k = after s1 in Sloop s1 s2 *)
                 | Kloop2: stmt -> stmt -> cont -> cont. (* Kloop2 s1 s2 k = after s2 in Sloop s1 s2 *)                
 
-           FRecursion call_cont about cont motive (fun (_ : cont) => cont).
+           FRecursion call_cont : (c : cont) -> cont.
                 Case Kstop := Kstop.
-                Case Kseq := (fun s k call_cont_k => call_cont_k).                
-                Case Kloop1 := (fun s1 s2 k call_cont_k => call_cont_k).
-                Case Kloop2 := (fun s1 s2 k call_cont_k => call_cont_k).
-            FEnd call_cont.
+                Case Kseq s k := call_cont k.
+                Case Kloop1 s1 s2 k := call_cont k.
+                Case Kloop2 s1 s2 k := call_cont k.
+           FEnd call_cont.
             
-            FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop).
+           FRecursion is_call_cont : (_ : cont) -> Prop.
                 Case Kstop := True.
-                Case Kseq := (fun s k call_cont_k => False).                
-                Case Kloop1 := (fun s1 s2 k call_cont_k => False).
-                Case Kloop2 := (fun s1 s2 k call_cont_k => False).
-            FEnd is_call_cont.
+                Case Kseq s k := False. 
+                Case Kloop1 s1 s2 k := False. 
+                Case Kloop2 s1 s2 k := False.
+           FEnd is_call_cont.
 
             Fnductive state: Type :=
                 | State : function -> stmt -> cont -> env -> temp_env -> mem -> state                    
                 | Callstate : fundef -> list val -> cont -> mem -> state                    
                 | Returnstate : val -> cont -> mem -> state.                    
             
-           FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)). 
-                Case Sskip := (fun lbl k => None)
-                Case Sassign := (fun id e lbl k => None)
-                Case Ssequence := (fun s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
-                                         match find_label_s1 lbl (Kseq s2 k) with 
+           FRecursion find_label : (s : stmt) -> (lbl: label) -> (k: cont) -> option (stmt * cont). 
+                Case Sskip := None.
+                Case Sassign id e := None.
+                Case Ssequence s1 s2 := match find_label s1 lbl (Kseq s2 k) with 
+                                        | Some sk => Some sk 
+                                        | None => find_label s2 lbl k end.                
+                Case Sifthenelse e s1 s2 := match find_label s1 lbl k with 
                                          | Some sk => Some sk 
-                                         | None => find_label_s2 lbl k end).
-                Case Sifthenelse := (fun e s1 _ s2 _ => fun lbl k => 
-                                         match find_label_s1 lbl k with 
-                                         | Some sk => Some sk 
-                                         | None => find_label_s2 lbl k end).
-                Case Sloop := (fun s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
-                                         match find_label_s1 lbl (Kloop1 s1 s2 k) with 
-                                         | Some sk => Some sk 
-                                         | None => find_label_s2 lbl (Kloop2 s1 s2 k) end).
-                Case Sblock := (fun s _ lbl k => None).
-                Case Sexit := (fun n lbl k => None).                
-                Case Sreturn := (fun _ lbl k => None).
-                Case Slabel := (fun lbl' s find_label_s => fun lbl k => 
-                                       if ident_eq lbl lbl' then 
-                                       Some(s, k) else find_label_s lbl k).
-                Case Sgoto := (fun label lbl k => None).
+                                         | None => find_label s2 lbl k end.                
+                Case Sloop s1 s2 := match find_label s1 lbl (Kloop1 s1 s2 k) with 
+                                    | Some sk => Some sk 
+                                    | None => find_label s2 lbl (Kloop2 s1 s2 k) end.
+                Case Sblock s := None.
+                Case Sexit n := None.                
+                Case Sreturn e := None.
+                Case Slabel lbl' s := if ident_eq lbl lbl' then 
+                                      Some(s, k) else find_label s lbl k.
+                Case Sgoto label := None.
            FEnd find_label.
           
            (* (e : env) (le : temp_env) (m : mem) *)
@@ -363,6 +361,10 @@ Family Imp.
                    find_label lbl f.(fn_body) (call_cont k) = Some (s', k') ->
                    step (State f (Sgoto lbl) k e le m)
                      E0 (State f s' k' e le m) 
+               | step_internal_function: forall f vargs k m e le m1,
+                     function_entry f vargs m e le m1 ->
+                     step (Callstate (Internal f) vargs k m)
+                       E0 (State f f.(fn_body) k e le m1)
 
                Inductive initial_state (p: program): state -> Prop :=
                   | initial_state_intro: forall b f m0,
@@ -377,9 +379,9 @@ Family Imp.
                   | final_state_intro: forall r m,
                       final_state (Returnstate (Vint r) Kstop m) r.
        FEnd Semantics.
-   FEnd Clight.
+  FEnd Clight.
 
-   Family Csharpminor. 
+  Family Csharpminor.
        FInductive constant : Type :=
            | Ointconst: int -> constant (* integer constant *)
            | Ofloatconst: float -> constant (* double-precision floating-point constant *)
@@ -2180,7 +2182,7 @@ Family Imp.
        (* (nbrk : nat) -> if Clight.stmt terminates on break return Csharpminor.exit nbrk
           (ncnt : nat) -> if Clight.smt terminates on continue return Csharpminor.exit ncnt
         *)
-       FRecursion transl_statement about Clight.stmt motive (fun (_ : Clight.stmt) => composite_env -> type -> nat -> nat).
+      FRecursion transl_statement about Clight.stmt motive (fun (_ : Clight.stmt) => composite_env -> type -> nat -> nat).
            Case Sskip := (fun ce tyret nbrk ncnt => Csharpminor.Sskip).   
            Case Sset := (fun x b => fun ce tyret nbrk ncnt => Csharpminor.Sset x (transl_expr b)).
            Case Ssequence := (fun s1 transl_s1 s2 transl_s2 =>
@@ -2203,45 +2205,27 @@ Family Imp.
            Case Sswitch := (fun e lbls s1 transl_s1 => fun ce tyret nbrk ncnt => cheat).
            Case Slabel := (fun l s transl_s => fun ce tyret nbrk ncnt => Csharpminor.Slabel lbl (transl_s1 ce tyret nbrk ncnt)).
            Case Sgoto := (fun lbl =>  Csharpminor.Sgoto lbl).
-       FEnd transl_statement.
+      FEnd transl_statement.
        
        (* Translate function, fundef, program *)
        
-       Family Correctness.
-            (* FInduction transl_expr_correct about Clight.eval motive (fun (_ : Clight.Semantics.eval_expr) => ...). 
-                
-            FEnd transl_expr_correct.
-
-            FInduction transl_step about Clight.step motive (fun (_ : Clight.Semantics.step) =>  ...):
-                forall S1 t S2, Clight.step ge S1 t S2 ->
-                forall T1, match_states S1 T1 ->
-                exists T2, plus step tge T1 t T2 /\ match_states S2 T2.
-            
-                (* case Sset := *) 
-                (* case Sskip := *)
-                (* case Ssequence := *)
-                (* case Sifthenelse := *)
-                (* case Sloop := *)
-                (* case Sbreak := *)
-                (* case Scontinue := *)
-                (* case Sreturn := *)
-                (* case Sswitch :=  *)
-                (* case Slabel := *)
-                (* case Sgoto := *)               
-            FEnd transl_step.
-            
-            FLemma transl_initial_states:
-                forall S, Clight.initial_state prog S ->
-                exists R, initial_state tprog R /\ match_states S R.
-                 (* *)
-            FEnd transl_initial_states.
-            
-            FLemma transl_final_states:
-                forall S R r,
-                match_states S R -> Clight.final_state S r -> final_state R r.
-                (* *)
-            FEnd transl_final_states.*)
-       FEnd Correctness.
+      Family Correctness.            
+          FInduction transl_step:
+            forall S1 t S2, Clight.step ge S1 t S2 ->
+            forall T1, match_states S1 T1 ->
+            exists T2, plus step tge T1 t T2 /\ match_states S2 T2.
+          FProof.
+          
+          Closing Fact transl_initial_states:
+            forall S, Clight.initial_state prog S ->
+            exists R, initial_state tprog R /\ match_states S R.
+          FProof.
+          
+          Closing Fact transl_final_states:
+            forall S R r,
+            match_states S R -> Clight.final_state S r -> final_state R r.
+          FProof.
+      FEnd Correctness.
    FEnd Cshmgen.   
    
    (* Csharpminor -> Cminor *)
@@ -2566,46 +2550,9 @@ Family Imp.
                 (* Proof that the translation proof meets the specification *)    
                        
         FEnd Specification.
-   FEnd RTLgen.
-
-   (* Optimizations *)
-   Family Tailcall.
-   FEnd Tailcall.
+   FEnd RTLgen.   
    
-   Family Inlining.
-        MetaData _context. 
-            Record context: Type := mkcontext {
-              dpc: positive;(* offset for PCs *)
-              dreg: positive;(* offset for pseudo-regs *)
-              dstk: Z;(* offset for stack references *)
-              mreg: positive;(* max pseudo-reg number *)
-              mstk: Z;(* original stack block size *)
-              retinfo: option(node * reg)(* where to branch on return *)
-            }.
-        FEnd _context. 
-
-        MetaData _shift.       
-            Definition shiftpos (p amount: positive) := Pos.pred (Pos.add p amount).
-            Definition spc (ctx: context) (pc: node) := shiftpos pc ctx.(dpc).
-        FEnd _shift.
-
-        FRecursion expand_instr : (i : RTL.instruction) -> (ctx: context) (pc: node) -> mon unit. 
-            Case Inop (s) := set_instr (spc ctx pc) (Inop (spc ctx s)). 
-            Case Iop (op, args, res, s) := 
-               set_instr (spc ctx pc)
-                (Iop (sop ctx op) (sregs ctx args) (sreg ctx res) (spc ctx s)).
-            Case Icond (cond, args, s1, s2) := 
-               set_instr (spc ctx pc)
-                (Icond (scond ctx cond) (sregs ctx args) (spc ctx s1) (spc ctx s2)).
-            Case Ireturn (or) := (match ctx.(retinfo) with
-                  | None =>
-                      set_instr (spc ctx pc) (Ireturn (option_map (sreg ctx) or))
-                  | Some rinfo =>
-                      set_instr (spc ctx pc) (inline_return ctx or rinfo)
-                  end).
-   FEnd Inlining.
-   
-   Family Renumber.
+  Family Renumber.
       MetaData _renum_pc. 
           Definition renum_pc (pc: node) : node :=
           match pnum!pc with
@@ -2670,72 +2617,66 @@ Family Imp.
          FEnd transf_instr.
    FEnd Constprop.
    
-   (* *)
+   (* Nanopasses: 
+     1. Combine op 
+     2. Combine cond
+     3. Combine address
+   *)
    Family CSE.
-      (* Definition transfer (f: function) (approx: PMap.t VA.t) (pc: node) (before: numbering) :=
-  match f.(fn_code)!pc with
-  | None => before
-  | Some i =>
-      match i with
-      | Inop s =>
-          before
-      | Iop op args res s =>
-          add_op before res op args
-      | Iload chunk addr args dst s =>
-          add_load before dst chunk addr args
-      | Istore chunk addr args src s =>
-          let app := approx!!pc in
-          let n := kill_loads_after_store app before chunk addr args in
-          add_store_result app n chunk addr args src
-      | Icall sig ros args res s =>
-          empty_numbering
-      | Itailcall sig ros args =>
-          empty_numbering
-      | Ibuiltin ef args res s =>
-          match ef with
-          | EF_external _ _ | EF_runtime _ _ | EF_malloc | EF_free | EF_inline_asm _ _ _ =>
-              empty_numbering
-          | EF_vstore _ =>
-              set_res_unknown (kill_all_loads before) res
-          | EF_builtin name sg =>
-              match lookup_builtin_function name sg with
-              | Some bf => set_res_unknown before res
-              | None => set_res_unknown (kill_all_loads before) res
-              end
-          | EF_memcpy sz al =>
-              match args with
-              | dst :: src :: nil =>
-                  let app := approx!!pc in
-                  let adst := aaddr_arg app dst in
-                  let asrc := aaddr_arg app src in
-                  let n := kill_loads_after_storebytes app before adst sz in
-                  set_res_unknown (add_memcpy before n asrc adst sz) res
-              | _ =>
-                  empty_numbering
-              end
-          | EF_vload _ | EF_annot _ _ _ | EF_annot_val _ _ _ | EF_debug _ _ _ =>
-              set_res_unknown before res
-          end
-      | Icond cond args ifso ifnot =>
-          before
-      | Ijumptable arg tbl =>
-          before
-      | Ireturn optarg =>
-          before
-      end
-  end.
-   Let's define this function as an FRecursion 
-*)
-  FRecursion transfer : (i : instruction) -> (f: function) -> (approx: PMap.t VA.t) -> (before: numbering) -> instruction. 
-  FEnd transfer.
-
+      FRecursion transfer : (i : instruction) -> (f: function) -> (approx: PMap.t VA.t) -> (before: numbering) -> instruction.
+          Case Inop (s) := Inop (s).
+          Case Iop (op, args, res, s) := (
+                if is_trivial_op op then instr else
+                let (n1, vl) := valnum_regs n args in
+                match find_rhs n1 (Op op vl) with
+                | Some r =>
+                    Iop Omove (r :: nil) res s
+                | None =>
+                    let (op', args') := reduce _ combine_op n1 op args vl in
+                    Iop op' args' res s
+                end
+          ).
+          Case Icond (cond, args, ifso, ifnot) := (
+            let (n1, vl) := valnum_regs n args in
+            match combine_cond' cond vl with
+            | Some b => Inop (if b then s1 else s2)
+            | None =>
+                let (cond', args') := reduce _ combine_cond n1 cond args vl in
+                Icond cond' args' s1 s2
+            end
+          ).
+          Case Ireturn (optarg) := Ireturn (optarg). 
+      FEnd transfer.
    FEnd CSE.
    
    Family Deadcode.
+      FRecursion trnasf_instr : (i : instruction) -> (f: function) -> (approx: PMap.t VA.t) -> (an: PMap.t NA.t) -> (pc: RTL.node) -> RTL.instruction.
+          Case Inop (s) := Inop (s).
+          Case Iop (op, args, res, s) := (
+              let nres := nreg (fst an!!pc) res in
+              if is_dead nres then Inop s else
+              if is_int_zero nres then Iop (Ointconst Int.zero) nil res s else
+              if operation_is_redundant op nres then
+                  match args with
+                  | arg :: _ => Iop Omove (arg :: nil) res s
+                  | nil => instr
+                  end
+              else Iop (op, args, res, s)
+          ).
+          Case Icond (cond, args, s1, s2) := (
+              if peq s1 s2 then Inop s1 else Icond cond args s1 s2
+          ).
+          Case Ireturn(v) := Ireturn(v).
    FEnd Deadcode.
 
    Family Unusedglob.
-   FEnd Unusedglob.   
+      (* Checks the ids referenced by an instruction *)
+      FRecursion ref_instruction : (i : instruction) -> list ident.
+          Case Inop (s) := nil.
+          Case Iop (op, args, res, s) := globals_operation op.
+          Case Icond (cond, args, s1, s2) := nil.
+          Case Ireturn (or) := nil.
+   FEnd Unusedglob.
    
    (* RTL -> LTL *)
    (* Allocation is written in OCaml, hence this is a translation validation *)
@@ -2747,6 +2688,30 @@ Family Imp.
 
   (* RTL -> RTL *)
    Family Tunneling.
+      Module U := UnionFind.UF(PTree).
+      
+    FRecursion record_branch : (i : instruction) -> (uf: U.t) -> (pc: node) -> (b: bblock) -> U.t.
+          Case Lbranch s := U.union uf pc s.
+          Case Lgetstack sl ofs ty r := uf.
+          Case Lsetstack r sl ofs ty := uf.
+          Case Lop op args res := uf.
+          Case Lcond cond args s1 s2 := uf.
+          Case Lreturn := uf.
+    FEnd record_branch.
+
+    FRecursion tunnel_instr : (i : instruction) -> (uf: U.t) -> instruction.
+        Case Lbranch s := Lbranch (U.repr uf s).
+        Case Lcond cond args s1 s2 := 
+            let s1' := U.repr uf s1 in let s2' := U.repr uf s2 in
+            if peq s1' s2'
+            then Lbranch s1'
+            else Lcond cond args s1' s2'.
+        Case Ljumptable arg tbl := Ljumptable arg (List.map (U.repr uf) tbl).
+        Case Lop op args res := Lop op args res.
+        Case Lgetstack sl ofs ty r := Lgetstack sl ofs ty r.
+        Case Lsetstack r sl ofs ty := Lsetstack r sl ofs ty.
+        Case Lreturn := Lreturn.
+    FEnd tunnel_instr.
    FEnd Tunneling.
 
    (* LTL -> Linear *)
@@ -2760,20 +2725,18 @@ Family Imp.
             Case Lcond := (fun cond args lbl => fun lbl => false).
             Case Lreturn := (fun lbl => false).
             Case Ljumptable := (fun arg tbl => fun lbl => false).
-        FEnd starts_with_label.
+       FEnd starts_with_label.
 
        Metadata _starts_with.
-        Fixpoint starts_with (lbl: label) (k: code) {struct k} : bool :=
+       Fixpoint starts_with (lbl: label) (k: code) {struct k} : bool :=
             match k with
             | i :: k' => if starts_with_label i then true else starts_with lbl k'
             | _ => false
             end.
        FEnd _starts_with.
-       
-       MetaData _add_branch.
-        Definition add_branch (s: label) (k: code) : code :=
-            if starts_with s k then k else Lgoto s :: k.
-       FEnd _add_branch.
+              
+       FDefinition add_branch (s: label) (k: code) : code :=
+          if starts_with s k then k else Lgoto s :: k.
 
        FRecursion translate_instr about LTL.instruction motive (fun (_ : LTL.instruction) -> Linear.code -> Linear.instruction).
           Case Lop := (fun op args res => fun k => Lop op args res).
@@ -2796,11 +2759,6 @@ Family Imp.
           end.
        FEnd _linearize_block.
    FEnd Linearize.
-
-   (* Linear -> Linear *)
-   Family CleanupLabels.
-       
-   FEnd CleanupLabels.
 
    (* Linear -> Linear *)
    Family Debugvar.
@@ -2853,7 +2811,7 @@ Family Imp.
         Definition transl_code
             (fe: frame_env) (il: list Linear.instruction) : Mach.code :=
           list_fold_right (transl_instr fe) il nil.
-   FEnd Stacking.
+  FEnd Stacking.
 
    (* Mach -> Asm *)
    Family Asmgen.
