@@ -1,4 +1,4 @@
-(* FInduction implementation for extensible proofs *)
+(* Core implementation for extensible proofs *)
 open Env
 open Types
 
@@ -213,14 +213,6 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
   Ctx.update ctx;
   prepare_proving ()
 
-let remove_duplicates lst =
-  let rec aux seen = function
-    | [] -> []
-    | hd :: tl ->
-        if List.mem hd seen then aux seen tl else hd :: aux (hd :: seen) tl
-  in
-  aux [] lst
-
 let open_theorem_extension ~name =
   Inheritance.inherit_dependencies ~prefix:name;
   let context = Context.get () in
@@ -229,61 +221,14 @@ let open_theorem_extension ~name =
   in
   let family_name = Context.family_name context in
   let linkage = Context.family_linkage context in
-  let further_elem = Context.further_bound_linkage_elem context ~field:name in
-  let base_elem = Context.base_linkage_elem context ~field:name in
+  let elem = Inheritance.inherit_element ~field:name ~linkage ~context in
   let inductive, motives, inherited_handlers, suffix =
-    match (further_elem, base_elem) with
-    | ( None,
-        Some
-          ( base,
-            LinkageElem.TheoremDefinition
-              { inductive; motives; handlers; suffix; _ } ) ) ->
-        let source = Naming.self_version base.name in
-        let target = Naming.self_version linkage.name in
-        let path_subtitution = Naming.replace_qualid_root ~source ~target in
-        let motives = motives |> List.map path_subtitution in
-        let handlers =
-          handlers
-          |> List.map (fun (name, expr) -> (name, path_subtitution expr))
-        in
+    match elem with
+    | None -> Errors.fail ~info:"There is no such FInduction in a base family"
+    | Some
+        (LinkageElem.TheoremDefinition
+          { inductive; motives; handlers; suffix; _ }) ->
         (inductive, motives, handlers, suffix)
-    | ( Some
-          ( further,
-            TheoremDefinition { inductive; suffix; motives; handlers; _ } ),
-        None ) ->
-        let source = Linkage.top_most_self_name further in
-        let target = Linkage.top_most_self_name linkage in
-        let path_subtitution = Naming.replace_qualid_root ~source ~target in
-        let motives = motives |> List.map path_subtitution in
-        let handler_cases =
-          handlers
-          |> List.map (fun (name, expr) -> (name, path_subtitution expr))
-        in
-        (inductive, motives, handler_cases, suffix)
-    | ( Some
-          ( further,
-            TheoremDefinition
-              { motives; inductive; handlers = further_handlers; suffix; _ } ),
-        Some (base, TheoremDefinition { handlers = base_handlers; _ }) ) ->
-        let source = Linkage.top_most_self_name further in
-        let target = Linkage.top_most_self_name linkage in
-        let path_subtitution = Naming.replace_qualid_root ~source ~target in
-        let motives = motives |> List.map path_subtitution in
-        let handler_cases_further =
-          further_handlers
-          |> List.map (fun (name, expr) -> (name, path_subtitution expr))
-        in
-        let handler_cases_base =
-          let source = Naming.self_version base.name in
-          let target = Naming.self_version linkage.name in
-          let path_subtitution = Naming.replace_qualid_root ~source ~target in
-          base_handlers
-          |> List.map (fun (name, expr) -> (name, path_subtitution expr))
-        in
-        let handler_cases =
-          remove_duplicates (handler_cases_base @ handler_cases_further)
-        in
-        (inductive, motives, handler_cases, suffix)
     | _ -> Errors.fail ~info:"Expected to inherit an FInduction"
   in
   let motives =
@@ -391,8 +336,8 @@ let close_theorem () =
   let compiled_signature =
     Codegen.compile_recursive_definition_signature ~names:[ name ]
       ~motive_module:compiled_motive ~handler_cases:compiled_handlers
-      ~ctx:parameters ~provenance ~handlers:handler_names ~family_name
-      ~computational_behaviour:`Hidden ~computational_axioms:[]
+      ~ctx:parameters ~family_name ~computational_behaviour:`Hidden
+      ~computational_axioms:[]
   in
   let elem =
     LinkageElem.TheoremDefinition

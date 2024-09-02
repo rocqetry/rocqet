@@ -1,14 +1,18 @@
-; (coq.theory
-;  (name tests)
-;  (package nfpop)
-;  (synopsis "Tests for FPOP")
-;  ;(theories ../src/Loader.v)
-;  (plugins nfpop.plugin)
-;  (flags :standard))
+(alias
+  (name runtest)
+  (deps (alias_rec all)))
 
-(rule
- (alias runtest)
- (action (progn
-  (run coqc %{dep:STLC.v})
-  ; Add more test files here
- )))
+(coq.theory
+  (name NFPOP.Tests)
+  (theories NFPOP)
+  (modules
+    Demo
+    STLC
+    STLCCompiler
+    CompCert
+    Flexible
+    Flexible_2
+    Mixin
+    Salad
+    Play
+  ))

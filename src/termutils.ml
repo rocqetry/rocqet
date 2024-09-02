@@ -205,13 +205,14 @@ let calculate_computational_axiom_for_constructor ~recursor_name ~recursor_path
   in
   (equation_name, equation)
 
-let generate_computational_axioms ~provenance ~constructors ~recursor =
-  let prefix = Libnames.qualid_of_ident (Naming.self_version provenance) in
+let generate_computational_axioms ~provenance ~constructors ~recursor ~prefix =
+  (* let prefix = Libnames.qualid_of_ident (Naming.self_version provenance) in*)
+  provenance |> ignore;
   let recursor_name = recursor in
   let recursor_path = Libnames.qualid_of_ident recursor in
   let constructors =
     constructors
-    |> List.map (fun name -> (name, Naming.qualid_point (Some prefix) name))
+    |> List.map (fun name -> (name, Naming.qualid_point prefix name))
   in
   constructors
   |> List.map (fun (constructor_name, constructor_path) ->

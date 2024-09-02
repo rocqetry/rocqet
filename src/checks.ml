@@ -70,16 +70,18 @@ let rec check ~(further_base : Linkage.t) ~(base : Linkage.t) =
     | Some base -> check ~further_base ~base
 
 let check_further_binding_structure context =
-  let further_base =
+  let further_bases =
     let further = Context.further_bound_linkage context in
-    Option.bind further (fun (linkage : Linkage.t) -> linkage.base)
+    List.map (fun (_, (linkage : Linkage.t)) -> linkage.base) further
   in
   let base = Context.base_linkage context in
-  match (further_base, base) with
-  | Some further_base, Some base -> check ~further_base ~base
-  | Some _, None ->
-      Errors.fail
-        ~info:
-          "Type Error: further binding doesn't preserve inheritance structure."
-  | None, Some _ -> ()
-  | None, None -> ()
+  further_bases
+  |> List.iter (fun further_base ->        
+      match (further_base, base) with
+      | Some further_base, Some base -> check ~further_base ~base
+      | Some _, None ->
+          Errors.fail
+            ~info:
+              "Type Error: further binding doesn't preserve inheritance structure."
+      | None, Some _ -> ()
+      | None, None -> ())

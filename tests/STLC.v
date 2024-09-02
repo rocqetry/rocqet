@@ -5,11 +5,13 @@ Family STLC.
     Definition ident := nat.
   FEnd _ident.
 
+  Family X.
   FInductive ty : Set :=
   | ty_unit : ty
   | ty_arrow : ty -> ty -> ty.
+  FEnd X.
          
-  FRecursion subst : (t : ty) -> (k : nat) -> nat.  
+  FRecursion subst : (t : X.ty) -> (k : nat) -> nat.  
      Case ty_arrow n m := (subst m k + subst n k).
      Case ty_unit := k.
   FEnd subst.
@@ -24,8 +26,10 @@ Family STLC.
 FEnd STLC.
 
 Family STLC_bool extends STLC.
+  Family X.
   FInductive ty : Set :=
     | ty_bool : ty.
+  FEnd X.
 
   FRecursion subst.
       Case ty_bool := 1.
@@ -41,8 +45,10 @@ Family STLC_bool extends STLC.
 FEnd STLC_bool.
 
 Family STLC_prod extends STLC_bool.
+  Family X.
   FInductive ty : Set :=
     | ty_prod : ty -> ty -> ty.
+  FEnd X.
 
   FRecursion subst.
      Case ty_prod n m := (subst m k + subst n k).

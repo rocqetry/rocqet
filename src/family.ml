@@ -28,7 +28,8 @@ let open_family name =
       Context.destructive_update (Some (LinkageCtx.Toplevel linkage))
 
 let open_family_with_base ~name ~base =
-  match Context.lookup base with
+  let context = Context.get_store () in
+  match Context.lookup context base with
   | None -> Errors.fail ~info:"Unbound Family Name"
   | Some base_linkage -> (
       match Context.get_store () with
@@ -48,7 +49,7 @@ let open_family_with_base ~name ~base =
               }
           in
           let context = LinkageCtx.Nested (context, linkage) in
-          Typechecking.check_further_binding_structure context;
+          Checks.check_further_binding_structure context;
           Context.destructive_update (Some context)
       | None ->
           let linkage =
@@ -61,7 +62,7 @@ let open_family_with_base ~name ~base =
               }
           in
           let context = LinkageCtx.Toplevel linkage in
-          Typechecking.check_further_binding_structure context;
+          Checks.check_further_binding_structure context;
           Context.destructive_update (Some context))
 
 (* Close a family *)
@@ -85,12 +86,34 @@ let close_family () : unit =
 
       (* Note that we only want to do this when late binding of family names
          happens in the linkage *)
-      let linkage = Codegen.recompute_linkage linkage in
+      let linkage = Codegen.compute_linkage None linkage in
       Codegen.compile_linkage linkage |> ignore;
       Linkages.add linkage
   | LinkageCtx.Nested (upper, linkage) as context ->
-      let further_base = Context.further_bound_linkage context in
+      (* let further_base = Context.further_bound_linkage context in*)
       let base = Context.base_linkage context in
+      let _further_subst further =
+        Linkage.path_subtitution further
+          ~source:(Linkage.top_most_self_name further)
+          ~target:(Linkage.top_most_self_name linkage)
+      in
+      let subst (target, source) l = 
+         Linkage.path_subtitution l
+           ~source:(Naming.self_version source)
+           ~target:(Naming.self_version target)
+      in 
+      let further = Context.further_bound_linkage context in
+      let further_base =
+         match further with
+         | [] -> None
+         | (m, x) :: xs ->
+             let f (m, further) furthers =
+               Linkage.concatenate ~derived:(subst m further) ~base:furthers
+             in
+             Some
+               ((* Codegen.compute_linkage None*)
+             (List.fold_right f xs (subst m x)))
+      in
       let linkage =
         match (further_base, base) with
         | None, None -> linkage
@@ -98,15 +121,15 @@ let close_family () : unit =
             let base =
               match Linkage.context_match base linkage with
               | `Less | `More ->
-                  Codegen.recompute_linkage
+                  Codegen.compute_linkage (Some context)
                     { base with context = linkage.context }
               | `Equal -> base
             in
-            let further =
+            (* let further =
               Linkage.path_subtitution further
                 ~source:(Linkage.top_most_self_name further)
                 ~target:(Linkage.top_most_self_name linkage)
-            in
+            in*)
             let base =
               Linkage.path_subtitution base
                 ~source:(Naming.self_version base.name)
@@ -122,7 +145,7 @@ let close_family () : unit =
             let base =
               match Linkage.context_match base linkage with
               | `Less | `More ->
-                  Codegen.recompute_linkage
+                  Codegen.compute_linkage (Some context)
                     { base with context = linkage.context }
               | `Equal -> base
             in
@@ -141,7 +164,7 @@ let close_family () : unit =
             Linkage.concatenate_recursive ~base ~derived:linkage
       in
       (* Again should not do this all the time: *)
-      let linkage = Codegen.recompute_linkage linkage in
+      let linkage = Codegen.compute_linkage (Some context) linkage in
       let signature = Codegen.compile_linkage_signature linkage in
       let impl = Codegen.compile_nested_linkage linkage in
       let elem =

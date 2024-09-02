@@ -191,6 +191,7 @@ module CompiledRecursor = struct
   type t = {
     inductive_names : Names.Id.t list;
     compiled_recursor : CompiledModuleType.t;
+    handlers : (Names.Id.t * Constrexpr.constr_expr) list;
     compiled_handlers : (Names.Id.t * CompiledModuleType.t) list;
   }
 end
@@ -235,6 +236,7 @@ module rec LinkageElem : sig
         handler_types : (Names.Id.t * Constrexpr.constr_expr) list;
         handler_cases : (Names.Id.t * Constrexpr.constr_expr) list;
         inductive : VernacInductive.t;
+        inductive_path : Libnames.qualid;
         recursor_module : Libnames.qualid;
         motive_module : CompiledModule.t;
         suffix : RecKind.t;
@@ -281,6 +283,11 @@ and Linkage : sig
   val context_match : t -> t -> [ `Equal | `Less | `More ]
   val top_most_self_name : t -> Names.Id.t
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
+
+  val path_substitution_elem :
+    LinkageElem.t -> source:Names.Id.t -> target:Names.Id.t -> LinkageElem.t
+
+  val concatenate_elem : LinkageElem.t -> LinkageElem.t -> LinkageElem.t
   val concatenate_recursive : derived:t -> base:t -> t
 
   (* Linkage concatenation *)
@@ -319,58 +326,98 @@ end = struct
     | [] -> Naming.self_version linkage.name
     | (name, _) :: _ -> name
 
-  let rec path_subtitution linkage ~source ~target =
-    let f (name, elem) =
-      let elem =
-        match elem with
-        | LinkageElem.MetaDataSection metadata ->
-            LinkageElem.MetaDataSection metadata
-        | LinkageElem.FamilyDefinition family ->
-            LinkageElem.FamilyDefinition
-              {
-                family with
-                linkage = path_subtitution family.linkage ~source ~target;
-              }
-        | LinkageElem.InductiveDefinition definition ->
-            LinkageElem.InductiveDefinition
-              {
-                definition with
-                inductive =
-                  VernacInductive.path_subtitution definition.inductive ~source
-                    ~target;
-              }
-        | LinkageElem.FieldDefinition field ->
-            let body_expr =
-              Naming.replace_qualid_root ~source ~target field.body_expr
-            in
-            let body_type =
-              field.body_type
-              |> Option.map (Naming.replace_qualid_root ~source ~target)
-            in
-            FieldDefinition { field with body_expr; body_type }
-        | LinkageElem.RecursorDefinition definition ->
-            let motives =
-              definition.motives
-              |> List.map (Naming.replace_qualid_root ~source ~target)
-            in
-            RecursorDefinition { definition with motives }
-        | LinkageElem.TheoremDefinition definition ->
-            let motives =
-              definition.motives
-              |> List.map (Naming.replace_qualid_root ~source ~target)
-            in
-            TheoremDefinition { definition with motives }
-        | LinkageElem.PrincipleDefinition principle ->
-            LinkageElem.PrincipleDefinition principle
-      in
-      (name, elem)
-    in
+  let rec path_substitution_elem elem ~source ~target =
+    match elem with
+    | LinkageElem.MetaDataSection metadata ->
+       LinkageElem.MetaDataSection metadata
+    | LinkageElem.FamilyDefinition family ->
+        let g (name, expr) =
+          if Names.Id.equal source name then (target, expr) else (name, expr)
+        in
+        let context = family.linkage.context |> Bwd.map g in
+        let linkage =
+          { (path_subtitution family.linkage ~source ~target) with context }
+        in
+        LinkageElem.FamilyDefinition { family with linkage }
+    | LinkageElem.InductiveDefinition definition ->
+        LinkageElem.InductiveDefinition
+          {
+            definition with
+            inductive =
+              VernacInductive.path_subtitution definition.inductive ~source
+                ~target;
+          }
+    | LinkageElem.FieldDefinition field ->
+        let body_expr =
+          Naming.replace_qualid_root ~source ~target field.body_expr
+        in
+        let body_type =
+          field.body_type
+          |> Option.map (Naming.replace_qualid_root ~source ~target)
+        in
+        FieldDefinition { field with body_expr; body_type }
+    | LinkageElem.RecursorDefinition definition ->
+        let motives =
+          definition.motives
+          |> List.map (Naming.replace_qualid_root ~source ~target)
+        in
+        RecursorDefinition { definition with motives }
+    | LinkageElem.TheoremDefinition definition ->
+        let motives =
+          definition.motives
+          |> List.map (Naming.replace_qualid_root ~source ~target)
+        in
+        TheoremDefinition { definition with motives }
+    | LinkageElem.PrincipleDefinition principle ->
+        LinkageElem.PrincipleDefinition principle
+
+  and path_subtitution linkage ~source ~target =
+    let f (name, elem) = (name, path_substitution_elem elem ~source ~target) in
     let fields = linkage.fields |> Bwd.map f in
     { linkage with fields }
 
+  let rec concatenate_elem elem0 elem1 =
+    let remove_duplicates lst =
+      let rec aux seen = function
+        | [] -> []
+        | hd :: tl ->
+            if List.mem hd seen then aux seen tl else hd :: aux (hd :: seen) tl
+      in
+      aux [] lst
+    in
+    match (elem0, elem1) with
+    | LinkageElem.RecursorDefinition e0, LinkageElem.RecursorDefinition e1 ->
+        let handler_cases = e0.handler_cases @ e1.handler_cases in
+        let handler_cases = remove_duplicates handler_cases in
+        let handler_types = e0.handler_types @ e1.handler_types in
+        let handler_types = remove_duplicates handler_types in
+        LinkageElem.RecursorDefinition { e1 with handler_cases; handler_types }
+    | LinkageElem.TheoremDefinition e0, LinkageElem.TheoremDefinition e1 ->
+        let handler_cases = e0.handlers @ e1.handlers in
+        let handlers = remove_duplicates handler_cases in
+        LinkageElem.TheoremDefinition { e0 with handlers }
+    | LinkageElem.InductiveDefinition e0, LinkageElem.InductiveDefinition e1 ->
+        LinkageElem.InductiveDefinition
+          {
+            e0 with
+            inductive =
+              VernacInductive.concatenate ~base:e0.inductive
+                ~derived:e1.inductive;
+          }
+    | LinkageElem.FamilyDefinition e0, LinkageElem.FamilyDefinition e1 ->
+        let linkage =
+          concatenate_recursive ~base:e0.linkage ~derived:e1.linkage
+        in
+        LinkageElem.FamilyDefinition { e0 with linkage }
+    | FieldDefinition _, FieldDefinition e1 ->
+        FieldDefinition e1 (* Override a field? *)
+    | PrincipleDefinition _, PrincipleDefinition e1 -> PrincipleDefinition e1
+    | MetaDataSection _, MetaDataSection m -> MetaDataSection m
+    | _, _ -> Errors.fail ~info:"Invalid concatnenation arguments"
+
   (* Deep concatenation *)
   (* If the base is empty we loose some items *)
-  let rec concatenate_recursive ~derived ~base =
+  and concatenate_recursive ~derived ~base =
     (* Using pick here reorders the fields in a family, which is wrong *)
     let rec pick x lst =
       match lst with
@@ -382,72 +429,13 @@ end = struct
             (result, (hd, elem) :: rest)
     in
     let rec go base derived =
-      let remove_duplicates lst =
-        let rec aux seen = function
-          | [] -> []
-          | hd :: tl ->
-              if List.mem hd seen then aux seen tl
-              else hd :: aux (hd :: seen) tl
-        in
-        aux [] lst
-      in
       match base with
       | [] -> derived
       | (name, elem) :: base -> (
           match pick name derived with
           | None, _ -> (name, elem) :: go base derived
-          | Some (_, delem), derived -> (
-              match (elem, delem) with
-              | ( LinkageElem.RecursorDefinition rbase,
-                  LinkageElem.RecursorDefinition rderived ) ->
-                  let handler_cases =
-                    rbase.handler_cases @ rderived.handler_cases
-                  in
-                  let handler_cases = remove_duplicates handler_cases in
-                  let handler_types =
-                    rbase.handler_types @ rderived.handler_types
-                  in
-                  let handler_types = remove_duplicates handler_types in
-                  ( name,
-                    LinkageElem.RecursorDefinition
-                      { rderived with handler_cases; handler_types } )
-                  :: go base derived
-              | ( LinkageElem.TheoremDefinition rbase,
-                  LinkageElem.TheoremDefinition rderived ) ->
-                  let handler_cases = rbase.handlers @ rderived.handlers in
-                  let handlers = remove_duplicates handler_cases in
-                  ( name,
-                    LinkageElem.TheoremDefinition { rderived with handlers } )
-                  :: go base derived
-              | ( LinkageElem.InductiveDefinition ibase,
-                  LinkageElem.InductiveDefinition iderived ) ->
-                  let elem =
-                    LinkageElem.InductiveDefinition
-                      {
-                        ibase with
-                        inductive =
-                          VernacInductive.concatenate ~base:ibase.inductive
-                            ~derived:iderived.inductive;
-                      }
-                  in
-                  (name, elem) :: go base derived
-              | ( LinkageElem.FamilyDefinition ibase,
-                  LinkageElem.FamilyDefinition iderived ) ->
-                  let linkage =
-                    concatenate_recursive ~base:ibase.linkage
-                      ~derived:iderived.linkage
-                  in
-                  let elem =
-                    LinkageElem.FamilyDefinition { ibase with linkage }
-                  in
-                  (name, elem) :: go base derived
-              | FieldDefinition _, FieldDefinition f ->
-                  (name, FieldDefinition f) :: go base derived
-              | PrincipleDefinition _, PrincipleDefinition p ->
-                  (name, PrincipleDefinition p) :: go base derived
-              | MetaDataSection _, MetaDataSection m ->
-                  (name, MetaDataSection m) :: go base derived
-              | _ -> Errors.fail ~info:"Wrong concatenation arguments"))
+          | Some (_, delem), derived ->
+              (name, concatenate_elem elem delem) :: go base derived)
     in
     let fields = go (Bwd.to_list base.fields) (Bwd.to_list derived.fields) in
     Linkage.{ derived with fields = Bwd.of_list fields }

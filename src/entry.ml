@@ -41,7 +41,7 @@ let definition ~name ?body_type body_expr =
 
 let frecursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t) =
-  Recursion.open_recursion ~name ~inductive ~motive ~suffix ~arguments:[];
+  Recursion.open_recursion ~name ~inductive_path:inductive ~motive ~suffix ~arguments:[];
   PluginScopes.push
     PluginCmdScope.
       { name; command = PluginCmd.Recursion; close = Recursion.close_recursion }
@@ -75,3 +75,23 @@ let fproof () = Theorem.start_proving ()
 
 (* FQed *)
 let fqed () = Theorem.end_proving ()
+
+(*
+   let counter = Summary.ref ~name:"persistent_counter" 0
+
+   let cache_count v = counter := v
+
+   let declare_counter : int -> Libobject.obj =
+     let open Libobject in
+     declare_object
+       {
+         (default_object "COUNTER") with
+         cache_function = cache_count;
+         load_function = (fun _ -> cache_count);
+       }
+
+   let increment () =
+     Lib.add_leaf (declare_counter (succ !counter))
+
+   let value () = !counter
+*)

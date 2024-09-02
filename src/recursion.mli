@@ -4,7 +4,7 @@ val close_recursion : unit -> unit
 
 val open_recursion :
   name:Names.Id.t ->
-  inductive:Libnames.qualid ->
+  inductive_path:Libnames.qualid ->
   motive:Constrexpr.constr_expr ->
   suffix:RecKind.t ->
   arguments:Names.Id.t list ->

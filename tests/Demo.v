@@ -24,14 +24,14 @@ Family IR.
    FInductive constant : Type :=
       | Ointconst: nat -> constant.
     
-    FInductive unary_operation : Type := Negation : unary_operation.
+   FInductive unary_operation : Type := Negation : unary_operation.
 
-    FInductive binary_operation : Type :=
+   FInductive binary_operation : Type :=
         | Binplus : binary_operation
         | Binminus : binary_operation
         | Binmult : binary_operation.
 
-    FInductive expr : Type :=
+   FInductive expr : Type :=
         | Evar : ident -> expr
         | Econst : constant -> expr
         | Eunop : unary_operation -> expr -> expr
@@ -150,7 +150,8 @@ Family B10 extends A10.
    
    Family A1.
      FInductive basic : Set := extraBasic : B -> basic.
-     Family A2. FEnd A2.
+     Family A2. 
+     FEnd A2.
    FEnd A1.   
 FEnd B10.
 

@@ -35,6 +35,7 @@ val generate_computational_axioms :
   provenance:Names.Id.t ->
   constructors:Names.Id.t list ->
   recursor:Names.Id.t ->
+  prefix:Libnames.qualid option ->
   (Names.Id.t * Constrexpr.constr_expr) list
 
 val handler_types_table :

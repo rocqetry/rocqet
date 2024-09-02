@@ -50,6 +50,7 @@ module CompiledRecursor : sig
   type t = {
     inductive_names : Names.Id.t list;
     compiled_recursor : CompiledModuleType.t;
+    handlers : (Names.Id.t * Constrexpr.constr_expr) list;
     compiled_handlers : (Names.Id.t * CompiledModuleType.t) list;
   }
 end
@@ -96,6 +97,7 @@ module rec LinkageElem : sig
         handler_types : (Names.Id.t * Constrexpr.constr_expr) list;
         handler_cases : (Names.Id.t * Constrexpr.constr_expr) list;
         inductive : VernacInductive.t;
+        inductive_path : Libnames.qualid;
         recursor_module : Libnames.qualid;
         motive_module : CompiledModule.t;
         suffix : RecKind.t;
@@ -140,7 +142,12 @@ and Linkage : sig
   val context_parameters : t -> Libnames.qualid list
   val context_match : t -> t -> [ `Equal | `Less | `More ]
   val top_most_self_name : t -> Names.Id.t
+
+  val path_substitution_elem :
+    LinkageElem.t -> source:Names.Id.t -> target:Names.Id.t -> LinkageElem.t
+
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
+  val concatenate_elem : LinkageElem.t -> LinkageElem.t -> LinkageElem.t
   val concatenate_recursive : derived:t -> base:t -> t
   val concatenate : derived:t -> base:t -> t
   val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
