@@ -14,7 +14,7 @@ Family STLCBase.
   Family Y.
      FRecursion subst : (t : X.X0.Ty) -> nat. 
         Case TUnit := 1.
-        Case TArr (domain, codomain) := (subst domain + subst codomain).
+        Case TArr domain codomain := (subst domain + subst codomain).
      FEnd subst.
   FEnd Y.
 FEnd STLCBase.
@@ -62,7 +62,7 @@ Family Temp extends IfExt.
 
        Family Y.
           FRecursion subst.
-              Case AnotherExpr (x) := x.
+              Case AnotherExpr x := x.
           FEnd subst.
        FEnd Y.
     FEnd Base.
