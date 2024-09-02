@@ -54,8 +54,15 @@ FEnd TempSTLC.
 
 Family Temp extends IfExt.
     Family Base extends TempSTLC.       
+       Family X. 
+           Family X0.
+              FInductive Ty : Set := AnotherExpr : nat -> Ty.
+           FEnd X0.
+       FEnd X.
+
        Family Y.
           FRecursion subst.
+              Case AnotherExpr (x) := x.
           FEnd subst.
        FEnd Y.
     FEnd Base.
