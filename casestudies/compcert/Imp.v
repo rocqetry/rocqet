@@ -582,7 +582,15 @@ Inductive signedness : Type :=
                    | step_goto: forall f lbl k e le m s' k',
                        find_label f.(self__Csharpminor.fn_body) lbl (call_cont k) = Some(s', k') ->
                        step (State f (Sgoto lbl) k e le m)
-                         E0 (State f s' k' e le m).           
+                         E0 (State f s' k' e le m)
+                   | step_internal_function: forall f vargs k m m1 e le,
+                        list_norepet (map fst f.(fn_vars)) ->
+                        list_norepet f.(fn_params) ->
+                        list_disjoint f.(fn_params) f.(fn_temps) ->
+                        alloc_variables empty_env m (fn_vars f) e m1 ->
+                        bind_parameters f.(fn_params) vargs (create_undef_temps f.(fn_temps)) = Some le ->
+                        step (Callstate (Internal f) vargs k m)
+                          E0 (State f f.(fn_body) k e le m1)
             
             (*MetaData initial_state.
             Inductive initial_state (p: self__Csharpminor.program): state -> Prop :=
