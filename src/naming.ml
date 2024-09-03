@@ -74,6 +74,17 @@ let path_to_prefix (path : Libnames.qualid) :
   | [] -> (None, base)
   | _ -> (Some (Libnames.qualid_of_dirpath prefix), base)
 
+let make_module_path head path =
+  let head = Libnames.qualid_of_ident head in
+  List.fold_left
+    (fun module_path x -> qualid_point (Some module_path) x)
+    head path
+
+let list_to_path (names : Names.Id.t list) : Libnames.qualid = 
+  match names with 
+  | [] -> Errors.fail ~info:"list_to_path: expected a non empty list"
+  | head :: path -> make_module_path head path 
+
 (* extract a path into (name "." path) *)
 let to_name_qualid (path : Libnames.qualid) : Names.Id.t * Libnames.qualid =
   let prefix_path, base = Libnames.repr_qualid path in

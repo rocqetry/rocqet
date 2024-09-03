@@ -229,7 +229,14 @@ let handler_types_table inductive_path name (recursor : CompiledRecursor.t) suff
            Constrexpr_ops.mkRefC (Libnames.qualid_of_ident motive)
          in
          let handler_type = Naming.handler_type handler_name ~suffix:(RecKind.to_string suffix) in
-         let inductive_family = inductive_path |> Naming.path_to_list |> List.hd |> Libnames.qualid_of_ident in 
+         let inductive_family = 
+           inductive_path 
+           |> Naming.path_to_list 
+           |> List.rev 
+           |> List.tl (* Remove the inductive name suffix *)
+           |> List.rev 
+           |> Naming.list_to_path
+         in 
          let handler_type = Naming.qualid_point (Some inductive_family) handler_type in          
          let handler_type = Constrexpr_ops.mkRefC handler_type in
          let handler_type =
