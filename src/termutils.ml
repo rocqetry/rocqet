@@ -221,7 +221,7 @@ let generate_computational_axioms ~provenance ~constructors ~recursor ~prefix =
 
 (* Given a recursor name and a compiled recursor return the type
    each handler is supposed to be *)
-let handler_types_table name (recursor : CompiledRecursor.t) suffix =
+let handler_types_table inductive_path name (recursor : CompiledRecursor.t) suffix =
   let motive = Naming.motive_of name in
   recursor.compiled_handlers
   |> List.map (fun (handler_name, _) ->
@@ -229,9 +229,9 @@ let handler_types_table name (recursor : CompiledRecursor.t) suffix =
            Constrexpr_ops.mkRefC (Libnames.qualid_of_ident motive)
          in
          let handler_type = Naming.handler_type handler_name ~suffix:(RecKind.to_string suffix) in
-         let handler_type =
-           Constrexpr_ops.mkRefC (Libnames.qualid_of_ident handler_type)
-         in
+         let inductive_family = inductive_path |> Naming.path_to_list |> List.hd |> Libnames.qualid_of_ident in 
+         let handler_type = Naming.qualid_point (Some inductive_family) handler_type in          
+         let handler_type = Constrexpr_ops.mkRefC handler_type in
          let handler_type =
            Constrexpr_ops.mkAppC (handler_type, [ motive_term ])
          in

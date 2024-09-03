@@ -143,9 +143,10 @@ let open_recursion ~(name : Names.Id.t) ~(inductive_path : Libnames.qualid)
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
   let _module_name = DB.start_module module_name parameters in
-  VB.run
+  (* VB.run
   @@ Codegen.include_handler_types ~context ~inductive_provenance:provenance
-       ~inductive_path ~recursor;
+       ~inductive_path ~recursor;*)
+  let resolved_inductive_path = Resolver.resolve_qualid ~context ~qualid:inductive_path in 
   let applied_motive =
     Termutils.apply_module
       ~functor_expr:(Termutils.ident_to_module_expr motive)
@@ -153,7 +154,7 @@ let open_recursion ~(name : Names.Id.t) ~(inductive_path : Libnames.qualid)
         (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
   in
   let _ = VB.(run (include_module ~module_expr:applied_motive)) in
-  let handler_types = Termutils.handler_types_table name recursor suffix in
+  let handler_types = Termutils.handler_types_table resolved_inductive_path name recursor suffix in
   let rec_principle_prefix =
     Some
       (Codegen.calculate_rec_principle_prefix ~inductive_path ~context
@@ -211,7 +212,8 @@ let open_recursion_extension ~name =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
-  let handler_types = Termutils.handler_types_table name recursor suffix in
+  let resolved_inductive_path = Resolver.resolve_qualid ~context ~qualid:inductive_path in
+  let handler_types = Termutils.handler_types_table resolved_inductive_path name recursor suffix in
   let compiled_handler_types =
     Codegen.aggregate_handler_types context provenance inductive_path recursor
       parameters

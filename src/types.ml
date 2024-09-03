@@ -361,7 +361,15 @@ end = struct
           definition.motives
           |> List.map (Naming.replace_qualid_root ~source ~target)
         in
-        RecursorDefinition { definition with motives }
+        let handler_types = 
+          definition.handler_types
+          |> List.map (fun (name, e) -> name, Naming.replace_qualid_root ~source ~target e)
+        in
+        let handler_cases = 
+          definition.handler_cases
+          |> List.map (fun (name, e) -> name, Naming.replace_qualid_root ~source ~target e)
+        in 
+        RecursorDefinition { definition with motives; handler_types; handler_cases; }
     | LinkageElem.TheoremDefinition definition ->
         let motives =
           definition.motives

@@ -1050,17 +1050,18 @@ let compile_handler_cases ~name ~(context : LinkageCtx.t) ~parameters ~motive
              ~functor_expr:(Termutils.ident_to_module_expr motive)
              ~arguments
          in
-         let applied_compilerd_handler_types =
+         (*let applied_compilerd_handler_types =
            Termutils.apply_module
              ~functor_expr:
                (Termutils.ident_to_module_expr compiled_handler_types)
              ~arguments
-         in
+         in*)
          let* _ = include_module ~module_expr:applied_motive in
-         let* _ = include_module ~module_expr:applied_compilerd_handler_types in
+         (* let* _ = include_module ~module_expr:applied_compilerd_handler_types in*)
          (* let* _ = include_handler_types provenance recursor in *)
          provenance |> ignore;
          recursor |> ignore;
+         compiled_handler_types |> ignore;
          let* _ =
            handler_cases
            |> List.map (fun (case_name, case) ->
