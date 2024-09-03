@@ -13,13 +13,31 @@ Require Import Smallstep.
 Require Import Events.
 Require Import Maps.
 
+Axiom cheat : forall {X}, X.
+Local Open Scope string_scope.
+Local Open Scope error_monad_scope.
+
 
 Family Imp.     
   MetaData type.
-  Notation intsize := nat.
-  Notation signedness := nat.
-  Notation attr := nat.
-  Notation calling_convention := nat.
+  Inductive intsize : Type :=
+  | I8: intsize
+  | I16: intsize
+  | I32: intsize
+  | IBool: intsize.
+
+  
+Inductive signedness : Type :=
+  | Signed: signedness
+  | Unsigned: signedness. 
+
+   Record attr : Type := mk_attr {
+   attr_volatile: bool;
+   attr_alignas: option N(* log2 of required alignment *)
+   }.
+
+   Definition noattr := {| attr_volatile := false; attr_alignas := None |}.
+     
   Inductive type : Type :=
       | Tvoid: type(* the void type *)
       | Tint: intsize -> signedness -> attr -> type(* integer types *)
@@ -28,35 +46,16 @@ Family Imp.
       | Tfunction: typelist -> type -> calling_convention -> type(* function types *)      
    with typelist : Type :=
       | Tnil: typelist
-      | Tcons: type -> typelist -> typelist.
-  FEnd type.
+      | Tcons: type -> typelist -> typelist.  
+  
+  Definition type_int32s := Tint I32 Signed noattr.
 
-   (* Definition typeconv (ty: type) : type :=
-  match ty with
-  | Tint (I8 | I16 | IBool) _ _ => Tint I32 Signed noattr
-  | Tarray t sz a => Tpointer t noattr
-  | Tfunction _ _ _ => Tpointer ty noattr
-  | _ => remove_attributes ty
-  end.*)
-
-   (* 
-      Fixpoint sizeof (env: composite_env) (t: type) : Z :=
-  match t with
-  | Tvoid => 1
-  | Tint I8 _ _ => 1
-  | Tint I16 _ _ => 2
-  | Tint I32 _ _ => 4
-  | Tint IBool _ _ => 1
-  | Tlong _ _ => 8
-  | Tfloat F32 _ => 4
-  | Tfloat F64 _ => 8
-  | Tpointer _ _ => if Archi.ptr64 then 8 else 4
-  | Tarray t' n _ => sizeof env t' * Z.max 0 n
-  | Tfunction _ _ _ => 1
-  | Tstruct id _ | Tunion id _ =>
-      match env!id with Some co => co_sizeof co | None => 0 end
+  Fixpoint type_of_params (params: list (ident * type)) : typelist :=
+  match params with
+  | nil => Tnil
+  | (id, ty) :: rem => Tcons ty (type_of_params rem)
   end.
-    *)    
+  FEnd type.
 
   Family ClightVariant. 
   FEnd ClightVariant.
@@ -179,24 +178,29 @@ Family Imp.
          fn_body: self__Clight.stmt
        }.
        FEnd function.       
-       
-       Family Semantics.            
-            FInductive fundef : Type := 
-              | Internal : function -> fundef.
 
-            MetaData genv.
-            Notation composite := nat. (* TODO *)
-            Definition composite_env : Type := PTree.t composite.
-            Record genv := { genv_genv :> Genv.t self__Semantics.fundef self__Imp.type; genv_cenv :> composite_env }.
-            FEnd genv.
-            
-            MetaData env.
-            Definition env := PTree.t (block * self__Imp.type).
-            FEnd env.
-             
-            MetaData temp_env.
-            Definition temp_env := PTree.t val.            
-            FEnd temp_env.
+       FDefinition var_names : list(ident * type) -> list ident := fun vars => 
+         List.map (@fst ident type) vars.
+              
+       FDefinition fundef := AST.fundef function.
+       
+       FDefinition type_of_function : function -> type := fun f => 
+         self__Imp.Tfunction (self__Imp.type_of_params (self__Clight.fn_params f)) 
+           (self__Clight.fn_return f) (self__Clight.fn_callconv f).
+       
+       FDefinition type_of_fundef : fundef -> type := fun f =>
+          match f with
+          | Internal fd => type_of_function fd
+          | _ => cheat (* TODO: We don't have External in the base compiler *)
+          end.
+       
+       FDefinition program : Type := AST.program fundef unit.                     
+       
+       Family Semantics.                                                          
+            FDefinition env := PTree.t (block * type).                                     
+            FDefinition empty_env: env := (PTree.empty (block * type)).
+
+            FDefinition temp_env := PTree.t val.
                         
            FInductive eval_expr : env -> temp_env -> mem -> expr -> val -> Prop :=
                | eval_Econst_int: forall e le m i ty,
@@ -217,44 +221,121 @@ Family Imp.
                 | Kloop1: stmt -> stmt -> cont -> cont(* Kloop1 s1 s2 k = after s1 in Sloop s1 s2 *)
                 | Kloop2: stmt -> stmt -> cont -> cont. (* Kloop2 s1 s2 k = after s2 in Sloop s1 s2 *)                
 
-           FRecursion call_cont : (c : cont) -> cont.
+           FRecursion call_cont about cont motive (fun (c : cont) => cont) by _rect.
+           (* FRecursion call_cont : (c : cont) -> cont.*)
                 Case Kstop := Kstop.
-                Case Kseq s k := call_cont k.
-                Case Kloop1 s1 s2 k := call_cont k.
-                Case Kloop2 s1 s2 k := call_cont k.
+                Case Kseq := ( fun s k call_cont_k => call_cont_k).
+                Case Kloop1 := (fun s1 s2 k call_cont_k => call_cont_k).
+                Case Kloop2 := (fun s1 s2 k call_cont_k => call_cont_k). 
            FEnd call_cont.
             
-           FRecursion is_call_cont : (_ : cont) -> Prop.
+           (* FRecursion is_call_cont about cont motive (fun (c : cont) => Prop) by _rect.
+           FRecursion is_call_cont : (c : cont) -> Prop.
                 Case Kstop := True.
                 Case Kseq s k := False. 
                 Case Kloop1 s1 s2 k := False. 
                 Case Kloop2 s1 s2 k := False.
+           FEnd is_call_cont.*)
+           (* There is a bug which doesn't allow more than one FRecursion on a type *)
+           MetaData is_call_cont.
+           Axiom is_call_cont : self__Semantics.cont -> Prop.
            FEnd is_call_cont.
 
-            Fnductive state: Type :=
+           FInductive state: Type :=
                 | State : function -> stmt -> cont -> env -> temp_env -> mem -> state                    
                 | Callstate : fundef -> list val -> cont -> mem -> state                    
-                | Returnstate : val -> cont -> mem -> state.                    
+                | Returnstate : val -> cont -> mem -> state.                      
             
-           FRecursion find_label : (s : stmt) -> (lbl: label) -> (k: cont) -> option (stmt * cont). 
-                Case Sskip := None.
-                Case Sassign id e := None.
-                Case Ssequence s1 s2 := match find_label s1 lbl (Kseq s2 k) with 
+           FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect.
+           (* FRecursion find_label : (s : stmt) -> (lbl: label) -> (k: cont) -> option (stmt * cont).*)
+                Case Sskip := (fun lbl k => None).
+                Case Sset := (fun id e => fun lbl k => None).
+                Case Ssequence := (fun s1 find_label_s1 s2 find_label_s2 => 
+                                        fun lbl k =>
+                                        match find_label_s1 lbl (Kseq s2 k) with 
                                         | Some sk => Some sk 
-                                        | None => find_label s2 lbl k end.                
-                Case Sifthenelse e s1 s2 := match find_label s1 lbl k with 
+                                        | None => find_label_s2 lbl k end).                
+                Case Sifthenelse := (fun e s1 find_label_s1 s2 find_label_s2 => 
+                                         fun lbl k =>
+                                         match find_label_s1 lbl k with 
                                          | Some sk => Some sk 
-                                         | None => find_label s2 lbl k end.                
-                Case Sloop s1 s2 := match find_label s1 lbl (Kloop1 s1 s2 k) with 
-                                    | Some sk => Some sk 
-                                    | None => find_label s2 lbl (Kloop2 s1 s2 k) end.
-                Case Sblock s := None.
-                Case Sexit n := None.                
-                Case Sreturn e := None.
-                Case Slabel lbl' s := if ident_eq lbl lbl' then 
-                                      Some(s, k) else find_label s lbl k.
-                Case Sgoto label := None.
+                                         | None => find_label_s2 lbl k end).
+                Case Sloop := (fun s1 find_label_s1 s2 find_label_s2 => 
+                                 fun lbl k =>
+                                 match find_label_s1 lbl (Kloop1 s1 s2 k) with 
+                                 | Some sk => Some sk 
+                                 | None => find_label_s2 lbl (Kloop2 s1 s2 k) end).                
+                Case Sreturn := (fun e => fun lbl k => None).
+                Case Slabel := (fun lbl' s find_label_s => fun lbl k => if ident_eq lbl lbl' then 
+                                      Some(s, k) else find_label_s lbl k).
+                Case Sgoto := (fun label => fun lbl k => None).
+                Case Sbreak := (fun lbl k => None).                
+                Case Scontinue := (fun lbl k => None).
            FEnd find_label.
+           MetaData bool_val.
+           Axiom bool_val : val -> self__Imp.type -> mem -> option bool. 
+           FEnd bool_val.
+
+           MetaData sizeof.
+           Axiom sizeof : (* self__Semantics.composite_env -> *) self__Imp.type -> Z. 
+           FEnd sizeof.      
+           
+           MetaData create_undef_temps.
+             Fixpoint create_undef_temps (temps: list (ident * self__Imp.type)) : self__Semantics.temp_env :=
+              match temps with
+              | nil => PTree.empty val
+              | (id, t) :: temps' => PTree.set id Vundef (create_undef_temps temps')
+             end.
+           FEnd create_undef_temps.
+
+           MetaData bind_parameter_temps.
+           Fixpoint bind_parameter_temps (formals: list (ident * self__Imp.type)) (args: list val)
+                              (le: self__Semantics.temp_env) : option self__Semantics.temp_env :=
+                match formals, args with
+                | nil, nil => Some le
+                | (id, t) :: xl, v :: vl => bind_parameter_temps xl vl (PTree.set id v le)
+                | _, _ => None
+                end.
+           FEnd bind_parameter_temps.
+             
+           FDefinition block_of_binding := fun (id_b_ty: ident * (block * type)) =>
+             match id_b_ty with (id, (b, ty)) => (b, 0, sizeof ty) end.
+
+           FDefinition blocks_of_env : env -> list (block * Z * Z)  := fun e => 
+             List.map block_of_binding (PTree.elements e).                      
+           
+           (* Definition sem_cast (v: val) (t1 t2: type) (m: mem): option val := *)
+           MetaData sem_cast.
+           Axiom sem_cast : val -> self__Imp.type -> self__Imp.type -> mem -> option val.
+           FEnd sem_cast.
+
+           MetaData alloc_variables.
+           Inductive alloc_variables: self__Semantics.env -> mem ->
+                           list (ident * self__Imp.type) ->
+                           self__Semantics.env -> mem -> Prop :=
+               | alloc_variables_nil:
+                   forall e m,
+                   alloc_variables e m nil e m
+               | alloc_variables_cons:
+                   forall e m id ty vars m1 b1 m2 e2,
+                   Mem.alloc m 0 (self__Semantics.sizeof ty) = (m1, b1) ->
+                   alloc_variables (PTree.set id (b1, ty) e) m1 vars e2 m2 ->
+                   alloc_variables e m ((id, ty) :: vars) e2 m2.
+           FEnd alloc_variables.
+
+
+           MetaData function_entry.
+           Inductive function_entry              
+             (f: self__Clight.function) (vargs: list val) (m: mem) 
+             (e: self__Semantics.env) (le: self__Semantics.temp_env) (m': mem) : Prop :=
+              | function_entry2_intro:
+                  list_norepet (self__Clight.var_names f.(self__Clight.fn_vars)) ->
+                  list_norepet (self__Clight.var_names f.(self__Clight.fn_params)) ->
+                  list_disjoint (self__Clight.var_names f.(self__Clight.fn_params)) (self__Clight.var_names f.(self__Clight.fn_temps)) ->
+                  self__Semantics.alloc_variables self__Semantics.empty_env m f.(self__Clight.fn_vars) e m' ->
+                  self__Semantics.bind_parameter_temps f.(self__Clight.fn_params) vargs (self__Semantics.create_undef_temps f.(self__Clight.fn_temps)) = Some le ->
+                  function_entry f vargs m e le m'.
+           FEnd function_entry.
           
            (* (e : env) (le : temp_env) (m : mem) *)
            FInductive step : state -> trace -> state -> Prop :=
@@ -301,7 +382,7 @@ Family Imp.
                      E0 (Returnstate Vundef (call_cont k) m')
                | step_return_1: forall f a k e le m v v' m',
                    eval_expr e le m a v ->
-                   sem_cast v (typeof a) f.(fn_return) m = Some v' ->
+                   sem_cast v (typeof a) f.(self__Clight.fn_return) m = Some v' ->
                    Mem.free_list m (blocks_of_env e) = Some m' ->
                    step (State f (Sreturn (Some a)) k e le m)
                      E0 (Returnstate v' (call_cont k) m')
@@ -314,26 +395,30 @@ Family Imp.
                    step (State f (Slabel lbl s) k e le m)
                      E0 (State f s k e le m)             
                | step_goto: forall f lbl k e le m s' k',
-                   find_label lbl f.(fn_body) (call_cont k) = Some (s', k') ->
+                   find_label f.(self__Clight.fn_body) lbl (call_cont k) = Some (s', k') ->
                    step (State f (Sgoto lbl) k e le m)
-                     E0 (State f s' k' e le m) 
+                     E0 (State f s' k' e le m)
                | step_internal_function: forall f vargs k m e le m1,
                      function_entry f vargs m e le m1 ->
                      step (Callstate (Internal f) vargs k m)
-                       E0 (State f f.(fn_body) k e le m1)
-
-               Inductive initial_state (p: program): state -> Prop :=
+                       E0 (State f f.(self__Clight.fn_body) k e le m1).
+           
+               MetaData initial_state.
+               Inductive initial_state (p: self__Clight.program): self__Semantics.state -> Prop :=
                   | initial_state_intro: forall b f m0,
                       let ge := Genv.globalenv p in
                       Genv.init_mem p = Some m0 ->
                       Genv.find_symbol ge p.(prog_main) = Some b ->
                       Genv.find_funct_ptr ge b = Some f ->
-                      type_of_fundef f = Tfunction Tnil type_int32s cc_default ->
-                      initial_state p (Callstate f nil Kstop m0).
+                      self__Clight.type_of_fundef f = self__Imp.Tfunction self__Imp.Tnil self__Imp.type_int32s cc_default ->
+                      initial_state p (self__Semantics.Callstate f nil self__Semantics.Kstop m0).
+               FEnd initial_state.
                
-               Inductive final_state: state -> int -> Prop :=
+               MetaData final_state.
+               Inductive final_state: self__Semantics.state -> int -> Prop :=
                   | final_state_intro: forall r m,
-                      final_state (Returnstate (Vint r) Kstop m) r.
+                      final_state (self__Semantics.Returnstate (Vint r) self__Semantics.Kstop m) r.
+               FEnd final_state.
        FEnd Semantics.
   FEnd Clight.
 
@@ -346,10 +431,9 @@ Family Imp.
 
        FInductive expr : Type :=
           | Evar : ident -> expr (* reading a temporary variable *)            
-          | Econst : constant -> expr (* constants *)
-          | Eunop : unary_operation -> expr -> expr (* unary operation *)
-          | Ebinop : binary_operation -> expr -> expr -> expr. (* binary operation *)            
+          | Econst : constant -> expr. (* constants *)          
 
+       FDefinition label := ident.
        FInductive stmt : Type :=
             | Sskip: stmt
             | Sset : ident -> expr -> stmt            
@@ -360,59 +444,66 @@ Family Imp.
             | Sexit: nat -> stmt            
             | Sreturn: option expr -> stmt
             | Slabel: label -> stmt -> stmt
-            | Sgoto: label -> stmt.       
+            | Sgoto: label -> stmt.
 
-       (* Function, Fundef, Program *)
+       
+       MetaData function.
        Record function : Type := mkfunction {
          fn_sig: signature;
          fn_params: list ident;
          fn_vars: list (ident * Z);
          fn_temps: list ident;
-         fn_body: stmt
+         fn_body: self__Csharpminor.stmt
        }.
+       FEnd function.
+       
+       FDefinition fundef := AST.fundef function.       
+       FDefinition program : Type := AST.program fundef unit.       
          
-       Family Semantics.
-            Definition genv := Genv.t fundef unit.
-            Definition env := PTree.t (block * Z).
-            Definition temp_env := PTree.t val.
-            Definition empty_env : env := PTree.empty (block * Z).
-            Definition empty_temp_env : temp_env := PTree.empty val.
+       Family Semantics.            
+            FDefinition env := PTree.t (block * Z).
+            FDefinition temp_env := PTree.t val.
+            FDefinition empty_env : env := PTree.empty (block * Z).
+            FDefinition empty_temp_env : temp_env := PTree.empty val.
             
             FInductive cont: Type :=
                | Kstop: cont
                | Kseq: stmt -> cont -> cont
-               | Kblock: cont -> cont               
+               | Kblock: cont -> cont.
             
             FInductive state: Type :=
                 | State: function -> stmt -> cont -> env -> temp_env -> mem -> state 
                 | Callstate: fundef -> list val -> cont -> mem -> state                    
                 | Returnstate : val -> cont -> mem -> state.
             
-            FRecursion call_cont about cont motive (fun (_ : cont) => cont).
+            FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
                    Case Kstop := Kstop.
                    Case Kseq := (fun s c call_cont_c => call_cont_c).
-                   Case Kblock := (fun s c call_cont_c => call_cont_c).                   
+                   Case Kblock := (fun c call_cont_c => call_cont_c).
                FEnd call_cont.
                
-            FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop).
+            (* FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
                    Case Kstop := True.                   
                    Case Kseq := (fun s c call_cont_c => False).
-                   Case Kblock := (fun s c call_cont_c => False).
-            FEnd is_call_cont.            
+                   Case Kblock := (fun c call_cont_c => False).
+            FEnd is_call_cont. *)
+            MetaData is_call_cont.
+            Axiom is_call_cont : self__Semantics.cont -> Prop.
+            FEnd is_call_cont.
             
-            FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)). 
+            FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect. 
                 Case Sskip := (fun lbl k => None).
-                Case Sassign := (fun id e lbl k => None).
-                Case Sseq := := (fun s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
+                Case Sset := (fun id e lbl k => None).
+                Case Sseq := (fun s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
                                          match find_label_s1 lbl (Kseq s2 k) with 
                                          | Some sk => Some sk 
                                          | None => find_label_s2 lbl k end).
-                Case Sifthenelse := (fun e s1 _ s2 _ => fun lbl k => 
+                Case Sifthenelse := (fun e s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
                                          match find_label_s1 lbl k with 
                                          | Some sk => Some sk 
                                          | None => find_label_s2 lbl k end).
                 Case Sloop := (fun s1 find_label_s1 => fun lbl k => 
-                                         find_label_s1 lbl (Kseq (Kloop1 s1) k)).                                         
+                                         find_label_s1 lbl (Kseq (Sloop s1) k)).                                         
                 Case Sblock := (fun s1 find_label_s1 => fun lbl k => find_label_s1 lbl (Kblock k)).
                 Case Sexit := (fun n lbl k => None).
                 Case Sreturn := (fun _ lbl k => None).
@@ -420,22 +511,30 @@ Family Imp.
                                        if ident_eq lbl lbl' then 
                                        Some(s, k) else find_label_s lbl k).
                 Case Sgoto := (fun label lbl k => None).
-            FEnd find_label.         
+            FEnd find_label.
                
-            FRecursion eval_constant about constant motive (fun (_ : constant) => val -> option val) by _rect.
-              Case Ointconst := (fun n => fun sp => Some (Vint n)). 
-              Case Ofloatconst := (fun n => fun sp => Some (Vfloat n)).
-              Case Osingleconst := (fun n => fun sp => Some (Vsingle n)).
-              Case Olongconst := (fun n => fun sp => Some (Vlong n)).
-            FEnd eval_constant.                           
+            FRecursion eval_constant about constant motive (fun (_ : constant) => option val) by _rect.
+              Case Ointconst := (fun n => Some (Vint n)). 
+              Case Ofloatconst := (fun n => Some (Vfloat n)).
+              Case Osingleconst := (fun n => Some (Vsingle n)).
+              Case Olongconst := (fun n => Some (Vlong n)).
+            FEnd eval_constant.
                
-            FInductive eval_expr : (e : env) -> (le : temp_env) -> (m : mem) -> expr -> val -> Prop :=
-                | eval_Evar: forall id v,
+            FInductive eval_expr : env -> temp_env -> mem -> expr -> val -> Prop :=
+                | eval_Evar: forall e le m id v,
                     PTree.get id le = Some v ->
-                    eval_expr (Evar id) v                  
-                | eval_Econst: forall cst v,
+                    eval_expr e le m (Evar id) v                  
+                | eval_Econst: forall e le m cst v,
                     eval_constant cst = Some v ->
-                    eval_expr (Econst cst) v.                           
+                    eval_expr e le m (Econst cst) v.
+            
+            
+            FDefinition block_of_binding := fun (id_b_sz: ident * (block * Z)) => 
+              match id_b_sz with (id, (b, sz)) => (b, 0, sz) end.
+            
+            FDefinition blocks_of_env : env -> list (block * Z * Z) := fun (e: env) =>
+              List.map block_of_binding (PTree.elements e).
+
                
             (* (e : env) -> (le : temp_env) -> (m : mem) -> *)
             FInductive step :  state -> trace -> state -> Prop :=
@@ -481,11 +580,12 @@ Family Imp.
                        step (State f (Slabel lbl s) k e le m)
                          E0 (State f s k e le m)
                    | step_goto: forall f lbl k e le m s' k',
-                       find_label lbl f.(fn_body) (call_cont k) = Some(s', k') ->
+                       find_label f.(self__Csharpminor.fn_body) lbl (call_cont k) = Some(s', k') ->
                        step (State f (Sgoto lbl) k e le m)
-                         E0 (State f s' k' e le m).                   
+                         E0 (State f s' k' e le m).           
             
-            FInductive initial_state (p: program): state -> Prop :=
+            (*MetaData initial_state.
+            Inductive initial_state (p: self__Csharpminor.program): state -> Prop :=
                 | initial_state_intro: forall b f m0,
                     let ge := Genv.globalenv p in
                     Genv.init_mem p = Some m0 ->
@@ -493,12 +593,156 @@ Family Imp.
                     Genv.find_funct_ptr ge b = Some f ->
                     funsig f = signature_main ->
                     initial_state p (Callstate f nil Kstop m0).
+            FEnd initial_state. *)
             
-            FInductive final_state: state -> int -> Prop :=
-                | final_state_intro: forall r m,m
-                    final_state (Returnstate (Vint r) Kstop m) r.
+            MetaData final_state.
+            Inductive final_state: self__Semantics.state -> int -> Prop :=
+                | final_state_intro: forall r m,
+                    final_state (self__Semantics.Returnstate (Vint r) self__Semantics.Kstop m) r.
+            FEnd final_state.
        FEnd Semantics.
    FEnd Csharpminor.
+
+   
+   (* Clight -> Csharpminor *)
+  Family Cshmgen.
+      FDefinition make_intconst := fun (n: int) => Csharpminor.Econst (Csharpminor.Ointconst n).
+      FDefinition make_longconst := fun (f: int64) => Csharpminor.Econst (Csharpminor.Olongconst f).
+      FDefinition make_floatconst := fun (f: float) => Csharpminor.Econst (Csharpminor.Ofloatconst f).
+      FDefinition make_singleconst := fun (f: float32) => Csharpminor.Econst (Csharpminor.Osingleconst f).            
+
+      FDefinition make_ptrofsconst := fun (n: Z) =>
+        if Archi.ptr64 then make_longconst (Int64.repr n) else make_intconst (Int.repr n).
+      
+      (* Definition sizeof (ce: composite_env) (t: type) : res Z := *)
+      MetaData sizeof.
+      Axiom sizeof : self__Imp.Clight.Semantics.composite_env -> self__Imp.type -> res Z.
+      FEnd sizeof.
+      
+      MetaData alignof.
+      Axiom alignof : self__Imp.Clight.Semantics.composite_env -> self__Imp.type -> res Z.
+      FEnd alignof.
+      
+      FRecursion transl_expr about Clight.expr motive (fun (_ : Clight.expr) => Clight.Semantics.composite_env -> res Csharpminor.expr) by _rect.
+          Case Econst_int := (fun n type => fun ce => OK(make_intconst n)). 
+          Case Econst_float := (fun n type => fun ce => OK(make_floatconst n)).
+          Case Econst_single := (fun n type => fun ce => OK(make_singleconst n)).
+          Case Econst_long := (fun n type => fun ce => OK(make_longconst n)).        
+          Case Etempvar := (fun id ty => fun ce => OK(Csharpminor.Evar id)). 
+          Case Esizeof := (fun ty _ => fun ce => 
+                               do sz <- sizeof ce ty; OK(make_ptrofsconst sz)).                           
+          Case Ealignof := (fun ty _ => fun ce => 
+                               do al <- alignof ce ty; OK(make_ptrofsconst al)).
+      FEnd transl_expr.
+
+       (* (nbrk : nat) -> if Clight.stmt terminates on break return Csharpminor.exit nbrk
+          (ncnt : nat) -> if Clight.smt terminates on continue return Csharpminor.exit ncnt
+        *)
+
+      (* Definition make_boolean (e: expr) (ty: type) := *)
+      MetaData make_boolean.
+      Axiom make_boolean : self__Imp.Csharpminor.expr -> self__Imp.type -> self__Imp.Csharpminor.expr.
+      FEnd make_boolean.
+      
+      (* Definition make_cast (from to: type) (e: expr) :=*)
+      MetaData make_cast.
+      Axiom make_cast : self__Imp.type -> self__Imp.type -> self__Imp.Csharpminor.expr -> res self__Imp.Csharpminor.expr.
+      FEnd make_cast.
+      
+      FRecursion transl_statement about Clight.stmt motive (fun (_ : Clight.stmt) => Clight.Semantics.composite_env -> type -> nat -> nat -> res Csharpminor.stmt) by _rect.
+           Case Sskip := (fun ce tyret nbrk ncnt => OK Csharpminor.Sskip).   
+           Case Sset := (fun x b => fun ce tyret nbrk ncnt => 
+                            do tb <- transl_expr b ce;
+                            OK (Csharpminor.Sset x tb)).
+           Case Ssequence := (fun s1 transl_s1 s2 transl_s2 =>
+                              fun ce tyret nbrk ncnt => 
+                             do ts1 <- transl_s1 ce tyret nbrk ncnt;
+                             do ts2 <- transl_s2 ce tyret nbrk ncnt;
+                             OK (Csharpminor.Sseq ts1 ts2)).
+           Case Sifthenelse := (fun e s1 transl_s1 s2 transl_s2 => 
+                                  fun ce tyret nbrk ncnt => 
+                                do te <- transl_expr e ce;
+                                do ts1 <- transl_s1 ce tyret nbrk ncnt;
+                                do ts2 <- transl_s2 ce tyret nbrk ncnt;
+                                OK (Csharpminor.Sifthenelse (make_boolean te (Clight.typeof e)) ts1 ts2)).
+           Case Sloop := (fun s1 transl_s1 s2 transl_s2 => 
+                          fun ce tyret nbrk ncnt =>
+                             do ts1 <- transl_s1 ce tyret 1%nat 0%nat;
+                             do ts2 <- transl_s2 ce tyret 0%nat (S ncnt);
+                             OK (Csharpminor.Sblock (Csharpminor.Sloop (Csharpminor.Sseq (Csharpminor.Sblock ts1) ts2)))).
+           Case Sbreak := (fun ce tyret nbrk ncnt => OK (Csharpminor.Sexit nbrk)).
+           Case Scontinue := (fun ce tyret nbrk ncnt => OK (Csharpminor.Sexit ncnt)).
+           Case Sreturn := (fun e => fun ce tyret nbrk ncnt =>
+                              match e with
+                              | None => OK (Csharpminor.Sreturn None)
+                              | Some e => 
+                                  do te <- transl_expr e ce;
+                                  do te' <- make_cast (Clight.typeof e) tyret te;
+                                  OK (Csharpminor.Sreturn (Some te'))
+                              end).           
+           Case Slabel := (fun lbl s transl_s =>
+                           fun ce tyret nbrk ncnt => 
+                             do ts <- transl_s ce tyret nbrk ncnt;
+                             OK (Csharpminor.Slabel lbl ts)).
+           Case Sgoto := (fun lbl =>  
+                            fun ce tyret nbrk ncnt =>  
+                              OK (Csharpminor.Sgoto lbl)).
+      FEnd transl_statement.
+            
+      
+      Definition transl_var (ce: composite_env) (v: ident * type) :=
+        do sz <- sizeof ce (snd v); OK (fst v, sz).
+
+      Definition signature_of_function (f: Clight.function) :=
+        {| sig_args := map typ_of_type (map snd (Clight.fn_params f));
+          sig_res  := rettype_of_type (Clight.fn_return f);
+          sig_cc   := Clight.fn_callconv f |}.
+
+      Definition transl_function (ce: composite_env) (f: Clight.function) : res function :=
+        do tbody <- transl_statement ce f.(Clight.fn_return) 1%nat 0%nat (Clight.fn_body f);
+        do tvars <- mmap (transl_var ce) (Clight.fn_vars f);
+        OK (mkfunction
+              (signature_of_function f)
+              (map fst (Clight.fn_params f))
+              tvars
+              (map fst (Clight.fn_temps f))
+              tbody).
+
+     Definition transl_fundef (ce: composite_env) (id: ident) (f: Clight.fundef) : res fundef :=
+       match f with
+       | Internal g =>
+           do tg <- transl_function ce g; OK(AST.Internal tg)
+       | External ef args res cconv =>
+           if signature_eq (ef_sig ef) (signature_of_type args res cconv)
+           then OK(AST.External ef)
+           else Error(msg "Cshmgen.transl_fundef: wrong external signature")
+       end.
+
+     (** ** Translation of programs *)
+
+     Definition transl_globvar (id: ident) (ty: type) := OK tt.
+
+     Definition transl_program (p: Clight.program) : res program :=
+       transform_partial_program2 (transl_fundef p.(prog_comp_env)) transl_globvar p.
+       
+     Family Correctness.            
+          FInduction transl_step:
+            forall S1 t S2, Clight.step ge S1 t S2 ->
+            forall T1, match_states S1 T1 ->
+            exists T2, plus step tge T1 t T2 /\ match_states S2 T2.
+          FProof.
+          
+          Closing Fact transl_initial_states:
+            forall S, Clight.initial_state prog S ->
+            exists R, initial_state tprog R /\ match_states S R.
+          FProof.
+          
+          Closing Fact transl_final_states:
+            forall S R r,
+            match_states S R -> Clight.final_state S r -> final_state R r.
+          FProof.
+      FEnd Correctness.
+   FEnd Cshmgen.
           
    Family Cminor.
        FInductive constant : Type :=
@@ -2118,71 +2362,7 @@ Family Imp.
 
                 (* Proof of correctness of translation wrt the specification *)
           FEnd Specification.
-   FEnd SimplExpr.
-
-   (* Clight -> Csharpminor *)
-   Family Cshmgen.
-      Definition make_intconst (n: int) := Econst (Ointconst n).
-      Definition make_longconst (f: int64) := Econst (Olongconst f).
-      Definition make_floatconst (f: float) := Econst (Ofloatconst f).
-      Definition make_singleconst (f: float32) := Econst (Osingleconst f).
-
-      FRecursion transl_expr about Clight.expr motive (fun (_ : Clight.expr) => composite_env -> Csharpminor.expr).
-          Case Econst_int := (fun n type => fun ce => make_intconst n). 
-          Case Econst_float := (fun n type => fun ce => make_floatconst n).
-          Case Econst_single := (fun n type => fun ce => make_singleconst n).
-          Case Econst_long := (fun n type => fun ce => make_longconst n).        
-          Case Etempvar := (fun id ty => fun ce => Csharpminor.EVar id). 
-      FEnd transl_expr.
-
-       (* (nbrk : nat) -> if Clight.stmt terminates on break return Csharpminor.exit nbrk
-          (ncnt : nat) -> if Clight.smt terminates on continue return Csharpminor.exit ncnt
-        *)
-      FRecursion transl_statement about Clight.stmt motive (fun (_ : Clight.stmt) => composite_env -> type -> nat -> nat).
-           Case Sskip := (fun ce tyret nbrk ncnt => Csharpminor.Sskip).   
-           Case Sset := (fun x b => fun ce tyret nbrk ncnt => Csharpminor.Sset x (transl_expr b)).
-           Case Ssequence := (fun s1 transl_s1 s2 transl_s2 =>
-                              fun ce tyret nbrk ncnt => Csharpminor.Sseq transl_s1 transl_s2).                               
-           Case Sifthenelse := (fun e s1 transl_s1 transl_s2 =>
-                                fun ce tyret nbrk ncnt => Csharpminor.Sifthenelse (transl_expr e) transl_s1 transl_s2).
-           Case Sloop := (fun s1 transl_s1 s2 transl_s2 => fun ce tyret nbrk ncnt =>
-                            Csharpminor.Sblock
-                              (Csharpminor.Sloop
-                                 (Csharpminor.Sseq
-                                    (Csharpminor.Sblock (transl_s1 ce tyret 1 0))
-                                                        (transl_s2 ce tyret 0 (S ncnt))))).
-           Case Sbreak := (fun ce tyret nbrk ncnt => Csharpminor.Sexit nbrk).
-           Case Scontinue := (fun ce tyret nbrk ncnt => Csharpminor.Sexit ncnt).
-           Case Sreturn := (fun e => fun ce tyret nbrk ncnt =>
-                              match e with
-                              | None => Csharpminor.Sreturn None
-                              | Some e => Csharpminor.Sreturn (Some (transl_expr ce e))
-                              end).
-           Case Sswitch := (fun e lbls s1 transl_s1 => fun ce tyret nbrk ncnt => cheat).
-           Case Slabel := (fun l s transl_s => fun ce tyret nbrk ncnt => Csharpminor.Slabel lbl (transl_s1 ce tyret nbrk ncnt)).
-           Case Sgoto := (fun lbl =>  Csharpminor.Sgoto lbl).
-      FEnd transl_statement.
-       
-       (* Translate function, fundef, program *)
-       
-      Family Correctness.            
-          FInduction transl_step:
-            forall S1 t S2, Clight.step ge S1 t S2 ->
-            forall T1, match_states S1 T1 ->
-            exists T2, plus step tge T1 t T2 /\ match_states S2 T2.
-          FProof.
-          
-          Closing Fact transl_initial_states:
-            forall S, Clight.initial_state prog S ->
-            exists R, initial_state tprog R /\ match_states S R.
-          FProof.
-          
-          Closing Fact transl_final_states:
-            forall S R r,
-            match_states S R -> Clight.final_state S r -> final_state R r.
-          FProof.
-      FEnd Correctness.
-   FEnd Cshmgen.   
+   FEnd SimplExpr.     
    
    (* Csharpminor -> Cminor *)
    Family Cminorgen.
