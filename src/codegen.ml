@@ -1178,7 +1178,10 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
               compiled_recursors;
             }
         in
-        let linkage = add_field ~name ~elem linkage in
+        let linkage = add_field ~name ~elem linkage in        
+        let compiled_context, parameters =
+          compile_linkage_context ~field_name:inductive_name linkage
+        in
         let compiled_recs =
           compile_recursors ~ind_def:inductive ~recursors ~ctx:parameters
             ~family_name
