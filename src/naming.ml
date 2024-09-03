@@ -1,4 +1,4 @@
-(* These functions are copied verbatim from
+(* Some of these functions are copied verbatim from
    https://github.com/DKXXXL/FPOP/blob/main/src/utils.ml#L407*)
 
 (* Magic constants embedded in these functions *)
@@ -8,7 +8,8 @@ let internal_name name = Nameops.add_prefix "__internal_" name
 let recursor_type ~inductive suffix =
   Nameops.add_prefix "__recursor_type_" (Nameops.add_suffix inductive suffix)
 
-let handler_type name = Nameops.add_prefix "__handler_type_" name
+let handler_type name ~suffix =
+  Nameops.add_suffix (Nameops.add_prefix "__handler_type_" name) suffix
 
 let handler_name ~recursor ~case =
   Names.Id.to_string recursor ^ Names.Id.to_string case |> Names.Id.of_string

@@ -177,7 +177,7 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
   let suffix = RecKind.IndComplete in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
   let handler_names =
-    Termutils.handler_types_table name recursor |> List.map fst
+    Termutils.handler_types_table name recursor suffix |> List.map fst
   in
   let implementing_handler_names = handler_names in
   let handler_type_prefix = Naming.fresh_name ~prefix:"HandlerTypes" in
@@ -247,7 +247,7 @@ let open_theorem_extension ~name =
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
   let handler_names =
-    Termutils.handler_types_table name recursor |> List.map fst
+    Termutils.handler_types_table name recursor suffix |> List.map fst
   in
   let implementing_handler_names =
     let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
