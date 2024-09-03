@@ -16,8 +16,8 @@ Family STLCBase.
        about Ty
        motive (fun (t : Ty) => self__STLCBase.subst t = 1).
      FProof.  
-        unfold HandlerTypes回30.__handler_type_TUnit.       
-        unfold HandlerTypes回30.__handler_type_TArr.
+        unfold HandlerTypes回31.__handler_type_TUnit_ind_comp.       
+        unfold HandlerTypes回31.__handler_type_TArr_ind_comp.
         unfold  __motiveTeasy_theorem.
        split.
        + rewrite self__STLCBase.subst_TUnit_eq. unfold self__STLCBase.substTUnit. reflexivity.
@@ -31,8 +31,8 @@ Family STLCBase.
        about Ty
        motive (fun (t : Ty) => self__STLCBase.subst t = 1).
     FProof.
-       unfold HandlerTypes回39.__handler_type_TUnit.
-       unfold HandlerTypes回39.__handler_type_TArr.
+       unfold HandlerTypes回40.__handler_type_TUnit_ind_comp.
+       unfold HandlerTypes回40.__handler_type_TArr_ind_comp.
        unfold  __motiveTsubst_theorem.
        split.
        + unfold self__STLCBase.substTUnit. 
@@ -43,7 +43,7 @@ Family STLCBase.
            rewrite -> self__STLCBase.subst_TArr_eq.
            reflexivity.
          - apply I.
-    FQed.
+    Qed.
   FEnd subst_theorem.  
   
   FInductive Exp : Set :=     

@@ -8,7 +8,8 @@ Family IR.
       | Osingleconst: (*float32 ->*) constant
       | Olongconst: (* int64 ->*) constant.
 
-   FDefinition ident := nat.
+   FDefinition ident := nat.   
+   
    FDefinition label := ident.
 
    FInductive expr : Type :=
@@ -43,3 +44,22 @@ Family IR.
         Case Kblock := (fun c call_cont_c => False).
    FEnd is_call_cont.
 FEnd IR.
+
+Family A extends IR.
+FEnd A.
+
+Family B extends IR.
+   FInductive cont: Type :=
+      | Knothing: cont.
+
+   FRecursion call_cont.
+      Case Knothing := Kstop.
+   FEnd call_cont.
+   
+   FRecursion is_call_cont.
+       Case Knothing := True.
+   FEnd is_call_cont.   
+FEnd B.
+
+Family C extends B.
+FEnd C.
