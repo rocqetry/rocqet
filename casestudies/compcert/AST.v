@@ -18,7 +18,11 @@
   the abstract syntax trees of many of the intermediate languages. *)
 
 Require Import String.
-Require Import Coqlib Maps Errors Integers Floats.
+Require Import Coqlib.
+Require Import Maps. 
+Require Import Errors. 
+Require Import Integers. 
+Require Import Floats.
 Require Archi.
 
 Set Implicit Arguments.
