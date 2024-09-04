@@ -51,6 +51,14 @@ let add_inductive_definition inductive =
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:inductive_name context
   in
+  let compiled_recs =
+    Codegen.compile_recursors ~ind_def:inductive ~recursors ~ctx:parameters
+      ~family_name
+  in
+  compiled_recursors := CompiledRecursors.{ compiled_context; recursors = compiled_recs };
+  let compiled_context, parameters =
+    Codegen.compile_linkage_context ~field_name:inductive_name context
+  in
   let principle_signature =
     Codegen.compile_principle_signature ~ind_def:inductive ~recursors
       ~ctx:parameters ~family_name
@@ -66,9 +74,5 @@ let add_inductive_definition inductive =
       }
   in
   let name = Nameops.add_suffix inductive_name "IndPrinciple" in
-  Context.add_field ~name ~elem:principle;
-  let recursors =
-    Codegen.compile_recursors ~ind_def:inductive ~recursors ~ctx:parameters
-      ~family_name
-  in
-  compiled_recursors := CompiledRecursors.{ compiled_context; recursors }
+  Context.add_field ~name ~elem:principle
+  

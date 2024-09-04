@@ -11,7 +11,7 @@ Family STLCBase.
 
   FRecursion subst : (t : X.Ty) -> nat. 
      Case TUnit := 1.
-     Case TArr (domain, codomain) := (subst domain + subst codomain).
+     Case TArr domain codomain := (subst domain + subst codomain).
   FEnd subst.
 FEnd STLCBase.
 

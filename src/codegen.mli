@@ -70,17 +70,9 @@ val compile_recursive_definition_implementation :
   handler_cases:CompiledModule.t ->
   CompiledModule.t * (Names.Id.t * Constrexpr.constr_expr) list
 
-val include_handler_types :
-  context:LinkageCtx.t ->
-  inductive_provenance:Linkage.t ->
-  inductive_path:Libnames.qualid ->
-  recursor:CompiledRecursor.t ->
-  unit B.t
-
 val calculate_rec_principle_prefix :
   inductive_path:Libnames.qualid ->
-  context:LinkageCtx.t ->
-  inductive_provenance:Linkage.t ->
+  context:LinkageCtx.t ->  
   Libnames.qualid
 
 val compile_handler_cases :
@@ -89,18 +81,7 @@ val compile_handler_cases :
   parameters:(Names.Id.t * Constrexpr.module_ast) list ->
   motive:CompiledModule.t ->
   handler_cases:(Names.Id.t * Constrexpr.constr_expr) list ->
-  handler_types:(Names.Id.t * Constrexpr.constr_expr) list ->
-  compiled_handler_types:CompiledModule.t ->
-  provenance:Linkage.t ->
-  recursor:CompiledRecursor.t ->
-  CompiledModule.t
-
-val aggregate_handler_types :
-  LinkageCtx.t ->
-  Linkage.t ->
-  Libnames.qualid ->
-  CompiledRecursor.t ->
-  (Names.Id.t * Constrexpr.module_ast) list ->
+  handler_types:(Names.Id.t * Constrexpr.constr_expr) list ->  
   CompiledModule.t
 
 (* FInduction *)

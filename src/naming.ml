@@ -1,4 +1,4 @@
-(* These functions are copied verbatim from
+(* Some of these functions are copied verbatim from
    https://github.com/DKXXXL/FPOP/blob/main/src/utils.ml#L407*)
 
 (* Magic constants embedded in these functions *)
@@ -8,7 +8,8 @@ let internal_name name = Nameops.add_prefix "__internal_" name
 let recursor_type ~inductive suffix =
   Nameops.add_prefix "__recursor_type_" (Nameops.add_suffix inductive suffix)
 
-let handler_type name = Nameops.add_prefix "__handler_type_" name
+let handler_type name ~suffix =
+  Nameops.add_suffix (Nameops.add_prefix "__handler_type_" name) suffix
 
 let handler_name ~recursor ~case =
   Names.Id.to_string recursor ^ Names.Id.to_string case |> Names.Id.of_string
@@ -72,6 +73,17 @@ let path_to_prefix (path : Libnames.qualid) :
   match Names.DirPath.repr prefix with
   | [] -> (None, base)
   | _ -> (Some (Libnames.qualid_of_dirpath prefix), base)
+
+let make_module_path head path =
+  let head = Libnames.qualid_of_ident head in
+  List.fold_left
+    (fun module_path x -> qualid_point (Some module_path) x)
+    head path
+
+let list_to_path (names : Names.Id.t list) : Libnames.qualid = 
+  match names with 
+  | [] -> Errors.fail ~info:"list_to_path: expected a non empty list"
+  | head :: path -> make_module_path head path 
 
 (* extract a path into (name "." path) *)
 let to_name_qualid (path : Libnames.qualid) : Names.Id.t * Libnames.qualid =

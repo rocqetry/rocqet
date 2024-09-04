@@ -39,7 +39,7 @@ val generate_computational_axioms :
   (Names.Id.t * Constrexpr.constr_expr) list
 
 val handler_types_table :
-  Names.Id.t -> CompiledRecursor.t -> (Names.Id.t * Constrexpr.constr_expr) list
+  Libnames.qualid -> Names.Id.t -> CompiledRecursor.t -> RecKind.t -> (Names.Id.t * Constrexpr.constr_expr) list
 
 val extract_handlers_from_inductive_proof :
   Names.Id.t list ->
