@@ -862,15 +862,24 @@ Inductive signedness : Type :=
 
           (* Let ge := globalenv prog.
              Let tge := Genv.globalenv tprog.*)
-          FDefinition ge : Clight.Semantics.genv := cheat.
+          FDefinition _ge : Clight.Semantics.genv := cheat.
           FDefinition tge : Csharpminor.Semantics.genv := cheat.
                  
-          FInduction transl_step about Clight.Semantis.step
-            motive (fun S1 t S2 (_ : Clight.Semantics.step ge S1 t S2) =>
+          FInduction transl_step about Clight.Semantics.step
+            motive (fun ge S1 t S2 (_ : Clight.Semantics.step ge S1 t S2) =>
             forall T1, self__Correctness.match_states S1 T1 -> 
             exists T2, plus Csharpminor.Semantics.step tge T1 t T2 /\ match_states S2 T2).            
           FProof.
-          
+              split.
+              (* Sset *)
+              + unfold self__Imp.Clight.Semantics.__handler_type_step_set_ind_comp.
+                unfold __motiveTtransl_step.
+                intros.
+                apply cheat.
+              + apply cheat.
+          Qed.
+          FEnd transl_step.
+                
           Closing Fact transl_initial_states:
             forall S, Clight.initial_state prog S ->
             exists R, initial_state tprog R /\ match_states S R.
