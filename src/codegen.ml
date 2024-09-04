@@ -876,16 +876,8 @@ let compile_definition ~(name : Names.Id.t)
   B.(
     run
     @@ define_module ~module_name ~parameters ~body:(fun _ ->
-           let* () = define_term ~name ?ty:body_type body_expr in
-           return ()))
-
-let rec find_reachable_path ~path ~name =
-  match path with
-  | [] -> Errors.failwith_stacktrace ~info:"Reachable path not found"
-  | x :: path ->
-      if Names.Id.equal (Naming.self_version x) name then
-        [ Naming.un_self_version name ]
-      else x :: find_reachable_path ~path ~name
+        let* () = define_term ~name ?ty:body_type body_expr in
+        return ()))
 
 let make_module_path head path =
   let head = Libnames.qualid_of_ident head in
@@ -898,144 +890,23 @@ let calculate_containing_family ~(inductive_path : Libnames.qualid)
   let resolved_path = Resolver.resolve_qualid ~context ~qualid:inductive_path in
   resolved_path |> Naming.path_to_list |> List.hd
 
-let _calculate_containing_family ~(current_linkage : Linkage.t)
-    ~(inductive_provenance : Linkage.t) =
-  let current_parameters = Bwd.to_list current_linkage.context in
-  let inductive_parameters = Bwd.to_list inductive_provenance.context in
-  let rec go previous current inductive =
-    match (current, inductive) with
-    | [], _ | _, [] -> previous
-    | (c, _) :: current, (i, _) :: inductive ->
-        if Names.Id.equal c i then go (Some c) current inductive else previous
-  in
-  match go None current_parameters inductive_parameters with
-  | None -> Naming.self_version current_linkage.name
-  | Some name -> name
-
 let rec remove_last lst =
   match lst with
   | [] -> failwith "Empty list"
   | [ _ ] -> []
   | x :: xs -> x :: remove_last xs
 
-let calculate_rec_principle_prefix ~inductive_path ~context
-    ~inductive_provenance =
-  let current_linkage = context |> Env.Context.family_linkage in
-  current_linkage |> ignore;
-  inductive_provenance |> ignore;
+let calculate_rec_principle_prefix ~inductive_path ~context =    
   let containing_family =
     calculate_containing_family ~context ~inductive_path
   in
   let path = inductive_path |> Naming.path_to_list |> remove_last in
   make_module_path containing_family path
 
-let aggregate_handler_types (context : LinkageCtx.t) (provenance : Linkage.t)
-    (inductive_path : Libnames.qualid) (recursor : CompiledRecursor.t)
-    parameters =
-  let current_family =
-    context |> Env.Context.family_name |> Naming.self_version
-  in
-  (* let current_linkage = context |> Env.Context.family_linkage in *)
-  let containing_family =
-    calculate_containing_family ~context ~inductive_path
-  in
-  let reachable_parameters =
-    context |> Env.Context.family_linkage |> fun linkage ->
-    linkage.context |> Bwd.to_list |> List.map fst
-  in
-  let reachable_parameters = reachable_parameters @ [ current_family ] in
-  let is_reacheable name =
-    reachable_parameters |> List.exists (Names.Id.equal name)
-  in
-  (* [X, Y] *)
-  let path = inductive_path |> Naming.path_to_list |> remove_last in
-  let normalize_arguments arguments =
-    arguments
-    |> List.map (fun name ->
-           if is_reacheable name then Libnames.qualid_of_ident name
-           else
-             let reacheable_path = find_reachable_path ~path ~name in
-             make_module_path containing_family reacheable_path)
-  in
-  let open B in
-  let f _ctx =
-    recursor.compiled_handlers
-    |> List.map (fun (_case_name, handler_module) ->
-           let arguments =
-             let family = provenance.name |> Naming.self_version in
-             let parameters =
-               provenance.context |> Bwd.to_list |> List.map fst
-             in
-             parameters @ [ family ]
-           in
-           let module_expr =
-             Termutils.apply_module
-               ~functor_expr:(Termutils.ident_to_module_expr handler_module)
-               ~arguments:(normalize_arguments arguments)
-           in
-           let* _ = include_module ~module_expr in
-           return ())
-    |> flatmap
-  in
-  let module_name = Naming.fresh_name ~prefix:"HandlerTypes" in
-  B.run @@ B.define_module ~module_name ~parameters ~body:f
-
-let include_handler_types ~(context : LinkageCtx.t)
-    ~(inductive_provenance : Linkage.t) ~(inductive_path : Libnames.qualid)
-    ~(recursor : CompiledRecursor.t) =
-  let provenance = inductive_provenance in
-  let current_family =
-    context |> Env.Context.family_name |> Naming.self_version
-  in
-  (* let current_linkage = context |> Env.Context.family_linkage in *)
-  let containing_family =
-    calculate_containing_family ~context ~inductive_path
-  in
-  let reachable_parameters =
-    context |> Env.Context.family_linkage |> fun linkage ->
-    linkage.context |> Bwd.to_list |> List.map fst
-  in
-  let reachable_parameters = reachable_parameters @ [ current_family ] in
-  let is_reacheable name =
-    reachable_parameters |> List.exists (Names.Id.equal name)
-  in
-  (* [X, Y] *)
-  let path = inductive_path |> Naming.path_to_list |> remove_last in
-  let normalize_arguments arguments =
-    arguments
-    |> List.map (fun name ->
-           if is_reacheable name then Libnames.qualid_of_ident name
-           else
-             let reacheable_path = find_reachable_path ~path ~name in
-             make_module_path containing_family reacheable_path)
-  in
-  let open B in
-  let* () =
-    recursor.compiled_handlers
-    |> List.map (fun (_case_name, handler_module) ->
-           let arguments =
-             let family = provenance.name |> Naming.self_version in
-             let parameters =
-               provenance.context |> Bwd.to_list |> List.map fst
-             in
-             parameters @ [ family ]
-           in
-           let module_expr =
-             Termutils.apply_module
-               ~functor_expr:(Termutils.ident_to_module_expr handler_module)
-               ~arguments:(normalize_arguments arguments)
-           in
-           let* _ = include_module ~module_expr in
-           return ())
-    |> flatmap
-  in
-  return ()
-
 let compile_handler_cases ~name ~(context : LinkageCtx.t) ~parameters ~motive
     ~(handler_cases : (Names.Id.t * Constrexpr.constr_expr) list)
-    ~(handler_types : (Names.Id.t * Constrexpr.constr_expr) list)
-    ~(compiled_handler_types : CompiledModule.t) ~(provenance : Linkage.t)
-    ~(recursor : CompiledRecursor.t) =
+    ~(handler_types : (Names.Id.t * Constrexpr.constr_expr) list)    
+    =
   let family = context |> Env.Context.family_name |> Names.Id.to_string in
   let module_name =
     let name = Nameops.add_suffix (Nameops.add_prefix family name) "Cases" in
@@ -1049,19 +920,8 @@ let compile_handler_cases ~name ~(context : LinkageCtx.t) ~parameters ~motive
            Termutils.apply_module
              ~functor_expr:(Termutils.ident_to_module_expr motive)
              ~arguments
-         in
-         (*let applied_compilerd_handler_types =
-           Termutils.apply_module
-             ~functor_expr:
-               (Termutils.ident_to_module_expr compiled_handler_types)
-             ~arguments
-         in*)
-         let* _ = include_module ~module_expr:applied_motive in
-         (* let* _ = include_module ~module_expr:applied_compilerd_handler_types in*)
-         (* let* _ = include_handler_types provenance recursor in *)
-         provenance |> ignore;
-         recursor |> ignore;
-         compiled_handler_types |> ignore;
+         in         
+         let* _ = include_module ~module_expr:applied_motive in         
          let* _ =
            handler_cases
            |> List.map (fun (case_name, case) ->
@@ -1219,12 +1079,11 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
           compile_motives ~names ~ctx:parameters ~motives ~family_name
         in
         let inductive_name = VernacInductive.extract_inductive_name inductive in
-        let inductive, compiled_recursors, provenance =
+        let inductive, _, provenance =
           Env.Context.lookup_inductive_for_recursion
             ~name:(Libnames.qualid_of_ident inductive_name)
             linkage
-        in
-        let recursor = RecursorStore.find suffix compiled_recursors.recursors in
+        in        
         let handler_type_prefix = Naming.fresh_name ~prefix:"HandlerTypes" in
         let handler_types =
           let prefix x =
@@ -1245,20 +1104,10 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
           Termutils.calculate_inductive_proof_goal ~theorem_name:name
             ~handler_names:(List.map fst handlers) ~handler_type_prefix ~suffix
         in
-        let impl_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in
-        let compiled_handler_types =
-          let handler_types =
-            aggregate_handler_types linkage provenance
-              (Libnames.qualid_of_ident inductive_name)
-              recursor parameters
-          in
-          wrap_module ~module_name:handler_type_prefix
-            ~inner_module:handler_types ~ctx:parameters
-        in
+        let impl_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in        
         let compiled_handlers =
           compile_handler_cases ~name ~parameters ~context:linkage
-            ~motive:compiled_motive ~handler_cases:handlers ~handler_types
-            ~compiled_handler_types ~provenance ~recursor
+            ~motive:compiled_motive ~handler_cases:handlers ~handler_types            
         in
         let compiled_impl =
           compile_theorem_implementation ~name:impl_name ~parameters
@@ -1314,20 +1163,14 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
             ~family_name:name
         in
         let recursor = RecursorStore.find suffix compiled_recursors.recursors in
-        let handlers = recursor.compiled_handlers |> List.map fst in
-        let compiled_handler_types =
-          aggregate_handler_types context provenance inductive_path recursor
-            parameters
-        in
+        let handlers = recursor.compiled_handlers |> List.map fst in        
         let recursor_module =
           compile_handler_cases ~name ~parameters ~handler_cases ~handler_types
-            ~compiled_handler_types ~context ~motive:motive_module ~provenance
-            ~recursor
+             ~context ~motive:motive_module            
         in
         let rec_principle_prefix =
           let prefix =
-            calculate_rec_principle_prefix ~inductive_path ~context
-              ~inductive_provenance:provenance
+            calculate_rec_principle_prefix ~inductive_path ~context              
           in
           Some prefix
         in
