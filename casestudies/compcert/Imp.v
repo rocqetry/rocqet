@@ -1110,6 +1110,8 @@ Inductive signedness : Type :=
 
    (* Csharpminor -> Cminor *)
    Family Cminorgen.
+      FDefinition compilenv := PTree.t Z.
+
       FRecursion translate_constant about
          Csharpminor.constant motive (fun (_ : Csharpminor.constant) => Cminor.constant) by _rect.
            Case Ointconst := (fun n => Cminor.Ointconst n).
@@ -1118,37 +1120,61 @@ Inductive signedness : Type :=
            Case Olongconst := (fun n => Cminor.Olongconst n).
       FEnd translate_constant.
    
-      FRecursion translate_expr about Csharpminor.expr motive (fun (_ : Csharpminor.expr) => Cminor.expr) by _rect.
-           Case Evar := (fun id => Cminor.Evar id).
-           Case Econst := (fun cst => Cminor.Econst (translate_constant cst)).
-      FEnd translate_expr.
+      FRecursion transl_expr about Csharpminor.expr motive (fun (_ : Csharpminor.expr) => compilenv -> res Cminor.expr) by _rect.
+           Case Evar := (fun id => fun cenv => OK (Cminor.Evar id)).
+           Case Econst := (fun cst => fun cenv => OK (Cminor.Econst (translate_constant cst))).
+      FEnd transl_expr.
 
-      Definition exit_env := list bool.
+      FDefinition exit_env := list bool.
 
-      Fixpoint shift_exit (e: exit_env) (n: nat) {struct e} : nat :=
+      MetaData shift_exit.
+      Fixpoint shift_exit (e: self__Cminorgen.exit_env) (n: nat) {struct e} : nat :=
         match e, n with
         | nil, _ => n
         | false :: e', _ => S (shift_exit e' n)
         | true :: e', O => O
         | true :: e', S m => S (shift_exit e' m)
         end.
+      FEnd shift_exit.
     
-      FRecursion translate_stmt about Csharpminor.stmt motive (fun (_ : Csharpminor.stmt) => compilenv -> exit_env -> Cminor.stmt) by _rect.
-            Case Sskip := (fun cenv xenv => Cminor.Sskip).
-            Case Sset := (fun id e => fun cenv xenv => Cminor.Sassign id (translate_expr e)).
-            Case Sseq := (fun s1 translate_stmt_s1 s2 translate_stmt_s2 => fun cenv xenv => Cminor.Sseq translate_stmt_s1 translate_stmt_s2).
-            Case Sifthenelse := (fun e s1 translate_stmt_s1 s2 translate_stmt_s2 => fun cenv xenv =>
-                                   Cminor.Sifthenelse (translate_expr e) translate_stmt_s1 translate_stmt_s2).
-            Case Sloop := (fun s1 translate_stmt_s1 => fun cenv xenv => Cminor.Sloop translate_stmt_s1).
-            Case Sblock := (fun s translate_stmt_s => fun cenv xenv => Cminor.Sblock translate_stmt_s).
-            Case Sexit := (fun cenv xenv => Sexit (shift_exit xenv n)).
+      FRecursion transl_stmt about Csharpminor.stmt motive (fun (_ : Csharpminor.stmt) => compilenv -> exit_env -> res Cminor.stmt) by _rect.
+            Case Sskip := (fun cenv xenv => OK (Cminor.Sskip)).
+            Case Sset := (fun id e => fun cenv xenv =>
+                         do te <- transl_expr e cenv;
+                         OK (Cminor.Sassign id te)).
+            Case Sseq := (fun s1 transl_stmt_s1 s2 transl_stmt_s2 =>
+                          fun cenv xenv =>
+                            do ts1 <- transl_stmt_s1 cenv xenv;
+                            do ts2 <- transl_stmt_s2 cenv xenv;
+                            OK (Cminor.Sseq ts1 ts2)).
+            Case Sifthenelse := (fun e s1 transl_stmt_s1 s2 transl_stmt_s2 =>
+                                 fun cenv xenv =>
+                                     do te <- transl_expr e cenv;
+                                     do ts1 <- transl_stmt_s1 cenv xenv;
+                                     do ts2 <- transl_stmt_s2 cenv xenv;
+                                     OK (Cminor.Sifthenelse te ts1 ts2)).
+            Case Sloop := (fun s1 transl_stmt_s1 =>
+                           fun cenv xenv =>
+                              do ts <- transl_stmt_s1 cenv xenv;
+                              OK (Cminor.Sloop ts)).
+            Case Sblock := (fun s transl_stmt_s =>
+                            fun cenv xenv =>
+                               do ts <- transl_stmt_s cenv (true :: xenv);
+                               OK (Cminor.Sblock ts)).
+            Case Sexit := (fun n => fun cenv xenv =>  OK (Cminor.Sexit (shift_exit xenv n))).
             Case Sreturn := (fun expr => fun cenv xenv =>
                                match expr with
-                               | None => Cminor.Sreturn None
-                               | Some expr => Cminor.Sreturn (Some (translate_expr expr)) end).
-            Case Slabel := (fun lbl s translate_stmt_s => fun cenv xenv => Cminor.Slabel lbl translate_stmt_s).
-            Case Sgoto := (fun lbl => fun cenv xenv => Cminor.Sgoto lbl).
-      FEnd translate_stmt.
+                               | None => OK (Cminor.Sreturn None)
+                               | Some expr =>
+                                    do te <- transl_expr expr cenv;
+                                    OK (Cminor.Sreturn (Some te))
+                               end).
+            Case Slabel := (fun lbl s transl_stmt_s =>
+                            fun cenv xenv =>
+                              do ts <- transl_stmt_s cenv xenv;
+                              OK (Cminor.Slabel lbl ts)).
+            Case Sgoto := (fun lbl => fun cenv xenv => OK (Cminor.Sgoto lbl)).
+      FEnd transl_stmt.
 
 
        (* Translate Function, Fundef, Program *)
