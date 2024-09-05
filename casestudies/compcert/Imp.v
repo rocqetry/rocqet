@@ -23,6 +23,8 @@ Require Import Ordered.
 Axiom cheat : forall {X}, X.
 Local Open Scope string_scope.
 Local Open Scope error_monad_scope.
+Local Open Scope string_scope.
+Local Open Scope list_scope.
 
 Module VarOrder <: TotalLeBool.
   Definition t := (ident * Z)%type.
@@ -146,7 +148,7 @@ Inductive signedness : Type :=
       FEnd Semantics.
   FEnd C.
       
-   Family Clight.
+  Family Clight.
        FInductive expr : Type :=          
           | Econst_int: int -> type -> expr(* integer literal *)
           | Econst_float: float -> type -> expr(* double float literal *)
@@ -154,6 +156,7 @@ Inductive signedness : Type :=
           | Econst_long: int64 -> type -> expr(* long integer literal *)                                            
           | Etempvar: ident -> type -> expr (* temporary variable *)          
           | Esizeof: type -> type -> expr (* size of a type *)
+          | Ecast: expr -> type -> expr
           | Ealignof: type -> type -> expr. (* alignment of a type *)                                         
        
        FRecursion typeof : (e : expr) -> type. 
@@ -164,6 +167,7 @@ Inductive signedness : Type :=
           Case Etempvar v ty := ty.
           Case Esizeof ty' ty := ty.
           Case Ealignof ty' ty := ty.
+          Case Ecast e ty := ty.
        FEnd typeof.
        
        FDefinition label := ident.
@@ -222,8 +226,12 @@ Inductive signedness : Type :=
             FDefinition empty_env: env := (PTree.empty (block * type)).
 
             FDefinition temp_env := PTree.t val.
+
+            MetaData sem_cast.
+            Axiom sem_cast : val -> self__Imp.type -> self__Imp.type -> mem -> option val.
+            FEnd sem_cast.
                         
-           FInductive eval_expr : env -> temp_env -> mem -> expr -> val -> Prop :=
+            FInductive eval_expr : env -> temp_env -> mem -> expr -> val -> Prop :=
                | eval_Econst_int: forall e le m i ty,
                    eval_expr e le m (Econst_int i ty) (Vint i)
                | eval_Econst_float: forall e le m f ty,
@@ -232,6 +240,10 @@ Inductive signedness : Type :=
                    eval_expr e le m (Econst_single f ty) (Vsingle f)
                | eval_Econst_long: forall e le m i ty,
                    eval_expr e le m (Econst_long i ty) (Vlong i)
+               | eval_Ecast: forall e le m a ty v1 v,
+                  eval_expr e le m a v1 ->
+                  sem_cast v1 (typeof a) ty m = Some v ->
+                  eval_expr e le m (Ecast a ty) v
                | eval_Etempvar: forall e le m id ty v,
                    PTree.get id le = Some v ->
                    eval_expr e le m (Etempvar id ty) v.
@@ -322,9 +334,9 @@ Inductive signedness : Type :=
              List.map block_of_binding (PTree.elements e).                      
            
            (* Definition sem_cast (v: val) (t1 t2: type) (m: mem): option val := *)
-           MetaData sem_cast.
+           (* MetaData sem_cast.
            Axiom sem_cast : val -> self__Imp.type -> self__Imp.type -> mem -> option val.
-           FEnd sem_cast.
+           FEnd sem_cast.*)
 
            MetaData alloc_variables.
            Inductive alloc_variables: self__Semantics.env -> mem ->
@@ -439,6 +451,615 @@ Inductive signedness : Type :=
        FEnd Semantics.
   FEnd Clight.
 
+  (* C -> Clight *)
+  Family SimplExpr.
+      (* State and error monad *)
+      MetaData monads.
+        Record generator : Type := mkgenerator {
+            gen_next: ident;
+            gen_trail: list (ident * self__Imp.type)
+        }.
+
+      Inductive result (A: Type) (g: generator) : Type :=
+        | Err: Errors.errmsg -> result A g
+        | Res: A -> forall (g': generator), Ple (gen_next g) (gen_next g') -> result A g.
+
+      Arguments Err [A g].
+      Arguments Res [A g].
+
+      Definition mon (A: Type) := forall (g: generator), result A g.
+
+      Definition ret {A: Type} (x: A) : mon A :=
+        fun g => Res x g (Ple_refl (gen_next g)).
+
+      Definition error {A: Type} (msg: Errors.errmsg) : mon A :=
+        fun g => Err msg.
+
+      Definition bind {A B: Type} (x: mon A) (f: A -> mon B) : mon B :=
+        fun g =>
+          match x g with
+            | Err msg => Err msg
+            | Res a g' i =>
+                match f a g' with
+                | Err msg => Err msg
+                | Res b g'' i' => Res b g'' (Ple_trans _ _ _ i i')
+            end
+          end.
+
+      Definition bind2 {A B C: Type} (x: mon (A * B)) (f: A -> B -> mon C) : mon C :=
+        bind x (fun p => f (fst p) (snd p)).
+
+      Declare Scope gensym_monad_scope.
+      Notation "'do' X <- A ; B" := (bind A (fun X => B))
+         (at level 200, X ident, A at level 100, B at level 200)
+         : gensym_monad_scope.
+      Notation "'do' ( X , Y ) <- A ; B" := (bind2 A (fun X Y => B))
+         (at level 200, X ident, Y ident, A at level 100, B at level 200)
+         : gensym_monad_scope.
+
+      Parameter first_unused_ident: unit -> ident.
+
+      Definition initial_generator (x: unit) : generator :=
+        mkgenerator (first_unused_ident x) nil.
+
+      Definition gensym (ty: self__Imp.type): mon ident :=
+        fun (g: generator) =>
+          Res (gen_next g)
+              (mkgenerator (Pos.succ (gen_next g)) ((gen_next g, ty) :: gen_trail g))
+              (Ple_succ (gen_next g)).
+      
+      Fixpoint makeseq_rec (s: self__Imp.C.statement) (l: list self__Imp.C.statement) : self__Imp.C.statement :=
+         match l with
+         | nil => s
+         | s' :: l' => makeseq_rec (self__Imp.C.Ssequence s s') l'
+          end.
+
+      Definition makeseq (l: list self__Imp.C.statement) : self__Imp.C.statement :=
+        makeseq_rec self__Imp.C.Sskip l.
+
+      Local Open Scope gensym_monad_scope.
+      FEnd monads.
+
+      MetaData destination.
+      Inductive set_destination : Type :=
+          | SDbase (tycast ty: self__Imp.type) (tmp: ident)
+          | SDcons (tycast ty: self__Imp.type) (tmp: ident) (sd: set_destination).
+
+      Inductive destination : Type :=
+        | For_val
+        | For_effects
+        | For_set (sd: set_destination).
+
+      Fixpoint do_set (sd: set_destination) (a: self__Imp.Clight.expr) : list self__Imp.Clight.stmt :=
+         match sd with
+         | SDbase tycast ty tmp => self__Imp.Clight.Sset tmp (self__Imp.Clight.Ecast a tycast) :: nil
+         | SDcons tycast ty tmp sd' => self__Imp.Clight.Sset tmp (self__Imp.Clight.Ecast a tycast) :: do_set sd' (self__Imp.Clight.Etempvar tmp ty)
+         end.
+      
+      Definition finish (dst: destination) (sl: list self__Imp.Clight.stmt) (a: self__Imp.Clight.expr) :=
+        match dst with
+        | For_val => (sl, a)
+        | For_effects => (sl, a)
+        | For_set sd => (sl ++ do_set sd a, a)
+        end.
+      FEnd destination.
+      
+      FRecursion transl_expr about C.expr motive (fun (_ : C.expr) => destination -> self__SimplExpr.mon (list Clight.stmt * Clight.expr)) by _rect. 
+          Case Evar := (fun id ty => fun dst => self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Etempvar id ty))).
+          Case Eval := (fun v ty => fun dst => 
+                             match v with 
+                              | Vint n => self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Econst_int n ty)) 
+                              | Vlong n => self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Econst_long n ty))
+                              | Vfloat n => self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Econst_float n ty))
+                              | Vsingle n => self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Econst_single n ty))
+                              | _ =>  self__SimplExpr.error (msg "SimplExpr.transl_expr: Eval") end).
+          Case Ecast := (fun r transl_expr_r ty => fun dst => 
+                            (do (sl1, a1) <- transl_expr_r self__SimplExpr.For_val;
+                            match dst with
+                            | self__SimplExpr.For_val | self__SimplExpr.For_set _ =>
+                                do t <- self__SimplExpr.gensym ty;
+                                self__SimplExpr.ret (self__SimplExpr.finish dst (sl1) (Clight.Ecast a1 ty))
+                            | self__SimplExpr.For_effects =>
+                                transl_expr_r self__SimplExpr.For_effects end)).
+          Case Eassign := (fun l r ty => fun dst => 
+                            do (sl1, a1) <- transl_expr For_val l;
+                            do (sl2, a2) <- transl_expr For_val r;
+                            do bf <- is_bitfield_access a1;
+                            let ty1 := C.typeof l in
+                            let ty2 := C.typeof r in
+                            match dst with
+                            | For_val | For_set _ =>
+                                do t <- gensym ty1;
+                                ret (finish dst
+                                        (sl1 ++ sl2 ++ Clight.Sset t (Clight.Ecast a2 ty1) :: make_assign bf a1 (Clight.Etempvar t ty1) :: nil)
+                                        (make_assign_value bf (Clight.Etempvar t ty1)))
+                            | For_effects =>
+                                ret (sl1 ++ sl2 ++ make_assign bf a1 a2 :: nil,
+                                    dummy_expr)
+                            end).
+          Case Eassignop := (fun op l r tyres ty => fun dst => 
+                            let ty1 := C.typeof l in
+                            do (sl1, a1) <- transl_expr For_val l;
+                            do (sl2, a2) <- transl_expr For_val r;
+                            do (sl3, a3) <- transl_valof ty1 a1;
+                            do bf <- is_bitfield_access a1;
+                            match dst with
+                            | For_val | For_set _ =>
+                                do t <- gensym ty1;
+                                ret (finish dst
+                                        (sl1 ++ sl2 ++ sl3 ++
+                                        Clight.Sset t (Clight.Ecast (Clight.Ebinop op a3 a2 tyres) ty1) ::
+                                        make_assign bf a1 (Clight.Etempvar t ty1) :: nil)
+                                        (make_assign_value bf (Clight.Etempvar t ty1)))
+                            | For_effects =>
+                                ret (sl1 ++ sl2 ++ sl3 ++ make_assign bf a1 (Clight.Ebinop op a3 a2 tyres) :: nil,
+                                    dummy_expr)
+                            end).
+          Case Epostincr := (fun id l ty => fun dst => 
+                            let ty1 := C.typeof l in
+                            do (sl1, a1) <- transl_expr For_val l;
+                            do bf <- is_bitfield_access a1;
+                            match dst with
+                            | For_val | For_set _ =>
+                                do t <- gensym ty1;
+                                ret (finish dst
+                                        (sl1 ++ make_set bf t a1 ::
+                                        make_assign bf a1 (transl_incrdecr id (Clight.Etempvar t ty1) ty1) :: nil)
+                                        (Clight.Etempvar t ty1))
+                            | For_effects =>
+                                do (sl2, a2) <- transl_valof ty1 a1;
+                                ret (sl1 ++ sl2 ++ make  assign bf a1 (transl_incrdecr id a2 ty1) :: nil,
+                                    dummy_expr) 
+                            end).
+          Case Ecomma := (fun r1 r2 ty => fun dst => 
+                            do (sl1, a1) <- transl_expr For_effects r1;
+                            do (sl2, a2) <- transl_expr dst r2;
+                            ret (sl1 ++ sl2, a2)).
+          Case Econdition := (fun r1 r2 r3 ty => fun dst => 
+                            do (sl1, a1) <- transl_expr For_val r1;
+                            match dst with
+                            | For_val =>
+                                do t <- gensym ty;
+                                let sd := SDbase ty ty t in
+                                do (sl2, a2) <- transl_expr (For_set sd) r2;
+                                do (sl3, a3) <- transl_expr (For_set sd) r3;
+                                ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
+                                    Clight.Etempvar t ty)
+                            | For_effects =>
+                                do (sl2, a2) <- transl_expr For_effects r2;
+                                do (sl3, a3) <- transl_expr For_effects r3;
+                                ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
+                                    dummy_expr)
+                            | For_set sd =>
+                                do t <- temp_for_sd ty sd;
+                                let sd' := SDcons ty ty t sd in
+                                do (sl2, a2) <- transl_expr (For_set sd') r2;
+                                do (sl3, a3) <- transl_expr (For_set sd') r3;
+                                ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
+                                    dummy_expr)
+                            end).
+          Case Eseqor := (fun r1 r2 ty => fun dst => 
+                            do (sl1, a1) <- transl_expr For_val r1;
+                            match dst with
+                            | For_val =>
+                                do t <- gensym ty;
+                                let sd := SDbase type_bool ty t in
+                                do (sl2, a2) <- transl_expr (For_set sd) r2;
+                                ret (sl1 ++
+                                    makeif a1 (Clight.Sset t (Clight.Econst_int Int.one ty)) (makeseq sl2) :: nil,
+                                    Clight.Etempvar t ty)
+                            | For_effects =>
+                                do (sl2, a2) <- transl_expr For_effects r2;
+                                ret (sl1 ++ makeif a1 Clight.Sskip (makeseq sl2) :: nil, dummy_expr)
+                            | For_set sd =>
+                                do t <- temp_for_sd ty sd;
+                                let sd' := SDcons type_bool ty t sd in
+                                do (sl2, a2) <- transl_expr (For_set sd') r2;
+                                ret (sl1 ++
+                                    makeif a1 (makeseq (do_set sd (Clight.Econst_int Int.one ty))) (makeseq sl2) :: nil,
+                                    dummy_expr)
+                            end).
+          Case Eseqand := (fun r1 r2 ty => fun dst => 
+                            do (sl1, a1) <- transl_expr For_val r1;
+                            match dst with
+                            | For_val =>
+                                do t <- gensym ty;
+                                let sd := SDbase type_bool ty t in
+                                do (sl2, a2) <- transl_expr (For_set sd) r2;
+                                ret (sl1 ++
+                                    makeif a1 (makeseq sl2) (Clight.Sset t (Clight.Econst_int Int.zero ty)) :: nil,
+                                    Clight.Etempvar t ty)
+                            | For_effects =>
+                                do (sl2, a2) <- transl_expr For_effects r2;
+                                ret (sl1 ++ makeif a1 Clight.Sskip (makeseq sl2) :: nil, dummy_expr)
+                            | For_set sd =>
+                                do t <- temp_for_sd ty sd;
+                                let sd' := SDcons type_bool ty t sd in
+                                do (sl2, a2) <- transl_expr (For_set sd') r2;
+                                ret (sl1 ++
+                                    makeif a1 (makeseq sl2) (makeseq (do_set sd (Clight.Econst_int Int.zero ty))) :: nil,
+                                    dummy_expr)
+                            end).
+          Case Esizeof := (fun ty' ty => fun dst => 
+                            ret (finish dst nil (Clight.Esizeof ty' ty))).
+          Case Ealignof := (fun ty' ty => fun dst => 
+                            ret (finish dst nil (Clight.Ealignof ty' ty))).
+          Case Evalof := (fun l ty => fun dst => 
+                            do (sl1, a1) <- transl_expr For_val l;
+                            do (sl2, a2) <- transl_valof (C.typeof l) a1;
+                            ret (finish dst (sl1 ++ sl2) a2)).
+      FEnd transl_expr.
+
+      Definition transl_expression (r: C.expr) : mon (statement * expr) :=
+          do (sl, a) <- transl_expr For_val r; ret (makeseq sl, a).
+
+      Definition transl_expr_stmt (r: C.expr) : mon statement :=
+          do (sl, a) <- transl_expr For_effects r; ret (makeseq sl).
+
+      Definition transl_if (r: C.expr) (s1 s2: statement) : mon statement :=
+          do (sl, a) <- transl_expr For_val r;
+          ret (makeseq (sl ++ makeif a s1 s2 :: nil)).
+
+      FRecursion transl_stmt about C.statement motive (fun (_ : C.statement) => mon Clight.statement).
+          Case Sskip :=  ret Clight.Sskip.
+          Case Sdo := (fun e => transl_expr_stmt e).
+          Case Ssequence := (fun s1 trans_stmt_s1 s2 transl_stmt_s2 => 
+                              do ts1 <- transl_stmt_s1;
+                              do ts2 <- transl_stmt_s2;
+                              ret (Clight.Ssequence ts1 ts2)).
+          Case Sifthenelse := (fun e s1 transl_stmt_s1 s2 transl_stmt_s2 =>
+                                do ts1 <- transl_stmt_s1;
+                                do ts2 <- transl_stmt_s2;
+                                do (s', a) <- transl_expression e;
+                                if is_Sskip s1 && is_Sskip s2 then
+                                  ret (Clight.Ssequence s' Clight.Sskip)
+                                else
+                                  ret (Clight.Ssequence s' (Clight.Sifthenelse a ts1 ts2))).
+          Case Swhile := (fun e s1 transl_stmt_s1 =>
+                            do s' <- transl_if e Clight.Sskip Clight.Sbreak;
+                            do ts1 <- transl_stmt_s1;
+                            ret (Clight.Sloop (Clight.Ssequence s' ts1) Clight.Sskip)).
+          Case Sdowhile := (fun e s1 transl_stmt_s1 =>
+                              do s' <- transl_if e Clight.Sskip Clight.Sbreak;
+                              do ts1 <- transl_stmt s1;
+                              ret (Clight.Sloop ts1 s')).
+          Case Sfor := (fun s1 transl_stmt_s1 e2 s3 transl_stmt_s3 s4 transl_stmt_s4 =>
+                          do ts1 <- transl_stmt s1;
+                          do s' <- transl_if e2 Clight.Sskip Clight.Sbreak;
+                          do ts3 <- transl_stmt s3;
+                          do ts4 <- transl_stmt s4;
+                          if is_Sskip s1 then
+                            ret (Clight.Sloop (Clight.Ssequence s' ts4) ts3)
+                          else
+                            ret (Clight.Ssequence ts1 (Clight.Sloop (Clight.Ssequence s' ts4) ts3))).
+          Case Sbreak := ret Clight.Sbreak.
+          Case Scontinue := ret Clight.Scontinue.
+          Case Sreturn := (fun e =>
+                            match e with
+                            | None => ret (Clight.Sreturn None)
+                            | Some e => do (s', a) <- transl_expression e;
+                                        ret (Clight.Ssequence s' (Clight.Sreturn (Some a)))
+                            end).
+          Case Slabel := (fun lbl s1 transl_stmt_s1 => 
+                            do ts1 <- transl_stmt_s1;
+                            ret (Clight.Slabel lbl ts1)).
+          Case Sgoto := (fun lbl => ret (Clight.Sgoto lbl)).
+      FEnd transl_stmt.
+
+      Definition transl_function (f: C.function) : res function :=
+          match transl_stmt f.(C.fn_body) (initial_generator tt) with
+          | Err msg =>
+              Error msg
+          | Res tbody g i =>
+              OK (mkfunction
+                      f.(C.fn_return)
+                      f.(C.fn_callconv)
+                      f.(C.fn_params)
+                      f.(C.fn_vars)
+                      g.(gen_trail)
+                      tbody)
+          end.
+
+          (* Relational specification of translation *)
+          Family Specification.
+                FInductive tr_expr: temp_env -> destination -> Csyntax.expr -> list statement -> expr -> list ident -> Prop :=
+                    | tr_var: forall le dst id ty tmp,
+                        tr_expr le dst (Csyntax.Evar id ty)
+                                (final dst (Evar id ty)) (Evar id ty) tmp
+                    | tr_deref: forall le dst e1 ty sl1 a1 tmp,
+                        tr_expr le For_val e1 sl1 a1 tmp ->
+                        tr_expr le dst (Csyntax.Ederef e1 ty)
+                                (sl1 ++ final dst (Ederef' a1 ty)) (Ederef' a1 ty) tmp
+                    | tr_field: forall le dst e1 f ty sl1 a1 tmp,
+                        tr_expr le For_val e1 sl1 a1 tmp ->
+                        tr_expr le dst (Csyntax.Efield e1 f ty)
+                                (sl1 ++ final dst (Efield a1 f ty)) (Efield a1 f ty) tmp
+                    | tr_val_effect: forall le v ty any tmp,
+                        tr_expr le For_effects (Csyntax.Eval v ty) nil any tmp
+                    | tr_val_value: forall le v ty a tmp,
+                        typeof a = ty ->
+                        (forall tge e le' m,
+                          (forall id, In id tmp -> le'!id = le!id) ->
+                          eval_expr tge e le' m a v) ->
+                        tr_expr le For_val (Csyntax.Eval v ty)
+                                            nil a tmp
+                    | tr_val_set: forall le sd v ty a any tmp,
+                        typeof a = ty ->
+                        (forall tge e le' m,
+                          (forall id, In id tmp -> le'!id = le!id) ->
+                          eval_expr tge e le' m a v) ->
+                        tr_expr le (For_set sd) (Csyntax.Eval v ty)
+                                    (do_set sd a) any tmp
+                    | tr_sizeof: forall le dst ty' ty tmp,
+                        tr_expr le dst (Csyntax.Esizeof ty' ty)
+                                    (final dst (Esizeof ty' ty))
+                                    (Esizeof ty' ty) tmp
+                    | tr_alignof: forall le dst ty' ty tmp,
+                        tr_expr le dst (Csyntax.Ealignof ty' ty)
+                                    (final dst (Ealignof ty' ty))
+                                    (Ealignof ty' ty) tmp
+                    | tr_cast_effects: forall le e1 ty sl1 a1 any tmp,
+                        tr_expr le For_effects e1 sl1 a1 tmp ->
+                        tr_expr le For_effects (Csyntax.Ecast e1 ty)
+                                    sl1
+                                    any tmp
+                    | tr_cast_val: forall le dst e1 ty sl1 a1 tmp,
+                        tr_expr le For_val e1 sl1 a1 tmp ->
+                        tr_expr le dst (Csyntax.Ecast e1 ty)
+                                    (sl1 ++ final dst (Ecast a1 ty))
+                                    (Ecast a1 ty) tmp
+                    | tr_seqand_val: forall le e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 tmp,
+                        tr_expr le For_val e1 sl1 a1 tmp1 ->
+                        tr_expr le (For_set (SDbase type_bool ty t)) e2 sl2 a2 tmp2 ->
+                        list_disjoint tmp1 tmp2 ->
+                        incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
+                        tr_expr le For_val (Csyntax.Eseqand e1 e2 ty)
+                                      (sl1 ++ makeif a1 (makeseq sl2)
+                                                        (Sset t (Econst_int Int.zero ty)) :: nil)
+                                      (Etempvar t ty) tmp
+                    | tr_seqand_effects: forall le e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 any tmp,
+                        tr_expr le For_val e1 sl1 a1 tmp1 ->
+                        tr_expr le For_effects e2 sl2 a2 tmp2 ->
+                        list_disjoint tmp1 tmp2 ->
+                        incl tmp1 tmp -> incl tmp2 tmp ->
+                        tr_expr le For_effects (Csyntax.Eseqand e1 e2 ty)
+                                      (sl1 ++ makeif a1 (makeseq sl2) Sskip :: nil)
+                                      any tmp
+                    | tr_seqand_set: forall le sd e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 any tmp,
+                        tr_expr le For_val e1 sl1 a1 tmp1 ->
+                        tr_expr le (For_set (SDcons type_bool ty t sd)) e2 sl2 a2 tmp2 ->
+                        list_disjoint tmp1 tmp2 ->
+                        incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
+                        tr_expr le (For_set sd) (Csyntax.Eseqand e1 e2 ty)
+                                      (sl1 ++ makeif a1 (makeseq sl2)
+                                                        (makeseq (do_set sd (Econst_int Int.zero ty))) :: nil)
+                                      any tmp
+                    | tr_seqor_val: forall le e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 tmp,
+                        tr_expr le For_val e1 sl1 a1 tmp1 ->
+                        tr_expr le (For_set (SDbase type_bool ty t)) e2 sl2 a2 tmp2 ->
+                        list_disjoint tmp1 tmp2 ->
+                        incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
+                        tr_expr le For_val (Csyntax.Eseqor e1 e2 ty)
+                                      (sl1 ++ makeif a1 (Sset t (Econst_int Int.one ty))
+                                                        (makeseq sl2) :: nil)
+                                      (Etempvar t ty) tmp
+                    | tr_seqor_effects: forall le e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 any tmp,
+                        tr_expr le For_val e1 sl1 a1 tmp1 ->
+                        tr_expr le For_effects e2 sl2 a2 tmp2 ->
+                        list_disjoint tmp1 tmp2 ->
+                        incl tmp1 tmp -> incl tmp2 tmp ->
+                        tr_expr le For_effects (Csyntax.Eseqor e1 e2 ty)
+                                      (sl1 ++ makeif a1 Sskip (makeseq sl2) :: nil)
+                                      any tmp
+                    | tr_seqor_set: forall le sd e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 any tmp,
+                        tr_expr le For_val e1 sl1 a1 tmp1 ->
+                        tr_expr le (For_set (SDcons type_bool ty t sd)) e2 sl2 a2 tmp2 ->
+                        list_disjoint tmp1 tmp2 ->
+                        incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
+                        tr_expr le (For_set sd) (Csyntax.Eseqor e1 e2 ty)
+                                      (sl1 ++ makeif a1 (makeseq (do_set sd (Econst_int Int.one ty)))
+                                      (makeseq sl2) :: nil)
+                                      any tmp
+                    | tr_condition_val: forall le e1 e2 e3 ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 t tmp,
+                        tr_expr le For_val e1 sl1 a1 tmp1 ->
+                        tr_expr le (For_set (SDbase ty ty t)) e2 sl2 a2 tmp2 ->
+                        tr_expr le (For_set (SDbase ty ty t)) e3 sl3 a3 tmp3 ->
+                        list_disjoint tmp1 tmp2 ->
+                        list_disjoint tmp1 tmp3 ->
+                        incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp -> In t tmp ->
+                        tr_expr le For_val (Csyntax.Econdition e1 e2 e3 ty)
+                                        (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil)
+                                        (Etempvar t ty) tmp
+                    | tr_condition_effects: forall le e1 e2 e3 ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 any tmp,
+                        tr_expr le For_val e1 sl1 a1 tmp1 ->
+                        tr_expr le For_effects e2 sl2 a2 tmp2 ->
+                        tr_expr le For_effects e3 sl3 a3 tmp3 ->
+                        list_disjoint tmp1 tmp2 ->
+                        list_disjoint tmp1 tmp3 ->
+                        incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp ->
+                        tr_expr le For_effects (Csyntax.Econdition e1 e2 e3 ty)
+                                        (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil)
+                                        any tmp
+                    | tr_condition_set: forall le sd t e1 e2 e3 ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 any tmp,
+                        tr_expr le For_val e1 sl1 a1 tmp1 ->
+                        tr_expr le (For_set (SDcons ty ty t sd)) e2 sl2 a2 tmp2 ->
+                        tr_expr le (For_set (SDcons ty ty t sd)) e3 sl3 a3 tmp3 ->
+                        list_disjoint tmp1 tmp2 ->
+                        list_disjoint tmp1 tmp3 ->
+                        incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp -> In t tmp ->
+                        tr_expr le (For_set sd) (Csyntax.Econdition e1 e2 e3 ty)
+                                        (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil)
+                                        any tmp
+                    | tr_assign_effects: forall le e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 bf any tmp,
+                        tr_expr le For_val e1 sl1 a1 tmp1 ->
+                        tr_expr le For_val e2 sl2 a2 tmp2 ->
+                        list_disjoint tmp1 tmp2 ->
+                        incl tmp1 tmp -> incl tmp2 tmp ->
+                        tr_is_bitfield_access a1 bf ->
+                        tr_expr le For_effects (Csyntax.Eassign e1 e2 ty)
+                                        (sl1 ++ sl2 ++ make_assign bf a1 a2 :: nil)
+                                        any tmp
+                    | tr_assign_val: forall le dst e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 t tmp ty1 ty2 bf,
+                        tr_expr le For_val e1 sl1 a1 tmp1 ->
+                        tr_expr le For_val e2 sl2 a2 tmp2 ->
+                        incl tmp1 tmp -> incl tmp2 tmp ->
+                        list_disjoint tmp1 tmp2 ->
+                        In t tmp -> ~In t tmp1 -> ~In t tmp2 ->
+                        ty1 = Csyntax.typeof e1 ->
+                        ty2 = Csyntax.typeof e2 ->
+                        tr_is_bitfield_access a1 bf ->
+                        tr_expr le dst (Csyntax.Eassign e1 e2 ty)
+                                    (sl1 ++ sl2 ++
+                                      Sset t (Ecast a2 ty1) ::
+                                      make_assign bf a1 (Etempvar t ty1) ::
+                                      final dst (make_assign_value bf (Etempvar t ty1)))
+                                    (make_assign_value bf (Etempvar t ty1)) tmp
+                    | tr_assignop_effects: forall le op e1 e2 tyres ty ty1 sl1 a1 tmp1 sl2 a2 tmp2 bf sl3 a3 tmp3 any tmp,
+                        tr_expr le For_val e1 sl1 a1 tmp1 ->
+                        tr_expr le For_val e2 sl2 a2 tmp2 ->
+                        ty1 = Csyntax.typeof e1 ->
+                        tr_rvalof ty1 a1 sl3 a3 tmp3 ->
+                        list_disjoint tmp1 tmp2 -> list_disjoint tmp1 tmp3 -> list_disjoint tmp2 tmp3 ->
+                        incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp ->
+                        tr_is_bitfield_access a1 bf ->
+                        tr_expr le For_effects (Csyntax.Eassignop op e1 e2 tyres ty)
+                                        (sl1 ++ sl2 ++ sl3 ++ make_assign bf a1 (Ebinop op a3 a2 tyres) :: nil)
+                                        any tmp
+                    | tr_assignop_val: forall le dst op e1 e2 tyres ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 t bf tmp ty1,
+                        tr_expr le For_val e1 sl1 a1 tmp1 ->
+                        tr_expr le For_val e2 sl2 a2 tmp2 ->
+                        tr_rvalof ty1 a1 sl3 a3 tmp3 ->
+                        list_disjoint tmp1 tmp2 -> list_disjoint tmp1 tmp3 -> list_disjoint tmp2 tmp3 ->
+                        incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp ->
+                        In t tmp -> ~In t tmp1 -> ~In t tmp2 -> ~In t tmp3 ->
+                        ty1 = Csyntax.typeof e1 ->
+                        tr_is_bitfield_access a1 bf ->
+                        tr_expr le dst (Csyntax.Eassignop op e1 e2 tyres ty)
+                                    (sl1 ++ sl2 ++ sl3 ++
+                                      Sset t (Ecast (Ebinop op a3 a2 tyres) ty1) ::
+                                      make_assign bf a1 (Etempvar t ty1) ::
+                                      final dst (make_assign_value bf (Etempvar t ty1)))
+                                    (make_assign_value bf (Etempvar t ty1)) tmp
+                    | tr_postincr_effects: forall le id e1 ty ty1 sl1 a1 tmp1 sl2 a2 tmp2 bf any tmp,
+                        tr_expr le For_val e1 sl1 a1 tmp1 ->
+                        tr_rvalof ty1 a1 sl2 a2 tmp2 ->
+                        ty1 = Csyntax.typeof e1 ->
+                        incl tmp1 tmp -> incl tmp2 tmp ->
+                        list_disjoint tmp1 tmp2 ->
+                        tr_is_bitfield_access a1 bf ->
+                        tr_expr le For_effects (Csyntax.Epostincr id e1 ty)
+                                        (sl1 ++ sl2 ++ make_assign bf a1 (transl_incrdecr id a2 ty1) :: nil)
+                                        any tmp
+                    | tr_postincr_val: forall le dst id e1 ty sl1 a1 tmp1 bf t ty1 tmp,
+                        tr_expr le For_val e1 sl1 a1 tmp1 ->
+                        incl tmp1 tmp -> In t tmp -> ~In t tmp1 ->
+                        ty1 = Csyntax.typeof e1 ->
+                        tr_is_bitfield_access a1 bf ->
+                        tr_expr le dst (Csyntax.Epostincr id e1 ty)
+                                    (sl1 ++ make_set bf t a1 ::
+                                      make_assign bf a1 (transl_incrdecr id (Etempvar t ty1) ty1) ::
+                                      final dst (Etempvar t ty1))
+                                    (Etempvar t ty1) tmp
+                    | tr_comma: forall le dst e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 tmp,
+                        tr_expr le For_effects e1 sl1 a1 tmp1 ->
+                        tr_expr le dst e2 sl2 a2 tmp2 ->
+                        list_disjoint tmp1 tmp2 ->
+                        incl tmp1 tmp -> incl tmp2 tmp ->
+                        tr_expr le dst (Csyntax.Ecomma e1 e2 ty) (sl1 ++ sl2) a2 tmp
+                    | tr_paren_val: forall le e1 tycast ty sl1 a1 t tmp,
+                        tr_expr le (For_set (SDbase tycast ty t)) e1 sl1 a1 tmp ->
+                        In t tmp ->
+                        tr_expr le For_val (Csyntax.Eparen e1 tycast ty)
+                                        sl1
+                                        (Etempvar t ty) tmp.
+                (*
+                Variable ge: genv.
+                Variable e: env.
+                Variable le: temp_env.
+                Variable m: mem. *)
+
+                Inductive tr_top: destination -> Csyntax.expr -> list statement -> expr -> list ident -> Prop :=
+                  | tr_top_val_val: forall v ty a tmp,
+                      typeof a = ty -> eval_expr ge e le m a v ->
+                      tr_top For_val (Csyntax.Eval v ty) nil a tmp
+                  | tr_top_base: forall dst r sl a tmp,
+                      tr_expr le dst r sl a tmp ->
+                      tr_top dst r sl a tmp.
+
+                Inductive tr_expression: Csyntax.expr -> statement -> expr -> Prop :=
+                  | tr_expression_intro: forall r sl a tmps,
+                      (forall ge e le m, tr_top ge e le m For_val r sl a tmps) ->
+                      tr_expression r (makeseq sl) a.
+
+                Inductive tr_expr_stmt: Csyntax.expr -> statement -> Prop :=
+                  | tr_expr_stmt_intro: forall r sl a tmps,
+                      (forall ge e le m, tr_top ge e le m For_effects r sl a tmps) ->
+                      tr_expr_stmt r (makeseq sl).
+
+                Inductive tr_if: Csyntax.expr -> statement -> statement -> statement -> Prop :=
+                  | tr_if_intro: forall r s1 s2 sl a tmps,
+                      (forall ge e le m, tr_top ge e le m For_val r sl a tmps) ->
+                      tr_if r s1 s2 (makeseq (sl ++ makeif a s1 s2 :: nil)).
+
+                FInductive tr_stmt: C.statement -> Clight.statement -> Prop :=
+                    | tr_skip:
+                        tr_stmt C.Sskip Clight.Sskip
+                    | tr_do: forall r s,
+                        tr_expr_stmt r s ->
+                        tr_stmt (C.Sdo r) s
+                    | tr_seq: forall s1 s2 ts1 ts2,
+                        tr_stmt s1 ts1 -> tr_stmt s2 ts2 ->
+                        tr_stmt (C.Ssequence s1 s2) (Clight.Ssequence ts1 ts2)
+                    | tr_ifthenelse_empty: forall r s' a,
+                        tr_expression r s' a ->
+                        tr_stmt (C.Sifthenelse r Csyntax.Sskip Csyntax.Sskip) (Clight.Ssequence s' Sskip)
+                    | tr_ifthenelse: forall r s1 s2 s' a ts1 ts2,
+                        tr_expression r s' a ->
+                        tr_stmt s1 ts1 -> tr_stmt s2 ts2 ->
+                        tr_stmt (C.Sifthenelse r s1 s2) (Clight.Ssequence s' (Clight.Sifthenelse a ts1 ts2))
+                    | tr_while: forall r s1 s' ts1,
+                        tr_if r Sskip Sbreak s' ->
+                        tr_stmt s1 ts1 ->
+                        tr_stmt (C.Swhile r s1)
+                                (Clight.Sloop (Ssequence s' ts1) Sskip)
+                    | tr_dowhile: forall r s1 s' ts1,
+                        tr_if r Sskip Sbreak s' ->
+                        tr_stmt s1 ts1 ->
+                        tr_stmt (C.Sdowhile r s1)
+                                (Clight.Sloop ts1 s')
+                    | tr_for_1: forall r s3 s4 s' ts3 ts4,
+                        tr_if r Sskip Sbreak s' ->
+                        tr_stmt s3 ts3 ->
+                        tr_stmt s4 ts4 ->
+                        tr_stmt (C.Sfor C.Sskip r s3 s4)
+                                (Clight.Sloop (Clight.Ssequence s' ts4) ts3)
+                    | tr_for_2: forall s1 r s3 s4 s' ts1 ts3 ts4,
+                        tr_if r Sskip Sbreak s' ->
+                        s1 <> C.Sskip ->
+                        tr_stmt s1 ts1 ->
+                        tr_stmt s3 ts3 ->
+                        tr_stmt s4 ts4 ->
+                        tr_stmt (C.Sfor s1 r s3 s4)
+                                (Clight.Ssequence ts1 (Clight.Sloop (Clight.Ssequence s' ts4) ts3))
+                    | tr_break:
+                        tr_stmt C.Sbreak Clight.Sbreak
+                    | tr_continue:
+                        tr_stmt C.Scontinue Clight.Scontinue
+                    | tr_return_none:
+                        tr_stmt (C.Sreturn None) (Clight.Sreturn None)
+                    | tr_return_some: forall r s' a,
+                        tr_expression r s' a ->
+                        tr_stmt (C.Sreturn (Some r)) (Clight.Ssequence s' (Clight.Sreturn (Some a)))
+                    | tr_label: forall lbl s ts,
+                        tr_stmt s ts ->
+                        tr_stmt (C.Slabel lbl s) (Clight.Slabel lbl ts)
+                    | tr_goto: forall lbl,
+                        tr_stmt (C.Sgoto lbl) (Clight.Sgoto lbl).
+
+                (* Proof of correctness of translation wrt the specification *)
+          FEnd Specification.
+  FEnd SimplExpr.
+  
   Family Csharpminor.
        FInductive constant : Type :=
            | Ointconst: int -> constant (* integer constant *)
@@ -2382,538 +3003,7 @@ Inductive signedness : Type :=
                       rs r = Vint retcode ->
                       final_state (Returnstate nil rs m) retcode.
         FEnd Semantics.
-   FEnd Mach.
-
-  (* C -> Clight *)
-   Family SimplExpr.
-      Inductive destination : Type :=
-        | For_val
-        | For_effects
-        | For_set (sd: set_destination).
-
-      Definition finish (dst: destination) (sl: list statement) (a: expr) :=
-        match dst with
-        | For_val => (sl, a)
-        | For_effects => (sl, a)
-        | For_set sd => (sl ++ do_set sd a, a)
-        end.
-     
-      FRecursion transl_expr about C.expr motive (fun (_ : C.expr) => destination -> mon (list Clight.statement * Clight.expr)). 
-          Case Etempvar := (fun id ty => fun dst => ret (finish dst nil (Clight.Etempvar id ty))).
-          Case EVal := (fun v ty => fun dst => 
-                             match v with 
-                              | Vint n => ret (finish dst nil (Clight.Econst_int n ty)) 
-                              | Vlong n => ret (finish dst nil (Clight.Econst_long n ty))
-                              | Vfloat n => ret (finish dst nil (Clight.Econst_float n ty))
-                              | Vsingle n => ret (finish dst nil (Clight.Econst_single n ty))
-                              | _ =>  error (msg "SimplExpr.transl_expr: Eval"))
-          Case Ecast := (fun r ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_val r;
-                            match dst with
-                            | For_val | For_set _ =>
-                                do t <- gensym ty;
-                                ret (finish dst (sl1) (Clight.Ecast a1 ty))
-                            | For_effects =>
-                                transl_expr For_effects r
-                            end).
-          Case Eassign := (fun l r ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_val l;
-                            do (sl2, a2) <- transl_expr For_val r;
-                            do bf <- is_bitfield_access a1;
-                            let ty1 := C.typeof l in
-                            let ty2 := C.typeof r in
-                            match dst with
-                            | For_val | For_set _ =>
-                                do t <- gensym ty1;
-                                ret (finish dst
-                                        (sl1 ++ sl2 ++ Clight.Sset t (Clight.Ecast a2 ty1) :: make_assign bf a1 (Clight.Etempvar t ty1) :: nil)
-                                        (make_assign_value bf (Clight.Etempvar t ty1)))
-                            | For_effects =>
-                                ret (sl1 ++ sl2 ++ make_assign bf a1 a2 :: nil,
-                                    dummy_expr)
-                            end).
-          Case Eassignop := (fun op l r tyres ty => fun dst => 
-                            let ty1 := C.typeof l in
-                            do (sl1, a1) <- transl_expr For_val l;
-                            do (sl2, a2) <- transl_expr For_val r;
-                            do (sl3, a3) <- transl_valof ty1 a1;
-                            do bf <- is_bitfield_access a1;
-                            match dst with
-                            | For_val | For_set _ =>
-                                do t <- gensym ty1;
-                                ret (finish dst
-                                        (sl1 ++ sl2 ++ sl3 ++
-                                        Clight.Sset t (Clight.Ecast (Clight.Ebinop op a3 a2 tyres) ty1) ::
-                                        make_assign bf a1 (Clight.Etempvar t ty1) :: nil)
-                                        (make_assign_value bf (Clight.Etempvar t ty1)))
-                            | For_effects =>
-                                ret (sl1 ++ sl2 ++ sl3 ++ make_assign bf a1 (Clight.Ebinop op a3 a2 tyres) :: nil,
-                                    dummy_expr)
-                            end).
-          Case Epostincr := (fun id l ty => fun dst => 
-                            let ty1 := C.typeof l in
-                            do (sl1, a1) <- transl_expr For_val l;
-                            do bf <- is_bitfield_access a1;
-                            match dst with
-                            | For_val | For_set _ =>
-                                do t <- gensym ty1;
-                                ret (finish dst
-                                        (sl1 ++ make_set bf t a1 ::
-                                        make_assign bf a1 (transl_incrdecr id (Clight.Etempvar t ty1) ty1) :: nil)
-                                        (Clight.Etempvar t ty1))
-                            | For_effects =>
-                                do (sl2, a2) <- transl_valof ty1 a1;
-                                ret (sl1 ++ sl2 ++ make  assign bf a1 (transl_incrdecr id a2 ty1) :: nil,
-                                    dummy_expr) 
-                            end).
-          Case Ecomma := (fun r1 r2 ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_effects r1;
-                            do (sl2, a2) <- transl_expr dst r2;
-                            ret (sl1 ++ sl2, a2)).
-          Case Econdition := (fun r1 r2 r3 ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_val r1;
-                            match dst with
-                            | For_val =>
-                                do t <- gensym ty;
-                                let sd := SDbase ty ty t in
-                                do (sl2, a2) <- transl_expr (For_set sd) r2;
-                                do (sl3, a3) <- transl_expr (For_set sd) r3;
-                                ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
-                                    Clight.Etempvar t ty)
-                            | For_effects =>
-                                do (sl2, a2) <- transl_expr For_effects r2;
-                                do (sl3, a3) <- transl_expr For_effects r3;
-                                ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
-                                    dummy_expr)
-                            | For_set sd =>
-                                do t <- temp_for_sd ty sd;
-                                let sd' := SDcons ty ty t sd in
-                                do (sl2, a2) <- transl_expr (For_set sd') r2;
-                                do (sl3, a3) <- transl_expr (For_set sd') r3;
-                                ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
-                                    dummy_expr)
-                            end).
-          Case Eseqor := (fun r1 r2 ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_val r1;
-                            match dst with
-                            | For_val =>
-                                do t <- gensym ty;
-                                let sd := SDbase type_bool ty t in
-                                do (sl2, a2) <- transl_expr (For_set sd) r2;
-                                ret (sl1 ++
-                                    makeif a1 (Clight.Sset t (Clight.Econst_int Int.one ty)) (makeseq sl2) :: nil,
-                                    Clight.Etempvar t ty)
-                            | For_effects =>
-                                do (sl2, a2) <- transl_expr For_effects r2;
-                                ret (sl1 ++ makeif a1 Clight.Sskip (makeseq sl2) :: nil, dummy_expr)
-                            | For_set sd =>
-                                do t <- temp_for_sd ty sd;
-                                let sd' := SDcons type_bool ty t sd in
-                                do (sl2, a2) <- transl_expr (For_set sd') r2;
-                                ret (sl1 ++
-                                    makeif a1 (makeseq (do_set sd (Clight.Econst_int Int.one ty))) (makeseq sl2) :: nil,
-                                    dummy_expr)
-                            end).
-          Case Eseqand := (fun r1 r2 ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_val r1;
-                            match dst with
-                            | For_val =>
-                                do t <- gensym ty;
-                                let sd := SDbase type_bool ty t in
-                                do (sl2, a2) <- transl_expr (For_set sd) r2;
-                                ret (sl1 ++
-                                    makeif a1 (makeseq sl2) (Clight.Sset t (Clight.Econst_int Int.zero ty)) :: nil,
-                                    Clight.Etempvar t ty)
-                            | For_effects =>
-                                do (sl2, a2) <- transl_expr For_effects r2;
-                                ret (sl1 ++ makeif a1 Clight.Sskip (makeseq sl2) :: nil, dummy_expr)
-                            | For_set sd =>
-                                do t <- temp_for_sd ty sd;
-                                let sd' := SDcons type_bool ty t sd in
-                                do (sl2, a2) <- transl_expr (For_set sd') r2;
-                                ret (sl1 ++
-                                    makeif a1 (makeseq sl2) (makeseq (do_set sd (Clight.Econst_int Int.zero ty))) :: nil,
-                                    dummy_expr)
-                            end).
-          Case Esizeof := (fun ty' ty => fun dst => 
-                            ret (finish dst nil (Clight.Esizeof ty' ty))).
-          Case Ealignof := (fun ty' ty => fun dst => 
-                            ret (finish dst nil (Clight.Ealignof ty' ty))).
-          Case Evalof := (fun l ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_val l;
-                            do (sl2, a2) <- transl_valof (C.typeof l) a1;
-                            ret (finish dst (sl1 ++ sl2) a2)).
-      FEnd transl_expr.
-
-      Definition transl_expression (r: C.expr) : mon (statement * expr) :=
-          do (sl, a) <- transl_expr For_val r; ret (makeseq sl, a).
-
-      Definition transl_expr_stmt (r: C.expr) : mon statement :=
-          do (sl, a) <- transl_expr For_effects r; ret (makeseq sl).
-
-      Definition transl_if (r: C.expr) (s1 s2: statement) : mon statement :=
-          do (sl, a) <- transl_expr For_val r;
-          ret (makeseq (sl ++ makeif a s1 s2 :: nil)).
-
-      FRecursion transl_stmt about C.statement motive (fun (_ : C.statement) => mon Clight.statement).
-          Case Sskip :=  ret Clight.Sskip.
-          Case Sdo := (fun e => transl_expr_stmt e).
-          Case Ssequence := (fun s1 trans_stmt_s1 s2 transl_stmt_s2 => 
-                              do ts1 <- transl_stmt_s1;
-                              do ts2 <- transl_stmt_s2;
-                              ret (Clight.Ssequence ts1 ts2)).
-          Case Sifthenelse := (fun e s1 transl_stmt_s1 s2 transl_stmt_s2 =>
-                                do ts1 <- transl_stmt_s1;
-                                do ts2 <- transl_stmt_s2;
-                                do (s', a) <- transl_expression e;
-                                if is_Sskip s1 && is_Sskip s2 then
-                                  ret (Clight.Ssequence s' Clight.Sskip)
-                                else
-                                  ret (Clight.Ssequence s' (Clight.Sifthenelse a ts1 ts2))).
-          Case Swhile := (fun e s1 transl_stmt_s1 =>
-                            do s' <- transl_if e Clight.Sskip Clight.Sbreak;
-                            do ts1 <- transl_stmt_s1;
-                            ret (Clight.Sloop (Clight.Ssequence s' ts1) Clight.Sskip)).
-          Case Sdowhile := (fun e s1 transl_stmt_s1 =>
-                              do s' <- transl_if e Clight.Sskip Clight.Sbreak;
-                              do ts1 <- transl_stmt s1;
-                              ret (Clight.Sloop ts1 s')).
-          Case Sfor := (fun s1 transl_stmt_s1 e2 s3 transl_stmt_s3 s4 transl_stmt_s4 =>
-                          do ts1 <- transl_stmt s1;
-                          do s' <- transl_if e2 Clight.Sskip Clight.Sbreak;
-                          do ts3 <- transl_stmt s3;
-                          do ts4 <- transl_stmt s4;
-                          if is_Sskip s1 then
-                            ret (Clight.Sloop (Clight.Ssequence s' ts4) ts3)
-                          else
-                            ret (Clight.Ssequence ts1 (Clight.Sloop (Clight.Ssequence s' ts4) ts3))).
-          Case Sbreak := ret Clight.Sbreak.
-          Case Scontinue := ret Clight.Scontinue.
-          Case Sreturn := (fun e =>
-                            match e with
-                            | None => ret (Clight.Sreturn None)
-                            | Some e => do (s', a) <- transl_expression e;
-                                        ret (Clight.Ssequence s' (Clight.Sreturn (Some a)))
-                            end).
-          Case Slabel := (fun lbl s1 transl_stmt_s1 => 
-                            do ts1 <- transl_stmt_s1;
-                            ret (Clight.Slabel lbl ts1)).
-          Case Sgoto := (fun lbl => ret (Clight.Sgoto lbl)).
-      FEnd transl_stmt.
-
-      Definition transl_function (f: C.function) : res function :=
-          match transl_stmt f.(C.fn_body) (initial_generator tt) with
-          | Err msg =>
-              Error msg
-          | Res tbody g i =>
-              OK (mkfunction
-                      f.(C.fn_return)
-                      f.(C.fn_callconv)
-                      f.(C.fn_params)
-                      f.(C.fn_vars)
-                      g.(gen_trail)
-                      tbody)
-          end.
-
-          (* Relational specification of translation *)
-          Family Specification.
-                FInductive tr_expr: temp_env -> destination -> Csyntax.expr -> list statement -> expr -> list ident -> Prop :=
-                    | tr_var: forall le dst id ty tmp,
-                        tr_expr le dst (Csyntax.Evar id ty)
-                                (final dst (Evar id ty)) (Evar id ty) tmp
-                    | tr_deref: forall le dst e1 ty sl1 a1 tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp ->
-                        tr_expr le dst (Csyntax.Ederef e1 ty)
-                                (sl1 ++ final dst (Ederef' a1 ty)) (Ederef' a1 ty) tmp
-                    | tr_field: forall le dst e1 f ty sl1 a1 tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp ->
-                        tr_expr le dst (Csyntax.Efield e1 f ty)
-                                (sl1 ++ final dst (Efield a1 f ty)) (Efield a1 f ty) tmp
-                    | tr_val_effect: forall le v ty any tmp,
-                        tr_expr le For_effects (Csyntax.Eval v ty) nil any tmp
-                    | tr_val_value: forall le v ty a tmp,
-                        typeof a = ty ->
-                        (forall tge e le' m,
-                          (forall id, In id tmp -> le'!id = le!id) ->
-                          eval_expr tge e le' m a v) ->
-                        tr_expr le For_val (Csyntax.Eval v ty)
-                                            nil a tmp
-                    | tr_val_set: forall le sd v ty a any tmp,
-                        typeof a = ty ->
-                        (forall tge e le' m,
-                          (forall id, In id tmp -> le'!id = le!id) ->
-                          eval_expr tge e le' m a v) ->
-                        tr_expr le (For_set sd) (Csyntax.Eval v ty)
-                                    (do_set sd a) any tmp
-                    | tr_sizeof: forall le dst ty' ty tmp,
-                        tr_expr le dst (Csyntax.Esizeof ty' ty)
-                                    (final dst (Esizeof ty' ty))
-                                    (Esizeof ty' ty) tmp
-                    | tr_alignof: forall le dst ty' ty tmp,
-                        tr_expr le dst (Csyntax.Ealignof ty' ty)
-                                    (final dst (Ealignof ty' ty))
-                                    (Ealignof ty' ty) tmp
-                    | tr_cast_effects: forall le e1 ty sl1 a1 any tmp,
-                        tr_expr le For_effects e1 sl1 a1 tmp ->
-                        tr_expr le For_effects (Csyntax.Ecast e1 ty)
-                                    sl1
-                                    any tmp
-                    | tr_cast_val: forall le dst e1 ty sl1 a1 tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp ->
-                        tr_expr le dst (Csyntax.Ecast e1 ty)
-                                    (sl1 ++ final dst (Ecast a1 ty))
-                                    (Ecast a1 ty) tmp
-                    | tr_seqand_val: forall le e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le (For_set (SDbase type_bool ty t)) e2 sl2 a2 tmp2 ->
-                        list_disjoint tmp1 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
-                        tr_expr le For_val (Csyntax.Eseqand e1 e2 ty)
-                                      (sl1 ++ makeif a1 (makeseq sl2)
-                                                        (Sset t (Econst_int Int.zero ty)) :: nil)
-                                      (Etempvar t ty) tmp
-                    | tr_seqand_effects: forall le e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le For_effects e2 sl2 a2 tmp2 ->
-                        list_disjoint tmp1 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp ->
-                        tr_expr le For_effects (Csyntax.Eseqand e1 e2 ty)
-                                      (sl1 ++ makeif a1 (makeseq sl2) Sskip :: nil)
-                                      any tmp
-                    | tr_seqand_set: forall le sd e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le (For_set (SDcons type_bool ty t sd)) e2 sl2 a2 tmp2 ->
-                        list_disjoint tmp1 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
-                        tr_expr le (For_set sd) (Csyntax.Eseqand e1 e2 ty)
-                                      (sl1 ++ makeif a1 (makeseq sl2)
-                                                        (makeseq (do_set sd (Econst_int Int.zero ty))) :: nil)
-                                      any tmp
-                    | tr_seqor_val: forall le e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le (For_set (SDbase type_bool ty t)) e2 sl2 a2 tmp2 ->
-                        list_disjoint tmp1 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
-                        tr_expr le For_val (Csyntax.Eseqor e1 e2 ty)
-                                      (sl1 ++ makeif a1 (Sset t (Econst_int Int.one ty))
-                                                        (makeseq sl2) :: nil)
-                                      (Etempvar t ty) tmp
-                    | tr_seqor_effects: forall le e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le For_effects e2 sl2 a2 tmp2 ->
-                        list_disjoint tmp1 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp ->
-                        tr_expr le For_effects (Csyntax.Eseqor e1 e2 ty)
-                                      (sl1 ++ makeif a1 Sskip (makeseq sl2) :: nil)
-                                      any tmp
-                    | tr_seqor_set: forall le sd e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le (For_set (SDcons type_bool ty t sd)) e2 sl2 a2 tmp2 ->
-                        list_disjoint tmp1 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
-                        tr_expr le (For_set sd) (Csyntax.Eseqor e1 e2 ty)
-                                      (sl1 ++ makeif a1 (makeseq (do_set sd (Econst_int Int.one ty)))
-                                      (makeseq sl2) :: nil)
-                                      any tmp
-                    | tr_condition_val: forall le e1 e2 e3 ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 t tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le (For_set (SDbase ty ty t)) e2 sl2 a2 tmp2 ->
-                        tr_expr le (For_set (SDbase ty ty t)) e3 sl3 a3 tmp3 ->
-                        list_disjoint tmp1 tmp2 ->
-                        list_disjoint tmp1 tmp3 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp -> In t tmp ->
-                        tr_expr le For_val (Csyntax.Econdition e1 e2 e3 ty)
-                                        (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil)
-                                        (Etempvar t ty) tmp
-                    | tr_condition_effects: forall le e1 e2 e3 ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le For_effects e2 sl2 a2 tmp2 ->
-                        tr_expr le For_effects e3 sl3 a3 tmp3 ->
-                        list_disjoint tmp1 tmp2 ->
-                        list_disjoint tmp1 tmp3 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp ->
-                        tr_expr le For_effects (Csyntax.Econdition e1 e2 e3 ty)
-                                        (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil)
-                                        any tmp
-                    | tr_condition_set: forall le sd t e1 e2 e3 ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le (For_set (SDcons ty ty t sd)) e2 sl2 a2 tmp2 ->
-                        tr_expr le (For_set (SDcons ty ty t sd)) e3 sl3 a3 tmp3 ->
-                        list_disjoint tmp1 tmp2 ->
-                        list_disjoint tmp1 tmp3 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp -> In t tmp ->
-                        tr_expr le (For_set sd) (Csyntax.Econdition e1 e2 e3 ty)
-                                        (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil)
-                                        any tmp
-                    | tr_assign_effects: forall le e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 bf any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le For_val e2 sl2 a2 tmp2 ->
-                        list_disjoint tmp1 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp ->
-                        tr_is_bitfield_access a1 bf ->
-                        tr_expr le For_effects (Csyntax.Eassign e1 e2 ty)
-                                        (sl1 ++ sl2 ++ make_assign bf a1 a2 :: nil)
-                                        any tmp
-                    | tr_assign_val: forall le dst e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 t tmp ty1 ty2 bf,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le For_val e2 sl2 a2 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp ->
-                        list_disjoint tmp1 tmp2 ->
-                        In t tmp -> ~In t tmp1 -> ~In t tmp2 ->
-                        ty1 = Csyntax.typeof e1 ->
-                        ty2 = Csyntax.typeof e2 ->
-                        tr_is_bitfield_access a1 bf ->
-                        tr_expr le dst (Csyntax.Eassign e1 e2 ty)
-                                    (sl1 ++ sl2 ++
-                                      Sset t (Ecast a2 ty1) ::
-                                      make_assign bf a1 (Etempvar t ty1) ::
-                                      final dst (make_assign_value bf (Etempvar t ty1)))
-                                    (make_assign_value bf (Etempvar t ty1)) tmp
-                    | tr_assignop_effects: forall le op e1 e2 tyres ty ty1 sl1 a1 tmp1 sl2 a2 tmp2 bf sl3 a3 tmp3 any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le For_val e2 sl2 a2 tmp2 ->
-                        ty1 = Csyntax.typeof e1 ->
-                        tr_rvalof ty1 a1 sl3 a3 tmp3 ->
-                        list_disjoint tmp1 tmp2 -> list_disjoint tmp1 tmp3 -> list_disjoint tmp2 tmp3 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp ->
-                        tr_is_bitfield_access a1 bf ->
-                        tr_expr le For_effects (Csyntax.Eassignop op e1 e2 tyres ty)
-                                        (sl1 ++ sl2 ++ sl3 ++ make_assign bf a1 (Ebinop op a3 a2 tyres) :: nil)
-                                        any tmp
-                    | tr_assignop_val: forall le dst op e1 e2 tyres ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 t bf tmp ty1,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le For_val e2 sl2 a2 tmp2 ->
-                        tr_rvalof ty1 a1 sl3 a3 tmp3 ->
-                        list_disjoint tmp1 tmp2 -> list_disjoint tmp1 tmp3 -> list_disjoint tmp2 tmp3 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp ->
-                        In t tmp -> ~In t tmp1 -> ~In t tmp2 -> ~In t tmp3 ->
-                        ty1 = Csyntax.typeof e1 ->
-                        tr_is_bitfield_access a1 bf ->
-                        tr_expr le dst (Csyntax.Eassignop op e1 e2 tyres ty)
-                                    (sl1 ++ sl2 ++ sl3 ++
-                                      Sset t (Ecast (Ebinop op a3 a2 tyres) ty1) ::
-                                      make_assign bf a1 (Etempvar t ty1) ::
-                                      final dst (make_assign_value bf (Etempvar t ty1)))
-                                    (make_assign_value bf (Etempvar t ty1)) tmp
-                    | tr_postincr_effects: forall le id e1 ty ty1 sl1 a1 tmp1 sl2 a2 tmp2 bf any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_rvalof ty1 a1 sl2 a2 tmp2 ->
-                        ty1 = Csyntax.typeof e1 ->
-                        incl tmp1 tmp -> incl tmp2 tmp ->
-                        list_disjoint tmp1 tmp2 ->
-                        tr_is_bitfield_access a1 bf ->
-                        tr_expr le For_effects (Csyntax.Epostincr id e1 ty)
-                                        (sl1 ++ sl2 ++ make_assign bf a1 (transl_incrdecr id a2 ty1) :: nil)
-                                        any tmp
-                    | tr_postincr_val: forall le dst id e1 ty sl1 a1 tmp1 bf t ty1 tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        incl tmp1 tmp -> In t tmp -> ~In t tmp1 ->
-                        ty1 = Csyntax.typeof e1 ->
-                        tr_is_bitfield_access a1 bf ->
-                        tr_expr le dst (Csyntax.Epostincr id e1 ty)
-                                    (sl1 ++ make_set bf t a1 ::
-                                      make_assign bf a1 (transl_incrdecr id (Etempvar t ty1) ty1) ::
-                                      final dst (Etempvar t ty1))
-                                    (Etempvar t ty1) tmp
-                    | tr_comma: forall le dst e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 tmp,
-                        tr_expr le For_effects e1 sl1 a1 tmp1 ->
-                        tr_expr le dst e2 sl2 a2 tmp2 ->
-                        list_disjoint tmp1 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp ->
-                        tr_expr le dst (Csyntax.Ecomma e1 e2 ty) (sl1 ++ sl2) a2 tmp
-                    | tr_paren_val: forall le e1 tycast ty sl1 a1 t tmp,
-                        tr_expr le (For_set (SDbase tycast ty t)) e1 sl1 a1 tmp ->
-                        In t tmp ->
-                        tr_expr le For_val (Csyntax.Eparen e1 tycast ty)
-                                        sl1
-                                        (Etempvar t ty) tmp.
-                (*
-                Variable ge: genv.
-                Variable e: env.
-                Variable le: temp_env.
-                Variable m: mem. *)
-
-                Inductive tr_top: destination -> Csyntax.expr -> list statement -> expr -> list ident -> Prop :=
-                  | tr_top_val_val: forall v ty a tmp,
-                      typeof a = ty -> eval_expr ge e le m a v ->
-                      tr_top For_val (Csyntax.Eval v ty) nil a tmp
-                  | tr_top_base: forall dst r sl a tmp,
-                      tr_expr le dst r sl a tmp ->
-                      tr_top dst r sl a tmp.
-
-                Inductive tr_expression: Csyntax.expr -> statement -> expr -> Prop :=
-                  | tr_expression_intro: forall r sl a tmps,
-                      (forall ge e le m, tr_top ge e le m For_val r sl a tmps) ->
-                      tr_expression r (makeseq sl) a.
-
-                Inductive tr_expr_stmt: Csyntax.expr -> statement -> Prop :=
-                  | tr_expr_stmt_intro: forall r sl a tmps,
-                      (forall ge e le m, tr_top ge e le m For_effects r sl a tmps) ->
-                      tr_expr_stmt r (makeseq sl).
-
-                Inductive tr_if: Csyntax.expr -> statement -> statement -> statement -> Prop :=
-                  | tr_if_intro: forall r s1 s2 sl a tmps,
-                      (forall ge e le m, tr_top ge e le m For_val r sl a tmps) ->
-                      tr_if r s1 s2 (makeseq (sl ++ makeif a s1 s2 :: nil)).
-
-                FInductive tr_stmt: C.statement -> Clight.statement -> Prop :=
-                    | tr_skip:
-                        tr_stmt C.Sskip Clight.Sskip
-                    | tr_do: forall r s,
-                        tr_expr_stmt r s ->
-                        tr_stmt (C.Sdo r) s
-                    | tr_seq: forall s1 s2 ts1 ts2,
-                        tr_stmt s1 ts1 -> tr_stmt s2 ts2 ->
-                        tr_stmt (C.Ssequence s1 s2) (Clight.Ssequence ts1 ts2)
-                    | tr_ifthenelse_empty: forall r s' a,
-                        tr_expression r s' a ->
-                        tr_stmt (C.Sifthenelse r Csyntax.Sskip Csyntax.Sskip) (Clight.Ssequence s' Sskip)
-                    | tr_ifthenelse: forall r s1 s2 s' a ts1 ts2,
-                        tr_expression r s' a ->
-                        tr_stmt s1 ts1 -> tr_stmt s2 ts2 ->
-                        tr_stmt (C.Sifthenelse r s1 s2) (Clight.Ssequence s' (Clight.Sifthenelse a ts1 ts2))
-                    | tr_while: forall r s1 s' ts1,
-                        tr_if r Sskip Sbreak s' ->
-                        tr_stmt s1 ts1 ->
-                        tr_stmt (C.Swhile r s1)
-                                (Clight.Sloop (Ssequence s' ts1) Sskip)
-                    | tr_dowhile: forall r s1 s' ts1,
-                        tr_if r Sskip Sbreak s' ->
-                        tr_stmt s1 ts1 ->
-                        tr_stmt (C.Sdowhile r s1)
-                                (Clight.Sloop ts1 s')
-                    | tr_for_1: forall r s3 s4 s' ts3 ts4,
-                        tr_if r Sskip Sbreak s' ->
-                        tr_stmt s3 ts3 ->
-                        tr_stmt s4 ts4 ->
-                        tr_stmt (C.Sfor C.Sskip r s3 s4)
-                                (Clight.Sloop (Clight.Ssequence s' ts4) ts3)
-                    | tr_for_2: forall s1 r s3 s4 s' ts1 ts3 ts4,
-                        tr_if r Sskip Sbreak s' ->
-                        s1 <> C.Sskip ->
-                        tr_stmt s1 ts1 ->
-                        tr_stmt s3 ts3 ->
-                        tr_stmt s4 ts4 ->
-                        tr_stmt (C.Sfor s1 r s3 s4)
-                                (Clight.Ssequence ts1 (Clight.Sloop (Clight.Ssequence s' ts4) ts3))
-                    | tr_break:
-                        tr_stmt C.Sbreak Clight.Sbreak
-                    | tr_continue:
-                        tr_stmt C.Scontinue Clight.Scontinue
-                    | tr_return_none:
-                        tr_stmt (C.Sreturn None) (Clight.Sreturn None)
-                    | tr_return_some: forall r s' a,
-                        tr_expression r s' a ->
-                        tr_stmt (C.Sreturn (Some r)) (Clight.Ssequence s' (Clight.Sreturn (Some a)))
-                    | tr_label: forall lbl s ts,
-                        tr_stmt s ts ->
-                        tr_stmt (C.Slabel lbl s) (Clight.Slabel lbl ts)
-                    | tr_goto: forall lbl,
-                        tr_stmt (C.Sgoto lbl) (Clight.Sgoto lbl).
-
-                (* Proof of correctness of translation wrt the specification *)
-          FEnd Specification.
-   FEnd SimplExpr.          
+   FEnd Mach.            
    
    (* Cminor -> CminorSel *)
    Family Selection.
