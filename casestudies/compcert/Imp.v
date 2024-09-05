@@ -879,7 +879,7 @@ Inductive signedness : Type :=
             exists R, Csharpminor.Semantics.initial_state tprog R /\ match_states S R.
           FProofLemma.
               apply cheat. Qed.
-          FEnd transl_initial_states.
+          CloseFLemma.
 
           FDisplay PluginScope.
           
@@ -888,8 +888,8 @@ Inductive signedness : Type :=
             match_states S R -> Clight.Semantics.final_state S r -> Csharpminor.Semantics.final_state R r.
           FProofLemma.
              intros. inv H0. inv H. inv MK. constructor. Qed.
-          FEnd transl_final_states.          
-     FEnd Correctness. 
+          CloseFLemma.
+     FEnd Correctness.
   FEnd Cshmgen.
           
    Family Cminor.
@@ -941,6 +941,23 @@ Inductive signedness : Type :=
               FDefinition genv := Genv.t fundef unit.
               FDefinition env := PTree.t val.
 
+              MetaData set_params.
+              Fixpoint set_params (vl: list val) (il: list ident) {struct il} : self__Semantics.env :=
+              match il, vl with
+              | i1 :: is, v1 :: vs => PTree.set i1 v1 (set_params vs is)
+              | i1 :: is, nil => PTree.set i1 Vundef (set_params nil is)
+              | _, _ => PTree.empty val
+              end.
+              FEnd set_params.
+
+              MetaData set_locals.
+              Fixpoint set_locals (il: list ident) (e: self__Semantics.env) {struct il} : self__Semantics.env :=
+               match il with
+               | nil => e
+               | i1 :: is => PTree.set i1 Vundef (set_locals is e)
+               end.
+              FEnd set_locals.              
+
               FInductive cont: Type :=
                    | Kstop: cont
                    | Kseq: stmt -> cont -> cont
@@ -978,95 +995,169 @@ Inductive signedness : Type :=
                FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
                    Case Kstop := Kstop.
                    Case Kseq := (fun s c call_cont_c => call_cont_c).
-                   Case Kblock := (fun s c call_cont_c => call_cont_c).
+                   Case Kblock := (fun k call_cont_c => call_cont_c).
                FEnd call_cont.
                
-               FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop).
-                   Case Kstop := True                   
-                   Case Kseq := (fun s c call_cont_c => False)
-                   Case Kblock := (fun s c call_cont_c => False)                   
+               FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
+                   Case Kstop := True.
+                   Case Kseq := (fun s c call_cont_c => False).
+                   Case Kblock := (fun c call_cont_c => False).                  
                FEnd is_call_cont.
                    
-               FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)). 
+               FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect. 
                     Case Sskip := (fun lbl k => None).         
                     Case Sassign := (fun id e lbl k => None).
-                    Case Sseq := := (fun s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
+                    Case Sseq := (fun s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
                                          match find_label_s1 lbl (Kseq s2 k) with 
                                          | Some sk => Some sk 
                                          | None => find_label_s2 lbl k end).
-                    Case Sifthenelse := (fun e s1 _ s2 _ lbl k => fun lbl k => 
+                    Case Sifthenelse := (fun e s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
                                          match find_label_s1 lbl k with 
                                          | Some sk => Some sk 
                                          | None => find_label_s2 lbl k end).
-                    Case Sloop := (fun s _ lbl k => fun lbl k => find_label_s lbl (Kseq (Sloop s) k)).
-                    Case Sblock := (fun s _ lbl k => find_label_s1 lbl (Kblock k)).
+                    Case Sloop := (fun s find_label_s => fun lbl k => find_label_s lbl (Kseq (Sloop s) k)).
+                    Case Sblock := (fun s1 find_label_s1 lbl k => find_label_s1 lbl (Kblock k)).
                     Case Slabel := (fun lbl' s find_label_s => fun lbl k => 
                                        if ident_eq lbl lbl' then 
                                        Some(s, k) else find_label_s lbl k).
-                    Case Sexit := (fun n lbl k => None)
+                    Case Sexit := (fun n lbl k => None).
                     Case Sreturn := (fun _ lbl k => None).
                     Case Sgoto := (fun label lbl k => None).
                FEnd find_label.
                
                (* (sp : val) -> (e : env) -> (m : mem) -> *)
-              FInductive step : state -> trace -> state -> Prop :=
-                 | step_skip_seq: forall f s k sp e m,
-                     step (State f Sskip (Kseq s k) sp e m)
+              FInductive step :  genv -> state -> trace -> state -> Prop :=
+                 | step_skip_seq: forall ge f s k sp e m,
+                     step ge (State f Sskip (Kseq s k) sp e m)
                        E0 (State f s k sp e m)
-                 | step_skip_block: forall f k sp e m,
-                     step (State f Sskip (Kblock k) sp e m)
+                 | step_skip_block: forall ge f k sp e m,
+                     step ge (State f Sskip (Kblock k) sp e m)
                        E0 (State f Sskip k sp e m)
-                 | step_skip_call: forall f k sp e m m',
+                 | step_skip_call: forall ge f k sp e m m',
                      is_call_cont k ->
-                     Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-                     step (State f Sskip k (Vptr sp Ptrofs.zero) e m)
+                     Mem.free m sp 0 f.(self__Cminor.fn_stackspace) = Some m' ->
+                     step ge (State f Sskip k (Vptr sp Ptrofs.zero) e m)
                        E0 (Returnstate Vundef k m')
-                 | step_assign: forall f id a k sp e m v,
+                 | step_assign: forall ge f id a k sp e m v,
                      eval_expr sp e m a v ->
-                     step (State f (Sassign id a) k sp e m)
+                     step ge (State f (Sassign id a) k sp e m)
                        E0 (State f Sskip k sp (PTree.set id v e) m)
-                 | step_seq: forall f s1 s2 k sp e m,
-                     step (State f (Sseq s1 s2) k sp e m)
+                 | step_seq: forall ge f s1 s2 k sp e m,
+                     step ge (State f (Sseq s1 s2) k sp e m)
                        E0 (State f s1 (Kseq s2 k) sp e m)
-                 | step_ifthenelse: forall f a s1 s2 k sp e m v b,
+                 | step_ifthenelse: forall ge f a s1 s2 k sp e m v b,
                      eval_expr sp e m a v ->
                      Val.bool_of_val v b ->
-                     step (State f (Sifthenelse a s1 s2) k sp e m)
+                     step ge (State f (Sifthenelse a s1 s2) k sp e m)
                        E0 (State f (if b then s1 else s2) k sp e m)
-                 | step_loop: forall f s k sp e m,
-                     step (State f (Sloop s) k sp e m)
+                 | step_loop: forall ge f s k sp e m,
+                     step ge (State f (Sloop s) k sp e m)
                        E0 (State f s (Kseq (Sloop s) k) sp e m)
-                 | step_block: forall f s k sp e m,
-                     step (State f (Sblock s) k sp e m)
+                 | step_block: forall ge f s k sp e m,
+                     step ge (State f (Sblock s) k sp e m)
                        E0 (State f s (Kblock k) sp e m)
-                 | step_exit_seq: forall f n s k sp e m,
-                     step (State f (Sexit n) (Kseq s k) sp e m)
+                 | step_exit_seq: forall ge f n s k sp e m,
+                     step ge (State f (Sexit n) (Kseq s k) sp e m)
                        E0 (State f (Sexit n) k sp e m)
-                 | step_exit_block_0: forall f k sp e m,
-                     step (State f (Sexit O) (Kblock k) sp e m)
+                 | step_exit_block_0: forall ge f k sp e m,
+                     step ge (State f (Sexit O) (Kblock k) sp e m)
                        E0 (State f Sskip k sp e m)
-                 | step_exit_block_S: forall f n k sp e m,
-                     step (State f (Sexit (S n)) (Kblock k) sp e m)
+                 | step_exit_block_S: forall ge f n k sp e m,
+                     step ge (State f (Sexit (S n)) (Kblock k) sp e m)
                        E0 (State f (Sexit n) k sp e m)
-                 | step_return_0: forall f k sp e m m',
-                    Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-                    step (State f (Sreturn None) k (Vptr sp Ptrofs.zero) e m)
+                 | step_return_0: forall ge f k sp e m m',
+                    Mem.free m sp 0 f.(self__Cminor.fn_stackspace) = Some m' ->
+                    step ge (State f (Sreturn None) k (Vptr sp Ptrofs.zero) e m)
                       E0 (Returnstate Vundef (call_cont k) m')
-                 | step_return_1: forall f a k sp e m v m',
+                 | step_return_1: forall ge f a k sp e m v m',
                      eval_expr (Vptr sp Ptrofs.zero) e m a v ->
-                     Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-                     step (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m)
+                     Mem.free m sp 0 f.(self__Cminor.fn_stackspace) = Some m' ->
+                     step ge (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m)
                       E0 (Returnstate v (call_cont k) m')
-                 | step_label: forall f lbl s k sp e m,
-                    step (State f (Slabel lbl s) k sp e m)
+                 | step_label: forall ge f lbl s k sp e m,
+                    step ge (State f (Slabel lbl s) k sp e m)
                       E0 (State f s k sp e m)
-                 | step_goto: forall f lbl k sp e m s' k',
-                    find_label lbl f.(fn_body) (call_cont k) = Some(s', k') ->
-                    step (State f (Sgoto lbl) k sp e m)
-                      E0 (State f s' k' sp e m).
+                 | step_goto: forall ge f lbl k sp e m s' k',
+                    find_label f.(self__Cminor.fn_body) lbl (call_cont k) = Some(s', k') ->
+                    step ge (State f (Sgoto lbl) k sp e m)
+                      E0 (State f s' k' sp e m)
+                 | step_internal_function: forall ge f vargs k m m' sp e,
+                     Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp) ->
+                     self__Semantics.set_locals
+                       f.(self__Cminor.fn_vars)
+                       (self__Semantics.set_params vargs f.(self__Cminor.fn_params)) = e ->
+                     step ge (Callstate (Internal f) vargs k m)
+                       E0 (State f f.(self__Cminor.fn_body) k (Vptr sp Ptrofs.zero) e m').
+
+              MetaData initial_state.
+              Inductive initial_state (p: self__Cminor.program): self__Semantics.state -> Prop :=
+                  | initial_state_intro: forall b f m0,
+                      let ge := Genv.globalenv p in
+                      Genv.init_mem p = Some m0 ->
+                      Genv.find_symbol ge p.(prog_main) = Some b ->
+                      Genv.find_funct_ptr ge b = Some f ->
+                      self__Cminor.funsig f = signature_main ->
+                      initial_state p (self__Semantics.Callstate f nil self__Semantics.Kstop m0).
+              FEnd initial_state.
+
+              MetaData final_state.
+              Inductive final_state: self__Semantics.state -> int -> Prop :=
+                  | final_state_intro: forall r m,
+                      final_state (self__Semantics.Returnstate (Vint r) self__Semantics.Kstop m) r.
+              FEnd final_state.
           FEnd Semantics.
    FEnd Cminor.
 
+   (* Csharpminor -> Cminor *)
+   Family Cminorgen.
+      FRecursion translate_constant about
+         Csharpminor.constant motive (fun (_ : Csharpminor.constant) => Cminor.constant) by _rect.
+           Case Ointconst := (fun n => Cminor.Ointconst n).
+           Case Ofloatconst := (fun n => Cminor.Ofloatconst n).
+           Case Osingleconst := (fun n => Cminor.Osingleconst n).
+           Case Olongconst := (fun n => Cminor.Olongconst n).
+      FEnd translate_constant.
+   
+      FRecursion translate_expr about Csharpminor.expr motive (fun (_ : Csharpminor.expr) => Cminor.expr) by _rect.
+           Case Evar := (fun id => Cminor.Evar id).
+           Case Econst := (fun cst => Cminor.Econst (translate_constant cst)).
+      FEnd translate_expr.
+
+      Definition exit_env := list bool.
+
+      Fixpoint shift_exit (e: exit_env) (n: nat) {struct e} : nat :=
+        match e, n with
+        | nil, _ => n
+        | false :: e', _ => S (shift_exit e' n)
+        | true :: e', O => O
+        | true :: e', S m => S (shift_exit e' m)
+        end.
+    
+      FRecursion translate_stmt about Csharpminor.stmt motive (fun (_ : Csharpminor.stmt) => compilenv -> exit_env -> Cminor.stmt) by _rect.
+            Case Sskip := (fun cenv xenv => Cminor.Sskip).
+            Case Sset := (fun id e => fun cenv xenv => Cminor.Sassign id (translate_expr e)).
+            Case Sseq := (fun s1 translate_stmt_s1 s2 translate_stmt_s2 => fun cenv xenv => Cminor.Sseq translate_stmt_s1 translate_stmt_s2).
+            Case Sifthenelse := (fun e s1 translate_stmt_s1 s2 translate_stmt_s2 => fun cenv xenv =>
+                                   Cminor.Sifthenelse (translate_expr e) translate_stmt_s1 translate_stmt_s2).
+            Case Sloop := (fun s1 translate_stmt_s1 => fun cenv xenv => Cminor.Sloop translate_stmt_s1).
+            Case Sblock := (fun s translate_stmt_s => fun cenv xenv => Cminor.Sblock translate_stmt_s).
+            Case Sexit := (fun cenv xenv => Sexit (shift_exit xenv n)).
+            Case Sreturn := (fun expr => fun cenv xenv =>
+                               match expr with
+                               | None => Cminor.Sreturn None
+                               | Some expr => Cminor.Sreturn (Some (translate_expr expr)) end).
+            Case Slabel := (fun lbl s translate_stmt_s => fun cenv xenv => Cminor.Slabel lbl translate_stmt_s).
+            Case Sgoto := (fun lbl => fun cenv xenv => Cminor.Sgoto lbl).
+      FEnd translate_stmt.
+
+
+       (* Translate Function, Fundef, Program *)
+
+
+      Family Correctness.
+      FEnd Correctness.
+  FEnd Cminorgen.
+   
     (* RISC-V *)
    Family Asm.
       (* Operations *)
@@ -2522,57 +2613,7 @@ Inductive signedness : Type :=
 
                 (* Proof of correctness of translation wrt the specification *)
           FEnd Specification.
-   FEnd SimplExpr.     
-   
-   (* Csharpminor -> Cminor *)
-   Family Cminorgen.
-      FRecursion translate_constant about
-         Csharpminor.constant motive (fun (_ : Csharpminor.constant) => Cminor.constant) by _rect.
-           Case Ointconst := (fun n => Cminor.Ointconst n).
-           Case Ofloatconst := (fun n => Cminor.Ofloatconst n).
-           Case Osingleconst := (fun n => Cminor.Osingleconst n).
-           Case Olongconst := (fun n => Cminor.Olongconst n).
-      FEnd translate_constant.
-   
-      FRecursion translate_expr about Csharpminor.expr motive (fun (_ : Csharpminor.expr) => Cminor.expr) by _rect.
-           Case Evar := (fun id => Cminor.Evar id).
-           Case Econst := (fun cst => Cminor.Econst (translate_constant cst)).
-      FEnd translate_expr.
-
-      Definition exit_env := list bool.
-
-      Fixpoint shift_exit (e: exit_env) (n: nat) {struct e} : nat :=
-        match e, n with
-        | nil, _ => n
-        | false :: e', _ => S (shift_exit e' n)
-        | true :: e', O => O
-        | true :: e', S m => S (shift_exit e' m)
-        end.
-    
-      FRecursion translate_stmt about Csharpminor.stmt motive (fun (_ : Csharpminor.stmt) => compilenv -> exit_env -> Cminor.stmt) by _rect.
-            Case Sskip := (fun cenv xenv => Cminor.Sskip).
-            Case Sset := (fun id e => fun cenv xenv => Cminor.Sassign id (translate_expr e)).
-            Case Sseq := (fun s1 translate_stmt_s1 s2 translate_stmt_s2 => fun cenv xenv => Cminor.Sseq translate_stmt_s1 translate_stmt_s2).
-            Case Sifthenelse := (fun e s1 translate_stmt_s1 s2 translate_stmt_s2 => fun cenv xenv =>
-                                   Cminor.Sifthenelse (translate_expr e) translate_stmt_s1 translate_stmt_s2).
-            Case Sloop := (fun s1 translate_stmt_s1 => fun cenv xenv => Cminor.Sloop translate_stmt_s1).
-            Case Sblock := (fun s translate_stmt_s => fun cenv xenv => Cminor.Sblock translate_stmt_s).
-            Case Sexit := (fun cenv xenv => Sexit (shift_exit xenv n)).
-            Case Sreturn := (fun expr => fun cenv xenv =>
-                               match expr with
-                               | None => Cminor.Sreturn None
-                               | Some expr => Cminor.Sreturn (Some (translate_expr expr)) end).
-            Case Slabel := (fun lbl s translate_stmt_s => fun cenv xenv => Cminor.Slabel lbl translate_stmt_s).
-            Case Sgoto := (fun lbl => fun cenv xenv => Cminor.Sgoto lbl).
-      FEnd translate_stmt.
-
-
-       (* Translate Function, Fundef, Program *)
-
-
-      Family Correctness.
-      FEnd Correctness.
-  FEnd Cminorgen.    
+   FEnd SimplExpr.          
    
    (* Cminor -> CminorSel *)
    Family Selection.
