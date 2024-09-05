@@ -13,10 +13,29 @@ Require Import Smallstep.
 Require Import Events.
 Require Import Maps.
 Require Import Linking.
+Require Import FSets.
+Require Import FSetAVL.
+Require Import Orders.
+Require Import Mergesort.
+Require Import Ordered.
+
 
 Axiom cheat : forall {X}, X.
 Local Open Scope string_scope.
 Local Open Scope error_monad_scope.
+
+Module VarOrder <: TotalLeBool.
+  Definition t := (ident * Z)%type.
+  Definition leb (v1 v2: t) : bool := zle (snd v1) (snd v2).
+  Theorem leb_total: forall v1 v2, leb v1 v2 = true \/ leb v2 v1 = true.
+  Proof.
+    unfold leb; intros.
+    assert (snd v1 <= snd v2 \/ snd v2 <= snd v1) by lia.
+    unfold proj_sumbool. destruct H; [left|right]; apply zle_true; auto.
+  Qed.
+End VarOrder.
+
+Module VarSort := Mergesort.Sort(VarOrder).
 
 
 Family Imp.     
@@ -1176,11 +1195,50 @@ Inductive signedness : Type :=
             Case Sgoto := (fun lbl => fun cenv xenv => OK (Cminor.Sgoto lbl)).
       FEnd transl_stmt.
 
+      (* Stack layout *)
+      FDefinition block_alignment : Z -> Z := fun sz =>
+          if zlt sz 2 then 1
+          else if zlt sz 4 then 2
+          else if zlt sz 8 then 4 else 8.
 
-       (* Translate Function, Fundef, Program *)
+      FDefinition assign_variable : compilenv * Z -> ident * Z -> compilenv * Z := 
+          fun cenv_stacksize id_sz => 
+          let (id, sz) := id_sz in
+          let (cenv, stacksize) := cenv_stacksize in
+          let ofs := align stacksize (block_alignment sz) in
+          (PTree.set id ofs cenv, ofs + Z.max 0 sz).
 
+      FDefinition assign_variables : compilenv * Z -> list (ident * Z) -> compilenv * Z :=
+          fun cenv_stacksize vars => List.fold_left assign_variable vars cenv_stacksize.
+
+      FDefinition build_compilenv : Csharpminor.function -> compilenv * Z :=
+          fun f => assign_variables (PTree.empty Z, 0) (VarSort.sort (Csharpminor.fn_vars f)).
+
+      (* Translate Function, Fundef, Program *)
+      FDefinition transl_funbody := 
+      fun (cenv: compilenv) (stacksize: Z) (f: Csharpminor.function) =>
+        do tbody <- transl_stmt f.(self__Imp.Csharpminor.fn_body) cenv nil ;
+        OK (Cminor.mkfunction
+              (Csharpminor.fn_sig f)
+              (Csharpminor.fn_params f)
+              (Csharpminor.fn_temps f)
+              stacksize
+              tbody).
+
+      FDefinition transl_function := fun (f: Csharpminor.function) => 
+        let (cenv, stacksize) := build_compilenv f in
+        if zle stacksize Ptrofs.max_unsigned
+        then transl_funbody cenv stacksize f
+        else Error(msg "Cminorgen: too many local variables, stack size exceeded").
+
+      FDefinition transl_fundef : Csharpminor.fundef -> res Cminor.fundef := fun f => 
+        transf_partial_fundef transl_function f.
+
+      FDefinition transl_program : Csharpminor.program -> res Cminor.program := fun p => 
+        transform_partial_program transl_fundef p.
 
       Family Correctness.
+          
       FEnd Correctness.
   FEnd Cminorgen.
    
