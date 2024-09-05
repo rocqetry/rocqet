@@ -878,17 +878,19 @@ Inductive signedness : Type :=
             forall S prog tprog, Clight.Semantics.initial_state prog S -> transl_program prog = OK tprog ->
             exists R, Csharpminor.Semantics.initial_state tprog R /\ match_states S R.
           FProofLemma.
-              apply cheat. Qed.           
+              apply cheat. Qed.
           FEnd transl_initial_states.
 
+          FDisplay PluginScope.
+          
           FLemma transl_final_states:
             forall S R r,
             match_states S R -> Clight.Semantics.final_state S r -> Csharpminor.Semantics.final_state R r.
           FProofLemma.
-             apply cheat. Qed.
-          FEnd transl_final_states.
+             intros. inv H0. inv H. inv MK. constructor. Qed.
+          FEnd transl_final_states.          
      FEnd Correctness. 
-   FEnd Cshmgen.
+  FEnd Cshmgen.
           
    Family Cminor.
        FInductive constant : Type :=
@@ -896,13 +898,14 @@ Inductive signedness : Type :=
            | Ofloatconst: float -> constant(* double-precision floating-point constant *)
            | Osingleconst: float32 -> constant(* single-precision floating-point constant *)
            | Olongconst: int64 -> constant(* long integer constant *)
-           | Oaddrsymbol: ident -> ptrofs -> constant(* address of the symbol plus the offset *)
-           | Oaddrstack: ptrofs -> constant.(* stack pointer plus the given offset *)       
+           (* | Oaddrsymbol: ident -> ptrofs -> constant(* address of the symbol plus the offset *)*)
+           | Oaddrstack: ptrofs -> constant. (* stack pointer plus the given offset *)       
 
        FInductive expr : Type :=
           | Evar : ident -> expr
-          | Econst : constant -> expr.          
+          | Econst : constant -> expr.   
 
+       FDefinition label := ident.
        FInductive stmt : Type :=
           | Sskip: stmt
           | Sassign : ident -> expr -> stmt          
@@ -915,22 +918,33 @@ Inductive signedness : Type :=
           | Slabel: label -> stmt -> stmt
           | Sgoto: label -> stmt.
 
+       MetaData function.
        Record function : Type := mkfunction {
           fn_sig: signature;
           fn_params: list ident;
           fn_vars: list ident;
           fn_stackspace: Z;
-          fn_body: stmt
+          fn_body: self__Cminor.stmt
        }.
+       FEnd function.
 
+       FDefinition fundef := AST.fundef function.
+       FDefinition program := AST.program fundef unit.
+
+       FDefinition funsig := fun (fd: fundef) =>
+         match fd with
+         | Internal f => self__Cminor.fn_sig f
+         | External ef => cheat
+         end.       
+       
         Family Semantics.
-              Definition genv := Genv.t fundef unit.
-              Definition env := PTree.t val.
+              FDefinition genv := Genv.t fundef unit.
+              FDefinition env := PTree.t val.
 
               FInductive cont: Type :=
                    | Kstop: cont
                    | Kseq: stmt -> cont -> cont
-                   | Kblock: cont -> cont.                   
+                   | Kblock: cont -> cont.              
                
               FInductive state: Type :=
                    | State: function -> stmt -> cont -> val -> env -> mem -> state  
@@ -942,29 +956,29 @@ Inductive signedness : Type :=
                   Case Olongconst := (fun n => fun sp => Some (Vlong n)).
                   Case Ofloatconst := (fun n => fun sp => Some (Vfloat n)).
                   Case Osingleconst := (fun n => fun sp => Some (Vsingle n)).
-                  Case Oaddrsymbol := (fun id ofs => fun sp => Some (Genv.symbol_address ge s ofs)).
+                  (* Case Oaddrsymbol := (fun s ofs => fun sp => Some (Genv.symbol_address ge s ofs)).*)
                   Case Oaddrstack := (fun ofs => fun sp => Some (Val.offset_ptr sp ofs)).
               FEnd eval_constant.                                
                
-              FInductive eval_expr : (sp : val) -> (e : env) -> (m : mem) -> expr -> val -> Prop :=
-                  | eval_Evar: forall id v,
+              FInductive eval_expr : val -> env -> mem -> expr -> val -> Prop :=
+                  | eval_Evar: forall sp e m id v,
                         PTree.get id e = Some v ->
-                        eval_expr (Evar id) v
-                  | eval_Econst: forall cst v,
-                        eval_constant sp cst = Some v ->
-                        eval_expr (Econst cst) v.              
-                  
-              FInductive eval_exprlist: list expr -> list val -> Prop :=
+                        eval_expr sp e m (Evar id) v
+                  | eval_Econst: forall sp e m cst v,
+                        eval_constant cst sp = Some v ->
+                        eval_expr sp e m (Econst cst) v.              
+              
+              (* FInductive eval_exprlist: list expr -> list val -> Prop :=
                   | eval_Enil:
                       eval_exprlist nil nil
                   | eval_Econs: forall a1 al v1 vl,
                       eval_expr a1 v1 -> eval_exprlist al vl ->
-                      eval_exprlist (a1 :: al) (v1 :: vl).
+                      eval_exprlist (a1 :: al) (v1 :: vl).*)
                
-               FRecursion call_cont about cont motive (fun (_ : cont) => cont).
-                   Case Kstop := Kstop
-                   Case Kseq := (fun s c call_cont_c => call_cont_c)
-                   Case Kblock := (fun s c call_cont_c => call_cont_c)                   
+               FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
+                   Case Kstop := Kstop.
+                   Case Kseq := (fun s c call_cont_c => call_cont_c).
+                   Case Kblock := (fun s c call_cont_c => call_cont_c).
                FEnd call_cont.
                
                FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop).
