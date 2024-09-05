@@ -67,3 +67,6 @@ val fproof_lemma : unit -> Declare.Proof.t
 
 (* Handle an `FLemma ... : ...` *)
 val flemma : Names.Id.t -> Constrexpr.constr_expr -> unit
+val close_flemma : unit -> unit
+
+val display_plugin_scope : unit -> unit

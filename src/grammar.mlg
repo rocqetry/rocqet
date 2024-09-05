@@ -133,10 +133,13 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "FLemma" ident(name) ":" llconstr_ip(t) ] -> { Entry.flemma name t }
 
-| [ "FQed"] ->
-   { Entry.fqed () }
+| [ "CloseFLemma" ] -> { Entry.close_flemma () }
+
+| [ "FQed"] -> { Entry.fqed () }
 
 | [ "MetaData" ident(i) ] -> { Entry.metadata i }
+
+| [ "FDisplay" "PluginScope" ] -> { Entry.display_plugin_scope () }
 
 END
 

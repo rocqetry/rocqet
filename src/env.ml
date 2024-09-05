@@ -25,21 +25,38 @@ module PluginScopes = struct
       when name = scope_name ->
         scopes := scopes_rest;
         Some scope
-    | { PluginCmdScope.name; command; _ }  :: _ ->
+    | { PluginCmdScope.name; command; _ }  :: rest ->
        let command =
          match command with
-         | PluginCmd.Lemma -> "FLemma"
+         | Lemma -> "FLemma"
          | Family -> "Family"
          | Induction -> "FInduction"
          | Recursion -> "FRecursion"
          | MetaData -> "MetaData"
-       in 
+       in
+       let rest =
+         rest
+         |> List.map (fun (scope: PluginCmdScope.t) -> scope.name)
+         |> List.map Names.Id.to_string
+         |> String.concat ", "
+       in
        let info =
-         Printf.sprintf "Closing Wrong Scope: expeted to close a scope which was opened by the %s %s"
-           command (Names.Id.to_string name) 
+         Printf.sprintf
+           "Closing wrong scope: expected to \
+            close a scope which was opened by \"%s %s.\" \
+            Commands waiting to be closed: %s."
+           command (Names.Id.to_string name) rest
        in
        Errors.fail ~info
-    (* | _ -> Errors.report ~error:Errors.ClosingWrongScope*)
+
+  let display () =
+    let rest =
+       !scopes
+       |> List.map (fun (scope: PluginCmdScope.t) -> scope.name)
+       |> List.map Names.Id.to_string
+       |> String.concat ", "
+    in
+    Feedback.msg_info (Pp.str rest)
 
   let ensure_in_scope ~scope =
     match peek () with
