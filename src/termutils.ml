@@ -275,31 +275,18 @@ let rec extract_handlers_from_inductive_proof
            (coq_snd acc_case_handlers)
            suffix
 
-let calculate_inductive_proof_goal ~(handler_type_prefix : Names.Id.t)
-    ~(theorem_name : Names.Id.t) ~(handler_names : Names.Id.t list)
-    ~(suffix : RecKind.t) =
-  let open Constrexpr_ops in
-  let the_motive =
-    theorem_name |> Naming.motive_of |> Libnames.qualid_of_ident |> mkRefC
-  in
+let calculate_inductive_proof_goal
+      ~(handler_types : Constrexpr.constr_expr list)    
+      ~(suffix : RecKind.t) =
+  let open Constrexpr_ops in  
   let __True = mkIdentC (Names.Id.of_string "True") in
   let __prod l r =
     let using_prod_or_conj =
       match suffix with RecKind.IndComplete -> "and" | _ -> "prod"
     in
     mkAppC (mkIdentC (Names.Id.of_string using_prod_or_conj), [ l; r ])
-  in
-  let all_recur_name =
-    let prefix x =
-      Libnames.make_qualid (Names.DirPath.make [ handler_type_prefix ]) x
-    in
-    List.map (fun name -> prefix (Naming.handler_type name ~suffix:(RecKind.to_string suffix))) handler_names
-  in
-  let all_recur_ = List.map mkRefC all_recur_name in
-  let all_applied_recur =
-    List.map (fun x -> mkAppC (x, [ the_motive ])) all_recur_
-  in
-  List.fold_right __prod all_applied_recur __True
+  in  
+  List.fold_right __prod handler_types __True
 
 let mk_lambda arguments body =
   let f (n : Names.Id.t) =

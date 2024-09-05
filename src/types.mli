@@ -63,7 +63,7 @@ module CompiledRecursors : sig
 end
 
 module PluginCmd : sig
-  type t = Family | Recursion | Induction | MetaData
+  type t = Family | Recursion | Induction | MetaData | Lemma
 end
 
 module PluginCmdScope : sig
@@ -90,6 +90,11 @@ module rec LinkageElem : sig
         body_type : Constrexpr.constr_expr option;
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModuleType.t;
+      }
+    | OpaqueFieldDefinition of {
+        compiled_context : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
+        compiled_signature : CompiledModuleType.t;
       }
     | RecursorDefinition of {
         names : Names.Id.t list;
@@ -118,6 +123,7 @@ module rec LinkageElem : sig
         goal : Constrexpr.constr_expr;
         suffix : RecKind.t;
         inductive : VernacInductive.t;
+        inductive_path : Libnames.qualid;
         handlers : (Names.Id.t * Constrexpr.constr_expr) list;
         compiled_handlers : CompiledModule.t;
         compiled_context : CompiledModuleType.t;

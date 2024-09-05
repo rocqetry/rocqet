@@ -88,13 +88,12 @@ val compile_handler_cases :
 val compile_theorem_implementation :
   name:Names.Id.t ->
   parameters:(Names.Id.t * Constrexpr.module_ast) list ->
-  compiled_handlers:CompiledModule.t ->
-  motive_name:Names.Id.t ->
+  compiled_handlers:CompiledModule.t ->  
   inductive_name:Names.Id.t ->
   suffix:RecKind.t ->
-  goal:Constrexpr.constr_expr ->
-  provenance:Linkage.t ->
+  goal:Constrexpr.constr_expr ->  
   handler_names:Names.Id.t list ->
+  rec_principle_prefix:Libnames.qualid ->
   CompiledModule.t
 
 (* Compiling Linkage Contexts *)
@@ -115,6 +114,13 @@ val compile_definition :
   body_expr:Constrexpr.constr_expr ->
   (Names.Id.t * Constrexpr.module_ast) list ->
   CompiledModule.t
+
+(* Compiling FLemma signatures *)
+val compile_lemma_signature : 
+    name:Names.Id.t ->
+    ty:Constrexpr.constr_expr ->
+    parameters:(Names.Id.t * Constrexpr.module_ast) list ->
+    CompiledModuleType.t
 
 (* Linkage computation *)
 val compute_linkage : LinkageCtx.t option -> Linkage.t -> Linkage.t

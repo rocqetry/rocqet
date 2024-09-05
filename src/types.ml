@@ -228,7 +228,13 @@ module rec LinkageElem : sig
         body_expr : Constrexpr.constr_expr;
         body_type : Constrexpr.constr_expr option;
         compiled_context : CompiledModuleType.t;
-        compiled_impl : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
+      }
+    (* Opaque definitions are overridable *)
+    | OpaqueFieldDefinition of {
+        compiled_context : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
+        compiled_signature : CompiledModuleType.t;
       }
     | RecursorDefinition of {
         names : Names.Id.t list;
@@ -257,6 +263,7 @@ module rec LinkageElem : sig
         goal : Constrexpr.constr_expr;
         suffix : RecKind.t;
         inductive : VernacInductive.t;
+        inductive_path : Libnames.qualid;
         handlers : (Names.Id.t * Constrexpr.constr_expr) list;
         compiled_handlers : CompiledModule.t;
         compiled_context : CompiledModuleType.t;
@@ -329,7 +336,9 @@ end = struct
   let rec path_substitution_elem elem ~source ~target =
     match elem with
     | LinkageElem.MetaDataSection metadata ->
-        LinkageElem.MetaDataSection metadata
+       LinkageElem.MetaDataSection metadata
+    | LinkageElem.OpaqueFieldDefinition definition ->
+       LinkageElem.OpaqueFieldDefinition definition
     | LinkageElem.FamilyDefinition family ->
         let g (name, expr) =
           if Names.Id.equal source name then (target, expr) else (name, expr)
@@ -526,7 +535,7 @@ end =
 (* A single plugin command *)
 (* e.g Family A. ... *)
 module PluginCmd = struct
-  type t = Family | Recursion | Induction | MetaData
+  type t = Family | Recursion | Induction | MetaData | Lemma
 end
 
 (* A scope is a plugin command enriched with a name and a "closing" handler *)

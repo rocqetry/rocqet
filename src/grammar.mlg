@@ -131,6 +131,8 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "FInduction" ident(name)] ->
    { Entry.finduction_extension ~name }
 
+| [ "FLemma" ident(name) ":" llconstr_ip(t) ] -> { Entry.flemma name t }
+
 | [ "FQed"] ->
    { Entry.fqed () }
 
@@ -140,4 +142,5 @@ END
 
 VERNAC COMMAND EXTEND FamilyPolyProof CLASSIFIED BY { _in_proof_mode } STATE open_proof
 | ["FProof"] -> { Entry.fproof () }
+| ["FProofLemma"] -> { Entry.fproof_lemma () }
 END

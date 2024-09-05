@@ -870,26 +870,24 @@ Inductive signedness : Type :=
             forall T1, self__Correctness.match_states S1 T1 -> 
             exists T2, plus Csharpminor.Semantics.step tge T1 t T2 /\ match_states S2 T2).            
           FProof.
-              split.
-              (* Sset *)
-              + unfold self__Imp.Clight.Semantics.__handler_type_step_set_ind_comp.
-                unfold __motiveTtransl_step.
-                intros.
-                apply cheat.
-              + apply cheat.
-          Qed.
+              __unfold_ftheorem_motive_nested.
+              apply cheat. Qed.          
           FEnd transl_step.
                 
-          Closing Fact transl_initial_states:
-            forall S, Clight.initial_state prog S ->
-            exists R, initial_state tprog R /\ match_states S R.
-          FProof.
-          
-          Closing Fact transl_final_states:
+          FLemma transl_initial_states:
+            forall S prog tprog, Clight.Semantics.initial_state prog S -> transl_program prog = OK tprog ->
+            exists R, Csharpminor.Semantics.initial_state tprog R /\ match_states S R.
+          FProofLemma.
+              apply cheat. Qed.           
+          FEnd transl_initial_states.
+
+          FLemma transl_final_states:
             forall S R r,
-            match_states S R -> Clight.final_state S r -> final_state R r.
-          FProof.
-      FEnd Correctness.
+            match_states S R -> Clight.Semantics.final_state S r -> Csharpminor.Semantics.final_state R r.
+          FProofLemma.
+             apply cheat. Qed.
+          FEnd transl_final_states.
+     FEnd Correctness. 
    FEnd Cshmgen.
           
    Family Cminor.

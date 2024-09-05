@@ -11,7 +11,7 @@ module PluginScopes = struct
     match peek () with
     | None
     | Some
-        { command = PluginCmd.(Family | Recursion | Induction | MetaData); _ }
+        { command = PluginCmd.(Family | Recursion | Induction | MetaData | Lemma); _ }
       ->
         scopes := scope :: !scopes
 
@@ -25,7 +25,21 @@ module PluginScopes = struct
       when name = scope_name ->
         scopes := scopes_rest;
         Some scope
-    | _ -> Errors.report ~error:Errors.ClosingWrongScope
+    | { PluginCmdScope.name; command; _ }  :: _ ->
+       let command =
+         match command with
+         | PluginCmd.Lemma -> "FLemma"
+         | Family -> "Family"
+         | Induction -> "FInduction"
+         | Recursion -> "FRecursion"
+         | MetaData -> "MetaData"
+       in 
+       let info =
+         Printf.sprintf "Closing Wrong Scope: expeted to close a scope which was opened by the %s %s"
+           command (Names.Id.to_string name) 
+       in
+       Errors.fail ~info
+    (* | _ -> Errors.report ~error:Errors.ClosingWrongScope*)
 
   let ensure_in_scope ~scope =
     match peek () with
