@@ -1238,7 +1238,224 @@ Inductive signedness : Type :=
         transform_partial_program transl_fundef p.
 
       Family Correctness.
-          
+        FDefinition match_prog : Csharpminor.program -> Cminor.program -> Prop :=
+          fun p tp =>
+          match_program (fun cu f tf => transl_fundef f = OK tf) eq p tp.
+
+        MetaData is_reachable_from_env.
+        Inductive is_reachable_from_env (f: meminj) (e: self__Imp.Csharpminor.Semantics.env) (sp: block) (ofs: Z) : Prop :=
+          | is_reachable_intro: forall id b sz delta,
+              e!id = Some(b, sz) ->
+              f b = Some(sp, delta) ->
+              delta <= ofs < delta + sz ->
+              is_reachable_from_env f e sp ofs.
+        FEnd is_reachable_from_env.
+
+        FDefinition padding_freeable : meminj -> Csharpminor.Semantics.env -> mem -> block -> Z -> Prop :=
+          fun f e tm sp sz =>
+          forall ofs,
+          0 <= ofs < sz -> Mem.perm tm sp ofs Cur Freeable \/ is_reachable_from_env f e sp ofs.
+        
+        FDefinition match_temps : meminj -> Csharpminor.Semantics.temp_env -> Cminor.Semantics.env -> Prop :=
+            fun f le te =>
+            forall id v, le!id = Some v -> exists v', te!(id) = Some v' /\ Val.inject f v v'.
+
+        MetaData match_var.
+        Inductive match_var (f: meminj) (sp: block): option (block * Z) -> option Z -> Prop :=
+          | match_var_local: forall b sz ofs,
+              Val.inject f (Vptr b Ptrofs.zero) (Vptr sp (Ptrofs.repr ofs)) ->
+              match_var f sp (Some(b, sz)) (Some ofs)
+          | match_var_global:
+              match_var f sp None None.
+        FEnd match_var.
+
+        MetaData match_env.
+        Record match_env (f: meminj) (cenv: self__Cminorgen.compilenv)
+                        (e: self__Imp.Csharpminor.Semantics.env) (sp: block)
+                        (lo hi: block) : Prop :=
+          mk_match_env {
+            me_vars:
+              forall id, self__Correctness.match_var f sp (e!id) (cenv!id);
+
+            me_low_high:
+              Ple lo hi;
+
+            me_bounded:
+              forall id b sz, PTree.get id e = Some(b, sz) -> Ple lo b /\ Plt b hi;
+
+            me_inv:
+              forall b delta,
+              f b = Some(sp, delta) ->
+              exists id, exists sz, PTree.get id e = Some(b, sz);
+              
+            me_incr:
+              forall b tb delta,
+              f b = Some(tb, delta) -> Plt b lo -> Plt tb sp
+        }.
+        FEnd match_env.
+
+        FDefinition match_bounds : Csharpminor.Semantics.env -> mem -> Prop := 
+          fun e m => forall id b sz ofs p, 
+             PTree.get id e = Some(b, sz) -> Mem.perm m b ofs Max p -> 0 <= ofs < sz.  
+
+        MetaData frame.
+        Inductive frame : Type :=
+          Frame(cenv: self__Cminorgen.compilenv)
+              (tf: self__Imp.Cminor.function)
+              (e: self__Imp.Csharpminor.Semantics.env)
+              (le: self__Imp.Csharpminor.Semantics.temp_env)
+              (te: self__Imp.Cminor.Semantics.env)
+              (sp: block)
+              (lo hi: block).
+        FEnd frame.
+
+        FDefinition callstack : Type := list frame.
+
+        MetaData match_globalenvs.
+        Inductive match_globalenvs (ge: self__Imp.Csharpminor.Semantics.genv) (f: meminj) (bound: block): Prop :=
+        | mk_match_globalenvs
+            (DOMAIN: forall b, Plt b bound -> f b = Some(b, 0))
+            (IMAGE: forall b1 b2 delta, f b1 = Some(b2, delta) -> Plt b2 bound -> b1 = b2)
+            (SYMBOLS: forall id b, Genv.find_symbol ge id = Some b -> Plt b bound)
+            (FUNCTIONS: forall b fd, Genv.find_funct_ptr ge b = Some fd -> Plt b bound)
+            (VARINFOS: forall b gv, Genv.find_var_info ge b = Some gv -> Plt b bound).
+        FEnd match_globalenvs.
+        
+        MetaData match_callstack.
+        Inductive match_callstack (ge: self__Imp.Csharpminor.Semantics.genv) (f: meminj) (m: mem) (tm: mem):
+                          self__Correctness.callstack -> block -> block -> Prop :=
+          | mcs_nil:
+              forall hi bound tbound,
+              self__Correctness.match_globalenvs ge f hi ->
+              Ple hi bound -> Ple hi tbound ->
+              match_callstack ge f m tm nil bound tbound
+          | mcs_cons:
+              forall cenv tf e le te sp lo hi cs bound tbound
+                (BOUND: Ple hi bound)
+                (TBOUND: Plt sp tbound)
+                (MTMP: self__Correctness.match_temps f le te)
+                (MENV: self__Correctness.match_env f cenv e sp lo hi)
+                (BOUND: self__Correctness.match_bounds e m)
+                (PERM: self__Correctness.padding_freeable f e tm sp tf.(self__Imp.Cminor.fn_stackspace))
+                (MCS: match_callstack ge f m tm cs lo sp),
+              match_callstack ge f m tm (self__Correctness.Frame cenv tf e le te sp lo hi :: cs) bound tbound.
+        FEnd match_callstack.
+
+        FInductive match_cont: Csharpminor.Semantics.cont -> Cminor.Semantics.cont -> compilenv -> exit_env -> callstack -> Prop :=
+          | match_Kstop: forall cenv xenv,
+              match_cont Csharpminor.Semantics.Kstop Cminor.Semantics.Kstop cenv xenv nil
+          | match_Kseq: forall s k ts tk cenv xenv cs,
+              transl_stmt s cenv xenv = OK ts ->
+              match_cont k tk cenv xenv cs ->
+              match_cont (Csharpminor.Semantics.Kseq s k) (Cminor.Semantics.Kseq ts tk) cenv xenv cs
+          | match_Kseq2: forall s1 s2 k ts1 tk cenv xenv cs,
+              transl_stmt s1 cenv xenv = OK ts1 ->
+              match_cont (Csharpminor.Semantics.Kseq s2 k) tk cenv xenv cs ->
+              match_cont (Csharpminor.Semantics.Kseq (Csharpminor.Sseq s1 s2) k)
+                        (Cminor.Semantics.Kseq ts1 tk) cenv xenv cs
+          | match_Kblock: forall k tk cenv xenv cs,
+              match_cont k tk cenv xenv cs ->
+              match_cont (Csharpminor.Semantics.Kblock k) (Cminor.Semantics.Kblock tk) cenv (true :: xenv) cs
+          | match_Kblock2: forall k tk cenv xenv cs,
+              match_cont k tk cenv xenv cs ->
+              match_cont k (Cminor.Semantics.Kblock tk) cenv (false :: xenv) cs.
+
+          MetaData match_states.
+          Inductive match_states (ge: self__Imp.Csharpminor.Semantics.genv) : self__Imp.Csharpminor.Semantics.state -> self__Imp.Cminor.Semantics.state -> Prop :=
+              | match_state:
+                  forall fn s k e le m tfn ts tk sp te tm cenv xenv f lo hi cs sz
+                  (TRF: self__Cminorgen.transl_funbody cenv sz fn = OK tfn)
+                  (TR: self__Cminorgen.transl_stmt s cenv xenv = OK ts)
+                  (MINJ: Mem.inject f m tm)
+                  (MCS: self__Correctness.match_callstack ge f m tm
+                          (self__Correctness.Frame cenv tfn e le te sp lo hi :: cs)
+                          (Mem.nextblock m) (Mem.nextblock tm))
+                  (MK: self__Correctness.match_cont k tk cenv xenv cs),
+                  match_states ge (self__Imp.Csharpminor.Semantics.State fn s k e le m)
+                              (self__Imp.Cminor.Semantics.State tfn ts tk (Vptr sp Ptrofs.zero) te tm)
+              | match_state_seq:
+                  forall fn s1 s2 k e le m tfn ts1 tk sp te tm cenv xenv f lo hi cs sz
+                  (TRF: self__Cminorgen.transl_funbody cenv sz fn = OK tfn)
+                  (TR: self__Cminorgen.transl_stmt s1 cenv xenv = OK ts1)
+                  (MINJ: Mem.inject f m tm)
+                  (MCS: self__Correctness.match_callstack ge f m tm
+                          (self__Correctness.Frame cenv tfn e le te sp lo hi :: cs)
+                          (Mem.nextblock m) (Mem.nextblock tm))
+                  (MK: self__Correctness.match_cont (self__Imp.Csharpminor.Semantics.Kseq s2 k) tk cenv xenv cs),
+                  match_states ge (self__Imp.Csharpminor.Semantics.State fn (self__Imp.Csharpminor.Sseq s1 s2) k e le m)
+                              (self__Imp.Cminor.Semantics.State tfn ts1 tk (Vptr sp Ptrofs.zero) te tm)
+              | match_callstate:
+                  forall fd args k m tfd targs tk tm f cs cenv
+                  (TR: self__Cminorgen.transl_fundef fd = OK tfd)
+                  (MINJ: Mem.inject f m tm)
+                  (MCS: self__Correctness.match_callstack ge f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
+                  (MK: self__Correctness.match_cont k tk cenv nil cs)
+                  (ISCC: self__Imp.Csharpminor.Semantics.is_call_cont k)
+                  (ARGSINJ: Val.inject_list f args targs),
+                  match_states ge (self__Imp.Csharpminor.Semantics.Callstate fd args k m)
+                              (self__Imp.Cminor.Semantics.Callstate tfd targs tk tm)
+              | match_returnstate:
+                  forall v k m tv tk tm f cs cenv
+                  (MINJ: Mem.inject f m tm)
+                  (MCS: self__Correctness.match_callstack ge f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
+                  (MK: self__Correctness.match_cont k tk cenv nil cs)
+                  (RESINJ: Val.inject f v tv),
+                  match_states ge (self__Imp.Csharpminor.Semantics.Returnstate v k m)
+                              (self__Imp.Cminor.Semantics.Returnstate tv tk tm).
+          FEnd match_states.
+        (*
+          Variable prog: Csharpminor.program.
+          Variable tprog: program.
+          Hypothesis TRANSL: match_prog prog tprog.
+          Let ge : Csharpminor.genv := Genv.globalenv prog.
+          Let tge: genv := Genv.globalenv tprog. 
+        *)
+
+        FRecursion seq_left_depth about Csharpminor.stmt motive (fun (_ : Csharpminor.stmt) => nat) by _rect.
+              Case Sskip := O.
+              Case Sset := (fun _ _ => O).
+              Case Sseq := (fun s1 seq_left_depth_s1 s2 _ => S (seq_left_depth_s1)).
+              Case Sifthenelse := (fun _ s1 _ s2 _ => O).
+              Case Sloop := (fun s _ => O).
+              Case Sblock := (fun s _ => O).
+              Case Sexit := (fun _ => O).
+              Case Sreturn := (fun e => O).
+              Case Slabel := (fun _ s _ => O).
+              Case Sgoto := (fun _ => O).
+        FEnd seq_left_depth.
+
+        FRecursion measure about Csharpminor.Semantics.state motive (fun (_ : Csharpminor.Semantics.state) => nat) by _rect.
+              Case State := (fun fn s k e le m => seq_left_depth s).
+              Case Callstate := (fun f args k m => O).
+              Case Returnstate := (fun res k m => O).
+          FEnd measure.
+
+        FInduction transl_step_correct about Csharpminor.Semantics.step motive
+          (fun prog tprog ge tge S1 t S2 => match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
+               forall (_ : Csharpminor.Semantics.step ge S1 t S2),
+          forall T1, match_states ge S1 T1 -> 
+          (exists T2, plus Cminor.Semantics.step tge T1 t T2 /\ match_states ge S2 T2) 
+          \/ (measure S2 < measure S1 /\ t = E0 /\ match_states ge S2 T1)%nat).
+        FProof. 
+          apply cheat.
+        Qed.
+        FEnd transl_step_correct.
+
+        FLemma transl_initial_states:
+          forall S, Csharpminor.initial_state prog S ->
+          exists R, Cminor.initial_state tprog R /\ match_states S R.
+            FProofLemma.
+              apply cheat.
+            Qed.
+        CloseFLemma.
+
+        FLemma transl_final_states:
+          forall S R r,
+          match_states S R -> Csharpminor.final_state S r -> Cminor.final_state R r.
+            FProofLemma.
+              apply cheat.
+            Qed.
+        CloseFLemma.
       FEnd Correctness.
   FEnd Cminorgen.
    
