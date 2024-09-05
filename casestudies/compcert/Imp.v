@@ -1431,8 +1431,7 @@ Inductive signedness : Type :=
           FEnd measure.
 
         FInduction transl_step_correct about Csharpminor.Semantics.step motive
-          (fun prog tprog ge tge S1 t S2 => match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
-               forall (_ : Csharpminor.Semantics.step ge S1 t S2),
+          (fun ge S1 t S2 (_ : Csharpminor.Semantics.step ge S1 t S2)  => forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->               
           forall T1, match_states ge S1 T1 -> 
           (exists T2, plus Cminor.Semantics.step tge T1 t T2 /\ match_states ge S2 T2) 
           \/ (measure S2 < measure S1 /\ t = E0 /\ match_states ge S2 T1)%nat).
@@ -1440,7 +1439,7 @@ Inductive signedness : Type :=
           apply cheat.
         Qed.
         FEnd transl_step_correct.
-
+        
         FLemma transl_initial_states:
           forall S, Csharpminor.initial_state prog S ->
           exists R, Cminor.initial_state tprog R /\ match_states S R.
