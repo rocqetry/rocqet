@@ -1441,19 +1441,19 @@ Inductive signedness : Type :=
         FEnd transl_step_correct.
         
         FLemma transl_initial_states:
-          forall S, Csharpminor.initial_state prog S ->
-          exists R, Cminor.initial_state tprog R /\ match_states S R.
+          forall S prog tprog ge, Csharpminor.Semantics.initial_state prog S ->
+          transl_program prog = OK tprog ->
+          exists R, Cminor.Semantics.initial_state tprog R /\ match_states ge S R.
             FProofLemma.
               apply cheat.
             Qed.
         CloseFLemma.
-
+        
         FLemma transl_final_states:
-          forall S R r,
-          match_states S R -> Csharpminor.final_state S r -> Cminor.final_state R r.
+          forall S R r ge,
+          match_states ge S R -> Csharpminor.Semantics.final_state S r -> Cminor.Semantics.final_state R r.
             FProofLemma.
-              apply cheat.
-            Qed.
+              intros. inv H0. inv H. inv MK. inv RESINJ. constructor. Qed.            
         CloseFLemma.
       FEnd Correctness.
   FEnd Cminorgen.
