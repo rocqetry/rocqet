@@ -148,6 +148,20 @@ Inductive bitfield : Type :=
       }.
       FEnd function.
 
+      FDefinition fundef := AST.fundef function.
+
+      FDefinition type_of_function : function -> type := fun f => 
+         self__Imp.Tfunction (self__Imp.type_of_params (self__C.fn_params f)) 
+           (self__C.fn_return f) (self__C.fn_callconv f).
+       
+       FDefinition type_of_fundef : fundef -> type := fun f =>
+          match f with
+          | Internal fd => type_of_function fd
+          | _ => cheat (* TODO: We don't have External in the base compiler *)
+          end.
+
+      FDefinition program := AST.program fundef type.
+
       Family Semantics.                        
       FEnd Semantics.
   FEnd C.
@@ -755,22 +769,32 @@ Inductive bitfield : Type :=
           Case Sgoto := (fun lbl => self__SimplExpr.ret (Clight.Sgoto lbl)).
       FEnd transl_stmt.
 
-      Definition transl_function (f: C.function) : res function :=
-          match transl_stmt f.(C.fn_body) (initial_generator tt) with
-          | Err msg =>
+      FDefinition transl_function : C.function -> res Clight.function := fun f => 
+          match transl_stmt f.(self__Imp.C.fn_body) (self__SimplExpr.initial_generator tt) with
+          | self__SimplExpr.Err msg =>
               Error msg
-          | Res tbody g i =>
-              OK (mkfunction
-                      f.(C.fn_return)
-                      f.(C.fn_callconv)
-                      f.(C.fn_params)
-                      f.(C.fn_vars)
-                      g.(gen_trail)
+          | self__SimplExpr.Res tbody g i =>
+              OK (Clight.mkfunction
+                      f.(self__Imp.C.fn_return)
+                      f.(self__Imp.C.fn_callconv)
+                      f.(self__Imp.C.fn_params)
+                      f.(self__Imp.C.fn_vars)
+                      g.(self__SimplExpr.gen_trail)
                       tbody)
-          end.
+          end.      
 
-          (* Relational specification of translation *)
-          Family Specification.
+     FDefinition transl_fundef : C.fundef -> res Clight.fundef := fun fd =>
+          match fd with
+          | Internal f =>
+              bind (transl_function f) (fun tf => OK (Internal tf))              
+          | _ => cheat (* No external yet *)              
+          end.
+     
+     FDefinition transl_program : C.program -> res Clight.program := fun p =>     
+       do p1 <- AST.transform_partial_program (transl_fundef) p; OK p1.     
+
+     (* Relational specification of translation *)
+     Family Specification.
                 FInductive tr_expr: temp_env -> destination -> Csyntax.expr -> list statement -> expr -> list ident -> Prop :=
                     | tr_var: forall le dst id ty tmp,
                         tr_expr le dst (Csyntax.Evar id ty)
