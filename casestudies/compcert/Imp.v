@@ -693,60 +693,66 @@ Inductive bitfield : Type :=
                             self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Ealignof ty' ty))).          
       FEnd transl_expr.
 
-      Definition transl_expression (r: C.expr) : mon (statement * expr) :=
-          do (sl, a) <- transl_expr For_val r; ret (makeseq sl, a).
+      FDefinition transl_expression : C.expr -> self__SimplExpr.mon (Clight.stmt * Clight.expr) := fun r =>
+          self__SimplExpr.bind2 (transl_expr r self__SimplExpr.For_val) (fun sl a => self__SimplExpr.ret (self__SimplExpr.makeseq sl, a)).
 
-      Definition transl_expr_stmt (r: C.expr) : mon statement :=
-          do (sl, a) <- transl_expr For_effects r; ret (makeseq sl).
+      FDefinition transl_expr_stmt : C.expr -> self__SimplExpr.mon Clight.stmt := fun r =>
+          self__SimplExpr.bind2 (transl_expr r self__SimplExpr.For_effects) (fun sl a => self__SimplExpr.ret (self__SimplExpr.makeseq sl)).          
 
-      Definition transl_if (r: C.expr) (s1 s2: statement) : mon statement :=
-          do (sl, a) <- transl_expr For_val r;
-          ret (makeseq (sl ++ makeif a s1 s2 :: nil)).
+      FDefinition transl_if : C.expr -> Clight.stmt -> Clight.stmt -> self__SimplExpr.mon Clight.stmt  := fun r s1 s2 => 
+          self__SimplExpr.bind2 (transl_expr r self__SimplExpr.For_val) (fun sl a => self__SimplExpr.ret (self__SimplExpr.makeseq (sl ++ makeif a s1 s2 :: nil))).          
 
-      FRecursion transl_stmt about C.statement motive (fun (_ : C.statement) => mon Clight.statement).
-          Case Sskip :=  ret Clight.Sskip.
+      FLemma is_Sskip:
+        forall s, {s = Clight.Sskip} + {s <> Clight.Sskip}.
+      FProofLemma.
+      apply cheat. Qed.
+      CloseFLemma.
+      
+      FRecursion transl_stmt about C.statement motive (fun (_ : C.statement) => self__SimplExpr.mon Clight.stmt) by _rect.
+          Case Sskip :=  (self__SimplExpr.ret Clight.Sskip).
           Case Sdo := (fun e => transl_expr_stmt e).
-          Case Ssequence := (fun s1 trans_stmt_s1 s2 transl_stmt_s2 => 
-                              do ts1 <- transl_stmt_s1;
-                              do ts2 <- transl_stmt_s2;
-                              ret (Clight.Ssequence ts1 ts2)).
+          Case Ssequence := (fun s1 transl_stmt_s1 s2 transl_stmt_s2 => 
+                              self__SimplExpr.bind (transl_stmt_s1) (fun ts1 => 
+                                  self__SimplExpr.bind (transl_stmt_s2) (fun ts2 => 
+                                      self__SimplExpr.ret (Clight.Ssequence ts1 ts2)))).
           Case Sifthenelse := (fun e s1 transl_stmt_s1 s2 transl_stmt_s2 =>
-                                do ts1 <- transl_stmt_s1;
-                                do ts2 <- transl_stmt_s2;
-                                do (s', a) <- transl_expression e;
-                                if is_Sskip s1 && is_Sskip s2 then
-                                  ret (Clight.Ssequence s' Clight.Sskip)
-                                else
-                                  ret (Clight.Ssequence s' (Clight.Sifthenelse a ts1 ts2))).
+                                self__SimplExpr.bind (transl_stmt_s1) (fun ts1 => 
+                                  self__SimplExpr.bind (transl_stmt_s2) (fun ts2 => 
+                                      self__SimplExpr.bind2 (transl_expression e) (fun s' a => 
+                                          if is_Sskip ts1 && is_Sskip ts2 then
+                                              self__SimplExpr.ret (Clight.Ssequence s' Clight.Sskip)
+                                          else
+                                              self__SimplExpr.ret (Clight.Ssequence s' (Clight.Sifthenelse a ts1 ts2)))))).
           Case Swhile := (fun e s1 transl_stmt_s1 =>
-                            do s' <- transl_if e Clight.Sskip Clight.Sbreak;
-                            do ts1 <- transl_stmt_s1;
-                            ret (Clight.Sloop (Clight.Ssequence s' ts1) Clight.Sskip)).
+                           self__SimplExpr.bind (transl_if e Clight.Sskip Clight.Sbreak) (fun s' => 
+                               self__SimplExpr.bind (transl_stmt_s1) (fun ts1 => 
+                                   self__SimplExpr.ret (Clight.Sloop (Clight.Ssequence s' ts1) Clight.Sskip)))).
           Case Sdowhile := (fun e s1 transl_stmt_s1 =>
-                              do s' <- transl_if e Clight.Sskip Clight.Sbreak;
-                              do ts1 <- transl_stmt s1;
-                              ret (Clight.Sloop ts1 s')).
+                              self__SimplExpr.bind (transl_if e Clight.Sskip Clight.Sbreak) (fun s' => 
+                                  self__SimplExpr.bind (transl_stmt_s1) (fun ts1 => 
+                                      self__SimplExpr.ret (Clight.Sloop ts1 s')))).
           Case Sfor := (fun s1 transl_stmt_s1 e2 s3 transl_stmt_s3 s4 transl_stmt_s4 =>
-                          do ts1 <- transl_stmt s1;
-                          do s' <- transl_if e2 Clight.Sskip Clight.Sbreak;
-                          do ts3 <- transl_stmt s3;
-                          do ts4 <- transl_stmt s4;
-                          if is_Sskip s1 then
-                            ret (Clight.Sloop (Clight.Ssequence s' ts4) ts3)
-                          else
-                            ret (Clight.Ssequence ts1 (Clight.Sloop (Clight.Ssequence s' ts4) ts3))).
-          Case Sbreak := ret Clight.Sbreak.
-          Case Scontinue := ret Clight.Scontinue.
+                          self__SimplExpr.bind (transl_stmt_s1) (fun ts1 => 
+                              self__SimplExpr.bind (transl_if e2 Clight.Sskip Clight.Sbreak) (fun s' => 
+                                  self__SimplExpr.bind (transl_stmt_s3) (fun ts3 => 
+                                      self__SimplExpr.bind (transl_stmt_s4) (fun ts4 => 
+                                          if is_Sskip ts1 then
+                                              self__SimplExpr.ret (Clight.Sloop (Clight.Ssequence s' ts4) ts3)
+                                          else
+                                              self__SimplExpr.ret (Clight.Ssequence ts1 (Clight.Sloop (Clight.Ssequence s' ts4) ts3))))))).
+          Case Sbreak := (self__SimplExpr.ret Clight.Sbreak).
+          Case Scontinue := (self__SimplExpr.ret Clight.Scontinue).
           Case Sreturn := (fun e =>
                             match e with
-                            | None => ret (Clight.Sreturn None)
-                            | Some e => do (s', a) <- transl_expression e;
-                                        ret (Clight.Ssequence s' (Clight.Sreturn (Some a)))
+                            | None => self__SimplExpr.ret (Clight.Sreturn None)
+                            | Some e => 
+                                self__SimplExpr.bind2 (transl_expression e) (fun s' a => 
+                                    self__SimplExpr.ret (Clight.Ssequence s' (Clight.Sreturn (Some a))))
                             end).
           Case Slabel := (fun lbl s1 transl_stmt_s1 => 
-                            do ts1 <- transl_stmt_s1;
-                            ret (Clight.Slabel lbl ts1)).
-          Case Sgoto := (fun lbl => ret (Clight.Sgoto lbl)).
+                            self__SimplExpr.bind transl_stmt_s1 (fun ts1 => 
+                                self__SimplExpr.ret (Clight.Slabel lbl ts1))).
+          Case Sgoto := (fun lbl => self__SimplExpr.ret (Clight.Sgoto lbl)).
       FEnd transl_stmt.
 
       Definition transl_function (f: C.function) : res function :=
