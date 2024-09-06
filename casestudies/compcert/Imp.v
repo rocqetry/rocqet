@@ -53,6 +53,11 @@ Inductive signedness : Type :=
   | Signed: signedness
   | Unsigned: signedness. 
 
+Inductive bitfield : Type :=
+  | Full
+  | Bits (sz: intsize) (sg: signedness) (pos: Z) (width: Z).
+
+
    Record attr : Type := mk_attr {
    attr_volatile: bool;
    attr_alignas: option N(* log2 of required alignment *)
@@ -71,6 +76,7 @@ Inductive signedness : Type :=
       | Tcons: type -> typelist -> typelist.  
   
   Definition type_int32s := Tint I32 Signed noattr.
+  Definition type_bool := Tint IBool Signed noattr.
 
   Fixpoint type_of_params (params: list (ident * type)) : typelist :=
   match params with
@@ -100,8 +106,7 @@ Inductive signedness : Type :=
         | Eseqor : expr -> expr -> type -> expr (* sequential "or" r1 || r2 *)
         | Econdition : expr -> expr -> expr -> type -> expr (* conditional r1 ? r2 : r3 *)
         | Esizeof : type -> type -> expr (* size of a type *)
-        | Ealignof : type -> type -> expr (* natural alignment of a type *)
-        | Eassign : expr -> expr -> type -> expr (* assignment l = r *)                
+        | Ealignof : type -> type -> expr (* natural alignment of a type *)        
         | Ecomma : expr -> expr -> type -> expr. (* sequence expression r1, r2 *)                
         
         FRecursion typeof : (e : expr) -> type.
@@ -112,10 +117,9 @@ Inductive signedness : Type :=
           Case Eseqor r1 r2 ty := ty. 
           Case Econdition r1 r2 r3 ty := ty.
           Case Esizeof ty' ty := ty.
-          Case Ealignof ty' ty := ty. 
-          Case Eassign l r ty := ty.                    
+          Case Ealignof ty' ty := ty.          
           Case Ecomma r1 r2 ty := ty.
-        FEnd typeof.      
+        FEnd typeof.
 
       FDefinition label := ident.
       
@@ -508,14 +512,14 @@ Inductive signedness : Type :=
               (mkgenerator (Pos.succ (gen_next g)) ((gen_next g, ty) :: gen_trail g))
               (Ple_succ (gen_next g)).
       
-      Fixpoint makeseq_rec (s: self__Imp.C.statement) (l: list self__Imp.C.statement) : self__Imp.C.statement :=
+      Fixpoint makeseq_rec (s: self__Imp.Clight.stmt) (l: list self__Imp.Clight.stmt) : self__Imp.Clight.stmt :=
          match l with
          | nil => s
-         | s' :: l' => makeseq_rec (self__Imp.C.Ssequence s s') l'
+         | s' :: l' => makeseq_rec (self__Imp.Clight.Ssequence s s') l'
           end.
 
-      Definition makeseq (l: list self__Imp.C.statement) : self__Imp.C.statement :=
-        makeseq_rec self__Imp.C.Sskip l.
+      Definition makeseq (l: list self__Imp.Clight.stmt) : self__Imp.Clight.stmt :=
+        makeseq_rec self__Imp.Clight.Sskip l.
 
       Local Open Scope gensym_monad_scope.
       FEnd monads.
@@ -541,10 +545,48 @@ Inductive signedness : Type :=
         | For_val => (sl, a)
         | For_effects => (sl, a)
         | For_set sd => (sl ++ do_set sd a, a)
-        end.
-      FEnd destination.
+        end.      
       
-      FRecursion transl_expr about C.expr motive (fun (_ : C.expr) => destination -> self__SimplExpr.mon (list Clight.stmt * Clight.expr)) by _rect. 
+         Definition sd_temp (sd: set_destination) :=
+           match sd with SDbase _ _ tmp => tmp | SDcons _ _ tmp _ => tmp end.
+         
+         Definition sd_head_type (sd: set_destination) :=
+           match sd with SDbase _ ty _ => ty | SDcons _ ty _ _ => ty end.
+         
+         Definition temp_for_sd (ty: self__Imp.type) (sd: set_destination) : self__SimplExpr.mon ident :=
+             (* if type_eq ty (sd_head_type sd) then ret (sd_temp sd) else gensym ty.*)
+             cheat.
+      FEnd destination.
+
+      FDefinition dummy_expr := Clight.Econst_int Int.zero self__Imp.type_int32s.
+      
+      FRecursion eval_simpl_expr about Clight.expr motive (fun (_ : Clight.expr) => option val) by _rect.
+          Case Econst_int := (fun n ty => Some(Vint n)).
+          Case Econst_float := (fun n ty => Some(Vfloat n)).
+          Case Econst_single := (fun n ty => Some(Vsingle n)).
+          Case Econst_long := (fun n ty => Some(Vlong n)).
+          Case Ecast := (fun b eval_simpl_expr_b ty  => 
+                            match eval_simpl_expr_b with
+                            | None => None
+                            | Some v => Clight.Semantics.sem_cast v (Clight.typeof b) ty Mem.empty
+                            end).
+          Case Etempvar := (fun id ty => None).
+          Case Esizeof := (fun _ _ => None).
+          Case Ealignof := (fun _ _ => None).
+      FEnd eval_simpl_expr.
+      
+      FDefinition makeif : Clight.expr -> Clight.stmt -> Clight.stmt -> Clight.stmt :=
+        fun a s1 s2 =>
+          match eval_simpl_expr a with
+          | Some v =>
+              match Clight.Semantics.bool_val v (Clight.typeof a) Mem.empty with
+              | Some b => if b then s1 else s2
+              | None => Clight.Sifthenelse a s1 s2
+              end
+          | None => Clight.Sifthenelse a s1 s2
+          end.      
+      
+      FRecursion transl_expr about C.expr motive (fun (_ : C.expr) => destination -> self__SimplExpr.mon (list Clight.stmt * Clight.expr)) by _rect.
           Case Evar := (fun id ty => fun dst => self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Etempvar id ty))).
           Case Eval := (fun v ty => fun dst => 
                              match v with 
@@ -553,141 +595,102 @@ Inductive signedness : Type :=
                               | Vfloat n => self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Econst_float n ty))
                               | Vsingle n => self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Econst_single n ty))
                               | _ =>  self__SimplExpr.error (msg "SimplExpr.transl_expr: Eval") end).
-          Case Ecast := (fun r transl_expr_r ty => fun dst => 
-                            (do (sl1, a1) <- transl_expr_r self__SimplExpr.For_val;
-                            match dst with
+          Case Ecast := (fun r transl_expr_r ty => fun dst =>
+                           self__SimplExpr.bind2 (transl_expr_r self__SimplExpr.For_val)
+                               (fun sl1 a1 => match dst with
                             | self__SimplExpr.For_val | self__SimplExpr.For_set _ =>
-                                do t <- self__SimplExpr.gensym ty;
-                                self__SimplExpr.ret (self__SimplExpr.finish dst (sl1) (Clight.Ecast a1 ty))
+                                self__SimplExpr.bind (self__SimplExpr.gensym ty)
+                                   (fun t => self__SimplExpr.ret (self__SimplExpr.finish dst (sl1) (Clight.Ecast a1 ty)))
                             | self__SimplExpr.For_effects =>
-                                transl_expr_r self__SimplExpr.For_effects end)).
-          Case Eassign := (fun l r ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_val l;
-                            do (sl2, a2) <- transl_expr For_val r;
-                            do bf <- is_bitfield_access a1;
-                            let ty1 := C.typeof l in
-                            let ty2 := C.typeof r in
-                            match dst with
-                            | For_val | For_set _ =>
-                                do t <- gensym ty1;
-                                ret (finish dst
-                                        (sl1 ++ sl2 ++ Clight.Sset t (Clight.Ecast a2 ty1) :: make_assign bf a1 (Clight.Etempvar t ty1) :: nil)
-                                        (make_assign_value bf (Clight.Etempvar t ty1)))
-                            | For_effects =>
-                                ret (sl1 ++ sl2 ++ make_assign bf a1 a2 :: nil,
-                                    dummy_expr)
-                            end).
-          Case Eassignop := (fun op l r tyres ty => fun dst => 
-                            let ty1 := C.typeof l in
-                            do (sl1, a1) <- transl_expr For_val l;
-                            do (sl2, a2) <- transl_expr For_val r;
-                            do (sl3, a3) <- transl_valof ty1 a1;
-                            do bf <- is_bitfield_access a1;
-                            match dst with
-                            | For_val | For_set _ =>
-                                do t <- gensym ty1;
-                                ret (finish dst
-                                        (sl1 ++ sl2 ++ sl3 ++
-                                        Clight.Sset t (Clight.Ecast (Clight.Ebinop op a3 a2 tyres) ty1) ::
-                                        make_assign bf a1 (Clight.Etempvar t ty1) :: nil)
-                                        (make_assign_value bf (Clight.Etempvar t ty1)))
-                            | For_effects =>
-                                ret (sl1 ++ sl2 ++ sl3 ++ make_assign bf a1 (Clight.Ebinop op a3 a2 tyres) :: nil,
-                                    dummy_expr)
-                            end).
-          Case Epostincr := (fun id l ty => fun dst => 
-                            let ty1 := C.typeof l in
-                            do (sl1, a1) <- transl_expr For_val l;
-                            do bf <- is_bitfield_access a1;
-                            match dst with
-                            | For_val | For_set _ =>
-                                do t <- gensym ty1;
-                                ret (finish dst
-                                        (sl1 ++ make_set bf t a1 ::
-                                        make_assign bf a1 (transl_incrdecr id (Clight.Etempvar t ty1) ty1) :: nil)
-                                        (Clight.Etempvar t ty1))
-                            | For_effects =>
-                                do (sl2, a2) <- transl_valof ty1 a1;
-                                ret (sl1 ++ sl2 ++ make  assign bf a1 (transl_incrdecr id a2 ty1) :: nil,
-                                    dummy_expr) 
-                            end).
-          Case Ecomma := (fun r1 r2 ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_effects r1;
-                            do (sl2, a2) <- transl_expr dst r2;
-                            ret (sl1 ++ sl2, a2)).
-          Case Econdition := (fun r1 r2 r3 ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_val r1;
-                            match dst with
-                            | For_val =>
-                                do t <- gensym ty;
-                                let sd := SDbase ty ty t in
-                                do (sl2, a2) <- transl_expr (For_set sd) r2;
-                                do (sl3, a3) <- transl_expr (For_set sd) r3;
-                                ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
-                                    Clight.Etempvar t ty)
-                            | For_effects =>
-                                do (sl2, a2) <- transl_expr For_effects r2;
-                                do (sl3, a3) <- transl_expr For_effects r3;
-                                ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
-                                    dummy_expr)
-                            | For_set sd =>
-                                do t <- temp_for_sd ty sd;
-                                let sd' := SDcons ty ty t sd in
-                                do (sl2, a2) <- transl_expr (For_set sd') r2;
-                                do (sl3, a3) <- transl_expr (For_set sd') r3;
-                                ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
-                                    dummy_expr)
-                            end).
-          Case Eseqor := (fun r1 r2 ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_val r1;
-                            match dst with
-                            | For_val =>
-                                do t <- gensym ty;
-                                let sd := SDbase type_bool ty t in
-                                do (sl2, a2) <- transl_expr (For_set sd) r2;
-                                ret (sl1 ++
-                                    makeif a1 (Clight.Sset t (Clight.Econst_int Int.one ty)) (makeseq sl2) :: nil,
-                                    Clight.Etempvar t ty)
-                            | For_effects =>
-                                do (sl2, a2) <- transl_expr For_effects r2;
-                                ret (sl1 ++ makeif a1 Clight.Sskip (makeseq sl2) :: nil, dummy_expr)
-                            | For_set sd =>
-                                do t <- temp_for_sd ty sd;
-                                let sd' := SDcons type_bool ty t sd in
-                                do (sl2, a2) <- transl_expr (For_set sd') r2;
-                                ret (sl1 ++
-                                    makeif a1 (makeseq (do_set sd (Clight.Econst_int Int.one ty))) (makeseq sl2) :: nil,
-                                    dummy_expr)
-                            end).
-          Case Eseqand := (fun r1 r2 ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_val r1;
-                            match dst with
-                            | For_val =>
-                                do t <- gensym ty;
-                                let sd := SDbase type_bool ty t in
-                                do (sl2, a2) <- transl_expr (For_set sd) r2;
-                                ret (sl1 ++
-                                    makeif a1 (makeseq sl2) (Clight.Sset t (Clight.Econst_int Int.zero ty)) :: nil,
-                                    Clight.Etempvar t ty)
-                            | For_effects =>
-                                do (sl2, a2) <- transl_expr For_effects r2;
-                                ret (sl1 ++ makeif a1 Clight.Sskip (makeseq sl2) :: nil, dummy_expr)
-                            | For_set sd =>
-                                do t <- temp_for_sd ty sd;
-                                let sd' := SDcons type_bool ty t sd in
-                                do (sl2, a2) <- transl_expr (For_set sd') r2;
-                                ret (sl1 ++
-                                    makeif a1 (makeseq sl2) (makeseq (do_set sd (Clight.Econst_int Int.zero ty))) :: nil,
-                                    dummy_expr)
-                            end).
+                                transl_expr_r self__SimplExpr.For_effects end)).                    
+          Case Ecomma := (fun r1 transl_expr_r1 r2 transl_expr_r2 ty => fun dst => 
+                            self__SimplExpr.bind2 (transl_expr_r1 self__SimplExpr.For_effects)
+                              (fun sl1 a1 => 
+                                   self__SimplExpr.bind2 (transl_expr_r2 dst)
+                                      (fun sl2 a2 => self__SimplExpr.ret (sl1 ++ sl2, a2)))).
+          Case Econdition := (fun r1 transl_expr_r1 r2 transl_expr_r2 r3 transl_expr_r3 ty => 
+                                fun dst => 
+                                    self__SimplExpr.bind2 (transl_expr_r1 self__SimplExpr.For_val) 
+                                       (fun sl1 a1 => 
+                                           match dst with
+                                          | self__SimplExpr.For_val =>
+                                              self__SimplExpr.bind (self__SimplExpr.gensym ty) (fun t => 
+                                                  let sd := self__SimplExpr.SDbase ty ty t in
+                                                  self__SimplExpr.bind2 (transl_expr_r2 (self__SimplExpr.For_set sd)) 
+                                                      (fun sl2 a2 => 
+                                                          self__SimplExpr.bind2 (transl_expr_r3 (self__SimplExpr.For_set sd)) 
+                                                              (fun sl3 a3 => 
+                                                                  self__SimplExpr.ret (sl1 ++ makeif a1 (self__SimplExpr.makeseq sl2) (self__SimplExpr.makeseq sl3) :: nil, Clight.Etempvar t ty))))
+                                          | self__SimplExpr.For_effects =>
+                                              self__SimplExpr.bind2 (transl_expr_r2 self__SimplExpr.For_effects) (fun sl2 a2 => 
+                                                  self__SimplExpr.bind2 (transl_expr_r3 self__SimplExpr.For_effects) (fun sl3 a3 => 
+                                                      self__SimplExpr.ret (sl1 ++ makeif a1 (self__SimplExpr.makeseq sl2) (self__SimplExpr.makeseq sl3) :: nil, dummy_expr)))
+                                          | self__SimplExpr.For_set sd =>
+                                              self__SimplExpr.bind (self__SimplExpr.temp_for_sd ty sd) (fun t => 
+                                                  let sd' := self__SimplExpr.SDcons ty ty t sd in
+                                                  self__SimplExpr.bind2 (transl_expr_r2 (self__SimplExpr.For_set sd')) 
+                                                      (fun sl2 a2 => 
+                                                          self__SimplExpr.bind2 (transl_expr_r3 (self__SimplExpr.For_set sd')) 
+                                                              (fun sl3 a3 => 
+                                                                   self__SimplExpr.ret (sl1 ++ makeif a1 (self__SimplExpr.makeseq sl2) (self__SimplExpr.makeseq sl3) :: nil,
+                                                                  dummy_expr))))
+                                          end)).
+          Case Eseqor := (fun r1 transl_expr_r1 r2 transl_expr_r2 ty => fun dst => 
+                            self__SimplExpr.bind2 (transl_expr_r1 self__SimplExpr.For_val)
+                               (fun sl1 a1 =>
+                                    match dst with
+                                    | self__SimplExpr.For_val =>
+                                        self__SimplExpr.bind (self__SimplExpr.gensym ty)
+                                             (fun t => 
+                                                 let sd := self__SimplExpr.SDbase self__Imp.type_bool ty t in
+                                                 self__SimplExpr.bind2 (transl_expr_r2 (self__SimplExpr.For_set sd))
+                                                     (fun sl2 a2 => 
+                                                    self__SimplExpr.ret (sl1 ++
+                                                     makeif a1 (Clight.Sset t (Clight.Econst_int Int.one ty)) (self__SimplExpr.makeseq sl2) :: nil,
+                                                     Clight.Etempvar t ty)))                             
+                                    | self__SimplExpr.For_effects =>
+                                        self__SimplExpr.bind2 (transl_expr_r2 self__SimplExpr.For_effects)
+                                             (fun sl2 a2 => self__SimplExpr.ret (sl1 ++ makeif a1 Clight.Sskip (self__SimplExpr.makeseq sl2) :: nil, dummy_expr))                                        
+                                    | self__SimplExpr.For_set sd =>
+                                        self__SimplExpr.bind (self__SimplExpr.temp_for_sd ty sd)
+                                            (fun t => 
+                                               let sd' := self__SimplExpr.SDcons self__Imp.type_bool ty t sd in
+                                               self__SimplExpr.bind2 (transl_expr_r2 (self__SimplExpr.For_set sd'))
+                                                  (fun sl2 a2 => 
+                                                      self__SimplExpr.ret (sl1 ++
+                                                             makeif a1 (self__SimplExpr.makeseq (self__SimplExpr.do_set sd (Clight.Econst_int Int.one ty))) (self__SimplExpr.makeseq sl2) :: nil,
+                                                          dummy_expr)))                                                                                                                        
+                                    end)).
+          Case Eseqand := (fun r1 transl_expr_r1 r2 transl_expr_r2 ty => fun dst => 
+                               self__SimplExpr.bind2 (transl_expr_r1 self__SimplExpr.For_val)
+                               (fun sl1 a1 =>
+                                    match dst with
+                                    | self__SimplExpr.For_val =>
+                                        self__SimplExpr.bind (self__SimplExpr.gensym ty)
+                                             (fun t => 
+                                                 let sd := self__SimplExpr.SDbase self__Imp.type_bool ty t in
+                                                 self__SimplExpr.bind2 (transl_expr_r2 (self__SimplExpr.For_set sd))
+                                                     (fun sl2 a2 => 
+                                                    self__SimplExpr.ret (sl1 ++
+                                                           makeif a1 (self__SimplExpr.makeseq sl2) (Clight.Sset t (Clight.Econst_int Int.zero ty)) :: nil,
+                                                        Clight.Etempvar t ty)))                      
+                                    | self__SimplExpr.For_effects =>
+                                        self__SimplExpr.bind2 (transl_expr_r2 self__SimplExpr.For_effects)
+                                             (fun sl2 a2 => self__SimplExpr.ret (sl1 ++ makeif a1 Clight.Sskip (self__SimplExpr.makeseq sl2) :: nil, dummy_expr))                                        
+                                    | self__SimplExpr.For_set sd =>
+                                        self__SimplExpr.bind (self__SimplExpr.temp_for_sd ty sd)
+                                            (fun t => 
+                                               let sd' := self__SimplExpr.SDcons self__Imp.type_bool ty t sd in
+                                               self__SimplExpr.bind2 (transl_expr_r2 (self__SimplExpr.For_set sd'))
+                                                  (fun sl2 a2 => 
+                                                      self__SimplExpr.ret (sl1 ++
+                                                             makeif a1 (self__SimplExpr.makeseq sl2) (self__SimplExpr.makeseq (self__SimplExpr.do_set sd (Clight.Econst_int Int.zero ty))) :: nil,
+                                                          dummy_expr)))                                                                                                                      
+                                    end)).                            
           Case Esizeof := (fun ty' ty => fun dst => 
-                            ret (finish dst nil (Clight.Esizeof ty' ty))).
+                            self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Esizeof ty' ty))).
           Case Ealignof := (fun ty' ty => fun dst => 
-                            ret (finish dst nil (Clight.Ealignof ty' ty))).
-          Case Evalof := (fun l ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_val l;
-                            do (sl2, a2) <- transl_valof (C.typeof l) a1;
-                            ret (finish dst (sl1 ++ sl2) a2)).
+                            self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Ealignof ty' ty))).          
       FEnd transl_expr.
 
       Definition transl_expression (r: C.expr) : mon (statement * expr) :=
