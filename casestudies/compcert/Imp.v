@@ -933,85 +933,103 @@ Inductive bitfield : Type :=
                 Variable le: temp_env.
                 Variable m: mem. *)
 
-                Inductive tr_top: destination -> Csyntax.expr -> list statement -> expr -> list ident -> Prop :=
-                  | tr_top_val_val: forall v ty a tmp,
-                      typeof a = ty -> eval_expr ge e le m a v ->
-                      tr_top For_val (Csyntax.Eval v ty) nil a tmp
-                  | tr_top_base: forall dst r sl a tmp,
-                      tr_expr le dst r sl a tmp ->
-                      tr_top dst r sl a tmp.
+             MetaData tr_top.
+             Inductive tr_top: 
+               self__Imp.Clight.Semantics.genv -> 
+               self__Imp.Clight.Semantics.env -> 
+               self__Imp.Clight.Semantics.temp_env -> 
+               mem -> 
+               self__SimplExpr.destination -> 
+               self__Imp.C.expr -> 
+               list self__Imp.Clight.stmt -> 
+               self__Imp.Clight.expr -> list ident -> Prop :=
+                  | tr_top_val_val: forall ge e le m v ty a tmp,
+                      self__Imp.Clight.typeof a = ty -> self__Imp.Clight.Semantics.eval_expr ge e le m a v ->
+                      tr_top ge e le m self__SimplExpr.For_val (self__Imp.C.Eval v ty) nil a tmp
+                  | tr_top_base: forall ge e le m dst r sl a tmp,
+                      self__Specification.tr_expr le dst r sl a tmp ->
+                      tr_top ge e le m dst r sl a tmp.
+             FEnd tr_top.
 
-                Inductive tr_expression: Csyntax.expr -> statement -> expr -> Prop :=
+             MetaData tr_expression.
+             Inductive tr_expression: self__Imp.C.expr -> self__Imp.Clight.stmt -> self__Imp.Clight.expr -> Prop :=
                   | tr_expression_intro: forall r sl a tmps,
-                      (forall ge e le m, tr_top ge e le m For_val r sl a tmps) ->
-                      tr_expression r (makeseq sl) a.
-
-                Inductive tr_expr_stmt: Csyntax.expr -> statement -> Prop :=
+                      (forall ge e le m, self__Specification.tr_top ge e le m self__SimplExpr.For_val r sl a tmps) ->
+                      tr_expression r (self__SimplExpr.makeseq sl) a.
+             FEnd tr_expression.
+             
+             MetaData tr_expr_stmt.
+             Inductive tr_expr_stmt: self__Imp.C.expr -> self__Imp.Clight.stmt -> Prop :=
                   | tr_expr_stmt_intro: forall r sl a tmps,
-                      (forall ge e le m, tr_top ge e le m For_effects r sl a tmps) ->
-                      tr_expr_stmt r (makeseq sl).
+                      (forall ge e le m, self__Specification.tr_top ge e le m self__SimplExpr.For_effects r sl a tmps) ->
+                      tr_expr_stmt r (self__SimplExpr.makeseq sl).
+             FEnd tr_expr_stmt.
 
-                Inductive tr_if: Csyntax.expr -> statement -> statement -> statement -> Prop :=
+             MetaData tr_if.
+             Inductive tr_if: self__Imp.C.expr -> self__Imp.Clight.stmt -> self__Imp.Clight.stmt -> self__Imp.Clight.stmt  -> Prop :=
                   | tr_if_intro: forall r s1 s2 sl a tmps,
-                      (forall ge e le m, tr_top ge e le m For_val r sl a tmps) ->
-                      tr_if r s1 s2 (makeseq (sl ++ makeif a s1 s2 :: nil)).
+                      (forall ge e le m, self__Specification.tr_top ge e le m self__SimplExpr.For_val r sl a tmps) ->
+                      tr_if r s1 s2 (self__SimplExpr.makeseq (sl ++ self__SimplExpr.makeif a s1 s2 :: nil)).
+             FEnd tr_if.                          
 
-                FInductive tr_stmt: C.statement -> Clight.statement -> Prop :=
-                    | tr_skip:
-                        tr_stmt C.Sskip Clight.Sskip
-                    | tr_do: forall r s,
-                        tr_expr_stmt r s ->
-                        tr_stmt (C.Sdo r) s
-                    | tr_seq: forall s1 s2 ts1 ts2,
-                        tr_stmt s1 ts1 -> tr_stmt s2 ts2 ->
-                        tr_stmt (C.Ssequence s1 s2) (Clight.Ssequence ts1 ts2)
-                    | tr_ifthenelse_empty: forall r s' a,
-                        tr_expression r s' a ->
-                        tr_stmt (C.Sifthenelse r Csyntax.Sskip Csyntax.Sskip) (Clight.Ssequence s' Sskip)
-                    | tr_ifthenelse: forall r s1 s2 s' a ts1 ts2,
-                        tr_expression r s' a ->
-                        tr_stmt s1 ts1 -> tr_stmt s2 ts2 ->
-                        tr_stmt (C.Sifthenelse r s1 s2) (Clight.Ssequence s' (Clight.Sifthenelse a ts1 ts2))
-                    | tr_while: forall r s1 s' ts1,
-                        tr_if r Sskip Sbreak s' ->
-                        tr_stmt s1 ts1 ->
-                        tr_stmt (C.Swhile r s1)
-                                (Clight.Sloop (Ssequence s' ts1) Sskip)
-                    | tr_dowhile: forall r s1 s' ts1,
-                        tr_if r Sskip Sbreak s' ->
-                        tr_stmt s1 ts1 ->
-                        tr_stmt (C.Sdowhile r s1)
-                                (Clight.Sloop ts1 s')
-                    | tr_for_1: forall r s3 s4 s' ts3 ts4,
-                        tr_if r Sskip Sbreak s' ->
-                        tr_stmt s3 ts3 ->
-                        tr_stmt s4 ts4 ->
-                        tr_stmt (C.Sfor C.Sskip r s3 s4)
-                                (Clight.Sloop (Clight.Ssequence s' ts4) ts3)
-                    | tr_for_2: forall s1 r s3 s4 s' ts1 ts3 ts4,
-                        tr_if r Sskip Sbreak s' ->
-                        s1 <> C.Sskip ->
-                        tr_stmt s1 ts1 ->
-                        tr_stmt s3 ts3 ->
-                        tr_stmt s4 ts4 ->
-                        tr_stmt (C.Sfor s1 r s3 s4)
-                                (Clight.Ssequence ts1 (Clight.Sloop (Clight.Ssequence s' ts4) ts3))
-                    | tr_break:
-                        tr_stmt C.Sbreak Clight.Sbreak
-                    | tr_continue:
-                        tr_stmt C.Scontinue Clight.Scontinue
-                    | tr_return_none:
-                        tr_stmt (C.Sreturn None) (Clight.Sreturn None)
-                    | tr_return_some: forall r s' a,
-                        tr_expression r s' a ->
-                        tr_stmt (C.Sreturn (Some r)) (Clight.Ssequence s' (Clight.Sreturn (Some a)))
-                    | tr_label: forall lbl s ts,
-                        tr_stmt s ts ->
-                        tr_stmt (C.Slabel lbl s) (Clight.Slabel lbl ts)
-                    | tr_goto: forall lbl,
-                        tr_stmt (C.Sgoto lbl) (Clight.Sgoto lbl).
-
+             FInductive tr_stmt: C.statement -> Clight.stmt -> Prop :=
+                | tr_skip:
+                    tr_stmt C.Sskip Clight.Sskip
+                | tr_do: forall r s,
+                    tr_expr_stmt r s ->
+                    tr_stmt (C.Sdo r) s
+                | tr_seq: forall s1 s2 ts1 ts2,
+                   tr_stmt s1 ts1 -> tr_stmt s2 ts2 ->
+                   tr_stmt (C.Ssequence s1 s2) (Clight.Ssequence ts1 ts2)
+                | tr_ifthenelse_empty: forall r s' a,
+                    tr_expression r s' a ->
+                    tr_stmt (C.Sifthenelse r C.Sskip C.Sskip) (Clight.Ssequence s' Clight.Sskip)
+                | tr_ifthenelse: forall r s1 s2 s' a ts1 ts2,
+                    tr_expression r s' a ->
+                    tr_stmt s1 ts1 -> tr_stmt s2 ts2 ->
+                    tr_stmt (C.Sifthenelse r s1 s2) (Clight.Ssequence s' (Clight.Sifthenelse a ts1 ts2))
+                | tr_while: forall r s1 s' ts1,
+                    tr_if r Clight.Sskip Clight.Sbreak s' ->
+                    tr_stmt s1 ts1 ->
+                    tr_stmt (C.Swhile r s1)
+                            (Clight.Sloop (Clight.Ssequence s' ts1) Clight.Sskip)
+                | tr_dowhile: forall r s1 s' ts1,
+                    tr_if r Clight.Sskip Clight.Sbreak s' ->
+                    tr_stmt s1 ts1 ->
+                    tr_stmt (C.Sdowhile r s1)
+                            (Clight.Sloop ts1 s')
+                | tr_for_1: forall r s3 s4 s' ts3 ts4,
+                    tr_if r Clight.Sskip Clight.Sbreak s' ->
+                    tr_stmt s3 ts3 ->
+                    tr_stmt s4 ts4 ->
+                    tr_stmt (C.Sfor C.Sskip r s3 s4)
+                            (Clight.Sloop (Clight.Ssequence s' ts4) ts3)
+                | tr_for_2: forall s1 r s3 s4 s' ts1 ts3 ts4,
+                    tr_if r Clight.Sskip Clight.Sbreak s' ->
+                    s1 <> C.Sskip ->
+                    tr_stmt s1 ts1 ->
+                    tr_stmt s3 ts3 ->
+                    tr_stmt s4 ts4 ->
+                    tr_stmt (C.Sfor s1 r s3 s4)
+                            (Clight.Ssequence ts1 (Clight.Sloop (Clight.Ssequence s' ts4) ts3))
+                | tr_break:
+                    tr_stmt C.Sbreak Clight.Sbreak
+                | tr_continue:
+                    tr_stmt C.Scontinue Clight.Scontinue
+                | tr_return_none:
+                    tr_stmt (C.Sreturn None) (Clight.Sreturn None)
+                | tr_return_some: forall r s' a,
+                    tr_expression r s' a ->
+                    tr_stmt (C.Sreturn (Some r)) (Clight.Ssequence s' (Clight.Sreturn (Some a)))
+                | tr_label: forall lbl s ts,
+                    tr_stmt s ts ->
+                    tr_stmt (C.Slabel lbl s) (Clight.Slabel lbl ts)
+                | tr_goto: forall lbl,
+                    tr_stmt (C.Sgoto lbl) (Clight.Sgoto lbl).
+                
                 (* Proof of correctness of translation wrt the specification *)
+                Family Correctness.
+                FEnd Correctness.
           FEnd Specification.
   FEnd SimplExpr.
   
