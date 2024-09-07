@@ -162,7 +162,227 @@ Inductive bitfield : Type :=
 
       FDefinition program := AST.program fundef type.
 
-      Family Semantics.                        
+      Family Semantics.       
+          FDefinition genv := Genv.t fundef type.
+          FDefinition env := PTree.t (block * type).
+          FDefinition empty_env: env := (PTree.empty (block * type)).
+
+          FInductive cont: Type :=
+              | Kstop: cont
+              | Kdo: cont -> cont(* Kdo k = after x in x; *)
+              | Kseq: statement -> cont -> cont(* Kseq s2 k = after s1 in s1;s2 *)
+              | Kifthenelse: statement -> statement -> cont -> cont(* Kifthenelse s1 s2 k = after x in if (x) { s1 } else { s2 } *)
+              | Kwhile1: expr -> statement -> cont -> cont(* Kwhile1 x s k = after x in while(x) s *)
+              | Kwhile2: expr -> statement -> cont -> cont(* Kwhile x s k = after s in while (x) s *)
+              | Kdowhile1: expr -> statement -> cont -> cont(* Kdowhile1 x s k = after s in do s while (x) *)
+              | Kdowhile2: expr -> statement -> cont -> cont(* Kdowhile2 x s k = after x in do s while (x) *)
+              | Kfor2: expr -> statement -> statement -> cont -> cont(* Kfor2 e2 e3 s k = after e2 in for(e1;e2;e3) s *)
+              | Kfor3: expr -> statement -> statement -> cont -> cont(* Kfor3 e2 e3 s k = after s in for(e1;e2;e3) s *)
+              | Kfor4: expr -> statement -> statement -> cont -> cont(* Kfor4 e2 e3 s k = after e3 in for(e1;e2;e3) s *)              
+              | Kreturn: cont -> cont. (* Kreturn k = after e in return e; *)              
+
+        FRecursion call_cont about cont motive (fun (c : cont) => cont) by _rect.
+            Case Kstop := Kstop.
+            Case Kdo k := k.
+            Case Kseq s k := (call_cont k).
+            Case Kifthenelse s1 s2 k := (call_cont k).
+            Case Kwhile1 e s k := (call_cont k).
+            Case Kwhile2 e s k := (call_cont k).
+            Case Kdowhile1 e s k := (call_cont k).
+            Case Kdowhile2 e s k := (call_cont k).
+            Case Kfor2 e2 e3 s k := (call_cont k).
+            Case Kfor3 e2 e3 s k := (call_cont k).
+            Case Kfor4 e2 e3 s k := (call_cont k).
+            Case Kreturn k := (call_cont k).            
+        FEnd call_cont.
+
+        FRecursion is_call_cont about cont motive (fun (c : cont) => Prop) by _rect.
+          Case Kstop := True.
+          Case Kdo k := False.
+          Case Kseq s k := False.
+          Case Kifthenelse s1 s2 k := False.
+          Case Kwhile1 e s k := False.
+          Case Kwhile2 e s k := False.
+          Case Kdowhile1 e s k := False.
+          Case Kdowhile2 e s k := False.
+          Case Kfor2 e2 e3 s k := False.
+          Case Kfor3 e2 e3 s k := False.
+          Case Kfor4 e2 e3 s k := False.
+          Case Kreturn k := False.          
+        FEnd is_call_cont.
+
+        FInductive state: Type :=
+          | State : (* execution of a statement *)
+              function ->
+              statement ->
+              cont ->
+              env ->
+              mem -> 
+              state
+          | ExprState : (* reduction of an expression *)
+               function ->
+               expr ->
+               cont ->
+               env ->
+               mem -> state
+          | Callstate : (* calling a function *)
+              fundef ->
+              list val ->
+              cont ->
+              mem -> state
+          | Returnstate : (* returning from a function *)
+              val ->
+              cont ->
+              mem ->  state
+          | Stuckstate : state. (* undefined behavior occurred *)
+        
+        FRecursion find_label about statement motive (fun (_ : statement) => label -> cont -> option (statement * cont)) by _rect.
+          Case Sskip := (fun lbl k => None).
+          Case Sdo r := (fun lbl k => None).
+          Case Ssequence s1 s2 := 
+              (fun lbl k => match find_label s1 lbl (Kseq s2 k) with 
+                            | Some sk => Some sk 
+                            | None => find_label s2 lbl k end).
+          Case Sifthenelse a s1 s2 := 
+              (fun lbl k => match find_label s1 lbl k with 
+                            | Some sk => Some sk 
+                            | None => find_label s2 lbl k end).
+          Case Swhile a s1 := (fun lbl k => find_label s1 lbl (Kwhile2 a s1 k)).
+          Case Sdowhile a s1 := (fun lbl k => find_label s1 lbl (Kdowhile1 a s1 k)).
+          Case Sfor a1 a2 a3 s1 := 
+              (fun lbl k => match find_label a1 lbl (Kseq (Sfor Sskip a2 a3 s1) k) with 
+                            | Some sk => Some sk 
+                            | None => match find_label s1 lbl (Kfor3 a2 a3 s1 k) with 
+                                      | Some sk => Some sk 
+                                      | None => find_label a3 lbl (Kfor4 a2 a3 s1 k) end end).
+          Case Sbreak := (fun lbl k => None).
+          Case Scontinue := (fun lbl k => None).
+          Case Sreturn e := (fun lbl k => None).
+          Case Slabel lbl' s' := (fun lbl k => if ident_eq lbl lbl' then 
+                                                 Some(s', k) else find_label s' lbl k).
+          Case Sgoto label := (fun lbl k => None).
+        FEnd find_label.                
+        
+        FInductive sstep: state -> trace -> state -> Prop :=
+            | step_do_1: forall f x k e m,
+                sstep (State f (Sdo x) k e m)
+                  E0 (ExprState f x (Kdo k) e m)
+            | step_do_2: forall f v ty k e m,
+                sstep (ExprState f (Eval v ty) (Kdo k) e m)
+                  E0 (State f Sskip k e m)
+            | step_seq: forall f s1 s2 k e m,
+                sstep (State f (Ssequence s1 s2) k e m)
+                  E0 (State f s1 (Kseq s2 k) e m)
+            | step_skip_seq: forall f s k e m,
+                sstep (State f Sskip (Kseq s k) e m)
+                  E0 (State f s k e m)
+            | step_continue_seq: forall f s k e m,
+                sstep (State f Scontinue (Kseq s k) e m)
+                  E0 (State f Scontinue k e m)
+            | step_break_seq: forall f s k e m,
+                sstep (State f Sbreak (Kseq s k) e m)
+                  E0 (State f Sbreak k e m)
+            | step_ifthenelse_1: forall f a s1 s2 k e m,
+                sstep (State f (Sifthenelse a s1 s2) k e m)
+                  E0 (ExprState f a (Kifthenelse s1 s2 k) e m)
+            | step_ifthenelse_2: forall f v ty s1 s2 k e m b,
+                bool_val v ty m = Some b ->
+                sstep (ExprState f (Eval v ty) (Kifthenelse s1 s2 k) e m)
+                  E0 (State f (if b then s1 else s2) k e m)
+            | step_while: forall f x s k e m,
+                sstep (State f (Swhile x s) k e m)
+                  E0 (ExprState f x (Kwhile1 x s k) e m)
+            | step_while_false: forall f v ty x s k e m,
+                bool_val v ty m = Some false ->
+                sstep (ExprState f (Eval v ty) (Kwhile1 x s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_while_true: forall f v ty x s k e m ,
+                bool_val v ty m = Some true ->
+                sstep (ExprState f (Eval v ty) (Kwhile1 x s k) e m)
+                  E0 (State f s (Kwhile2 x s k) e m)
+            | step_skip_or_continue_while: forall f s0 x s k e m,
+                s0 = Sskip \/ s0 = Scontinue ->
+                sstep (State f s0 (Kwhile2 x s k) e m)
+                  E0 (State f (Swhile x s) k e m)
+            | step_break_while: forall f x s k e m,
+                sstep (State f Sbreak (Kwhile2 x s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_dowhile: forall f a s k e m,
+                sstep (State f (Sdowhile a s) k e m)
+                  E0 (State f s (Kdowhile1 a s k) e m)
+            | step_skip_or_continue_dowhile: forall f s0 x s k e m,
+                s0 = Sskip \/ s0 = Scontinue ->
+                sstep (State f s0 (Kdowhile1 x s k) e m)
+                  E0 (ExprState f x (Kdowhile2 x s k) e m)
+            | step_dowhile_false: forall f v ty x s k e m,
+                bool_val v ty m = Some false ->
+                sstep (ExprState f (Eval v ty) (Kdowhile2 x s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_dowhile_true: forall f v ty x s k e m,
+                bool_val v ty m = Some true ->
+                sstep (ExprState f (Eval v ty) (Kdowhile2 x s k) e m)
+                  E0 (State f (Sdowhile x s) k e m)
+            | step_break_dowhile: forall f a s k e m,
+                sstep (State f Sbreak (Kdowhile1 a s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_for_start: forall f a1 a2 a3 s k e m,
+                a1 <> Sskip ->
+                sstep (State f (Sfor a1 a2 a3 s) k e m)
+                  E0 (State f a1 (Kseq (Sfor Sskip a2 a3 s) k) e m)
+            | step_for: forall f a2 a3 s k e m,
+                sstep (State f (Sfor Sskip a2 a3 s) k e m)
+                  E0 (ExprState f a2 (Kfor2 a2 a3 s k) e m)
+            | step_for_false: forall f v ty a2 a3 s k e m,
+                bool_val v ty m = Some false ->
+                sstep (ExprState f (Eval v ty) (Kfor2 a2 a3 s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_for_true: forall f v ty a2 a3 s k e m,
+                bool_val v ty m = Some true ->
+                sstep (ExprState f (Eval v ty) (Kfor2 a2 a3 s k) e m)
+                  E0 (State f s (Kfor3 a2 a3 s k) e m)
+            | step_skip_or_continue_for3: forall f x a2 a3 s k e m,
+                x = Sskip \/ x = Scontinue ->
+                sstep (State f x (Kfor3 a2 a3 s k) e m)
+                  E0 (State f a3 (Kfor4 a2 a3 s k) e m)
+            | step_break_for3: forall f a2 a3 s k e m,
+                sstep (State f Sbreak (Kfor3 a2 a3 s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_skip_for4: forall f a2 a3 s k e m,
+                sstep (State f Sskip (Kfor4 a2 a3 s k) e m)
+                  E0 (State f (Sfor Sskip a2 a3 s) k e m)
+            | step_return_0: forall f k e m m',
+                Mem.free_list m (blocks_of_env e) = Some m' ->
+                sstep (State f (Sreturn None) k e m)
+                  E0 (Returnstate Vundef (call_cont k) m')
+            | step_return_1: forall f x k e m,
+                sstep (State f (Sreturn (Some x)) k e m)
+                  E0 (ExprState f x (Kreturn k) e m)
+            | step_return_2: forall f v1 ty k e m v2 m',
+                sem_cast v1 ty f.(fn_return) m = Some v2 ->
+                Mem.free_list m (blocks_of_env e) = Some m' ->
+                sstep (ExprState f (Eval v1 ty) (Kreturn k) e m)
+                  E0 (Returnstate v2 (call_cont k) m')
+            | step_skip_call: forall f k e m m',
+                is_call_cont k ->
+                Mem.free_list m (blocks_of_env e) = Some m' ->
+                sstep (State f Sskip k e m)
+                  E0 (Returnstate Vundef k m')
+            | step_label: forall f lbl s k e m,
+                sstep (State f (Slabel lbl s) k e m)
+                  E0 (State f s k e m)
+            | step_goto: forall f lbl k e m s' k',
+                find_label lbl f.(fn_body) (call_cont k) = Some (s', k') ->
+                sstep (State f (Sgoto lbl) k e m)
+                  E0 (State f s' k' e m)
+            | step_internal_function: forall f vargs k m e m1 m2,
+                list_norepet (var_names (fn_params f) ++ var_names (fn_vars f)) ->
+                alloc_variables empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1 ->
+                bind_parameters e m1 f.(fn_params) vargs m2 ->
+                sstep (Callstate (Internal f) vargs k m)
+                  E0 (State f f.(fn_body) k e m2).
+
+            Definition step (S: state) (t: trace) (S': state) : Prop :=
+              estep S t S' \/ sstep S t S'.
       FEnd Semantics.
   FEnd C.
       
@@ -467,8 +687,8 @@ Inductive bitfield : Type :=
                       final_state (self__Semantics.Returnstate (Vint r) self__Semantics.Kstop m) r.
                FEnd final_state.
        FEnd Semantics.
-  FEnd Clight.
-
+  FEnd Clight.  
+  
   (* C -> Clight *)
   Family SimplExpr.
       (* State and error monad *)
@@ -1031,6 +1251,10 @@ Inductive bitfield : Type :=
                 Family Correctness.
                 FEnd Correctness.
           FEnd Specification.
+
+          (* Correctness of the pass *)
+          Family Correctness.
+          FEnd Correctness.
   FEnd SimplExpr.
   
   Family Csharpminor.
@@ -1056,7 +1280,6 @@ Inductive bitfield : Type :=
             | Sreturn: option expr -> stmt
             | Slabel: label -> stmt -> stmt
             | Sgoto: label -> stmt.
-
        
        MetaData function.
        Record function : Type := mkfunction {
@@ -1273,6 +1496,11 @@ Inductive bitfield : Type :=
       MetaData alignof.
       Axiom alignof : (* self__Imp.Clight.Semantics.composite_env ->*) self__Imp.type -> res Z.
       FEnd alignof.
+
+      (* Definition make_cast (from to: type) (e: expr) :=*)
+      MetaData make_cast.
+      Axiom make_cast : self__Imp.type -> self__Imp.type -> self__Imp.Csharpminor.expr -> res self__Imp.Csharpminor.expr.
+      FEnd make_cast.
       
       FRecursion transl_expr about Clight.expr motive (fun (_ : Clight.expr) => res Csharpminor.expr) by _rect.
           Case Econst_int := (fun n type => OK(make_intconst n)). 
@@ -1284,6 +1512,9 @@ Inductive bitfield : Type :=
                                do sz <- sizeof ty; OK(make_ptrofsconst sz)).
           Case Ealignof := (fun ty _ => 
                                do al <- alignof ty; OK(make_ptrofsconst al)).
+          Case Ecast := (fun b transl_expr_b ty => 
+                                do tb <- transl_expr_b;
+                                make_cast (Clight.typeof b) ty tb).
       FEnd transl_expr.
 
        (* (nbrk : nat) -> if Clight.stmt terminates on break return Csharpminor.exit nbrk
@@ -1293,12 +1524,7 @@ Inductive bitfield : Type :=
       (* Definition make_boolean (e: expr) (ty: type) := *)
       MetaData make_boolean.
       Axiom make_boolean : self__Imp.Csharpminor.expr -> self__Imp.type -> self__Imp.Csharpminor.expr.
-      FEnd make_boolean.
-      
-      (* Definition make_cast (from to: type) (e: expr) :=*)
-      MetaData make_cast.
-      Axiom make_cast : self__Imp.type -> self__Imp.type -> self__Imp.Csharpminor.expr -> res self__Imp.Csharpminor.expr.
-      FEnd make_cast.
+      FEnd make_boolean.            
       
       FRecursion transl_statement about Clight.stmt motive (fun (_ : Clight.stmt) => type -> nat -> nat -> res Csharpminor.stmt) by _rect.
            Case Sskip := (fun tyret nbrk ncnt => OK Csharpminor.Sskip).   
@@ -1385,10 +1611,16 @@ Inductive bitfield : Type :=
        transform_partial_program2 (transl_fundef) transl_globvar p.
      
      Family Correctness.
-          FInductive match_fundef : Clight.fundef -> Csharpminor.fundef -> Prop :=
+          FInductive match_fundef :  Clight.fundef -> Csharpminor.fundef -> Prop :=
             | match_fundef_internal: forall f tf,
                 transl_function f = OK tf ->
                 match_fundef (Internal f) (Internal tf).
+
+          FDefinition match_varinfo : self__Imp.type -> unit -> Prop := fun v tb => True.
+
+          FDefinition match_prog : Clight.program -> Csharpminor.program -> Prop := fun p tp => 
+            (* match_program_gen match_fundef match_varinfo p p tp.*) cheat.
+
      
           FInductive match_cont : type -> nat -> nat -> Clight.Semantics.cont -> Csharpminor.Semantics.cont -> Prop :=
               | match_Kstop: forall tyret nbrk ncnt,
@@ -1471,20 +1703,16 @@ Inductive bitfield : Type :=
                       (* (WT: wt_val res tres),*)
                   match_states (self__Imp.Clight.Semantics.Returnstate res k m)
                     (self__Imp.Csharpminor.Semantics.Returnstate res tk m).
-          FEnd match_states.
-
-          (* Let ge := globalenv prog.
-             Let tge := Genv.globalenv tprog.*)
-          FDefinition _ge : Clight.Semantics.genv := cheat.
-          FDefinition tge : Csharpminor.Semantics.genv := cheat.
+          FEnd match_states.          
                  
           FInduction transl_step about Clight.Semantics.step
-            motive (fun ge S1 t S2 (_ : Clight.Semantics.step ge S1 t S2) =>
+            motive (fun ge S1 t S2 (_ : Clight.Semantics.step ge S1 t S2) => 
+             forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
             forall T1, self__Correctness.match_states S1 T1 -> 
             exists T2, plus Csharpminor.Semantics.step tge T1 t T2 /\ match_states S2 T2).            
           FProof.
               __unfold_ftheorem_motive_nested.
-              apply cheat. Qed.          
+              apply cheat. Qed.
           FEnd transl_step.
                 
           FLemma transl_initial_states:
@@ -2025,7 +2253,8 @@ Inductive bitfield : Type :=
           FEnd measure.
 
         FInduction transl_step_correct about Csharpminor.Semantics.step motive
-          (fun ge S1 t S2 (_ : Csharpminor.Semantics.step ge S1 t S2)  => forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->               
+          (fun ge S1 t S2 (_ : Csharpminor.Semantics.step ge S1 t S2) => 
+             forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->               
           forall T1, match_states ge S1 T1 -> 
           (exists T2, plus Cminor.Semantics.step tge T1 t T2 /\ match_states ge S2 T2) 
           \/ (measure S2 < measure S1 /\ t = E0 /\ match_states ge S2 T1)%nat).
