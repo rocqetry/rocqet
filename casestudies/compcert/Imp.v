@@ -148,6 +148,9 @@ Inductive bitfield : Type :=
       }.
       FEnd function.
 
+      FDefinition var_names := fun (vars: list(ident * type)) =>
+        List.map (@fst ident type) vars.
+
       FDefinition fundef := AST.fundef function.
 
       FDefinition type_of_function : function -> type := fun f => 
@@ -261,7 +264,57 @@ Inductive bitfield : Type :=
           Case Slabel lbl' s' := (fun lbl k => if ident_eq lbl lbl' then 
                                                  Some(s', k) else find_label s' lbl k).
           Case Sgoto label := (fun lbl k => None).
-        FEnd find_label.                
+        FEnd find_label.
+        
+        (* 
+           Definition bool_val (v: val) (t: type) (m: mem) : option bool :=
+         *)
+        MetaData bool_val.
+        Axiom bool_val : val -> self__Imp.type -> mem -> option bool.
+        FEnd bool_val.
+
+        MetaData sizeof.
+           Axiom sizeof : (* self__Semantics.composite_env -> *) self__Imp.type -> Z. 
+        FEnd sizeof.      
+
+        MetaData sem_cast.
+            Axiom sem_cast : val -> self__Imp.type -> self__Imp.type -> mem -> option val.
+        FEnd sem_cast.        
+        
+        FDefinition block_of_binding := fun (id_b_ty: ident * (block * type)) =>
+          match id_b_ty with (id, (b, ty)) => (b, 0, sizeof ty) end.
+
+        FDefinition blocks_of_env : env -> list (block * Z * Z) := fun e =>
+          List.map block_of_binding (PTree.elements e).
+
+        MetaData alloc_variables.
+        Inductive alloc_variables: self__Semantics.env -> mem ->
+                           list (ident * self__Imp.type) ->
+                           self__Semantics.env -> mem -> Prop :=
+            | alloc_variables_nil:
+                forall e m,
+                alloc_variables e m nil e m
+            | alloc_variables_cons:
+                forall e m id ty vars m1 b1 m2 e2,
+                Mem.alloc m 0 (self__Semantics.sizeof ty) = (m1, b1) ->
+                alloc_variables (PTree.set id (b1, ty) e) m1 vars e2 m2 ->
+                alloc_variables e m ((id, ty) :: vars) e2 m2.
+        FEnd alloc_variables.
+
+        MetaData bind_parameters.
+        Inductive bind_parameters (e: self__Semantics.env):
+                           mem -> list (ident * self__Imp.type) -> list val ->
+                           mem -> Prop :=
+            | bind_parameters_nil:
+              forall m,
+                bind_parameters e m nil nil m
+            | bind_parameters_cons:
+              forall m id ty params v1 vl (* v1'*) b m1 m2,
+                PTree.get id e = Some(b, ty) ->
+                (* TODO: assign_loc ty m b Ptrofs.zero Full v1 E0 m1 v1' ->*)
+                bind_parameters e m1 params vl m2 ->
+                bind_parameters e m ((id, ty) :: params) (v1 :: vl) m2.
+        FEnd bind_parameters.
         
         FInductive sstep: state -> trace -> state -> Prop :=
             | step_do_1: forall f x k e m,
@@ -358,7 +411,7 @@ Inductive bitfield : Type :=
                 sstep (State f (Sreturn (Some x)) k e m)
                   E0 (ExprState f x (Kreturn k) e m)
             | step_return_2: forall f v1 ty k e m v2 m',
-                sem_cast v1 ty f.(fn_return) m = Some v2 ->
+                sem_cast v1 ty f.(self__C.fn_return) m = Some v2 ->
                 Mem.free_list m (blocks_of_env e) = Some m' ->
                 sstep (ExprState f (Eval v1 ty) (Kreturn k) e m)
                   E0 (Returnstate v2 (call_cont k) m')
@@ -371,15 +424,15 @@ Inductive bitfield : Type :=
                 sstep (State f (Slabel lbl s) k e m)
                   E0 (State f s k e m)
             | step_goto: forall f lbl k e m s' k',
-                find_label lbl f.(fn_body) (call_cont k) = Some (s', k') ->
+                find_label f.(self__C.fn_body) lbl (call_cont k) = Some (s', k') ->
                 sstep (State f (Sgoto lbl) k e m)
                   E0 (State f s' k' e m)
             | step_internal_function: forall f vargs k m e m1 m2,
-                list_norepet (var_names (fn_params f) ++ var_names (fn_vars f)) ->
-                alloc_variables empty_env m (f.(fn_params) ++ f.(fn_vars)) e m1 ->
-                bind_parameters e m1 f.(fn_params) vargs m2 ->
+                list_norepet (var_names (self__C.fn_params f) ++ var_names (self__C.fn_vars f)) ->
+                alloc_variables empty_env m (f.(self__C.fn_params) ++ f.(self__C.fn_vars)) e m1 ->
+                bind_parameters e m1 f.(self__C.fn_params) vargs m2 ->
                 sstep (Callstate (Internal f) vargs k m)
-                  E0 (State f f.(fn_body) k e m2).
+                  E0 (State f f.(self__C.fn_body) k e m2).
 
             Definition step (S: state) (t: trace) (S': state) : Prop :=
               estep S t S' \/ sstep S t S'.
