@@ -270,18 +270,22 @@ let extend_argumets_with_inductive_case ~(recursor : Names.Id.t)
     match c.v with
     | CNotation (_, (_, "_ -> _"), ([ domain; codomain ], _, _, _)) -> (
         match domain.v with
-        | Constrexpr.CRef (ty_name, _) -> ty_name.v :: unflatten codomain
-        | _ -> Errors.fail ~info:"Expected reference")
+        | Constrexpr.CRef (ty_name, _) -> Some (ty_name.v) :: unflatten codomain        
+        | _ -> None :: unflatten codomain)
     | _ -> []
   in
   let types = unflatten constructor_type in
-  Printf.printf "type length : %d\n" (List.length types);
+  (* Give a good error message for this, e.g as user to fallback 
+      to the regular syntax if we cannot infer handlers *)
   let result = List.combine arguments types in
   result
   |> List.concat_map (fun (arg, ty) ->
          let r = Names.Id.to_string recursor ^ "_" ^ Names.Id.to_string arg in
          let r = Names.Id.of_string r in
-         if ty = ind_name.v then [ arg; r ] else [ arg ])
+         match ty with
+         | None -> [ arg]
+         | Some ty -> 
+            if ty = ind_name.v then [ arg; r ] else [ arg ])
 
 (* Given a recursor name `r` and an argument `n`
    replace the expression r n (i.e r applied to n) with the
