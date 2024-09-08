@@ -277,7 +277,21 @@ let extend_argumets_with_inductive_case ~(recursor : Names.Id.t)
   let types = unflatten constructor_type in
   (* Give a good error message for this, e.g as user to fallback 
       to the regular syntax if we cannot infer handlers *)
-  let result = List.combine arguments types in
+  let result = 
+    match List.combine arguments types with 
+    | result -> result 
+    | exception Invalid_argument _ -> 
+       let name = Names.Id.to_string constructor in 
+       let types_len = List.length types in 
+       let arg_len = List.length arguments in
+       let info = 
+         Printf.sprintf "%s exptects %d arguments, \ 
+                         but you provided %d" 
+           name 
+           types_len arg_len 
+       in       
+       Errors.fail ~info
+  in
   result
   |> List.concat_map (fun (arg, ty) ->
          let r = Names.Id.to_string recursor ^ "_" ^ Names.Id.to_string arg in
