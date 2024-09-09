@@ -155,7 +155,7 @@ Inductive bitfield : Type :=
 
       FDefinition program := AST.program fundef type.
 
-      Family Semantics.       
+      Family Sem.       
           FDefinition genv := Genv.t fundef type.
           FDefinition env := PTree.t (block * type).
           FDefinition empty_env: env := (PTree.empty (block * type)).
@@ -264,11 +264,11 @@ Inductive bitfield : Type :=
         FEnd bool_val.
 
         MetaData sizeof.
-           Axiom sizeof : (* self__Semantics.composite_env -> *) self__Imp.type -> Z. 
+           Axiom sizeof : (* self__Sem.composite_env -> *) self__Imp.type -> Z. 
         FEnd sizeof.      
                 
         MetaData alignof.
-        Axiom alignof : (* self__Imp.Clight.Semantics.composite_env ->*) self__Imp.type -> Z.
+        Axiom alignof : (* self__Imp.Clight.Sem.composite_env ->*) self__Imp.type -> Z.
         FEnd alignof.
 
         MetaData sem_cast.
@@ -282,21 +282,21 @@ Inductive bitfield : Type :=
           List.map block_of_binding (PTree.elements e).
 
         MetaData alloc_variables.
-        Inductive alloc_variables: self__Semantics.env -> mem ->
+        Inductive alloc_variables: self__Sem.env -> mem ->
                            list (ident * self__Imp.type) ->
-                           self__Semantics.env -> mem -> Prop :=
+                           self__Sem.env -> mem -> Prop :=
             | alloc_variables_nil:
                 forall e m,
                 alloc_variables e m nil e m
             | alloc_variables_cons:
                 forall e m id ty vars m1 b1 m2 e2,
-                Mem.alloc m 0 (self__Semantics.sizeof ty) = (m1, b1) ->
+                Mem.alloc m 0 (self__Sem.sizeof ty) = (m1, b1) ->
                 alloc_variables (PTree.set id (b1, ty) e) m1 vars e2 m2 ->
                 alloc_variables e m ((id, ty) :: vars) e2 m2.
         FEnd alloc_variables.
 
         MetaData bind_parameters.
-        Inductive bind_parameters (e: self__Semantics.env):
+        Inductive bind_parameters (e: self__Sem.env):
                            mem -> list (ident * self__Imp.type) -> list val ->
                            mem -> Prop :=
             | bind_parameters_nil:
@@ -343,17 +343,17 @@ Inductive bitfield : Type :=
         | lctx_top: forall k,
             leftcontext k k (fun x => x)  
         | lctx_cast: forall k C ty,
-            leftcontext k self__Semantics.RV C -> leftcontext k self__Semantics.RV (fun x => Ecast (C x) ty)
+            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Ecast (C x) ty)
         | lctx_seqand: forall k C r2 ty,
-            leftcontext k self__Semantics.RV C -> leftcontext k self__Semantics.RV (fun x => Eseqand (C x) r2 ty)
+            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Eseqand (C x) r2 ty)
         | lctx_seqor: forall k C r2 ty,
-            leftcontext k self__Semantics.RV C -> leftcontext k self__Semantics.RV (fun x => Eseqor (C x) r2 ty)
+            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Eseqor (C x) r2 ty)
         | lctx_condition: forall k C r2 r3 ty,
-            leftcontext k self__Semantics.RV C -> leftcontext k self__Semantics.RV (fun x => Econdition (C x) r2 r3 ty)
+            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Econdition (C x) r2 r3 ty)
         | lctx_comma: forall k C e2 ty,
-            leftcontext k self__Semantics.RV C -> leftcontext k self__Semantics.RV (fun x => Ecomma (C x) e2 ty)
+            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Ecomma (C x) e2 ty)
         | lctx_paren: forall k C tycast ty,
-            leftcontext k self__Semantics.RV C -> leftcontext k self__Semantics.RV (fun x => Eparen (C x) tycast ty).
+            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Eparen (C x) tycast ty).
 
         FInductive estep: genv -> state -> trace -> state -> Prop :=
              | step_expr: forall ge f r k e m v ty,
@@ -363,43 +363,43 @@ Inductive bitfield : Type :=
                  estep ge (ExprState f r k e m)
                     E0 (ExprState f (Eval v ty) k e m)               
              | step_seqand_true: forall ge f C r1 r2 ty k e m v,
-                 leftcontext self__Semantics.RV self__Semantics.RV C ->
+                 leftcontext self__Sem.RV self__Sem.RV C ->
                  eval_simple_rvalue ge e m r1 v ->
                  bool_val v (typeof r1) m = Some true ->
                  estep ge (ExprState f (C (Eseqand r1 r2 ty)) k e m)
                     E0 (ExprState f (C (Eparen r2 self__Imp.type_bool ty)) k e m)
              | step_seqand_false: forall ge f C r1 r2 ty k e m v,
-                 leftcontext self__Semantics.RV self__Semantics.RV C ->
+                 leftcontext self__Sem.RV self__Sem.RV C ->
                  eval_simple_rvalue ge e m r1 v ->
                  bool_val v (typeof r1) m = Some false ->
                  estep ge (ExprState f (C (Eseqand r1 r2 ty)) k e m)
                     E0 (ExprState f (C (Eval (Vint Int.zero) ty)) k e m)
              | step_seqor_true: forall ge f C r1 r2 ty k e m v,
-                 leftcontext self__Semantics.RV self__Semantics.RV C ->
+                 leftcontext self__Sem.RV self__Sem.RV C ->
                  eval_simple_rvalue ge e m r1 v ->
                  bool_val v (typeof r1) m = Some true ->
                  estep ge (ExprState f (C (Eseqor r1 r2 ty)) k e m)
                     E0 (ExprState f (C (Eval (Vint Int.one) ty)) k e m)
              | step_seqor_false: forall ge f C r1 r2 ty k e m v,
-                 leftcontext self__Semantics.RV self__Semantics.RV C ->
+                 leftcontext self__Sem.RV self__Sem.RV C ->
                  eval_simple_rvalue ge e m r1 v ->
                  bool_val v (typeof r1) m = Some false ->
                  estep ge (ExprState f (C (Eseqor r1 r2 ty)) k e m)
                     E0 (ExprState f (C (Eparen r2 self__Imp.type_bool ty)) k e m)
              | step_condition: forall ge f C r1 r2 r3 ty k e m v b,
-                 leftcontext self__Semantics.RV self__Semantics.RV C ->
+                 leftcontext self__Sem.RV self__Sem.RV C ->
                  eval_simple_rvalue ge e m r1 v ->
                  bool_val v (typeof r1) m = Some b ->
                  estep ge (ExprState f (C (Econdition r1 r2 r3 ty)) k e m)
                     E0 (ExprState f (C (Eparen (if b then r2 else r3) ty ty)) k e m)
              | step_comma: forall ge f C r1 r2 ty k e m v,
-                 leftcontext self__Semantics.RV self__Semantics.RV C ->
+                 leftcontext self__Sem.RV self__Sem.RV C ->
                  eval_simple_rvalue ge e m r1 v ->
                  ty = typeof r2 ->
                  estep ge (ExprState f (C (Ecomma r1 r2 ty)) k e m)
                     E0 (ExprState f (C r2) k e m)
              | step_paren: forall ge f C r tycast ty k e m v1 v,
-                 leftcontext self__Semantics.RV self__Semantics.RV C ->
+                 leftcontext self__Sem.RV self__Sem.RV C ->
                  eval_simple_rvalue ge e m r v1 ->
                  sem_cast v1 (typeof r) tycast m = Some v ->
                  estep ge (ExprState f (C (Eparen r tycast ty)) k e m)
@@ -525,7 +525,7 @@ Inductive bitfield : Type :=
 
             FDefinition step :  genv -> state -> trace -> state -> Prop := fun ge S t S' => 
               estep ge S t S' \/ sstep ge S t S'.
-      FEnd Semantics.
+      FEnd Sem.
   FEnd C.
       
   Family Clight.
@@ -600,7 +600,7 @@ Inductive bitfield : Type :=
        
        FDefinition program : Type := AST.program fundef type.                     
        
-       Family Semantics.
+       Family Sem.
             FDefinition genv := Genv.t fundef type.
             FDefinition env := PTree.t (block * type).                                     
             FDefinition empty_env: env := (PTree.empty (block * type)).
@@ -686,11 +686,11 @@ Inductive bitfield : Type :=
            FEnd bool_val.
 
            MetaData sizeof.
-           Axiom sizeof : (* self__Semantics.composite_env -> *) self__Imp.type -> Z. 
+           Axiom sizeof : (* self__Sem.composite_env -> *) self__Imp.type -> Z. 
            FEnd sizeof.      
            
            MetaData create_undef_temps.
-             Fixpoint create_undef_temps (temps: list (ident * self__Imp.type)) : self__Semantics.temp_env :=
+             Fixpoint create_undef_temps (temps: list (ident * self__Imp.type)) : self__Sem.temp_env :=
               match temps with
               | nil => PTree.empty val
               | (id, t) :: temps' => PTree.set id Vundef (create_undef_temps temps')
@@ -699,7 +699,7 @@ Inductive bitfield : Type :=
 
            MetaData bind_parameter_temps.
            Fixpoint bind_parameter_temps (formals: list (ident * self__Imp.type)) (args: list val)
-                              (le: self__Semantics.temp_env) : option self__Semantics.temp_env :=
+                              (le: self__Sem.temp_env) : option self__Sem.temp_env :=
                 match formals, args with
                 | nil, nil => Some le
                 | (id, t) :: xl, v :: vl => bind_parameter_temps xl vl (PTree.set id v le)
@@ -719,15 +719,15 @@ Inductive bitfield : Type :=
            FEnd sem_cast.*)
 
            MetaData alloc_variables.
-           Inductive alloc_variables: self__Semantics.env -> mem ->
+           Inductive alloc_variables: self__Sem.env -> mem ->
                            list (ident * self__Imp.type) ->
-                           self__Semantics.env -> mem -> Prop :=
+                           self__Sem.env -> mem -> Prop :=
                | alloc_variables_nil:
                    forall e m,
                    alloc_variables e m nil e m
                | alloc_variables_cons:
                    forall e m id ty vars m1 b1 m2 e2,
-                   Mem.alloc m 0 (self__Semantics.sizeof ty) = (m1, b1) ->
+                   Mem.alloc m 0 (self__Sem.sizeof ty) = (m1, b1) ->
                    alloc_variables (PTree.set id (b1, ty) e) m1 vars e2 m2 ->
                    alloc_variables e m ((id, ty) :: vars) e2 m2.
            FEnd alloc_variables.
@@ -736,13 +736,13 @@ Inductive bitfield : Type :=
            MetaData function_entry.
            Inductive function_entry              
              (f: self__Clight.function) (vargs: list val) (m: mem) 
-             (e: self__Semantics.env) (le: self__Semantics.temp_env) (m': mem) : Prop :=
+             (e: self__Sem.env) (le: self__Sem.temp_env) (m': mem) : Prop :=
               | function_entry2_intro:
                   list_norepet (self__Clight.var_names f.(self__Clight.fn_vars)) ->
                   list_norepet (self__Clight.var_names f.(self__Clight.fn_params)) ->
                   list_disjoint (self__Clight.var_names f.(self__Clight.fn_params)) (self__Clight.var_names f.(self__Clight.fn_temps)) ->
-                  self__Semantics.alloc_variables self__Semantics.empty_env m f.(self__Clight.fn_vars) e m' ->
-                  self__Semantics.bind_parameter_temps f.(self__Clight.fn_params) vargs (self__Semantics.create_undef_temps f.(self__Clight.fn_temps)) = Some le ->
+                  self__Sem.alloc_variables self__Sem.empty_env m f.(self__Clight.fn_vars) e m' ->
+                  self__Sem.bind_parameter_temps f.(self__Clight.fn_params) vargs (self__Sem.create_undef_temps f.(self__Clight.fn_temps)) = Some le ->
                   function_entry f vargs m e le m'.
            FEnd function_entry.
           
@@ -813,22 +813,22 @@ Inductive bitfield : Type :=
                        E0 (State f f.(self__Clight.fn_body) k e le m1).
            
                MetaData initial_state.
-               Inductive initial_state (p: self__Clight.program): self__Semantics.state -> Prop :=
+               Inductive initial_state (p: self__Clight.program): self__Sem.state -> Prop :=
                   | initial_state_intro: forall b f m0,
                       let ge := Genv.globalenv p in
                       Genv.init_mem p = Some m0 ->
                       Genv.find_symbol ge p.(prog_main) = Some b ->
                       Genv.find_funct_ptr ge b = Some f ->
                       self__Clight.type_of_fundef f = self__Imp.Tfunction self__Imp.Tnil self__Imp.type_int32s cc_default ->
-                      initial_state p (self__Semantics.Callstate f nil self__Semantics.Kstop m0).
+                      initial_state p (self__Sem.Callstate f nil self__Sem.Kstop m0).
                FEnd initial_state.
                
                MetaData final_state.
-               Inductive final_state: self__Semantics.state -> int -> Prop :=
+               Inductive final_state: self__Sem.state -> int -> Prop :=
                   | final_state_intro: forall r m,
-                      final_state (self__Semantics.Returnstate (Vint r) self__Semantics.Kstop m) r.
+                      final_state (self__Sem.Returnstate (Vint r) self__Sem.Kstop m) r.
                FEnd final_state.
-       FEnd Semantics.
+       FEnd Sem.
   FEnd Clight.  
   
   (* C -> Clight *)
@@ -944,7 +944,7 @@ Inductive bitfield : Type :=
           Case Ecast := (fun b eval_simpl_expr_b ty  => 
                             match eval_simpl_expr_b with
                             | None => None
-                            | Some v => Clight.Semantics.sem_cast v (Clight.typeof b) ty Mem.empty
+                            | Some v => Clight.Sem.sem_cast v (Clight.typeof b) ty Mem.empty
                             end).
           Case Etempvar := (fun id ty => None).
           Case Esizeof := (fun _ _ => None).
@@ -955,7 +955,7 @@ Inductive bitfield : Type :=
         fun a s1 s2 =>
           match eval_simpl_expr a with
           | Some v =>
-              match Clight.Semantics.bool_val v (Clight.typeof a) Mem.empty with
+              match Clight.Sem.bool_val v (Clight.typeof a) Mem.empty with
               | Some b => if b then s1 else s2
               | None => Clight.Sifthenelse a s1 s2
               end
@@ -1166,7 +1166,7 @@ Inductive bitfield : Type :=
               end.
 
           FInductive tr_expr : 
-                  Clight.Semantics.temp_env -> 
+                  Clight.Sem.temp_env -> 
                   self__SimplExpr.destination -> C.expr -> list Clight.stmt -> 
                   Clight.expr -> list ident -> Prop :=              
              | tr_val_effect: forall le v ty any tmp,
@@ -1175,13 +1175,13 @@ Inductive bitfield : Type :=
                  Clight.typeof a = ty ->
                  (forall tge e le' m,
                    (forall id, In id tmp -> le'!id = le!id) ->
-                   Clight.Semantics.eval_expr tge e le' m a v) ->
+                   Clight.Sem.eval_expr tge e le' m a v) ->
                  tr_expr le self__SimplExpr.For_val (C.Eval v ty) nil a tmp
              | tr_val_set: forall le sd v ty a any tmp,
                  Clight.typeof a = ty ->
                  (forall tge e le' m,
                    (forall id, In id tmp -> le'!id = le!id) ->
-                   Clight.Semantics.eval_expr tge e le' m a v) ->
+                   Clight.Sem.eval_expr tge e le' m a v) ->
                  tr_expr le (self__SimplExpr.For_set sd) (C.Eval v ty)
                              (self__SimplExpr.do_set sd a) any tmp
              | tr_sizeof: forall le dst ty' ty tmp,
@@ -1298,16 +1298,16 @@ Inductive bitfield : Type :=
 
              MetaData tr_top.
              Inductive tr_top: 
-               self__Imp.Clight.Semantics.genv -> 
-               self__Imp.Clight.Semantics.env -> 
-               self__Imp.Clight.Semantics.temp_env -> 
+               self__Imp.Clight.Sem.genv -> 
+               self__Imp.Clight.Sem.env -> 
+               self__Imp.Clight.Sem.temp_env -> 
                mem -> 
                self__SimplExpr.destination -> 
                self__Imp.C.expr -> 
                list self__Imp.Clight.stmt -> 
                self__Imp.Clight.expr -> list ident -> Prop :=
                   | tr_top_val_val: forall ge e le m v ty a tmp,
-                      self__Imp.Clight.typeof a = ty -> self__Imp.Clight.Semantics.eval_expr ge e le m a v ->
+                      self__Imp.Clight.typeof a = ty -> self__Imp.Clight.Sem.eval_expr ge e le m a v ->
                       tr_top ge e le m self__SimplExpr.For_val (self__Imp.C.Eval v ty) nil a tmp
                   | tr_top_base: forall ge e le m dst r sl a tmp,
                       self__Spec.tr_expr le dst r sl a tmp ->
@@ -1486,36 +1486,36 @@ Inductive bitfield : Type :=
                        match_cont_exp ce For_val a (C.Sem.Kreturn k) (Clight.Sem.Kseq (Clight.Sreturn (Some a)) tk).
               
               MetaData match_states.
-              Inductive match_states: self__Imp.C.Semantics.state -> self__Imp.Clight.Semantics.state -> Prop :=
+              Inductive match_states: self__Imp.C.Sem.state -> self__Imp.Clight.Sem.state -> Prop :=
                   | match_exprstates: forall tge f r k e m tf sl tk le dest a tmps cu 
                       (* (LINK: linkorder cu prog)*)
                       (TRF: self__SimplExpr.Spec.tr_function (* cu.(prog_comp_env) *) f tf)
                       (TR: self__SimplExpr.Spec.tr_top (* cu.(prog_comp_env)*) tge e le m dest r sl a tmps)
                       (MK: match_cont_exp cu.(prog_comp_env) dest a k tk),
-                      match_states (self__Imp.C.Semantics.ExprState f r k e m)
-                                   (self__Imp.Clight.Semantics.State tf self__Imp.Clight.Sskip (Kseqlist sl tk) e le m)
+                      match_states (self__Imp.C.Sem.ExprState f r k e m)
+                                   (self__Imp.Clight.Sem.State tf self__Imp.Clight.Sskip (Kseqlist sl tk) e le m)
                   | match_regularstates: forall f s k e m tf ts tk le cu
                       (LINK: linkorder cu prog)
                       (TRF: self__SimplExpr.Spec.tr_function cu.(prog_comp_env) f tf)
                       (TR: self__SimplExpr.Spec.tr_stmt cu.(prog_comp_env) s ts)
                       (MK: match_cont cu.(prog_comp_env) k tk),
-                      match_states (self__Imp.C.Semantics.State f s k e m)
+                      match_states (self__Imp.C.Sem.State f s k e m)
                                    (self__Imp.Clight.State tf ts tk e le m)
                   | match_callstates: forall fd args k m tfd tk cu
                       (LINK: linkorder cu prog)
                       (TR: tr_fundef cu fd tfd)
                       (MK: forall ce, match_cont ce k tk),
-                      match_states (self__Imp.C.Semantics.Callstate fd args k m)
-                                   (self__Imp.Clight.Semantics.Callstate tfd args tk m)
+                      match_states (self__Imp.C.Sem.Callstate fd args k m)
+                                   (self__Imp.Clight.Sem.Callstate tfd args tk m)
                   | match_returnstates: forall res k m tk
                       (MK: forall ce, match_cont ce k tk),
-                      match_states (self__Imp.C.Semantics.Returnstate res k m)
-                                   (self__Imp.Clight.Semantics.Returnstate res tk m)
+                      match_states (self__Imp.C.Sem.Returnstate res k m)
+                                   (self__Imp.Clight.Sem.Returnstate res tk m)
                   | match_stuckstate: forall S,
-                      match_states self__Imp.C.Semantics.Stuckstate S.
+                      match_states self__Imp.C.Sem.Stuckstate S.
                 
-              FInduction estep_simulation about C.Semantics.estep 
-                 motive (fun ge S1 t S2 (_ : C.Semantics.estep ge S1 t S2) => 
+              FInduction estep_simulation about C.Sem.estep 
+                 motive (fun ge S1 t S2 (_ : C.Sem.estep ge S1 t S2) => 
                             forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
                             forall T1 (MS : match_states S1 T1),
                       exists T2,
@@ -1594,7 +1594,7 @@ Inductive bitfield : Type :=
          | External ef => cheat (* No external functions *)
          end.
          
-       Family Semantics.
+       Family Sem.
             FDefinition genv := Genv.t fundef unit.
             FDefinition env := PTree.t (block * Z).
             FDefinition temp_env := PTree.t val.
@@ -1602,7 +1602,7 @@ Inductive bitfield : Type :=
             FDefinition empty_temp_env : temp_env := PTree.empty val.
 
             MetaData create_undef_temps.
-            Fixpoint create_undef_temps (temps: list ident) : self__Semantics.temp_env :=
+            Fixpoint create_undef_temps (temps: list ident) : self__Sem.temp_env :=
              match temps with
              | nil => PTree.empty val
              | id :: temps' => PTree.set id Vundef (create_undef_temps temps')
@@ -1611,7 +1611,7 @@ Inductive bitfield : Type :=
 
             MetaData bind_parameters.
             Fixpoint bind_parameters (formals: list ident) (args: list val)
-                         (le: self__Semantics.temp_env) : option self__Semantics.temp_env :=
+                         (le: self__Sem.temp_env) : option self__Sem.temp_env :=
                 match formals, args with
                 | nil, nil => Some le
                 | id :: xl, v :: vl => bind_parameters xl vl (PTree.set id v le)
@@ -1679,9 +1679,9 @@ Inductive bitfield : Type :=
                     eval_expr e le m (Econst cst) v.
 
             MetaData alloc_variables.
-            Inductive alloc_variables: self__Semantics.env -> mem ->
+            Inductive alloc_variables: self__Sem.env -> mem ->
                            list (ident * Z) ->
-                           self__Semantics.env -> mem -> Prop :=
+                           self__Sem.env -> mem -> Prop :=
             | alloc_variables_nil:
               forall e m,
                 alloc_variables e m nil e m
@@ -1754,22 +1754,22 @@ Inductive bitfield : Type :=
                           E0 (State f f.(self__Csharpminor.fn_body) k e le m1).
             
             MetaData initial_state.
-            Inductive initial_state (p: self__Csharpminor.program): self__Semantics.state -> Prop :=
+            Inductive initial_state (p: self__Csharpminor.program): self__Sem.state -> Prop :=
                 | initial_state_intro: forall b f m0,
                     let ge := Genv.globalenv p in
                     Genv.init_mem p = Some m0 ->
                     Genv.find_symbol ge p.(prog_main) = Some b ->
                     Genv.find_funct_ptr ge b = Some f ->
                     self__Csharpminor.funsig f = signature_main ->
-                    initial_state p (self__Semantics.Callstate f nil self__Semantics.Kstop m0).
+                    initial_state p (self__Sem.Callstate f nil self__Sem.Kstop m0).
             FEnd initial_state.
             
             MetaData final_state.
-            Inductive final_state: self__Semantics.state -> int -> Prop :=
+            Inductive final_state: self__Sem.state -> int -> Prop :=
                 | final_state_intro: forall r m,
-                    final_state (self__Semantics.Returnstate (Vint r) self__Semantics.Kstop m) r.
+                    final_state (self__Sem.Returnstate (Vint r) self__Sem.Kstop m) r.
             FEnd final_state.
-       FEnd Semantics.
+       FEnd Sem.
   FEnd Csharpminor.
   
   (* Clight -> Csharpminor *)
@@ -1784,11 +1784,11 @@ Inductive bitfield : Type :=
       
       (* Definition sizeof (ce: composite_env) (t: type) : res Z := *)
       MetaData sizeof.
-      Axiom sizeof : (* self__Imp.Clight.Semantics.composite_env -> *)self__Imp.type -> res Z.
+      Axiom sizeof : (* self__Imp.Clight.Sem.composite_env -> *)self__Imp.type -> res Z.
       FEnd sizeof.
       
       MetaData alignof.
-      Axiom alignof : (* self__Imp.Clight.Semantics.composite_env ->*) self__Imp.type -> res Z.
+      Axiom alignof : (* self__Imp.Clight.Sem.composite_env ->*) self__Imp.type -> res Z.
       FEnd alignof.
 
       (* Definition make_cast (from to: type) (e: expr) :=*)
@@ -1916,62 +1916,62 @@ Inductive bitfield : Type :=
             (* match_program_gen match_fundef match_varinfo p p tp.*) cheat.
 
      
-          FInductive match_cont : type -> nat -> nat -> Clight.Semantics.cont -> Csharpminor.Semantics.cont -> Prop :=
+          FInductive match_cont : type -> nat -> nat -> Clight.Sem.cont -> Csharpminor.Sem.cont -> Prop :=
               | match_Kstop: forall tyret nbrk ncnt,
                   match_cont tyret nbrk ncnt
-                    Clight.Semantics.Kstop
-                    Csharpminor.Semantics.Kstop
+                    Clight.Sem.Kstop
+                    Csharpminor.Sem.Kstop
               | match_Kseq: forall tyret nbrk ncnt s k ts tk,
                   transl_statement s tyret nbrk ncnt = OK ts ->
                   match_cont tyret nbrk ncnt k tk ->
                   match_cont tyret nbrk ncnt
-                             (Clight.Semantics.Kseq s k)
-                             (Csharpminor.Semantics.Kseq ts tk)
+                             (Clight.Sem.Kseq s k)
+                             (Csharpminor.Sem.Kseq ts tk)
               | match_Kloop1: forall tyret s1 s2 k ts1 ts2 nbrk ncnt tk,
                   transl_statement s1 tyret 1%nat 0%nat = OK ts1 ->
                   transl_statement s2 tyret 0%nat (S ncnt) = OK ts2 ->
                   match_cont tyret nbrk ncnt k tk ->
                   match_cont tyret 1%nat 0%nat
-                             (Clight.Semantics.Kloop1 s1 s2 k)
-                             (Csharpminor.Semantics.Kblock
-                                (Csharpminor.Semantics.Kseq ts2
-                                   (Csharpminor.Semantics.Kseq
+                             (Clight.Sem.Kloop1 s1 s2 k)
+                             (Csharpminor.Sem.Kblock
+                                (Csharpminor.Sem.Kseq ts2
+                                   (Csharpminor.Sem.Kseq
                                       (Csharpminor.Sloop
                                          (Csharpminor.Sseq
                                             (Csharpminor.Sblock ts1) ts2))
-                                      (Csharpminor.Semantics.Kblock tk))))
+                                      (Csharpminor.Sem.Kblock tk))))
               | match_Kloop2: forall tyret s1 s2 k ts1 ts2 nbrk ncnt tk,
                   transl_statement s1 tyret 1%nat 0%nat = OK ts1 ->
                   transl_statement s2 tyret 0%nat (S ncnt) = OK ts2 ->
                   match_cont tyret nbrk ncnt k tk ->
                   match_cont tyret 0%nat (S ncnt)
-                             (Clight.Semantics.Kloop2 s1 s2 k)
-                             (Csharpminor.Semantics.Kseq
+                             (Clight.Sem.Kloop2 s1 s2 k)
+                             (Csharpminor.Sem.Kseq
                                 (Csharpminor.Sloop
                                    (Csharpminor.Sseq
                                       (Csharpminor.Sblock ts1) ts2))
-                                (Csharpminor.Semantics.Kblock tk)).          
+                                (Csharpminor.Sem.Kblock tk)).          
           
           MetaData match_states.
-          Record match_env (e: self__Imp.Clight.Semantics.env) (te: self__Imp.Csharpminor.Semantics.env) : Prop :=
+          Record match_env (e: self__Imp.Clight.Sem.env) (te: self__Imp.Csharpminor.Sem.env) : Prop :=
            mk_match_env {
              me_local:
                forall id b ty,
-               e!id = Some (b, ty) -> te!id = Some(b, self__Imp.Clight.Semantics.sizeof ty);
+               e!id = Some (b, ty) -> te!id = Some(b, self__Imp.Clight.Sem.sizeof ty);
              me_local_inv:
                forall id b sz,
                te!id = Some (b, sz) -> exists ty, e!id = Some(b, ty)
            }.
 
           Inductive match_transl
-            : self__Imp.Csharpminor.stmt -> self__Imp.Csharpminor.Semantics.cont ->
-              self__Imp.Csharpminor.stmt -> self__Imp.Csharpminor.Semantics.cont -> Prop :=
+            : self__Imp.Csharpminor.stmt -> self__Imp.Csharpminor.Sem.cont ->
+              self__Imp.Csharpminor.stmt -> self__Imp.Csharpminor.Sem.cont -> Prop :=
           | match_transl_0: forall ts tk,
               match_transl ts tk ts tk
           | match_transl_1: forall ts tk,
-              match_transl (self__Imp.Csharpminor.Sblock ts) tk ts (self__Imp.Csharpminor.Semantics.Kblock tk).
+              match_transl (self__Imp.Csharpminor.Sblock ts) tk ts (self__Imp.Csharpminor.Sem.Kblock tk).
           
-          Inductive match_states: self__Imp.Clight.Semantics.state -> self__Imp.Csharpminor.Semantics.state -> Prop :=
+          Inductive match_states: self__Imp.Clight.Sem.state -> self__Imp.Csharpminor.Sem.state -> Prop :=
               | match_state:
                   forall f nbrk ncnt s k e le m tf ts tk te ts' tk'
                       (* (LINK: linkorder cu prog)*)
@@ -1980,38 +1980,38 @@ Inductive bitfield : Type :=
                       (MTR: match_transl ts tk ts' tk')
                       (MENV: match_env e te)
                       (MK: self__Correctness.match_cont (self__Imp.Clight.fn_return f) nbrk ncnt k tk),
-                  match_states (self__Imp.Clight.Semantics.State f s k e le m)
-                               (self__Imp.Csharpminor.Semantics.State tf ts' tk' te le m)
+                  match_states (self__Imp.Clight.Sem.State f s k e le m)
+                               (self__Imp.Csharpminor.Sem.State tf ts' tk' te le m)
               | match_callstate:
                   forall fd args k m tfd tk targs tres cconv 
                       (* (LINK: linkorder cu prog)*)
                       (TR: self__Correctness.match_fundef fd tfd)
                       (MK: self__Correctness.match_cont tres 0%nat 0%nat k tk)
-                      (ISCC: self__Imp.Clight.Semantics.is_call_cont k)
+                      (ISCC: self__Imp.Clight.Sem.is_call_cont k)
                       (TY: self__Imp.Clight.type_of_fundef fd = self__Imp.Tfunction targs tres cconv),
-                  match_states (self__Imp.Clight.Semantics.Callstate fd args k m)
-                               (self__Imp.Csharpminor.Semantics.Callstate tfd args tk m)
+                  match_states (self__Imp.Clight.Sem.Callstate fd args k m)
+                               (self__Imp.Csharpminor.Sem.Callstate tfd args tk m)
               | match_returnstate:
                   forall res tres k m tk 
                       (MK: self__Correctness.match_cont tres 0%nat 0%nat k tk),
                       (* (WT: wt_val res tres),*)
-                  match_states (self__Imp.Clight.Semantics.Returnstate res k m)
-                    (self__Imp.Csharpminor.Semantics.Returnstate res tk m).
+                  match_states (self__Imp.Clight.Sem.Returnstate res k m)
+                    (self__Imp.Csharpminor.Sem.Returnstate res tk m).
           FEnd match_states.          
                  
-          FInduction transl_step about Clight.Semantics.step
-            motive (fun ge S1 t S2 (_ : Clight.Semantics.step ge S1 t S2) => 
+          FInduction transl_step about Clight.Sem.step
+            motive (fun ge S1 t S2 (_ : Clight.Sem.step ge S1 t S2) => 
              forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
             forall T1, self__Correctness.match_states S1 T1 -> 
-            exists T2, plus Csharpminor.Semantics.step tge T1 t T2 /\ match_states S2 T2).            
+            exists T2, plus Csharpminor.Sem.step tge T1 t T2 /\ match_states S2 T2).            
           FProof.
               __unfold_ftheorem_motive_nested.
               apply cheat. Qed.
           FEnd transl_step.
                 
           FLemma transl_initial_states:
-            forall S prog tprog, Clight.Semantics.initial_state prog S -> transl_program prog = OK tprog ->
-            exists R, Csharpminor.Semantics.initial_state tprog R /\ match_states S R.
+            forall S prog tprog, Clight.Sem.initial_state prog S -> transl_program prog = OK tprog ->
+            exists R, Csharpminor.Sem.initial_state tprog R /\ match_states S R.
           FProofLemma.
               apply cheat. Qed.
           CloseFLemma.
@@ -2020,7 +2020,7 @@ Inductive bitfield : Type :=
           
           FLemma transl_final_states:
             forall S R r,
-            match_states S R -> Clight.Semantics.final_state S r -> Csharpminor.Semantics.final_state R r.
+            match_states S R -> Clight.Sem.final_state S r -> Csharpminor.Sem.final_state R r.
           FProofLemma.
              intros. inv H0. inv H. inv MK. constructor. Qed.
           CloseFLemma.
@@ -2072,12 +2072,12 @@ Inductive bitfield : Type :=
          | External ef => cheat
          end.       
        
-        Family Semantics.
+        Family Sem.
               FDefinition genv := Genv.t fundef unit.
               FDefinition env := PTree.t val.
 
               MetaData set_params.
-              Fixpoint set_params (vl: list val) (il: list ident) {struct il} : self__Semantics.env :=
+              Fixpoint set_params (vl: list val) (il: list ident) {struct il} : self__Sem.env :=
               match il, vl with
               | i1 :: is, v1 :: vs => PTree.set i1 v1 (set_params vs is)
               | i1 :: is, nil => PTree.set i1 Vundef (set_params nil is)
@@ -2086,7 +2086,7 @@ Inductive bitfield : Type :=
               FEnd set_params.
 
               MetaData set_locals.
-              Fixpoint set_locals (il: list ident) (e: self__Semantics.env) {struct il} : self__Semantics.env :=
+              Fixpoint set_locals (il: list ident) (e: self__Sem.env) {struct il} : self__Sem.env :=
                match il with
                | nil => e
                | i1 :: is => PTree.set i1 Vundef (set_locals is e)
@@ -2218,29 +2218,29 @@ Inductive bitfield : Type :=
                       E0 (State f s' k' sp e m)
                  | step_internal_function: forall ge f vargs k m m' sp e,
                      Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp) ->
-                     self__Semantics.set_locals
+                     self__Sem.set_locals
                        f.(self__Cminor.fn_vars)
-                       (self__Semantics.set_params vargs f.(self__Cminor.fn_params)) = e ->
+                       (self__Sem.set_params vargs f.(self__Cminor.fn_params)) = e ->
                      step ge (Callstate (Internal f) vargs k m)
                        E0 (State f f.(self__Cminor.fn_body) k (Vptr sp Ptrofs.zero) e m').
 
               MetaData initial_state.
-              Inductive initial_state (p: self__Cminor.program): self__Semantics.state -> Prop :=
+              Inductive initial_state (p: self__Cminor.program): self__Sem.state -> Prop :=
                   | initial_state_intro: forall b f m0,
                       let ge := Genv.globalenv p in
                       Genv.init_mem p = Some m0 ->
                       Genv.find_symbol ge p.(prog_main) = Some b ->
                       Genv.find_funct_ptr ge b = Some f ->
                       self__Cminor.funsig f = signature_main ->
-                      initial_state p (self__Semantics.Callstate f nil self__Semantics.Kstop m0).
+                      initial_state p (self__Sem.Callstate f nil self__Sem.Kstop m0).
               FEnd initial_state.
 
               MetaData final_state.
-              Inductive final_state: self__Semantics.state -> int -> Prop :=
+              Inductive final_state: self__Sem.state -> int -> Prop :=
                   | final_state_intro: forall r m,
-                      final_state (self__Semantics.Returnstate (Vint r) self__Semantics.Kstop m) r.
+                      final_state (self__Sem.Returnstate (Vint r) self__Sem.Kstop m) r.
               FEnd final_state.
-          FEnd Semantics.
+          FEnd Sem.
    FEnd Cminor.
 
    (* Csharpminor -> Cminor *)
@@ -2359,7 +2359,7 @@ Inductive bitfield : Type :=
           match_program (fun cu f tf => transl_fundef f = OK tf) eq p tp.
 
         MetaData is_reachable_from_env.
-        Inductive is_reachable_from_env (f: meminj) (e: self__Imp.Csharpminor.Semantics.env) (sp: block) (ofs: Z) : Prop :=
+        Inductive is_reachable_from_env (f: meminj) (e: self__Imp.Csharpminor.Sem.env) (sp: block) (ofs: Z) : Prop :=
           | is_reachable_intro: forall id b sz delta,
               e!id = Some(b, sz) ->
               f b = Some(sp, delta) ->
@@ -2367,12 +2367,12 @@ Inductive bitfield : Type :=
               is_reachable_from_env f e sp ofs.
         FEnd is_reachable_from_env.
 
-        FDefinition padding_freeable : meminj -> Csharpminor.Semantics.env -> mem -> block -> Z -> Prop :=
+        FDefinition padding_freeable : meminj -> Csharpminor.Sem.env -> mem -> block -> Z -> Prop :=
           fun f e tm sp sz =>
           forall ofs,
           0 <= ofs < sz -> Mem.perm tm sp ofs Cur Freeable \/ is_reachable_from_env f e sp ofs.
         
-        FDefinition match_temps : meminj -> Csharpminor.Semantics.temp_env -> Cminor.Semantics.env -> Prop :=
+        FDefinition match_temps : meminj -> Csharpminor.Sem.temp_env -> Cminor.Sem.env -> Prop :=
             fun f le te =>
             forall id v, le!id = Some v -> exists v', te!(id) = Some v' /\ Val.inject f v v'.
 
@@ -2387,7 +2387,7 @@ Inductive bitfield : Type :=
 
         MetaData match_env.
         Record match_env (f: meminj) (cenv: self__Cminorgen.compilenv)
-                        (e: self__Imp.Csharpminor.Semantics.env) (sp: block)
+                        (e: self__Imp.Csharpminor.Sem.env) (sp: block)
                         (lo hi: block) : Prop :=
           mk_match_env {
             me_vars:
@@ -2410,7 +2410,7 @@ Inductive bitfield : Type :=
         }.
         FEnd match_env.
 
-        FDefinition match_bounds : Csharpminor.Semantics.env -> mem -> Prop := 
+        FDefinition match_bounds : Csharpminor.Sem.env -> mem -> Prop := 
           fun e m => forall id b sz ofs p, 
              PTree.get id e = Some(b, sz) -> Mem.perm m b ofs Max p -> 0 <= ofs < sz.  
 
@@ -2418,9 +2418,9 @@ Inductive bitfield : Type :=
         Inductive frame : Type :=
           Frame(cenv: self__Cminorgen.compilenv)
               (tf: self__Imp.Cminor.function)
-              (e: self__Imp.Csharpminor.Semantics.env)
-              (le: self__Imp.Csharpminor.Semantics.temp_env)
-              (te: self__Imp.Cminor.Semantics.env)
+              (e: self__Imp.Csharpminor.Sem.env)
+              (le: self__Imp.Csharpminor.Sem.temp_env)
+              (te: self__Imp.Cminor.Sem.env)
               (sp: block)
               (lo hi: block).
         FEnd frame.
@@ -2428,7 +2428,7 @@ Inductive bitfield : Type :=
         FDefinition callstack : Type := list frame.
 
         MetaData match_globalenvs.
-        Inductive match_globalenvs (ge: self__Imp.Csharpminor.Semantics.genv) (f: meminj) (bound: block): Prop :=
+        Inductive match_globalenvs (ge: self__Imp.Csharpminor.Sem.genv) (f: meminj) (bound: block): Prop :=
         | mk_match_globalenvs
             (DOMAIN: forall b, Plt b bound -> f b = Some(b, 0))
             (IMAGE: forall b1 b2 delta, f b1 = Some(b2, delta) -> Plt b2 bound -> b1 = b2)
@@ -2438,7 +2438,7 @@ Inductive bitfield : Type :=
         FEnd match_globalenvs.
         
         MetaData match_callstack.
-        Inductive match_callstack (ge: self__Imp.Csharpminor.Semantics.genv) (f: meminj) (m: mem) (tm: mem):
+        Inductive match_callstack (ge: self__Imp.Csharpminor.Sem.genv) (f: meminj) (m: mem) (tm: mem):
                           self__Correctness.callstack -> block -> block -> Prop :=
           | mcs_nil:
               forall hi bound tbound,
@@ -2457,27 +2457,27 @@ Inductive bitfield : Type :=
               match_callstack ge f m tm (self__Correctness.Frame cenv tf e le te sp lo hi :: cs) bound tbound.
         FEnd match_callstack.
 
-        FInductive match_cont: Csharpminor.Semantics.cont -> Cminor.Semantics.cont -> compilenv -> exit_env -> callstack -> Prop :=
+        FInductive match_cont: Csharpminor.Sem.cont -> Cminor.Sem.cont -> compilenv -> exit_env -> callstack -> Prop :=
           | match_Kstop: forall cenv xenv,
-              match_cont Csharpminor.Semantics.Kstop Cminor.Semantics.Kstop cenv xenv nil
+              match_cont Csharpminor.Sem.Kstop Cminor.Sem.Kstop cenv xenv nil
           | match_Kseq: forall s k ts tk cenv xenv cs,
               transl_stmt s cenv xenv = OK ts ->
               match_cont k tk cenv xenv cs ->
-              match_cont (Csharpminor.Semantics.Kseq s k) (Cminor.Semantics.Kseq ts tk) cenv xenv cs
+              match_cont (Csharpminor.Sem.Kseq s k) (Cminor.Sem.Kseq ts tk) cenv xenv cs
           | match_Kseq2: forall s1 s2 k ts1 tk cenv xenv cs,
               transl_stmt s1 cenv xenv = OK ts1 ->
-              match_cont (Csharpminor.Semantics.Kseq s2 k) tk cenv xenv cs ->
-              match_cont (Csharpminor.Semantics.Kseq (Csharpminor.Sseq s1 s2) k)
-                        (Cminor.Semantics.Kseq ts1 tk) cenv xenv cs
+              match_cont (Csharpminor.Sem.Kseq s2 k) tk cenv xenv cs ->
+              match_cont (Csharpminor.Sem.Kseq (Csharpminor.Sseq s1 s2) k)
+                        (Cminor.Sem.Kseq ts1 tk) cenv xenv cs
           | match_Kblock: forall k tk cenv xenv cs,
               match_cont k tk cenv xenv cs ->
-              match_cont (Csharpminor.Semantics.Kblock k) (Cminor.Semantics.Kblock tk) cenv (true :: xenv) cs
+              match_cont (Csharpminor.Sem.Kblock k) (Cminor.Sem.Kblock tk) cenv (true :: xenv) cs
           | match_Kblock2: forall k tk cenv xenv cs,
               match_cont k tk cenv xenv cs ->
-              match_cont k (Cminor.Semantics.Kblock tk) cenv (false :: xenv) cs.
+              match_cont k (Cminor.Sem.Kblock tk) cenv (false :: xenv) cs.
 
           MetaData match_states.
-          Inductive match_states (ge: self__Imp.Csharpminor.Semantics.genv) : self__Imp.Csharpminor.Semantics.state -> self__Imp.Cminor.Semantics.state -> Prop :=
+          Inductive match_states (ge: self__Imp.Csharpminor.Sem.genv) : self__Imp.Csharpminor.Sem.state -> self__Imp.Cminor.Sem.state -> Prop :=
               | match_state:
                   forall fn s k e le m tfn ts tk sp te tm cenv xenv f lo hi cs sz
                   (TRF: self__Cminorgen.transl_funbody cenv sz fn = OK tfn)
@@ -2487,8 +2487,8 @@ Inductive bitfield : Type :=
                           (self__Correctness.Frame cenv tfn e le te sp lo hi :: cs)
                           (Mem.nextblock m) (Mem.nextblock tm))
                   (MK: self__Correctness.match_cont k tk cenv xenv cs),
-                  match_states ge (self__Imp.Csharpminor.Semantics.State fn s k e le m)
-                              (self__Imp.Cminor.Semantics.State tfn ts tk (Vptr sp Ptrofs.zero) te tm)
+                  match_states ge (self__Imp.Csharpminor.Sem.State fn s k e le m)
+                              (self__Imp.Cminor.Sem.State tfn ts tk (Vptr sp Ptrofs.zero) te tm)
               | match_state_seq:
                   forall fn s1 s2 k e le m tfn ts1 tk sp te tm cenv xenv f lo hi cs sz
                   (TRF: self__Cminorgen.transl_funbody cenv sz fn = OK tfn)
@@ -2497,27 +2497,27 @@ Inductive bitfield : Type :=
                   (MCS: self__Correctness.match_callstack ge f m tm
                           (self__Correctness.Frame cenv tfn e le te sp lo hi :: cs)
                           (Mem.nextblock m) (Mem.nextblock tm))
-                  (MK: self__Correctness.match_cont (self__Imp.Csharpminor.Semantics.Kseq s2 k) tk cenv xenv cs),
-                  match_states ge (self__Imp.Csharpminor.Semantics.State fn (self__Imp.Csharpminor.Sseq s1 s2) k e le m)
-                              (self__Imp.Cminor.Semantics.State tfn ts1 tk (Vptr sp Ptrofs.zero) te tm)
+                  (MK: self__Correctness.match_cont (self__Imp.Csharpminor.Sem.Kseq s2 k) tk cenv xenv cs),
+                  match_states ge (self__Imp.Csharpminor.Sem.State fn (self__Imp.Csharpminor.Sseq s1 s2) k e le m)
+                              (self__Imp.Cminor.Sem.State tfn ts1 tk (Vptr sp Ptrofs.zero) te tm)
               | match_callstate:
                   forall fd args k m tfd targs tk tm f cs cenv
                   (TR: self__Cminorgen.transl_fundef fd = OK tfd)
                   (MINJ: Mem.inject f m tm)
                   (MCS: self__Correctness.match_callstack ge f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
                   (MK: self__Correctness.match_cont k tk cenv nil cs)
-                  (ISCC: self__Imp.Csharpminor.Semantics.is_call_cont k)
+                  (ISCC: self__Imp.Csharpminor.Sem.is_call_cont k)
                   (ARGSINJ: Val.inject_list f args targs),
-                  match_states ge (self__Imp.Csharpminor.Semantics.Callstate fd args k m)
-                              (self__Imp.Cminor.Semantics.Callstate tfd targs tk tm)
+                  match_states ge (self__Imp.Csharpminor.Sem.Callstate fd args k m)
+                              (self__Imp.Cminor.Sem.Callstate tfd targs tk tm)
               | match_returnstate:
                   forall v k m tv tk tm f cs cenv
                   (MINJ: Mem.inject f m tm)
                   (MCS: self__Correctness.match_callstack ge f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
                   (MK: self__Correctness.match_cont k tk cenv nil cs)
                   (RESINJ: Val.inject f v tv),
-                  match_states ge (self__Imp.Csharpminor.Semantics.Returnstate v k m)
-                              (self__Imp.Cminor.Semantics.Returnstate tv tk tm).
+                  match_states ge (self__Imp.Csharpminor.Sem.Returnstate v k m)
+                              (self__Imp.Cminor.Sem.Returnstate tv tk tm).
           FEnd match_states.
         (*
           Variable prog: Csharpminor.program.
@@ -2540,17 +2540,17 @@ Inductive bitfield : Type :=
               Case Sgoto := (fun _ => O).
         FEnd seq_left_depth.
 
-        FRecursion measure about Csharpminor.Semantics.state motive (fun (_ : Csharpminor.Semantics.state) => nat) by _rect.
+        FRecursion measure about Csharpminor.Sem.state motive (fun (_ : Csharpminor.Sem.state) => nat) by _rect.
               Case State := (fun fn s k e le m => seq_left_depth s).
               Case Callstate := (fun f args k m => O).
               Case Returnstate := (fun res k m => O).
           FEnd measure.
 
-        FInduction transl_step_correct about Csharpminor.Semantics.step motive
-          (fun ge S1 t S2 (_ : Csharpminor.Semantics.step ge S1 t S2) => 
+        FInduction transl_step_correct about Csharpminor.Sem.step motive
+          (fun ge S1 t S2 (_ : Csharpminor.Sem.step ge S1 t S2) => 
              forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->               
           forall T1, match_states ge S1 T1 -> 
-          (exists T2, plus Cminor.Semantics.step tge T1 t T2 /\ match_states ge S2 T2) 
+          (exists T2, plus Cminor.Sem.step tge T1 t T2 /\ match_states ge S2 T2) 
           \/ (measure S2 < measure S1 /\ t = E0 /\ match_states ge S2 T1)%nat).
         FProof. 
           apply cheat.
@@ -2558,9 +2558,9 @@ Inductive bitfield : Type :=
         FEnd transl_step_correct.
         
         FLemma transl_initial_states:
-          forall S prog tprog ge, Csharpminor.Semantics.initial_state prog S ->
+          forall S prog tprog ge, Csharpminor.Sem.initial_state prog S ->
           transl_program prog = OK tprog ->
-          exists R, Cminor.Semantics.initial_state tprog R /\ match_states ge S R.
+          exists R, Cminor.Sem.initial_state tprog R /\ match_states ge S R.
             FProofLemma.
               apply cheat.
             Qed.
@@ -2568,7 +2568,7 @@ Inductive bitfield : Type :=
         
         FLemma transl_final_states:
           forall S R r ge,
-          match_states ge S R -> Csharpminor.Semantics.final_state S r -> Cminor.Semantics.final_state R r.
+          match_states ge S R -> Csharpminor.Sem.final_state S r -> Cminor.Sem.final_state R r.
             FProofLemma.
               intros. inv H0. inv H. inv MK. inv RESINJ. constructor. Qed.            
         CloseFLemma.
@@ -2787,7 +2787,7 @@ Inductive bitfield : Type :=
      Definition code := list instruction.
      Record function : Type := mkfunction { fn_sig: signature; fn_code: code }.
       
-    Family Semantics. 
+    Family Sem. 
           Definition regset := Pregmap.t val.
           Definition genv := Genv.t fundef unit.
           
@@ -2950,7 +2950,7 @@ Inductive bitfield : Type :=
               rs X10 = Vint r ->
               final_state (State rs m) r.
 
-      FEnd Semantics.                   
+      FEnd Sem.                   
    FEnd Asm.
 
    (* Processor dependent intermediate representations *)
@@ -2989,7 +2989,7 @@ Inductive bitfield : Type :=
           fn_body: stmt
        }.
 
-       Family Semantics. 
+       Family Sem. 
           Definition genv := Genv.t fundef unit.
           Definition letenv := list val.
            
@@ -3135,7 +3135,7 @@ Inductive bitfield : Type :=
                    find_label lbl f.(fn_body) (call_cont k) = Some(s', k') ->
                    step (State f (Sgoto lbl) k sp e m)
                      E0 (State f s' k' sp e m).
-       FEnd Semantics.
+       FEnd Sem.
     FEnd CminorSel.   
 
    Family RTL.
@@ -3157,7 +3157,7 @@ Inductive bitfield : Type :=
         fn_entrypoint: node
       }.
        
-      Family Semantics. 
+      Family Sem. 
           Definition genv := Genv.t fundef unit.
           Definition regset := Regmap.t val.
            
@@ -3211,7 +3211,7 @@ Inductive bitfield : Type :=
                  Inductive final_state: state -> int -> Prop :=
                     | final_state_intro: forall r m,
                         final_state (Returnstate nil (Vint r) m) r.
-      FEnd Semantics.
+      FEnd Sem.
    FEnd RTL.
 
    Family LTL.
@@ -3235,7 +3235,7 @@ Inductive bitfield : Type :=
         fn_entrypoint: node
       }.
        
-      Family Semantics.
+      Family Sem.
           Definition genv := Genv.t fundef unit.
           Definition locset := Locmap.t.
            
@@ -3296,7 +3296,7 @@ Inductive bitfield : Type :=
               | final_state_intro: forall rs m retcode,
                   Locmap.getpair (map_rpair R (loc_result signature_main)) rs = Vint retcode ->
                   final_state (Returnstate nil rs m) retcode.
-       FEnd Semantics.
+       FEnd Sem.
    FEnd LTL.
 
    Family Linear.
@@ -3317,7 +3317,7 @@ Inductive bitfield : Type :=
          fn_code: code
        }.
        
-       Family Semantics.
+       Family Sem.
           Definition genv := Genv.t fundef unit.
           Definition locset := Locmap.t.
 
@@ -3391,7 +3391,7 @@ Inductive bitfield : Type :=
               | final_state_intro: forall rs m retcode,
                   Locmap.getpair (map_rpair R (loc_result signature_main)) rs = Vint retcode ->
                   final_state (Returnstate nil rs m) retcode.
-       FEnd Semantics.
+       FEnd Sem.
    FEnd Linear.
 
    Family Mach.
@@ -3414,7 +3414,7 @@ Inductive bitfield : Type :=
               fn_link_ofs: ptrofs;
               fn_retaddr_ofs: ptrofs }.
 
-        Family Semantics.
+        Family Sem.
             Definition genv := Genv.t fundef unit.
             Definition locset := Locmap.t.
             
@@ -3497,8 +3497,8 @@ Inductive bitfield : Type :=
                       loc_result signature_main = One r ->
                       rs r = Vint retcode ->
                       final_state (Returnstate nil rs m) retcode.
-        FEnd Semantics.
-   FEnd Mach.            
+        FEnd Sem.
+   FEnd Mach.         
    
    (* Cminor -> CminorSel *)
    Family Selection.
