@@ -154,7 +154,7 @@ Inductive bitfield : Type :=
           end.
 
       FDefinition program := AST.program fundef type.
-
+      
       Family Sem.       
           FDefinition genv := Genv.t fundef type.
           FDefinition env := PTree.t (block * type).
@@ -1289,7 +1289,7 @@ Inductive bitfield : Type :=
                  tr_expr le dst e2 sl2 a2 tmp2 ->
                  list_disjoint tmp1 tmp2 ->
                  incl tmp1 tmp -> incl tmp2 tmp ->
-                 tr_expr le dst (C.Ecomma e1 e2 ty) (sl1 ++ sl2) a2 tmp.             
+                 tr_expr le dst (C.Ecomma e1 e2 ty) (sl1 ++ sl2) a2 tmp.
                 (*
                 Variable ge: genv.
                 Variable e: env.
@@ -1408,9 +1408,9 @@ Inductive bitfield : Type :=
                         tr_fundef p (Internal f) (Internal tf).                    
                 FEnd tr_fundef.
           FEnd Spec.
-
+          
           (* Correctness of the pass *)
-          Family Correctness.
+          Family Proof.
               FDefinition match_prog : C.program -> Clight.program -> Prop := fun p tp => cheat.
               
               FInductive match_cont : composite_env -> C.Sem.cont -> Clight.Sem.cont -> Prop :=
@@ -1548,7 +1548,7 @@ Inductive bitfield : Type :=
                    forall S S' r,
                    match_states S S' -> Csem.final_state S r -> Clight.final_state S' r.
               
-          FEnd Correctness.
+          FEnd Proof.
   FEnd SimplExpr.
   
   Family Csharpminor.
@@ -1904,7 +1904,7 @@ Inductive bitfield : Type :=
      FDefinition transl_program : Clight.program -> res Csharpminor.program := fun p => 
        transform_partial_program2 (transl_fundef) transl_globvar p.
      
-     Family Correctness.
+     Family Proof.
           FInductive match_fundef :  Clight.fundef -> Csharpminor.fundef -> Prop :=
             | match_fundef_internal: forall f tf,
                 transl_function f = OK tf ->
@@ -1979,21 +1979,21 @@ Inductive bitfield : Type :=
                       (TR: self__Cshmgen.transl_statement s (self__Imp.Clight.fn_return f) nbrk ncnt = OK ts)
                       (MTR: match_transl ts tk ts' tk')
                       (MENV: match_env e te)
-                      (MK: self__Correctness.match_cont (self__Imp.Clight.fn_return f) nbrk ncnt k tk),
+                      (MK: self__Proof.match_cont (self__Imp.Clight.fn_return f) nbrk ncnt k tk),
                   match_states (self__Imp.Clight.Sem.State f s k e le m)
                                (self__Imp.Csharpminor.Sem.State tf ts' tk' te le m)
               | match_callstate:
                   forall fd args k m tfd tk targs tres cconv 
                       (* (LINK: linkorder cu prog)*)
-                      (TR: self__Correctness.match_fundef fd tfd)
-                      (MK: self__Correctness.match_cont tres 0%nat 0%nat k tk)
+                      (TR: self__Proof.match_fundef fd tfd)
+                      (MK: self__Proof.match_cont tres 0%nat 0%nat k tk)
                       (ISCC: self__Imp.Clight.Sem.is_call_cont k)
                       (TY: self__Imp.Clight.type_of_fundef fd = self__Imp.Tfunction targs tres cconv),
                   match_states (self__Imp.Clight.Sem.Callstate fd args k m)
                                (self__Imp.Csharpminor.Sem.Callstate tfd args tk m)
               | match_returnstate:
                   forall res tres k m tk 
-                      (MK: self__Correctness.match_cont tres 0%nat 0%nat k tk),
+                      (MK: self__Proof.match_cont tres 0%nat 0%nat k tk),
                       (* (WT: wt_val res tres),*)
                   match_states (self__Imp.Clight.Sem.Returnstate res k m)
                     (self__Imp.Csharpminor.Sem.Returnstate res tk m).
@@ -2002,7 +2002,7 @@ Inductive bitfield : Type :=
           FInduction transl_step about Clight.Sem.step
             motive (fun ge S1 t S2 (_ : Clight.Sem.step ge S1 t S2) => 
              forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
-            forall T1, self__Correctness.match_states S1 T1 -> 
+            forall T1, self__Proof.match_states S1 T1 -> 
             exists T2, plus Csharpminor.Sem.step tge T1 t T2 /\ match_states S2 T2).            
           FProof.
               __unfold_ftheorem_motive_nested.
@@ -2024,7 +2024,7 @@ Inductive bitfield : Type :=
           FProofLemma.
              intros. inv H0. inv H. inv MK. constructor. Qed.
           CloseFLemma.
-     FEnd Correctness.
+     FEnd Proof.
   FEnd Cshmgen.
           
    Family Cminor.
@@ -2353,7 +2353,7 @@ Inductive bitfield : Type :=
       FDefinition transl_program : Csharpminor.program -> res Cminor.program := fun p => 
         transform_partial_program transl_fundef p.
 
-      Family Correctness.
+      Family Proof.
         FDefinition match_prog : Csharpminor.program -> Cminor.program -> Prop :=
           fun p tp =>
           match_program (fun cu f tf => transl_fundef f = OK tf) eq p tp.
@@ -2391,7 +2391,7 @@ Inductive bitfield : Type :=
                         (lo hi: block) : Prop :=
           mk_match_env {
             me_vars:
-              forall id, self__Correctness.match_var f sp (e!id) (cenv!id);
+              forall id, self__Proof.match_var f sp (e!id) (cenv!id);
 
             me_low_high:
               Ple lo hi;
@@ -2439,22 +2439,22 @@ Inductive bitfield : Type :=
         
         MetaData match_callstack.
         Inductive match_callstack (ge: self__Imp.Csharpminor.Sem.genv) (f: meminj) (m: mem) (tm: mem):
-                          self__Correctness.callstack -> block -> block -> Prop :=
+                          self__Proof.callstack -> block -> block -> Prop :=
           | mcs_nil:
               forall hi bound tbound,
-              self__Correctness.match_globalenvs ge f hi ->
+              self__Proof.match_globalenvs ge f hi ->
               Ple hi bound -> Ple hi tbound ->
               match_callstack ge f m tm nil bound tbound
           | mcs_cons:
               forall cenv tf e le te sp lo hi cs bound tbound
                 (BOUND: Ple hi bound)
                 (TBOUND: Plt sp tbound)
-                (MTMP: self__Correctness.match_temps f le te)
-                (MENV: self__Correctness.match_env f cenv e sp lo hi)
-                (BOUND: self__Correctness.match_bounds e m)
-                (PERM: self__Correctness.padding_freeable f e tm sp tf.(self__Imp.Cminor.fn_stackspace))
+                (MTMP: self__Proof.match_temps f le te)
+                (MENV: self__Proof.match_env f cenv e sp lo hi)
+                (BOUND: self__Proof.match_bounds e m)
+                (PERM: self__Proof.padding_freeable f e tm sp tf.(self__Imp.Cminor.fn_stackspace))
                 (MCS: match_callstack ge f m tm cs lo sp),
-              match_callstack ge f m tm (self__Correctness.Frame cenv tf e le te sp lo hi :: cs) bound tbound.
+              match_callstack ge f m tm (self__Proof.Frame cenv tf e le te sp lo hi :: cs) bound tbound.
         FEnd match_callstack.
 
         FInductive match_cont: Csharpminor.Sem.cont -> Cminor.Sem.cont -> compilenv -> exit_env -> callstack -> Prop :=
@@ -2483,10 +2483,10 @@ Inductive bitfield : Type :=
                   (TRF: self__Cminorgen.transl_funbody cenv sz fn = OK tfn)
                   (TR: self__Cminorgen.transl_stmt s cenv xenv = OK ts)
                   (MINJ: Mem.inject f m tm)
-                  (MCS: self__Correctness.match_callstack ge f m tm
-                          (self__Correctness.Frame cenv tfn e le te sp lo hi :: cs)
+                  (MCS: self__Proof.match_callstack ge f m tm
+                          (self__Proof.Frame cenv tfn e le te sp lo hi :: cs)
                           (Mem.nextblock m) (Mem.nextblock tm))
-                  (MK: self__Correctness.match_cont k tk cenv xenv cs),
+                  (MK: self__Proof.match_cont k tk cenv xenv cs),
                   match_states ge (self__Imp.Csharpminor.Sem.State fn s k e le m)
                               (self__Imp.Cminor.Sem.State tfn ts tk (Vptr sp Ptrofs.zero) te tm)
               | match_state_seq:
@@ -2494,18 +2494,18 @@ Inductive bitfield : Type :=
                   (TRF: self__Cminorgen.transl_funbody cenv sz fn = OK tfn)
                   (TR: self__Cminorgen.transl_stmt s1 cenv xenv = OK ts1)
                   (MINJ: Mem.inject f m tm)
-                  (MCS: self__Correctness.match_callstack ge f m tm
-                          (self__Correctness.Frame cenv tfn e le te sp lo hi :: cs)
+                  (MCS: self__Proof.match_callstack ge f m tm
+                          (self__Proof.Frame cenv tfn e le te sp lo hi :: cs)
                           (Mem.nextblock m) (Mem.nextblock tm))
-                  (MK: self__Correctness.match_cont (self__Imp.Csharpminor.Sem.Kseq s2 k) tk cenv xenv cs),
+                  (MK: self__Proof.match_cont (self__Imp.Csharpminor.Sem.Kseq s2 k) tk cenv xenv cs),
                   match_states ge (self__Imp.Csharpminor.Sem.State fn (self__Imp.Csharpminor.Sseq s1 s2) k e le m)
                               (self__Imp.Cminor.Sem.State tfn ts1 tk (Vptr sp Ptrofs.zero) te tm)
               | match_callstate:
                   forall fd args k m tfd targs tk tm f cs cenv
                   (TR: self__Cminorgen.transl_fundef fd = OK tfd)
                   (MINJ: Mem.inject f m tm)
-                  (MCS: self__Correctness.match_callstack ge f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
-                  (MK: self__Correctness.match_cont k tk cenv nil cs)
+                  (MCS: self__Proof.match_callstack ge f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
+                  (MK: self__Proof.match_cont k tk cenv nil cs)
                   (ISCC: self__Imp.Csharpminor.Sem.is_call_cont k)
                   (ARGSINJ: Val.inject_list f args targs),
                   match_states ge (self__Imp.Csharpminor.Sem.Callstate fd args k m)
@@ -2513,8 +2513,8 @@ Inductive bitfield : Type :=
               | match_returnstate:
                   forall v k m tv tk tm f cs cenv
                   (MINJ: Mem.inject f m tm)
-                  (MCS: self__Correctness.match_callstack ge f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
-                  (MK: self__Correctness.match_cont k tk cenv nil cs)
+                  (MCS: self__Proof.match_callstack ge f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
+                  (MK: self__Proof.match_cont k tk cenv nil cs)
                   (RESINJ: Val.inject f v tv),
                   match_states ge (self__Imp.Csharpminor.Sem.Returnstate v k m)
                               (self__Imp.Cminor.Sem.Returnstate tv tk tm).
@@ -2572,7 +2572,7 @@ Inductive bitfield : Type :=
             FProofLemma.
               intros. inv H0. inv H. inv MK. inv RESINJ. constructor. Qed.            
         CloseFLemma.
-      FEnd Correctness.
+      FEnd Proof.
   FEnd Cminorgen.
    
     (* RISC-V *)
@@ -3904,8 +3904,8 @@ Inductive bitfield : Type :=
    (* Allocation is written in OCaml, hence this is a translation validation *)
    (* The correctness is the correctness of the translation validator *)
    Family Allocation.
-        Family Correctness.
-        FEnd Correctness.
+        Family Proof.
+        FEnd Proof.
    FEnd Allocation.
 
   (* RTL -> RTL *)
