@@ -1413,43 +1413,44 @@ Inductive bitfield : Type :=
           Family Proof.
               FDefinition match_prog : C.program -> Clight.program -> Prop := fun p tp => cheat.
               
-              FInductive match_cont : composite_env -> C.Sem.cont -> Clight.Sem.cont -> Prop :=
-                   | match_Kstop: forall ce,
-                       match_cont ce C.Sem.Kstop Clight.Sem.Kstop
-                   | match_Kseq: forall ce s k ts tk,
-                       tr_stmt ce s ts ->
-                       match_cont ce k tk ->
-                       match_cont ce (C.Sem.Kseq s k) (Clight.Sem.Kseq ts tk)
-                   | match_Kwhile2: forall ce r s k s' ts tk,
-                       tr_if ce r Sskip Sbreak s' ->
-                       tr_stmt ce s ts ->
-                       match_cont ce k tk ->
-                       match_cont ce (C.Sem.Kwhile2 r s k)
-                                     (Clight.Sem.Kloop1 (Clight.Ssequence s' ts) Clight.Sskip tk)
-                   | match_Kdowhile1: forall ce r s k s' ts tk,
-                       tr_if ce r Sskip Sbreak s' ->
-                       tr_stmt ce s ts ->
-                       match_cont ce k tk ->
-                       match_cont ce (C.Sem.Kdowhile1 r s k)
-                                     (Clight.Sem.Kloop1 ts s' tk)
-                   | match_Kfor3: forall ce r s3 s k ts3 s' ts tk,
-                       tr_if ce r Sskip Sbreak s' ->
-                       tr_stmt ce s3 ts3 ->
-                       tr_stmt ce s ts ->
-                       match_cont ce k tk ->
-                       match_cont ce (C.Sem.Kfor3 r s3 s k)
-                                     (Clight.Sem.Kloop1 (Clight.Ssequence s' ts) ts3 tk)
-                   | match_Kfor4: forall ce r s3 s k ts3 s' ts tk,
-                       tr_if ce r Sskip Sbreak s' ->
-                       tr_stmt ce s3 ts3 ->
-                       tr_stmt ce s ts ->
-                       match_cont ce k tk ->
-                       match_cont ce (Csem.Kfor4 r s3 s k)
-                                     (Clight.Sem.Kloop2 (Clight.Ssequence s' ts) ts3 tk)                   
-              with match_cont_exp : composite_env -> destination -> expr -> Csem.cont -> cont -> Prop :=
+              FInductive match_cont : (* composite_env ->*) C.Sem.cont -> Clight.Sem.cont -> Prop :=
+                   | match_Kstop: 
+                       match_cont C.Sem.Kstop Clight.Sem.Kstop
+                   | match_Kseq: forall s k ts tk,
+                       Spec.tr_stmt s ts ->
+                       match_cont k tk ->
+                       match_cont (C.Sem.Kseq s k) (Clight.Sem.Kseq ts tk)
+                   | match_Kwhile2: forall r s k s' ts tk,
+                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
+                       Spec.tr_stmt s ts ->
+                       match_cont k tk ->
+                       match_cont (C.Sem.Kwhile2 r s k)
+                                  (Clight.Sem.Kloop1 (Clight.Ssequence s' ts) Clight.Sskip tk)
+                   | match_Kdowhile1: forall r s k s' ts tk,
+                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
+                       Spec.tr_stmt s ts ->
+                       match_cont k tk ->
+                       match_cont (C.Sem.Kdowhile1 r s k)
+                                  (Clight.Sem.Kloop1 ts s' tk)
+                   | match_Kfor3: forall r s3 s k ts3 s' ts tk,
+                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
+                       Spec.tr_stmt s3 ts3 ->
+                       Spec.tr_stmt s ts ->
+                       match_cont k tk ->
+                       match_cont (C.Sem.Kfor3 r s3 s k)
+                                  (Clight.Sem.Kloop1 (Clight.Ssequence s' ts) ts3 tk)
+                   | match_Kfor4: forall r s3 s k ts3 s' ts tk,
+                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
+                       Spec.tr_stmt s3 ts3 ->
+                       Spec.tr_stmt s ts ->
+                       match_cont k tk ->
+                       match_cont (C.Sem.Kfor4 r s3 s k)
+                                  (Clight.Sem.Kloop2 (Clight.Ssequence s' ts) ts3 tk)                   
+              with match_cont_exp : (* composite_env*) -> destination -> expr -> Csem.cont -> cont -> Prop :=
                    | match_Kdo: forall ce k a tk,
                        match_cont ce k tk ->
                        match_cont_exp ce For_effects a (C.Sem.Kdo k) tk
+
                    | match_Kifthenelse_empty: forall ce a k tk,
                        match_cont ce k tk ->
                        match_cont_exp ce For_val a (C.Sem.Kifthenelse Csyntax.Sskip Csyntax.Sskip k) (Clight.Sem.Kseq Clight.Sskip tk)
