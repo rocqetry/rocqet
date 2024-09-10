@@ -265,8 +265,7 @@ module rec LinkageElem : sig
         inductive_path : Libnames.qualid;
         handlers : (Names.Id.t * Constrexpr.constr_expr) list;
         compiled_handlers : CompiledModule.t;
-        compiled_context : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;
+        compiled_context : CompiledModuleType.t;        
         compiled_signature : CompiledModuleType.t;
       }
     | MetaDataSection of {

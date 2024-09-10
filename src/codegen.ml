@@ -484,49 +484,48 @@ let compile_recursive_definition_implementation
   
   
 
-let compile_theorem_implementation ~(name : Names.Id.t)
-    ~(parameters : (Names.Id.t * Constrexpr.module_ast) list)
+let compile_theorem_implementation 
+    ~(name : Names.Id.t)
+    ~ctx
     ~(compiled_handlers : CompiledModule.t)    
-    ~(inductive_name : Names.Id.t) ~(suffix : RecKind.t)
+    ~(inductive_name : Names.Id.t) 
+    ~(suffix : RecKind.t)
     ~(goal : Constrexpr.constr_expr)    
     ~(handler_names : Names.Id.t list)
-    ~(rec_principle_prefix : Libnames.qualid) =
-  let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in
-  let open Constrexpr_ops in
-  B.(
-    run
-    @@ define_module ~module_name ~parameters ~body:(fun ctx ->
-           let module_expr =
-             Termutils.apply_module
-               ~functor_expr:(Termutils.ident_to_module_expr compiled_handlers)
-               ~arguments:ctx
-           in
-           let* _ = B.include_module ~module_expr in
-           let handler_names =
-             handler_names
-             |> List.map (fun handler ->
-                    Naming.handler_name ~recursor:name ~case:handler)
-           in
-           let handler_names =
-             handler_names
-             |> List.map Libnames.qualid_of_ident
-             |> List.map mkRefC
-           in           
-           let recursor =
-              let recursor =
-                Nameops.add_suffix inductive_name (RecKind.to_string suffix)
-              in
-              let recursor_path = Naming.qualid_point (Some rec_principle_prefix) recursor in      
-              let motive =
-                name |> Naming.motive_of |> Libnames.qualid_of_ident
-                |> Constrexpr_ops.mkRefC
-              in
-              Constrexpr_ops.mkAppC
-                (Constrexpr_ops.mkRefC recursor_path, motive :: handler_names)
-           in           
-           goal |> ignore;           
-           let* _ = define_term ~name (* ~ty:goal*) recursor in
-           return ()))
+    ~(prefix : Libnames.qualid option) =  
+  let open Constrexpr_ops in  
+  let open B in 
+  let module_expr =
+    Termutils.apply_module
+      ~functor_expr:(Termutils.ident_to_module_expr compiled_handlers)
+      ~arguments:ctx
+  in
+  let* _ = B.include_module ~module_expr in
+  let handler_names =
+    handler_names
+    |> List.map (fun handler ->
+           Naming.handler_name ~recursor:name ~case:handler)
+  in
+  let handler_names =
+    handler_names
+    |> List.map Libnames.qualid_of_ident
+    |> List.map mkRefC
+  in           
+  let recursor =
+     let recursor =
+       Nameops.add_suffix inductive_name (RecKind.to_string suffix)
+     in
+     let recursor_path = Naming.qualid_point prefix recursor in      
+     let motive =
+       name |> Naming.motive_of |> Libnames.qualid_of_ident
+       |> Constrexpr_ops.mkRefC
+     in
+     Constrexpr_ops.mkAppC
+       (Constrexpr_ops.mkRefC recursor_path, motive :: handler_names)
+  in           
+  goal |> ignore;           
+  let* _ = define_term ~name (* ~ty:goal*) recursor in
+  return ()
 
 let compile_linkage_context ~field_name (context : LinkageCtx.t) :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
@@ -695,7 +694,21 @@ let compile_linkage (linkage : Linkage.t) =
          ~suffix
          ~ctx
          ~handler_cases
-    | Bwd.Snoc (fields, (_, LinkageElem.TheoremDefinition { compiled_impl; _ }))
+    | Bwd.Snoc (fields, (_, LinkageElem.TheoremDefinition { handlers; goal; names; compiled_handlers; inductive; suffix;  _ })) -> 
+       let open B in 
+       let* _ = compile_fields fields ctx in
+       let name = List.hd names in 
+       let inductive_name = VernacInductive.extract_inductive_name inductive in
+       let handler_names = List.map fst handlers in 
+       compile_theorem_implementation 
+         ~name 
+         ~ctx 
+         ~compiled_handlers 
+         ~inductive_name 
+         ~suffix 
+         ~prefix:None
+         ~goal
+         ~handler_names
     | Bwd.Snoc (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.MetaDataSection { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.OpaqueFieldDefinition { compiled_impl; _ }))

@@ -13,8 +13,7 @@ module DB = Backend.Declare
 module Ctx = struct
   type t = {
     name : Names.Id.t;
-    proof : Declare.Proof.t option;
-    handler_names : Names.Id.t list;
+    proof : Declare.Proof.t option;    
     implementing_handler_names : Names.Id.t list;
     inherited_handlers : (Names.Id.t * Constrexpr.constr_expr) list;
     compiled_context : CompiledModuleType.t;
@@ -178,8 +177,7 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     Ctx.
       {
         name;
-        module_name;
-        handler_names;        
+        module_name;        
         implementing_handler_names;
         inherited_handlers;
         goal;
@@ -257,8 +255,7 @@ let open_theorem_extension ~name =
   let ctx =
     Ctx.
       {
-        name;
-        handler_names;
+        name;        
         implementing_handler_names;
         inherited_handlers;        
         module_name;
@@ -281,8 +278,7 @@ let open_theorem_extension ~name =
 let close_theorem () =
   let Ctx.
         {
-          name;
-          handler_names;
+          name;          
           implementing_handler_names;
           inherited_handlers;
           motive;
@@ -298,7 +294,7 @@ let close_theorem () =
           _;
         } =
     Ctx.get ()
-  in
+  in  
   let open Constrexpr_ops in
   let implemented_handlers =
     Termutils.extract_handlers_from_inductive_proof implementing_handler_names
@@ -318,14 +314,14 @@ let close_theorem () =
   let _ = VB.run @@ VB.flatmap all_compiled_handlers in
   let compiled_handlers = DB.end_module () in
   (* let the_motive = Naming.motive_of name in*)
-  let compiled_impl =
+  (*let compiled_impl =
     Codegen.compile_theorem_implementation ~name ~parameters ~compiled_handlers      
       ~inductive_name:(VernacInductive.extract_inductive_name inductive)
       ~suffix
       ~goal
       ~handler_names
       ~rec_principle_prefix
-  in
+  in*)
   let family_name = Context.family_name (Context.get ()) in
   let compiled_signature =
     Codegen.compile_recursive_definition_signature ~names:[ name ]
@@ -338,8 +334,7 @@ let close_theorem () =
       {
         names = [ name ];
         goal;
-        inductive;
-        compiled_impl;
+        inductive;        
         compiled_signature;
         compiled_context;
         motives = [ motive ];

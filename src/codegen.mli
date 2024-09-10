@@ -74,17 +74,6 @@ val compile_handler_cases :
   handler_types:(Names.Id.t * Constrexpr.constr_expr) list ->  
   CompiledModule.t
 
-(* FInduction *)
-val compile_theorem_implementation :
-  name:Names.Id.t ->
-  parameters:(Names.Id.t * Constrexpr.module_ast) list ->
-  compiled_handlers:CompiledModule.t ->  
-  inductive_name:Names.Id.t ->
-  suffix:RecKind.t ->
-  goal:Constrexpr.constr_expr ->  
-  handler_names:Names.Id.t list ->
-  rec_principle_prefix:Libnames.qualid ->
-  CompiledModule.t
 
 (* Compiling Linkage Contexts *)
 val compile_linkage_context :
