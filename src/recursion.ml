@@ -243,34 +243,16 @@ let open_recursion_extension ~name =
   in
   Ctx.update recursion_ctx
 
-let extend_argumets_with_inductive_case ~(recursor : Names.Id.t)
-    ~(constructor : Names.Id.t) ~(arguments : Names.Id.t list)
-    ~(inductive : VernacInductive.t) =
-  (* TODO: We will need all the names for the case of
-     mutual recursion *)
-  let ind_name =
-    VernacInductive.extract_inductive_name inductive |> Libnames.qualid_of_ident
-  in
-  let constructor_type =
-    inductive
-    |> List.map (fun (inductive_expr, _) ->
-           inductive_expr |> VernacInductive.extract_type_and_cstrs)
-    |> List.find_map (fun (_, ctrs) -> List.assoc_opt constructor ctrs)
-  in
-  let constructor_type =
-    match constructor_type with
-    | None -> Errors.fail ~info:"Couldn't find constructor"
-    | Some c -> c
-  in
-  let rec unflatten (c : Constrexpr.constr_expr) =
-    match c.v with
-    | CNotation (_, (_, "_ -> _"), ([ domain; codomain ], _, _, _)) -> (
-        match domain.v with
-        | Constrexpr.CRef (ty_name, _) -> Some (ty_name.v) :: unflatten codomain        
-        | _ -> None :: unflatten codomain)
-    | _ -> []
-  in
-  let types = unflatten constructor_type in
+let extend_argumets_with_inductive_case 
+    ~(recursor : Names.Id.t)
+    ~(constructor : Names.Id.t) 
+    ~(arguments : Names.Id.t list)
+    ~(inductive : VernacInductive.t) =  
+  let types = 
+    Termutils.flatten_inductive_constructor_type 
+      ~inductive 
+      ~constructor 
+  in   
   (* Give a good error message for this, e.g as user to fallback 
       to the regular syntax if we cannot infer handlers *)
   let result = 
@@ -294,8 +276,8 @@ let extend_argumets_with_inductive_case ~(recursor : Names.Id.t)
          let r = Names.Id.of_string r in
          match ty with
          | None -> [ arg]
-         | Some ty -> 
-            if ty = ind_name.v then [ arg; r ] else [ arg ])
+         | Some _ -> 
+            [arg; r])
 
 (* Given a recursor name `r` and an argument `n`
    replace the expression r n (i.e r applied to n) with the

@@ -31,6 +31,19 @@ val apply_module :
   arguments:Libnames.qualid list ->
   Constrexpr.module_ast
 
+(** Given a constructor name [n] in an inductive type [i], 
+   [flatten_inductive_constructor_type i n] returns a list 
+   of optional names. This list correspoinds to the types of 
+   argument of [i]. If the type of an argument is a 
+   simple name [name] and [name] is the same as [i], then
+   it would be [Some name] otherwise it will be none.
+   We are effectively tracking the recursive location in 
+   the constructor where the inductived type appears 
+   recursively. *)
+val flatten_inductive_constructor_type : 
+     inductive:VernacInductive.t -> 
+     constructor:Names.Id.t -> Libnames.qualid_r option list
+
 val generate_computational_axioms :
   inductive:VernacInductive.t ->
   constructors:Names.Id.t list ->

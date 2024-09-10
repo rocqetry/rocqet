@@ -392,9 +392,11 @@ let compile_recursive_definition_signature ~(names : Names.Id.t list)
            return ()))
 
 (* Return the compiled module and the generated computation behaviour *)
-let compile_recursive_definition_implementation ~inductive
-     ~recursor_name ~handlers
-    ~(rec_principle_prefix : Libnames.qualid option) ~suffix ~ctx
+let compile_recursive_definition_implementation 
+      ~inductive
+      ~recursor_name 
+      ~handlers
+      ~(rec_principle_prefix : Libnames.qualid option) ~suffix ~ctx
     ~(handler_cases : CompiledModule.t) :
     CompiledModule.t * (Names.Id.t * Constrexpr.constr_expr) list =
   let module_name = Naming.fresh_name ~prefix:"RecImpl" in

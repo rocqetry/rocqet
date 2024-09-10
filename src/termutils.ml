@@ -152,6 +152,8 @@ let apply_module ~(functor_expr : Constrexpr.module_ast)
 let flatten_inductive_constructor_type 
       ~(inductive : VernacInductive.t) 
       ~(constructor : Names.Id.t) = 
+  (* TODO: We will need all the names for the case of
+     mutual recursion *)
   let ind_name =
     VernacInductive.extract_inductive_name inductive |> Libnames.qualid_of_ident
   in
