@@ -525,6 +525,23 @@ Inductive bitfield : Type :=
 
             FDefinition step :  genv -> state -> trace -> state -> Prop := fun ge S t S' => 
               estep ge S t S' \/ sstep ge S t S'.
+            
+            MetaData initial_state.
+            Inductive initial_state (p: self__C.program): self__Sem.state -> Prop :=
+                 | initial_state_intro: forall b f m0,
+                     let ge := Genv.globalenv p in
+                     Genv.init_mem p = Some m0 ->
+                     Genv.find_symbol ge p.(prog_main) = Some b ->
+                     Genv.find_funct_ptr ge b = Some f ->
+                     self__C.type_of_fundef f = self__Imp.Tfunction self__Imp.Tnil self__Imp.type_int32s cc_default ->
+                     initial_state p (self__Sem.Callstate f nil self__Sem.Kstop m0).
+            FEnd initial_state.
+            
+            MetaData final_state.
+            Inductive final_state: self__Sem.state -> int -> Prop :=
+                | final_state_intro: forall r m,
+                    final_state (self__Sem.Returnstate (Vint r) self__Sem.Kstop m) r.
+            FEnd final_state.
       FEnd Sem.
   FEnd C.
       
@@ -1446,109 +1463,182 @@ Inductive bitfield : Type :=
                        match_cont k tk ->
                        match_cont (C.Sem.Kfor4 r s3 s k)
                                   (Clight.Sem.Kloop2 (Clight.Ssequence s' ts) ts3 tk)                   
-              with match_cont_exp : (* composite_env*) -> destination -> expr -> Csem.cont -> cont -> Prop :=
-                   | match_Kdo: forall ce k a tk,
-                       match_cont ce k tk ->
-                       match_cont_exp ce For_effects a (C.Sem.Kdo k) tk
-
-                   | match_Kifthenelse_empty: forall ce a k tk,
-                       match_cont ce k tk ->
-                       match_cont_exp ce For_val a (C.Sem.Kifthenelse Csyntax.Sskip Csyntax.Sskip k) (Clight.Sem.Kseq Clight.Sskip tk)
-                   | match_Kifthenelse_1: forall ce a s1 s2 k ts1 ts2 tk,
-                       tr_stmt ce s1 ts1 -> tr_stmt ce s2 ts2 ->
-                       match_cont ce k tk ->
-                       match_cont_exp ce For_val a (C.Sem.Kifthenelse s1 s2 k) (Clight.Sem.Kseq (Clight.Sifthenelse a ts1 ts2) tk)
-                   | match_Kwhile1: forall ce r s k s' a ts tk,
-                       tr_if ce r Sskip Sbreak s' ->
-                       tr_stmt ce s ts ->
-                       match_cont ce k tk ->
-                       match_cont_exp ce For_val a
+              with match_cont_exp : (* composite_env*) destination -> Clight.expr -> C.Sem.cont -> Clight.Sem.cont -> Prop :=
+                   | match_Kdo: forall k a tk,
+                       match_cont k tk ->
+                       match_cont_exp self__SimplExpr.For_effects a (C.Sem.Kdo k) tk
+                   | match_Kifthenelse_empty: forall a k tk,
+                       match_cont k tk ->
+                       match_cont_exp self__SimplExpr.For_val a (C.Sem.Kifthenelse C.Sskip C.Sskip k) (Clight.Sem.Kseq Clight.Sskip tk)
+                   | match_Kifthenelse_1: forall a s1 s2 k ts1 ts2 tk,
+                       Spec.tr_stmt s1 ts1 -> Spec.tr_stmt s2 ts2 ->
+                       match_cont k tk ->
+                       match_cont_exp self__SimplExpr.For_val a (C.Sem.Kifthenelse s1 s2 k) (Clight.Sem.Kseq (Clight.Sifthenelse a ts1 ts2) tk)
+                   | match_Kwhile1: forall r s k s' a ts tk,
+                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
+                       Spec.tr_stmt s ts ->
+                       match_cont k tk ->
+                       match_cont_exp self__SimplExpr.For_val a
                           (C.Sem.Kwhile1 r s k)
                           (Clight.Sem.Kseq (makeif a Clight.Sskip Clight.Sbreak)
-                            (Clight.Sem.Kseq ts (Clight.Kloop1 (Clight.Ssequence s' ts) Clight.Sskip tk)))
-                   | match_Kdowhile2: forall ce r s k s' a ts tk,
-                       tr_if ce r Sskip Sbreak s' ->
-                       tr_stmt ce s ts ->
-                        match_cont ce k tk ->
-                        match_cont_exp ce For_val a
+                            (Clight.Sem.Kseq ts (Clight.Sem.Kloop1 (Clight.Ssequence s' ts) Clight.Sskip tk)))
+                   | match_Kdowhile2: forall r s k s' a ts tk,
+                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
+                       Spec.tr_stmt s ts ->
+                        match_cont k tk ->
+                        match_cont_exp self__SimplExpr.For_val a
                           (C.Sem.Kdowhile2 r s k)
-                          (Clight.Sem.Kseq (makeif a Clight.Sskip Clight.Sbreak) (Clight.Kloop2 ts s' tk))
-                   | match_Kfor2: forall ce r s3 s k s' a ts3 ts tk,
-                       tr_if ce r Sskip Sbreak s' ->
-                       tr_stmt ce s3 ts3 ->
-                       tr_stmt ce s ts ->
-                       match_cont ce k tk ->
-                       match_cont_exp ce For_val a
-                         (Csem.Kfor2 r s3 s k)
-                         (Clight.Sem.Kseq (makeif a Sskip Sbreak)
+                          (Clight.Sem.Kseq (makeif a Clight.Sskip Clight.Sbreak) (Clight.Sem.Kloop2 ts s' tk))
+                   | match_Kfor2: forall r s3 s k s' a ts3 ts tk,
+                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
+                       Spec.tr_stmt s3 ts3 ->
+                       Spec.tr_stmt s ts ->
+                       match_cont k tk ->
+                       match_cont_exp self__SimplExpr.For_val a
+                         (C.Sem.Kfor2 r s3 s k)
+                         (Clight.Sem.Kseq (makeif a Clight.Sskip Clight.Sbreak)
                            (Clight.Sem.Kseq ts (Clight.Sem.Kloop1 (Clight.Ssequence s' ts) ts3 tk)))
-                   | match_Kreturn: forall ce k a tk,
-                       match_cont ce k tk ->
-                       match_cont_exp ce For_val a (C.Sem.Kreturn k) (Clight.Sem.Kseq (Clight.Sreturn (Some a)) tk).
+                   | match_Kreturn: forall k a tk,
+                       match_cont k tk ->
+                       match_cont_exp self__SimplExpr.For_val a (C.Sem.Kreturn k) (Clight.Sem.Kseq (Clight.Sreturn (Some a)) tk).
+
+              MetaData Kseqlist.
+                 Fixpoint Kseqlist (sl: list self__Imp.Clight.stmt) (k: self__Imp.Clight.Sem.cont) :=
+                 match sl with
+                 | nil => k
+                 | s :: l => self__Imp.Clight.Sem.Kseq s (Kseqlist l k)
+                 end.
+              FEnd Kseqlist.
               
               MetaData match_states.
               Inductive match_states: self__Imp.C.Sem.state -> self__Imp.Clight.Sem.state -> Prop :=
-                  | match_exprstates: forall tge f r k e m tf sl tk le dest a tmps cu 
+                  | match_exprstates: forall tge f r k e m tf sl tk le dest a tmps (* cu *)
                       (* (LINK: linkorder cu prog)*)
                       (TRF: self__SimplExpr.Spec.tr_function (* cu.(prog_comp_env) *) f tf)
                       (TR: self__SimplExpr.Spec.tr_top (* cu.(prog_comp_env)*) tge e le m dest r sl a tmps)
-                      (MK: match_cont_exp cu.(prog_comp_env) dest a k tk),
+                      (MK: self__Proof.match_cont_exp (* cu.(prog_comp_env)*) dest a k tk),
                       match_states (self__Imp.C.Sem.ExprState f r k e m)
-                                   (self__Imp.Clight.Sem.State tf self__Imp.Clight.Sskip (Kseqlist sl tk) e le m)
-                  | match_regularstates: forall f s k e m tf ts tk le cu
-                      (LINK: linkorder cu prog)
-                      (TRF: self__SimplExpr.Spec.tr_function cu.(prog_comp_env) f tf)
-                      (TR: self__SimplExpr.Spec.tr_stmt cu.(prog_comp_env) s ts)
-                      (MK: match_cont cu.(prog_comp_env) k tk),
+                                   (self__Imp.Clight.Sem.State tf self__Imp.Clight.Sskip (self__Proof.Kseqlist sl tk) e le m)
+                  | match_regularstates: forall f s k e m tf ts tk le (* cu*)
+                      (* (LINK: linkorder cu prog) *)
+                      (TRF: self__SimplExpr.Spec.tr_function (* cu.(prog_comp_env)*) f tf)
+                      (TR: self__SimplExpr.Spec.tr_stmt (* cu.(prog_comp_env)*) s ts)
+                      (MK: self__Proof.match_cont (* cu.(prog_comp_env)*) k tk),
                       match_states (self__Imp.C.Sem.State f s k e m)
-                                   (self__Imp.Clight.State tf ts tk e le m)
+                                   (self__Imp.Clight.Sem.State tf ts tk e le m)
                   | match_callstates: forall fd args k m tfd tk cu
-                      (LINK: linkorder cu prog)
-                      (TR: tr_fundef cu fd tfd)
-                      (MK: forall ce, match_cont ce k tk),
+                      (* (LINK: linkorder cu prog)*)
+                      (TR: self__SimplExpr.Spec.tr_fundef cu fd tfd)
+                      (MK: (* forall ce,*) self__Proof.match_cont (* ce*) k tk),
                       match_states (self__Imp.C.Sem.Callstate fd args k m)
                                    (self__Imp.Clight.Sem.Callstate tfd args tk m)
                   | match_returnstates: forall res k m tk
-                      (MK: forall ce, match_cont ce k tk),
+                      (MK: (* forall ce,*) self__Proof.match_cont (* ce*) k tk),
                       match_states (self__Imp.C.Sem.Returnstate res k m)
                                    (self__Imp.Clight.Sem.Returnstate res tk m)
                   | match_stuckstate: forall S,
                       match_states self__Imp.C.Sem.Stuckstate S.
-                
+              FEnd match_states.
+
+              (* Write esize as an FRecursion *)
+              FRecursion esize about C.expr motive (fun (_ : C.expr) => nat) by _rect.                  
+                  Case Evar := (fun _ _ => 1%nat).                                    
+                  Case Eval := (fun _ _ => 0%nat).                                                      
+                  Case Ecast r1 ty := (S(esize r1)).
+                  Case Eseqand r1 r2 ty := (S(esize r1)).
+                  Case Eseqor r1 r2 ty := (S(esize r1)).
+                  Case Econdition r1 r2 r3 ty := (S(esize r1)).
+                  Case Esizeof ty' ty := 1%nat.
+                  Case Ealignof ty' ty:= 1%nat.                                    
+                  Case Ecomma r1 r2 ty := (S(esize r1 + esize r2)%nat).                                    
+                  Case Eparen r1 tycast ty := (S(esize r1)).
+              FEnd esize.
+
+              FRecursion measure_stmt about C.statement motive (fun (_ : C.statement) => nat) by _rect.
+                  Case Sskip := 0%nat.
+                  Case Sdo r := ((esize r + 2)%nat).
+                  Case Sifthenelse r s1 s2 := ((esize r + 2)%nat).                                                      
+                  Case Slabel lbl s := 0%nat.
+                  Case Sgoto lbl := 0%nat. 
+                  Case Ssequence s1 s2 := 0%nat.
+                  Case Swhile e s1 := 0%nat. 
+                  Case Sdowhile e s1 := 0%nat.
+                  Case Sfor s1 e s2 s3 := 0%nat.
+                  Case Sbreak := 0%nat. 
+                  Case Scontinue := 0%nat. 
+                  Case Sreturn e := 0%nat.                   
+              FEnd measure_stmt.
+              
+              FRecursion measure about C.Sem.state motive (fun (_ : C.Sem.state) => nat) by _rect.
+                  Case ExprState f r k e m := ((esize r + 1)%nat).
+                  Case State f s k e m := (measure_stmt s).
+                  Case Callstate f vs k m := 0%nat. 
+                  Case Returnstate v k m := 0%nat.
+                  Case Stuckstate := 0%nat.
+              FEnd measure.
+              
               FInduction estep_simulation about C.Sem.estep 
                  motive (fun ge S1 t S2 (_ : C.Sem.estep ge S1 t S2) => 
                             forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
                             forall T1 (MS : match_states S1 T1),
                       exists T2,
-                       (plus Clight.step tge T1 t T2 \/
-                         (star Clight.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
-                    /\ match_states S2 T2).                    
+                       (plus Clight.Sem.step tge T1 t T2 \/
+                         (star Clight.Sem.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
+                    /\ match_states S2 T2).
+              FProof.
+                 split.
+                 unfold self__Imp.C.Sem.__handler_type_step_expr_ind_comp.
+                 unfold __motiveTestep_simulation.
+                 intros.
+                 - apply cheat.
+                 - apply cheat.
+              Qed.
+              FEnd estep_simulation.
               
-              FInduction sstep_simulation:
-                    forall S1 t S2, Csem.sstep ge S1 t S2 ->
-                    forall S1' (MS: match_states S1 S1'),
-                    exists S2',
-                       (plus step1 tge S1' t S2' \/
-                         (star step1 tge S1' t S2' /\ measure S2 < measure S1)%nat)
-                    /\ match_states S2 S2'.
+              FInduction sstep_simulation about C.Sem.sstep 
+                   motive (fun ge S1 t S2 (_ : C.Sem.sstep ge S1 t S2) => 
+                            forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
+                            forall T1 (MS : match_states S1 T1),
+                      exists T2,
+                       (plus Clight.Sem.step tge T1 t T2 \/
+                         (star Clight.Sem.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
+                    /\ match_states S2 T2).
+              FProof.
+                  apply cheat.
+              Qed.
+              FEnd sstep_simulation.                    
               
-              FLemma simulation:
-                   forall S1 t S2, Cstrategy.step ge S1 t S2 ->
-                   forall S1' (MS: match_states S1 S1'),
-                   exists S2',
-                      (plus step1 tge S1' t S2' \/
-                        (star step1 tge S1' t S2' /\ measure S2 < measure S1)%nat)
-                   /\ match_states S2 S2'.
+              FLemma simulation :
+                   (forall ge S1 t S2 (_ : C.Sem.step ge S1 t S2),
+                        forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
+                        forall T1 (MS : match_states S1 T1),
+                      exists T2,
+                       (plus Clight.Sem.step tge T1 t T2 \/
+                         (star Clight.Sem.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
+                    /\ match_states S2 T2).
+              FProofLemma.
+                  intros ge S1 t S2 STEP. destruct STEP.
+                  - apply self__Proof.estep_simulation; auto.
+                  - apply self__Proof.sstep_simulation; auto.
+                Qed.
+              CloseFLemma.                            
               
               FLemma transl_initial_states:
-                 forall S,
-                 Csem.initial_state prog S ->
-                 exists S', Clight.initial_state tprog S' /\ match_states S S'.
+                 forall S prog tprog (_ : match_prog prog tprog),                 
+                 C.Sem.initial_state prog S ->
+                 exists T, Clight.Sem.initial_state tprog T /\ match_states S T.
+              FProofLemma.
+                 apply cheat.
+              Qed.
+              CloseFLemma.
               
               FLemma transl_final_states:
-                   forall S S' r,
-                   match_states S S' -> Csem.final_state S r -> Clight.final_state S' r.
-              
+                   forall S T r,
+                   match_states S T -> C.Sem.final_state S r -> Clight.Sem.final_state T r.
+              FProofLemma.
+                  intros. inv H0. inv H. (* specialize (MK (PTree.empty _)).*) inv MK. constructor.
+              Qed.
+              CloseFLemma.
           FEnd Proof.
   FEnd SimplExpr.
   
