@@ -65,13 +65,7 @@ let close_recursion () =
   in
   Checks.check_exhaustive ~name ~inductive ~handlers:handler_cases;
   module_name |> ignore;
-  let module_name = DB.end_module () in
-  let handlers = handler_types |> List.map fst in
-  let compiled_impl =
-    Codegen.compile_recursive_definition_implementation ~rec_principle_prefix
-      ~inductive ~recursor_name:name ~handlers ~suffix
-      ~ctx:parameters ~handler_cases:module_name
-  in
+  let module_name = DB.end_module () in  
   let compiled_signature =
     Codegen.compile_recursive_definition_signature ~names:[ name ]
       ~motive_module:motive ~handler_cases:module_name ~ctx:parameters
@@ -87,8 +81,7 @@ let close_recursion () =
         recursor_module = module_name;
         motive_module = motive;
         motives = motive_expr;
-        compiled_signature;
-        compiled_impl;
+        compiled_signature;        
         compiled_context;
         suffix;
         handler_types;

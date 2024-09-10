@@ -60,16 +60,6 @@ val compile_recursive_definition_signature :
   prefix:Libnames.qualid option ->
   CompiledModuleType.t
 
-val compile_recursive_definition_implementation :
-  inductive:VernacInductive.t ->  
-  recursor_name:Names.Id.t ->
-  handlers:Names.Id.t list ->
-  rec_principle_prefix:Libnames.qualid option ->
-  suffix:RecKind.t ->
-  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-  handler_cases:CompiledModule.t ->
-  CompiledModule.t
-
 val calculate_rec_principle_prefix :
   inductive_path:Libnames.qualid ->
   context:LinkageCtx.t ->  

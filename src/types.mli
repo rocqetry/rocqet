@@ -107,8 +107,7 @@ module rec LinkageElem : sig
         motive_module : CompiledModule.t;
         suffix : RecKind.t;
         compiled_context : CompiledModuleType.t;
-        compiled_signature : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;
+        compiled_signature : CompiledModuleType.t;        
         arguments : Names.Id.t list;
       }
     | PrincipleDefinition of {

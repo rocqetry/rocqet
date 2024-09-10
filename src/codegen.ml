@@ -421,14 +421,12 @@ let compile_recursive_definition_signature
 
 (* Return the compiled module and the generated computation behaviour *)
 let compile_recursive_definition_implementation 
-      ~inductive
-      ~recursor_name 
-      ~handlers
-     ~(rec_principle_prefix : Libnames.qualid option) ~suffix ~ctx
-    ~(handler_cases : CompiledModule.t) :
-    CompiledModule.t =
-  let module_name = Naming.fresh_name ~prefix:"RecImpl" in  
-  let f ctx =
+    ~inductive
+    ~recursor_name 
+    ~handlers
+    ~(rec_principle_prefix : Libnames.qualid option) ~suffix ~ctx
+    ~(handler_cases : CompiledModule.t) : unit B.t =     
+  let computation =
     let module_expr = Termutils.ident_to_module_expr handler_cases in
     let module_expr =
       Termutils.apply_module ~functor_expr:module_expr ~arguments:ctx
@@ -482,10 +480,9 @@ let compile_recursive_definition_implementation
     in
     return ()
   in
-  let compiled_module =
-    B.run (B.define_module ~module_name ~parameters:ctx ~body:f)
-  in
-  compiled_module
+  computation
+  
+  
 
 let compile_theorem_implementation ~(name : Names.Id.t)
     ~(parameters : (Names.Id.t * Constrexpr.module_ast) list)
@@ -685,7 +682,20 @@ let compile_linkage (linkage : Linkage.t) =
   let rec compile_fields fields (ctx : CompiledModule.t list) =
     match fields with
     | Bwd.Emp -> B.return ()
-    | Bwd.Snoc (fields, (_, LinkageElem.RecursorDefinition { compiled_impl; _ }))
+    | Bwd.Snoc (fields, (_, LinkageElem.RecursorDefinition { names; inductive; handler_types; suffix; recursor_module;  _ })) -> 
+       let open B in 
+       let* _ = compile_fields fields ctx in
+       let recursor_name = List.hd names in
+       let handlers = handler_types |> List.map fst in
+       let handler_cases = recursor_module in 
+       compile_recursive_definition_implementation 
+         ~inductive 
+         ~recursor_name 
+         ~handlers
+         ~rec_principle_prefix:None
+         ~suffix
+         ~ctx
+         ~handler_cases
     | Bwd.Snoc (fields, (_, LinkageElem.TheoremDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.MetaDataSection { compiled_impl; _ }))
@@ -1192,7 +1202,7 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
         let compiled_context, parameters =
           compile_linkage_context ~field_name:name context
         in
-        let inductive, compiled_recursors, _provenance =
+        let inductive, _compiled_recursors, _provenance =
           Env.Context.lookup_inductive_for_recursion ~name:inductive_path
             context
         in
@@ -1200,9 +1210,7 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
         let motive_module =
           compile_motives ~names:[ name ] ~motives ~ctx:parameters
             ~family_name:name
-        in
-        let recursor = RecursorStore.find suffix compiled_recursors.recursors in
-        let handlers = recursor.compiled_handlers |> List.map fst in        
+        in        
         let recursor_module =
           compile_handler_cases ~name ~parameters ~handler_cases ~handler_types
              ~context ~motive:motive_module            
@@ -1212,12 +1220,7 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
             calculate_rec_principle_prefix ~inductive_path ~context              
           in
           Some prefix
-        in
-        let compiled_impl =
-          compile_recursive_definition_implementation ~rec_principle_prefix
-            ~inductive ~recursor_name:name ~handlers ~suffix
-            ~ctx:parameters ~handler_cases:recursor_module
-        in
+        in        
         let compiled_signature =
           compile_recursive_definition_signature ~handler_cases:recursor_module
             ~names:[ name ] ~motive_module ~ctx:parameters ~family_name:name
@@ -1233,8 +1236,7 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
               inductive;
               recursor_module;
               motive_module;
-              compiled_signature;
-              compiled_impl;
+              compiled_signature;              
               compiled_context;
               suffix;
               handler_types;
