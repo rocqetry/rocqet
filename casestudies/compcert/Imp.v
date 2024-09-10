@@ -1407,6 +1407,51 @@ Inductive bitfield : Type :=
                 | tr_goto: forall lbl,
                     tr_stmt (C.Sgoto lbl) (Clight.Sgoto lbl).
              
+                (* Translation meets spec *)
+                (*
+                    Lemma transl_meets_spec:
+                     (forall r dst g sl a g' I,
+                      transl_expr ce dst r g = Res (sl, a) g' I ->
+                      dest_below dst g ->
+                      exists tmps, (forall le, tr_expr le dst r sl a (add_dest dst tmps)) /\ contained tmps g g')
+                    /\
+                     (forall rl g sl al g' I,
+                      transl_exprlist ce rl g = Res (sl, al) g' I ->
+                      exists tmps, (forall le, tr_exprlist le rl sl al tmps) /\ contained tmps g g').
+                  Proof.
+                  
+                  Lemma transl_expr_meets_spec:
+                     forall r dst g sl a g' I,
+                     transl_expr ce dst r g = Res (sl, a) g' I ->
+                     dest_below dst g ->
+                     exists tmps, forall ge e le m, tr_top ge e le m dst r sl a tmps.
+                  Proof.
+                  
+                  Lemma transl_expression_meets_spec:
+                    forall r g s a g' I,
+                    transl_expression ce r g = Res (s, a) g' I ->
+                    tr_expression r s a.
+                  Proof.
+                  
+                  Lemma transl_expr_stmt_meets_spec:
+                    forall r g s g' I,
+                    transl_expr_stmt ce r g = Res s g' I ->
+                    tr_expr_stmt r s.
+                  Proof.
+                  
+                  Lemma transl_if_meets_spec:
+                    forall r s1 s2 g s g' I,
+                    transl_if ce r s1 s2 g = Res s g' I ->
+                    tr_if r s1 s2 s.
+                  Proof.
+                  
+                  Lemma transl_stmt_meets_spec:
+                    forall s g ts g' I, transl_stmt ce s g = Res ts g' I -> tr_stmt s ts
+                  with transl_lblstmt_meets_spec:
+                    forall s g ts g' I, transl_lblstmt ce s g = Res ts g' I -> tr_lblstmts s ts.
+                  Proof.
+                *)
+             
                 MetaData tr_function.
                 Inductive tr_function: self__Imp.C.function -> self__Imp.Clight.function -> Prop :=
                      | tr_function_intro: forall f tf,
@@ -1417,6 +1462,11 @@ Inductive bitfield : Type :=
                          self__Imp.Clight.fn_vars tf = self__Imp.C.fn_vars f ->
                          tr_function f tf.
                 FEnd tr_function.
+
+                (* Lemma transl_function_spec:
+                    forall f tf,
+                    transl_function ce f = OK tf ->
+                    tr_function f tf. *)
                 
                 MetaData tr_fundef.
                 Inductive tr_fundef (p: self__Imp.C.program): self__Imp.C.fundef -> self__Imp.Clight.fundef -> Prop :=
@@ -1424,6 +1474,11 @@ Inductive bitfield : Type :=
                         self__Spec.tr_function (* p.(prog_comp_env)*) f tf ->
                         tr_fundef p (Internal f) (Internal tf).                    
                 FEnd tr_fundef.
+                
+                (* Lemma transl_fundef_spec:
+                   forall p fd tfd,
+                   transl_fundef p.(prog_comp_env) fd = OK tfd ->
+                   tr_fundef p fd tfd.*)
           FEnd Spec.
           
           (* Correctness of the pass *)
