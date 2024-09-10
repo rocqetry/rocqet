@@ -1640,13 +1640,24 @@ Inductive bitfield : Type :=
                        (plus Clight.Sem.step tge T1 t T2 \/
                          (star Clight.Sem.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
                     /\ match_states S2 T2).
-              FProof.
-                 split.
-                 unfold self__Imp.C.Sem.__handler_type_step_expr_ind_comp.
-                 unfold __motiveTestep_simulation.
-                 intros.
-                 - apply cheat.
-                 - apply cheat.
+              FProof.                 
+                 finduction.                 
+                 (* expr *)
+                 + apply cheat.                 
+                 (* seqand true *)                  
+                 + intros. apply cheat.
+                 (* seqand false *)                 
+                 + intros. apply cheat.
+                 (* seqor true *)
+                 + intros. apply cheat.
+                 (* seqor false *)
+                 + apply cheat.
+                 (* condition *)
+                 + apply cheat.
+                 (* comma *)
+                 + apply cheat.
+                 (* paren *)
+                 + apply cheat.   
               Qed.
               FEnd estep_simulation.
               
@@ -1659,7 +1670,71 @@ Inductive bitfield : Type :=
                          (star Clight.Sem.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
                     /\ match_states S2 T2).
               FProof.
-                  apply cheat.
+                  finduction.
+                  (* do 1 *)
+                  + apply cheat.
+                  (* do 2 *)
+                  + apply cheat.
+                  (* seq *)
+                  + apply cheat.
+                  (* skip seq *)
+                  + apply cheat.
+                  (* continue seq *)
+                  + apply cheat.
+                  (* break seq *)
+                  + apply cheat.
+                  (* ifthenelse empty *)
+                  + apply cheat.
+                  (* ifthenelse non empty *)
+                  + apply cheat.
+                  (* while *)
+                  + apply cheat.
+                  (* while false *)
+                  + apply cheat.
+                  (* while true *)
+                  + apply cheat.
+                   (* skip-or-continue while *)
+                  + apply cheat.
+                  (* break while *)
+                  + apply cheat.
+                  (* dowhile *)
+                  + apply cheat.
+                  (* skip-or-continue dowhile *)
+                  + apply cheat.
+                  (* dowhile false *)
+                  + apply cheat.
+                  (* dowhile true *)
+                  + apply cheat.
+                  (* break dowhile *)
+                  + apply cheat.
+                  (* for start *)
+                  + apply cheat.
+                  (* for *)
+                  + apply cheat.
+                  (* for false *)
+                  + apply cheat.
+                  (* for true *)
+                  + apply cheat.
+                  (* skip-or-continue for3 *)
+                  + apply cheat.
+                  (* break for3 *)
+                  + apply cheat.
+                  (* skip for4 *)
+                  + apply cheat.
+                  (* return none *)
+                  + apply cheat.
+                  (* return some 1 *)
+                  + apply cheat.
+                  (* return some 2 *)
+                  + apply cheat.
+                  (* skip return *)
+                  + apply cheat.
+                  (* label *)
+                  + apply cheat.
+                  (* goto *)
+                  + apply cheat.
+                  (* internal function *)
+                  + apply cheat.
               Qed.
               FEnd sstep_simulation.                    
               
