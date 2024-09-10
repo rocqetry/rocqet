@@ -384,15 +384,36 @@ let compile_recursive_definition_signature
              | `Exposed -> 
                  thunk (fun () ->
                      let recursor = List.hd names in
-                     let result =
+                     let computational_axioms =
                        Termutils.generate_computational_axioms 
                          ~inductive
                          ~prefix
                          ~recursor
-                     in                 
-                     result
+                     in    
+       
+                     computational_axioms
                      |> List.map (fun (name, ty) -> postulate_axiom ~name ~ty)
                      |> flatmap |> run;
+
+                     (* User feedback *)
+                     let print_constr_expr expr =
+                        let sigma, env = Termutils.global_env () in
+                        Ppconstr.pr_constr_expr env sigma expr
+                      in
+                      let print_name name = name |> Names.Id.to_string |> Pp.str in
+                      let print_single_equation (name, eq) =
+                        let open Pp in
+                        print_name name ++ Pp.str " : " ++ print_constr_expr eq
+                      in
+                      let _ =
+                        let open Pp in
+                        Feedback.msg_info
+                          (str "Computational Axioms for "
+                          ++ print_name recursor
+                          ++ str " are defined as follows:");
+                        computational_axioms
+                        |> List.iter (fun eq -> Feedback.msg_info (print_single_equation eq))
+                      in
                      return ())
              | `Hidden -> return ()
            in           
@@ -405,9 +426,8 @@ let compile_recursive_definition_implementation
       ~handlers
      ~(rec_principle_prefix : Libnames.qualid option) ~suffix ~ctx
     ~(handler_cases : CompiledModule.t) :
-    CompiledModule.t * (Names.Id.t * Constrexpr.constr_expr) list =
-  let module_name = Naming.fresh_name ~prefix:"RecImpl" in
-  let computational_axioms = ref [] in
+    CompiledModule.t =
+  let module_name = Naming.fresh_name ~prefix:"RecImpl" in  
   let f ctx =
     let module_expr = Termutils.ident_to_module_expr handler_cases in
     let module_expr =
@@ -453,8 +473,7 @@ let compile_recursive_definition_implementation
               ~inductive
               ~prefix:rec_principle_prefix
               ~recursor:recursor_name
-          in
-          computational_axioms := result;
+          in          
           result
           |> List.map (fun (name, ty) ->
                  construct_term_using_proof ~name ~proof:auto_tactic ~ty ())
@@ -466,7 +485,7 @@ let compile_recursive_definition_implementation
   let compiled_module =
     B.run (B.define_module ~module_name ~parameters:ctx ~body:f)
   in
-  (compiled_module, !computational_axioms)
+  compiled_module
 
 let compile_theorem_implementation ~(name : Names.Id.t)
     ~(parameters : (Names.Id.t * Constrexpr.module_ast) list)
@@ -1194,7 +1213,7 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
           in
           Some prefix
         in
-        let compiled_impl, _computational_axioms =
+        let compiled_impl =
           compile_recursive_definition_implementation ~rec_principle_prefix
             ~inductive ~recursor_name:name ~handlers ~suffix
             ~ctx:parameters ~handler_cases:recursor_module

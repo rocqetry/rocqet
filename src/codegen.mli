@@ -68,7 +68,7 @@ val compile_recursive_definition_implementation :
   suffix:RecKind.t ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
   handler_cases:CompiledModule.t ->
-  CompiledModule.t * (Names.Id.t * Constrexpr.constr_expr) list
+  CompiledModule.t
 
 val calculate_rec_principle_prefix :
   inductive_path:Libnames.qualid ->

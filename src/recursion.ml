@@ -67,7 +67,7 @@ let close_recursion () =
   module_name |> ignore;
   let module_name = DB.end_module () in
   let handlers = handler_types |> List.map fst in
-  let compiled_impl, computational_axioms =
+  let compiled_impl =
     Codegen.compile_recursive_definition_implementation ~rec_principle_prefix
       ~inductive ~recursor_name:name ~handlers ~suffix
       ~ctx:parameters ~handler_cases:module_name
@@ -76,26 +76,7 @@ let close_recursion () =
     Codegen.compile_recursive_definition_signature ~names:[ name ]
       ~motive_module:motive ~handler_cases:module_name ~ctx:parameters
       ~family_name:name ~computational_behaviour:`Exposed ~inductive ~prefix:rec_principle_prefix
-  in
-  (* Feedback the defined Computational Axioms *)
-  let print_constr_expr expr =
-    let sigma, env = Termutils.global_env () in
-    Ppconstr.pr_constr_expr env sigma expr
-  in
-  let print_name name = name |> Names.Id.to_string |> Pp.str in
-  let print_single_equation (name, eq) =
-    let open Pp in
-    print_name name ++ Pp.str " : " ++ print_constr_expr eq
-  in
-  let _ =
-    let open Pp in
-    Feedback.msg_info
-      (str "Computational Axioms for "
-      ++ print_name name
-      ++ str " are defined as follows:");
-    computational_axioms
-    |> List.iter (fun eq -> Feedback.msg_info (print_single_equation eq))
-  in
+  in  
   let elem =
     LinkageElem.RecursorDefinition
       {
