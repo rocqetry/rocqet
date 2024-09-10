@@ -12,10 +12,32 @@ Require Import Globalenvs.
 Require Import Smallstep.
 Require Import Events.
 Require Import Maps.
+Require Import Linking.
+Require Import FSets.
+Require Import FSetAVL.
+Require Import Orders.
+Require Import Mergesort.
+Require Import Ordered.
+
 
 Axiom cheat : forall {X}, X.
 Local Open Scope string_scope.
 Local Open Scope error_monad_scope.
+Local Open Scope string_scope.
+Local Open Scope list_scope.
+
+Module VarOrder <: TotalLeBool.
+  Definition t := (ident * Z)%type.
+  Definition leb (v1 v2: t) : bool := zle (snd v1) (snd v2).
+  Theorem leb_total: forall v1 v2, leb v1 v2 = true \/ leb v2 v1 = true.
+  Proof.
+    unfold leb; intros.
+    assert (snd v1 <= snd v2 \/ snd v2 <= snd v1) by lia.
+    unfold proj_sumbool. destruct H; [left|right]; apply zle_true; auto.
+  Qed.
+End VarOrder.
+
+Module VarSort := Mergesort.Sort(VarOrder).
 
 
 Family Imp.     
@@ -30,6 +52,11 @@ Family Imp.
 Inductive signedness : Type :=
   | Signed: signedness
   | Unsigned: signedness. 
+
+Inductive bitfield : Type :=
+  | Full
+  | Bits (sz: intsize) (sg: signedness) (pos: Z) (width: Z).
+
 
    Record attr : Type := mk_attr {
    attr_volatile: bool;
@@ -49,6 +76,7 @@ Inductive signedness : Type :=
       | Tcons: type -> typelist -> typelist.  
   
   Definition type_int32s := Tint I32 Signed noattr.
+  Definition type_bool := Tint IBool Signed noattr.
 
   Fixpoint type_of_params (params: list (ident * type)) : typelist :=
   match params with
@@ -56,18 +84,6 @@ Inductive signedness : Type :=
   | (id, ty) :: rem => Tcons ty (type_of_params rem)
   end.
   FEnd type.
-
-  Family ClightVariant. 
-  FEnd ClightVariant.
-  
-  Family CminorVariant.
-  FEnd CminorVariant.
-  
-  Family CFGLike. 
-  FEnd CFGLike.
-  
-  Family LinearLike.
-  FEnd LinearLike.
          
   Family C.
       FInductive expr : Type :=
@@ -78,9 +94,9 @@ Inductive signedness : Type :=
         | Eseqor : expr -> expr -> type -> expr (* sequential "or" r1 || r2 *)
         | Econdition : expr -> expr -> expr -> type -> expr (* conditional r1 ? r2 : r3 *)
         | Esizeof : type -> type -> expr (* size of a type *)
-        | Ealignof : type -> type -> expr (* natural alignment of a type *)
-        | Eassign : expr -> expr -> type -> expr (* assignment l = r *)                
-        | Ecomma : expr -> expr -> type -> expr. (* sequence expression r1, r2 *)                
+        | Ealignof : type -> type -> expr (* natural alignment of a type *)        
+        | Ecomma : expr -> expr -> type -> expr (* sequence expression r1, r2 *)                
+        | Eparen : expr -> type -> type -> expr. 
         
         FRecursion typeof : (e : expr) -> type.
           Case Eval v ty := ty.
@@ -90,10 +106,10 @@ Inductive signedness : Type :=
           Case Eseqor r1 r2 ty := ty. 
           Case Econdition r1 r2 r3 ty := ty.
           Case Esizeof ty' ty := ty.
-          Case Ealignof ty' ty := ty. 
-          Case Eassign l r ty := ty.                    
+          Case Ealignof ty' ty := ty.          
           Case Ecomma r1 r2 ty := ty.
-        FEnd typeof.      
+          Case Eparen e ty' ty := ty.
+        FEnd typeof.
 
       FDefinition label := ident.
       
@@ -122,11 +138,414 @@ Inductive signedness : Type :=
       }.
       FEnd function.
 
-      Family Semantics.                        
-      FEnd Semantics.
+      FDefinition var_names := fun (vars: list(ident * type)) =>
+        List.map (@fst ident type) vars.
+
+      FDefinition fundef := AST.fundef function.
+
+      FDefinition type_of_function : function -> type := fun f => 
+         self__Imp.Tfunction (self__Imp.type_of_params (self__C.fn_params f)) 
+           (self__C.fn_return f) (self__C.fn_callconv f).
+       
+       FDefinition type_of_fundef : fundef -> type := fun f =>
+          match f with
+          | Internal fd => type_of_function fd
+          | _ => cheat (* TODO: We don't have External in the base compiler *)
+          end.
+
+      FDefinition program := AST.program fundef type.
+      
+      Family Sem.       
+          FDefinition genv := Genv.t fundef type.
+          FDefinition env := PTree.t (block * type).
+          FDefinition empty_env: env := (PTree.empty (block * type)).
+
+          FInductive cont: Type :=
+              | Kstop: cont
+              | Kdo: cont -> cont(* Kdo k = after x in x; *)
+              | Kseq: statement -> cont -> cont(* Kseq s2 k = after s1 in s1;s2 *)
+              | Kifthenelse: statement -> statement -> cont -> cont(* Kifthenelse s1 s2 k = after x in if (x) { s1 } else { s2 } *)
+              | Kwhile1: expr -> statement -> cont -> cont(* Kwhile1 x s k = after x in while(x) s *)
+              | Kwhile2: expr -> statement -> cont -> cont(* Kwhile x s k = after s in while (x) s *)
+              | Kdowhile1: expr -> statement -> cont -> cont(* Kdowhile1 x s k = after s in do s while (x) *)
+              | Kdowhile2: expr -> statement -> cont -> cont(* Kdowhile2 x s k = after x in do s while (x) *)
+              | Kfor2: expr -> statement -> statement -> cont -> cont(* Kfor2 e2 e3 s k = after e2 in for(e1;e2;e3) s *)
+              | Kfor3: expr -> statement -> statement -> cont -> cont(* Kfor3 e2 e3 s k = after s in for(e1;e2;e3) s *)
+              | Kfor4: expr -> statement -> statement -> cont -> cont(* Kfor4 e2 e3 s k = after e3 in for(e1;e2;e3) s *)              
+              | Kreturn: cont -> cont. (* Kreturn k = after e in return e; *)              
+
+        FRecursion call_cont about cont motive (fun (c : cont) => cont) by _rect.
+            Case Kstop := Kstop.
+            Case Kdo k := k.
+            Case Kseq s k := (call_cont k).
+            Case Kifthenelse s1 s2 k := (call_cont k).
+            Case Kwhile1 e s k := (call_cont k).
+            Case Kwhile2 e s k := (call_cont k).
+            Case Kdowhile1 e s k := (call_cont k).
+            Case Kdowhile2 e s k := (call_cont k).
+            Case Kfor2 e2 e3 s k := (call_cont k).
+            Case Kfor3 e2 e3 s k := (call_cont k).
+            Case Kfor4 e2 e3 s k := (call_cont k).
+            Case Kreturn k := (call_cont k).            
+        FEnd call_cont.
+
+        FRecursion is_call_cont about cont motive (fun (c : cont) => Prop) by _rect.
+          Case Kstop := True.
+          Case Kdo k := False.
+          Case Kseq s k := False.
+          Case Kifthenelse s1 s2 k := False.
+          Case Kwhile1 e s k := False.
+          Case Kwhile2 e s k := False.
+          Case Kdowhile1 e s k := False.
+          Case Kdowhile2 e s k := False.
+          Case Kfor2 e2 e3 s k := False.
+          Case Kfor3 e2 e3 s k := False.
+          Case Kfor4 e2 e3 s k := False.
+          Case Kreturn k := False.          
+        FEnd is_call_cont.
+
+        FInductive state: Type :=
+          | State : (* execution of a statement *)
+              function ->
+              statement ->
+              cont ->
+              env ->
+              mem -> 
+              state
+          | ExprState : (* reduction of an expression *)
+               function ->
+               expr ->
+               cont ->
+               env ->
+               mem -> state
+          | Callstate : (* calling a function *)
+              fundef ->
+              list val ->
+              cont ->
+              mem -> state
+          | Returnstate : (* returning from a function *)
+              val ->
+              cont ->
+              mem ->  state
+          | Stuckstate : state. (* undefined behavior occurred *)
+        
+        FRecursion find_label about statement motive (fun (_ : statement) => label -> cont -> option (statement * cont)) by _rect.
+          Case Sskip := (fun lbl k => None).
+          Case Sdo r := (fun lbl k => None).
+          Case Ssequence s1 s2 := 
+              (fun lbl k => match find_label s1 lbl (Kseq s2 k) with 
+                            | Some sk => Some sk 
+                            | None => find_label s2 lbl k end).
+          Case Sifthenelse a s1 s2 := 
+              (fun lbl k => match find_label s1 lbl k with 
+                            | Some sk => Some sk 
+                            | None => find_label s2 lbl k end).
+          Case Swhile a s1 := (fun lbl k => find_label s1 lbl (Kwhile2 a s1 k)).
+          Case Sdowhile a s1 := (fun lbl k => find_label s1 lbl (Kdowhile1 a s1 k)).
+          Case Sfor a1 a2 a3 s1 := 
+              (fun lbl k => match find_label a1 lbl (Kseq (Sfor Sskip a2 a3 s1) k) with 
+                            | Some sk => Some sk 
+                            | None => match find_label s1 lbl (Kfor3 a2 a3 s1 k) with 
+                                      | Some sk => Some sk 
+                                      | None => find_label a3 lbl (Kfor4 a2 a3 s1 k) end end).
+          Case Sbreak := (fun lbl k => None).
+          Case Scontinue := (fun lbl k => None).
+          Case Sreturn e := (fun lbl k => None).
+          Case Slabel lbl' s' := (fun lbl k => if ident_eq lbl lbl' then 
+                                                 Some(s', k) else find_label s' lbl k).
+          Case Sgoto label := (fun lbl k => None).
+        FEnd find_label.
+        
+        (* 
+           Definition bool_val (v: val) (t: type) (m: mem) : option bool :=
+         *)
+        MetaData bool_val.
+        Axiom bool_val : val -> self__Imp.type -> mem -> option bool.
+        FEnd bool_val.
+
+        MetaData sizeof.
+           Axiom sizeof : (* self__Sem.composite_env -> *) self__Imp.type -> Z. 
+        FEnd sizeof.      
+                
+        MetaData alignof.
+        Axiom alignof : (* self__Imp.Clight.Sem.composite_env ->*) self__Imp.type -> Z.
+        FEnd alignof.
+
+        MetaData sem_cast.
+            Axiom sem_cast : val -> self__Imp.type -> self__Imp.type -> mem -> option val.
+        FEnd sem_cast.        
+        
+        FDefinition block_of_binding := fun (id_b_ty: ident * (block * type)) =>
+          match id_b_ty with (id, (b, ty)) => (b, 0, sizeof ty) end.
+
+        FDefinition blocks_of_env : env -> list (block * Z * Z) := fun e =>
+          List.map block_of_binding (PTree.elements e).
+
+        MetaData alloc_variables.
+        Inductive alloc_variables: self__Sem.env -> mem ->
+                           list (ident * self__Imp.type) ->
+                           self__Sem.env -> mem -> Prop :=
+            | alloc_variables_nil:
+                forall e m,
+                alloc_variables e m nil e m
+            | alloc_variables_cons:
+                forall e m id ty vars m1 b1 m2 e2,
+                Mem.alloc m 0 (self__Sem.sizeof ty) = (m1, b1) ->
+                alloc_variables (PTree.set id (b1, ty) e) m1 vars e2 m2 ->
+                alloc_variables e m ((id, ty) :: vars) e2 m2.
+        FEnd alloc_variables.
+
+        MetaData bind_parameters.
+        Inductive bind_parameters (e: self__Sem.env):
+                           mem -> list (ident * self__Imp.type) -> list val ->
+                           mem -> Prop :=
+            | bind_parameters_nil:
+              forall m,
+                bind_parameters e m nil nil m
+            | bind_parameters_cons:
+              forall m id ty params v1 vl (* v1'*) b m1 m2,
+                PTree.get id e = Some(b, ty) ->
+                (* TODO: assign_loc ty m b Ptrofs.zero Full v1 E0 m1 v1' ->*)
+                bind_parameters e m1 params vl m2 ->
+                bind_parameters e m ((id, ty) :: params) (v1 :: vl) m2.
+        FEnd bind_parameters.
+
+        FInductive eval_simple_rvalue: genv -> env -> mem -> expr -> val -> Prop :=
+           | esr_val: forall ge e m v ty,
+               eval_simple_rvalue ge e m (Eval v ty) v                                   
+           | esr_cast: forall ge e m ty r1 v1 v,
+               eval_simple_rvalue ge e m r1 v1 ->
+               sem_cast v1 (typeof r1) ty m = Some v ->
+               eval_simple_rvalue ge e m (Ecast r1 ty) v
+           | esr_sizeof: forall ge e m ty1 ty,
+               eval_simple_rvalue ge e m (Esizeof ty1 ty) (Vptrofs (Ptrofs.repr (sizeof (* ge *) ty1)))                                  
+           | esr_alignof: forall ge e m ty1 ty,
+               eval_simple_rvalue ge e m (Ealignof ty1 ty) (Vptrofs (Ptrofs.repr (alignof (* ge *) ty1))).        
+                
+        FRecursion is_val about expr motive (fun (e : expr) => Prop) by _rect.
+            Case Eval v ty := True.
+            Case Evar x ty := False.
+            Case Ecast r ty := False.
+            Case Eseqand r1 r2 ty := False.
+            Case Eseqor r1 r2 ty := False.
+            Case Econdition r1 r2 r3 ty := False.
+            Case Esizeof ty' ty := False.
+            Case Ealignof ty' ty := True.
+            Case Ecomma r1 r2 ty := False.
+            Case Eparen e ty' ty := False.
+        FEnd is_val.
+        
+        MetaData kind.
+        Inductive kind : Type := LV | RV.
+        FEnd kind.
+        
+        FInductive leftcontext: kind -> kind -> (expr -> expr) -> Prop :=
+        | lctx_top: forall k,
+            leftcontext k k (fun x => x)  
+        | lctx_cast: forall k C ty,
+            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Ecast (C x) ty)
+        | lctx_seqand: forall k C r2 ty,
+            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Eseqand (C x) r2 ty)
+        | lctx_seqor: forall k C r2 ty,
+            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Eseqor (C x) r2 ty)
+        | lctx_condition: forall k C r2 r3 ty,
+            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Econdition (C x) r2 r3 ty)
+        | lctx_comma: forall k C e2 ty,
+            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Ecomma (C x) e2 ty)
+        | lctx_paren: forall k C tycast ty,
+            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Eparen (C x) tycast ty).
+
+        FInductive estep: genv -> state -> trace -> state -> Prop :=
+             | step_expr: forall ge f r k e m v ty,
+                 eval_simple_rvalue ge e m r v ->
+                 is_val r ->
+                 ty = typeof r ->
+                 estep ge (ExprState f r k e m)
+                    E0 (ExprState f (Eval v ty) k e m)               
+             | step_seqand_true: forall ge f C r1 r2 ty k e m v,
+                 leftcontext self__Sem.RV self__Sem.RV C ->
+                 eval_simple_rvalue ge e m r1 v ->
+                 bool_val v (typeof r1) m = Some true ->
+                 estep ge (ExprState f (C (Eseqand r1 r2 ty)) k e m)
+                    E0 (ExprState f (C (Eparen r2 self__Imp.type_bool ty)) k e m)
+             | step_seqand_false: forall ge f C r1 r2 ty k e m v,
+                 leftcontext self__Sem.RV self__Sem.RV C ->
+                 eval_simple_rvalue ge e m r1 v ->
+                 bool_val v (typeof r1) m = Some false ->
+                 estep ge (ExprState f (C (Eseqand r1 r2 ty)) k e m)
+                    E0 (ExprState f (C (Eval (Vint Int.zero) ty)) k e m)
+             | step_seqor_true: forall ge f C r1 r2 ty k e m v,
+                 leftcontext self__Sem.RV self__Sem.RV C ->
+                 eval_simple_rvalue ge e m r1 v ->
+                 bool_val v (typeof r1) m = Some true ->
+                 estep ge (ExprState f (C (Eseqor r1 r2 ty)) k e m)
+                    E0 (ExprState f (C (Eval (Vint Int.one) ty)) k e m)
+             | step_seqor_false: forall ge f C r1 r2 ty k e m v,
+                 leftcontext self__Sem.RV self__Sem.RV C ->
+                 eval_simple_rvalue ge e m r1 v ->
+                 bool_val v (typeof r1) m = Some false ->
+                 estep ge (ExprState f (C (Eseqor r1 r2 ty)) k e m)
+                    E0 (ExprState f (C (Eparen r2 self__Imp.type_bool ty)) k e m)
+             | step_condition: forall ge f C r1 r2 r3 ty k e m v b,
+                 leftcontext self__Sem.RV self__Sem.RV C ->
+                 eval_simple_rvalue ge e m r1 v ->
+                 bool_val v (typeof r1) m = Some b ->
+                 estep ge (ExprState f (C (Econdition r1 r2 r3 ty)) k e m)
+                    E0 (ExprState f (C (Eparen (if b then r2 else r3) ty ty)) k e m)
+             | step_comma: forall ge f C r1 r2 ty k e m v,
+                 leftcontext self__Sem.RV self__Sem.RV C ->
+                 eval_simple_rvalue ge e m r1 v ->
+                 ty = typeof r2 ->
+                 estep ge (ExprState f (C (Ecomma r1 r2 ty)) k e m)
+                    E0 (ExprState f (C r2) k e m)
+             | step_paren: forall ge f C r tycast ty k e m v1 v,
+                 leftcontext self__Sem.RV self__Sem.RV C ->
+                 eval_simple_rvalue ge e m r v1 ->
+                 sem_cast v1 (typeof r) tycast m = Some v ->
+                 estep ge (ExprState f (C (Eparen r tycast ty)) k e m)
+                    E0 (ExprState f (C (Eval v ty)) k e m).
+        
+        FInductive sstep: genv -> state -> trace -> state -> Prop :=
+            | step_do_1: forall ge f x k e m,
+                sstep ge (State f (Sdo x) k e m)
+                  E0 (ExprState f x (Kdo k) e m)
+            | step_do_2: forall ge f v ty k e m,
+                sstep ge (ExprState f (Eval v ty) (Kdo k) e m)
+                  E0 (State f Sskip k e m)
+            | step_seq: forall ge f s1 s2 k e m,
+                sstep ge (State f (Ssequence s1 s2) k e m)
+                  E0 (State f s1 (Kseq s2 k) e m)
+            | step_skip_seq: forall ge f s k e m,
+                sstep ge (State f Sskip (Kseq s k) e m)
+                  E0 (State f s k e m)
+            | step_continue_seq: forall ge f s k e m,
+                sstep ge (State f Scontinue (Kseq s k) e m)
+                  E0 (State f Scontinue k e m)
+            | step_break_seq: forall ge f s k e m,
+                sstep ge (State f Sbreak (Kseq s k) e m)
+                  E0 (State f Sbreak k e m)
+            | step_ifthenelse_1: forall ge f a s1 s2 k e m,
+                sstep ge (State f (Sifthenelse a s1 s2) k e m)
+                  E0 (ExprState f a (Kifthenelse s1 s2 k) e m)
+            | step_ifthenelse_2: forall ge f v ty s1 s2 k e m b,
+                bool_val v ty m = Some b ->
+                sstep ge (ExprState f (Eval v ty) (Kifthenelse s1 s2 k) e m)
+                  E0 (State f (if b then s1 else s2) k e m)
+            | step_while: forall ge f x s k e m,
+                sstep ge (State f (Swhile x s) k e m)
+                  E0 (ExprState f x (Kwhile1 x s k) e m)
+            | step_while_false: forall ge f v ty x s k e m,
+                bool_val v ty m = Some false ->
+                sstep ge (ExprState f (Eval v ty) (Kwhile1 x s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_while_true: forall ge f v ty x s k e m ,
+                bool_val v ty m = Some true ->
+                sstep ge (ExprState f (Eval v ty) (Kwhile1 x s k) e m)
+                  E0 (State f s (Kwhile2 x s k) e m)
+            | step_skip_or_continue_while: forall ge f s0 x s k e m,
+                s0 = Sskip \/ s0 = Scontinue ->
+                sstep ge (State f s0 (Kwhile2 x s k) e m)
+                  E0 (State f (Swhile x s) k e m)
+            | step_break_while: forall ge f x s k e m,
+                sstep ge (State f Sbreak (Kwhile2 x s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_dowhile: forall ge f a s k e m,
+                sstep ge (State f (Sdowhile a s) k e m)
+                  E0 (State f s (Kdowhile1 a s k) e m)
+            | step_skip_or_continue_dowhile: forall ge f s0 x s k e m,
+                s0 = Sskip \/ s0 = Scontinue ->
+                sstep ge (State f s0 (Kdowhile1 x s k) e m)
+                  E0 (ExprState f x (Kdowhile2 x s k) e m)
+            | step_dowhile_false: forall ge f v ty x s k e m,
+                bool_val v ty m = Some false ->
+                sstep ge (ExprState f (Eval v ty) (Kdowhile2 x s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_dowhile_true: forall ge f v ty x s k e m,
+                bool_val v ty m = Some true ->
+                sstep ge (ExprState f (Eval v ty) (Kdowhile2 x s k) e m)
+                  E0 (State f (Sdowhile x s) k e m)
+            | step_break_dowhile: forall ge f a s k e m,
+                sstep ge (State f Sbreak (Kdowhile1 a s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_for_start: forall ge f a1 a2 a3 s k e m,
+                a1 <> Sskip ->
+                sstep ge (State f (Sfor a1 a2 a3 s) k e m)
+                  E0 (State f a1 (Kseq (Sfor Sskip a2 a3 s) k) e m)
+            | step_for: forall ge f a2 a3 s k e m,
+                sstep ge (State f (Sfor Sskip a2 a3 s) k e m)
+                  E0 (ExprState f a2 (Kfor2 a2 a3 s k) e m)
+            | step_for_false: forall ge f v ty a2 a3 s k e m,
+                bool_val v ty m = Some false ->
+                sstep ge (ExprState f (Eval v ty) (Kfor2 a2 a3 s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_for_true: forall ge f v ty a2 a3 s k e m,
+                bool_val v ty m = Some true ->
+                sstep ge (ExprState f (Eval v ty) (Kfor2 a2 a3 s k) e m)
+                  E0 (State f s (Kfor3 a2 a3 s k) e m)
+            | step_skip_or_continue_for3: forall ge f x a2 a3 s k e m,
+                x = Sskip \/ x = Scontinue ->
+                sstep ge (State f x (Kfor3 a2 a3 s k) e m)
+                  E0 (State f a3 (Kfor4 a2 a3 s k) e m)
+            | step_break_for3: forall ge f a2 a3 s k e m,
+                sstep ge (State f Sbreak (Kfor3 a2 a3 s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_skip_for4: forall ge f a2 a3 s k e m,
+                sstep ge (State f Sskip (Kfor4 a2 a3 s k) e m)
+                  E0 (State f (Sfor Sskip a2 a3 s) k e m)
+            | step_return_0: forall ge f k e m m',
+                Mem.free_list m (blocks_of_env e) = Some m' ->
+                sstep ge (State f (Sreturn None) k e m)
+                  E0 (Returnstate Vundef (call_cont k) m')
+            | step_return_1: forall ge f x k e m,
+                sstep ge (State f (Sreturn (Some x)) k e m)
+                  E0 (ExprState f x (Kreturn k) e m)
+            | step_return_2: forall ge f v1 ty k e m v2 m',
+                sem_cast v1 ty f.(self__C.fn_return) m = Some v2 ->
+                Mem.free_list m (blocks_of_env e) = Some m' ->
+                sstep ge (ExprState f (Eval v1 ty) (Kreturn k) e m)
+                  E0 (Returnstate v2 (call_cont k) m')
+            | step_skip_call: forall ge f k e m m',
+                is_call_cont k ->
+                Mem.free_list m (blocks_of_env e) = Some m' ->
+                sstep ge (State f Sskip k e m)
+                  E0 (Returnstate Vundef k m')
+            | step_label: forall ge f lbl s k e m,
+                sstep ge (State f (Slabel lbl s) k e m)
+                  E0 (State f s k e m)
+            | step_goto: forall ge f lbl k e m s' k',
+                find_label f.(self__C.fn_body) lbl (call_cont k) = Some (s', k') ->
+                sstep ge (State f (Sgoto lbl) k e m)
+                  E0 (State f s' k' e m)
+            | step_internal_function: forall ge f vargs k m e m1 m2,
+                list_norepet (var_names (self__C.fn_params f) ++ var_names (self__C.fn_vars f)) ->
+                alloc_variables empty_env m (f.(self__C.fn_params) ++ f.(self__C.fn_vars)) e m1 ->
+                bind_parameters e m1 f.(self__C.fn_params) vargs m2 ->
+                sstep ge (Callstate (Internal f) vargs k m)
+                  E0 (State f f.(self__C.fn_body) k e m2).
+
+            FDefinition step :  genv -> state -> trace -> state -> Prop := fun ge S t S' => 
+              estep ge S t S' \/ sstep ge S t S'.
+            
+            MetaData initial_state.
+            Inductive initial_state (p: self__C.program): self__Sem.state -> Prop :=
+                 | initial_state_intro: forall b f m0,
+                     let ge := Genv.globalenv p in
+                     Genv.init_mem p = Some m0 ->
+                     Genv.find_symbol ge p.(prog_main) = Some b ->
+                     Genv.find_funct_ptr ge b = Some f ->
+                     self__C.type_of_fundef f = self__Imp.Tfunction self__Imp.Tnil self__Imp.type_int32s cc_default ->
+                     initial_state p (self__Sem.Callstate f nil self__Sem.Kstop m0).
+            FEnd initial_state.
+            
+            MetaData final_state.
+            Inductive final_state: self__Sem.state -> int -> Prop :=
+                | final_state_intro: forall r m,
+                    final_state (self__Sem.Returnstate (Vint r) self__Sem.Kstop m) r.
+            FEnd final_state.
+      FEnd Sem.
   FEnd C.
       
-   Family Clight.
+  Family Clight.
        FInductive expr : Type :=          
           | Econst_int: int -> type -> expr(* integer literal *)
           | Econst_float: float -> type -> expr(* double float literal *)
@@ -134,6 +553,7 @@ Inductive signedness : Type :=
           | Econst_long: int64 -> type -> expr(* long integer literal *)                                            
           | Etempvar: ident -> type -> expr (* temporary variable *)          
           | Esizeof: type -> type -> expr (* size of a type *)
+          | Ecast: expr -> type -> expr
           | Ealignof: type -> type -> expr. (* alignment of a type *)                                         
        
        FRecursion typeof : (e : expr) -> type. 
@@ -144,6 +564,7 @@ Inductive signedness : Type :=
           Case Etempvar v ty := ty.
           Case Esizeof ty' ty := ty.
           Case Ealignof ty' ty := ty.
+          Case Ecast e ty := ty.
        FEnd typeof.
        
        FDefinition label := ident.
@@ -194,26 +615,35 @@ Inductive signedness : Type :=
           | _ => cheat (* TODO: We don't have External in the base compiler *)
           end.
        
-       FDefinition program : Type := AST.program fundef unit.                     
+       FDefinition program : Type := AST.program fundef type.                     
        
-       Family Semantics.                                                          
+       Family Sem.
+            FDefinition genv := Genv.t fundef type.
             FDefinition env := PTree.t (block * type).                                     
             FDefinition empty_env: env := (PTree.empty (block * type)).
 
             FDefinition temp_env := PTree.t val.
+
+            MetaData sem_cast.
+            Axiom sem_cast : val -> self__Imp.type -> self__Imp.type -> mem -> option val.
+            FEnd sem_cast.
                         
-           FInductive eval_expr : env -> temp_env -> mem -> expr -> val -> Prop :=
-               | eval_Econst_int: forall e le m i ty,
-                   eval_expr e le m (Econst_int i ty) (Vint i)
-               | eval_Econst_float: forall e le m f ty,
-                   eval_expr e le m (Econst_float f ty) (Vfloat f)
-               | eval_Econst_single: forall e le m f ty,
-                   eval_expr e le m (Econst_single f ty) (Vsingle f)
-               | eval_Econst_long: forall e le m i ty,
-                   eval_expr e le m (Econst_long i ty) (Vlong i)
-               | eval_Etempvar: forall e le m id ty v,
+            FInductive eval_expr : genv -> env -> temp_env -> mem -> expr -> val -> Prop :=
+               | eval_Econst_int: forall ge e le m i ty,
+                   eval_expr ge e le m (Econst_int i ty) (Vint i)
+               | eval_Econst_float: forall ge e le m f ty,
+                   eval_expr ge e le m (Econst_float f ty) (Vfloat f)
+               | eval_Econst_single: forall ge e le m f ty,
+                   eval_expr ge e le m (Econst_single f ty) (Vsingle f)
+               | eval_Econst_long: forall ge e le m i ty,
+                   eval_expr ge e le m (Econst_long i ty) (Vlong i)
+               | eval_Ecast: forall ge e le m a ty v1 v,
+                  eval_expr ge e le m a v1 ->
+                  sem_cast v1 (typeof a) ty m = Some v ->
+                  eval_expr ge e le m (Ecast a ty) v
+               | eval_Etempvar: forall ge e le m id ty v,
                    PTree.get id le = Some v ->
-                   eval_expr e le m (Etempvar id ty) v.
+                   eval_expr ge e le m (Etempvar id ty) v.
 
            FInductive cont: Type :=
                 | Kstop: cont
@@ -229,17 +659,13 @@ Inductive signedness : Type :=
                 Case Kloop2 := (fun s1 s2 k call_cont_k => call_cont_k). 
            FEnd call_cont.
             
-           (* FRecursion is_call_cont about cont motive (fun (c : cont) => Prop) by _rect.
-           FRecursion is_call_cont : (c : cont) -> Prop.
+           FRecursion is_call_cont about cont motive (fun (c : cont) => Prop) by _rect.
+           (* FRecursion is_call_cont : (c : cont) -> Prop.*)
                 Case Kstop := True.
                 Case Kseq s k := False. 
                 Case Kloop1 s1 s2 k := False. 
                 Case Kloop2 s1 s2 k := False.
-           FEnd is_call_cont.*)
-           (* There is a bug which doesn't allow more than one FRecursion on a type *)
-           MetaData is_call_cont.
-           Axiom is_call_cont : self__Semantics.cont -> Prop.
-           FEnd is_call_cont.
+           FEnd is_call_cont.           
 
            FInductive state: Type :=
                 | State : function -> stmt -> cont -> env -> temp_env -> mem -> state                    
@@ -277,11 +703,11 @@ Inductive signedness : Type :=
            FEnd bool_val.
 
            MetaData sizeof.
-           Axiom sizeof : (* self__Semantics.composite_env -> *) self__Imp.type -> Z. 
+           Axiom sizeof : (* self__Sem.composite_env -> *) self__Imp.type -> Z. 
            FEnd sizeof.      
            
            MetaData create_undef_temps.
-             Fixpoint create_undef_temps (temps: list (ident * self__Imp.type)) : self__Semantics.temp_env :=
+             Fixpoint create_undef_temps (temps: list (ident * self__Imp.type)) : self__Sem.temp_env :=
               match temps with
               | nil => PTree.empty val
               | (id, t) :: temps' => PTree.set id Vundef (create_undef_temps temps')
@@ -290,7 +716,7 @@ Inductive signedness : Type :=
 
            MetaData bind_parameter_temps.
            Fixpoint bind_parameter_temps (formals: list (ident * self__Imp.type)) (args: list val)
-                              (le: self__Semantics.temp_env) : option self__Semantics.temp_env :=
+                              (le: self__Sem.temp_env) : option self__Sem.temp_env :=
                 match formals, args with
                 | nil, nil => Some le
                 | (id, t) :: xl, v :: vl => bind_parameter_temps xl vl (PTree.set id v le)
@@ -305,20 +731,20 @@ Inductive signedness : Type :=
              List.map block_of_binding (PTree.elements e).                      
            
            (* Definition sem_cast (v: val) (t1 t2: type) (m: mem): option val := *)
-           MetaData sem_cast.
+           (* MetaData sem_cast.
            Axiom sem_cast : val -> self__Imp.type -> self__Imp.type -> mem -> option val.
-           FEnd sem_cast.
+           FEnd sem_cast.*)
 
            MetaData alloc_variables.
-           Inductive alloc_variables: self__Semantics.env -> mem ->
+           Inductive alloc_variables: self__Sem.env -> mem ->
                            list (ident * self__Imp.type) ->
-                           self__Semantics.env -> mem -> Prop :=
+                           self__Sem.env -> mem -> Prop :=
                | alloc_variables_nil:
                    forall e m,
                    alloc_variables e m nil e m
                | alloc_variables_cons:
                    forall e m id ty vars m1 b1 m2 e2,
-                   Mem.alloc m 0 (self__Semantics.sizeof ty) = (m1, b1) ->
+                   Mem.alloc m 0 (self__Sem.sizeof ty) = (m1, b1) ->
                    alloc_variables (PTree.set id (b1, ty) e) m1 vars e2 m2 ->
                    alloc_variables e m ((id, ty) :: vars) e2 m2.
            FEnd alloc_variables.
@@ -327,101 +753,950 @@ Inductive signedness : Type :=
            MetaData function_entry.
            Inductive function_entry              
              (f: self__Clight.function) (vargs: list val) (m: mem) 
-             (e: self__Semantics.env) (le: self__Semantics.temp_env) (m': mem) : Prop :=
+             (e: self__Sem.env) (le: self__Sem.temp_env) (m': mem) : Prop :=
               | function_entry2_intro:
                   list_norepet (self__Clight.var_names f.(self__Clight.fn_vars)) ->
                   list_norepet (self__Clight.var_names f.(self__Clight.fn_params)) ->
                   list_disjoint (self__Clight.var_names f.(self__Clight.fn_params)) (self__Clight.var_names f.(self__Clight.fn_temps)) ->
-                  self__Semantics.alloc_variables self__Semantics.empty_env m f.(self__Clight.fn_vars) e m' ->
-                  self__Semantics.bind_parameter_temps f.(self__Clight.fn_params) vargs (self__Semantics.create_undef_temps f.(self__Clight.fn_temps)) = Some le ->
+                  self__Sem.alloc_variables self__Sem.empty_env m f.(self__Clight.fn_vars) e m' ->
+                  self__Sem.bind_parameter_temps f.(self__Clight.fn_params) vargs (self__Sem.create_undef_temps f.(self__Clight.fn_temps)) = Some le ->
                   function_entry f vargs m e le m'.
            FEnd function_entry.
           
            (* (e : env) (le : temp_env) (m : mem) *)
-           FInductive step : state -> trace -> state -> Prop :=
-               | step_set: forall f id a k e le m v,
-                   eval_expr e le m a v ->
-                   step (State f (Sset id a) k e le m)
+           FInductive step : genv -> state -> trace -> state -> Prop :=
+               | step_set: forall ge f id a k e le m v,
+                   eval_expr ge e le m a v ->
+                   step ge (State f (Sset id a) k e le m)
                      E0 (State f Sskip k e (PTree.set id v le) m)                  
-               | step_seq: forall f s1 s2 k e le m,
-                   step (State f (Ssequence s1 s2) k e le m)
+               | step_seq: forall ge f s1 s2 k e le m,
+                   step ge (State f (Ssequence s1 s2) k e le m)
                      E0 (State f s1 (Kseq s2 k) e le m)
-               | step_skip_seq: forall f s k e le m,
-                   step (State f Sskip (Kseq s k) e le m)
+               | step_skip_seq: forall ge f s k e le m,
+                   step ge (State f Sskip (Kseq s k) e le m)
                      E0 (State f s k e le m)
-               | step_continue_seq: forall f s k e le m,
-                   step (State f Scontinue (Kseq s k) e le m)
+               | step_continue_seq: forall ge f s k e le m,
+                   step ge (State f Scontinue (Kseq s k) e le m)
                      E0 (State f Scontinue k e le m)
-               | step_break_seq: forall f s k e le m,
-                   step (State f Sbreak (Kseq s k) e le m)
+               | step_break_seq: forall ge f s k e le m,
+                   step ge (State f Sbreak (Kseq s k) e le m)
                      E0 (State f Sbreak k e le m)             
-               | step_ifthenelse: forall f a s1 s2 k e le m v1 b,
-                   eval_expr e le m a v1 ->
+               | step_ifthenelse: forall ge f a s1 s2 k e le m v1 b,
+                   eval_expr ge e le m a v1 ->
                    bool_val v1 (typeof a) m = Some b ->
-                   step (State f (Sifthenelse a s1 s2) k e le m)
+                   step ge (State f (Sifthenelse a s1 s2) k e le m)
                      E0 (State f (if b then s1 else s2) k e le m)
-               | step_loop: forall f s1 s2 k e le m,
-                   step (State f (Sloop s1 s2) k e le m)
+               | step_loop: forall ge f s1 s2 k e le m,
+                   step ge (State f (Sloop s1 s2) k e le m)
                      E0 (State f s1 (Kloop1 s1 s2 k) e le m)
-               | step_skip_or_continue_loop1: forall f s1 s2 k e le m x,
+               | step_skip_or_continue_loop1: forall ge f s1 s2 k e le m x,
                    x = Sskip \/ x = Scontinue ->
-                   step (State f x (Kloop1 s1 s2 k) e le m)
+                   step ge (State f x (Kloop1 s1 s2 k) e le m)
                      E0 (State f s2 (Kloop2 s1 s2 k) e le m)
-               | step_break_loop1: forall f s1 s2 k e le m,
-                   step (State f Sbreak (Kloop1 s1 s2 k) e le m)
+               | step_break_loop1: forall ge f s1 s2 k e le m,
+                   step ge (State f Sbreak (Kloop1 s1 s2 k) e le m)
                      E0 (State f Sskip k e le m)
-               | step_skip_loop2: forall f s1 s2 k e le m,
-                   step (State f Sskip (Kloop2 s1 s2 k) e le m)
+               | step_skip_loop2: forall ge f s1 s2 k e le m,
+                   step ge (State f Sskip (Kloop2 s1 s2 k) e le m)
                      E0 (State f (Sloop s1 s2) k e le m)
-               | step_break_loop2: forall f s1 s2 k e le m,
-                   step (State f Sbreak (Kloop2 s1 s2 k) e le m)
+               | step_break_loop2: forall ge f s1 s2 k e le m,
+                   step ge (State f Sbreak (Kloop2 s1 s2 k) e le m)
                      E0 (State f Sskip k e le m)
-               | step_return_0: forall f k e le m m',
+               | step_return_0: forall ge f k e le m m',
                    Mem.free_list m (blocks_of_env e) = Some m' ->
-                   step (State f (Sreturn None) k e le m)
+                   step ge (State f (Sreturn None) k e le m)
                      E0 (Returnstate Vundef (call_cont k) m')
-               | step_return_1: forall f a k e le m v v' m',
-                   eval_expr e le m a v ->
+               | step_return_1: forall ge f a k e le m v v' m',
+                   eval_expr ge e le m a v ->
                    sem_cast v (typeof a) f.(self__Clight.fn_return) m = Some v' ->
                    Mem.free_list m (blocks_of_env e) = Some m' ->
-                   step (State f (Sreturn (Some a)) k e le m)
+                   step ge (State f (Sreturn (Some a)) k e le m)
                      E0 (Returnstate v' (call_cont k) m')
-               | step_skip_call: forall f k e le m m',
+               | step_skip_call: forall ge f k e le m m',
                    is_call_cont k ->
                    Mem.free_list m (blocks_of_env e) = Some m' ->
-                   step (State f Sskip k e le m)
+                   step ge (State f Sskip k e le m)
                      E0 (Returnstate Vundef k m')                          
-               | step_label: forall f lbl s k e le m,
-                   step (State f (Slabel lbl s) k e le m)
+               | step_label: forall ge f lbl s k e le m,
+                   step ge (State f (Slabel lbl s) k e le m)
                      E0 (State f s k e le m)             
-               | step_goto: forall f lbl k e le m s' k',
+               | step_goto: forall ge f lbl k e le m s' k',
                    find_label f.(self__Clight.fn_body) lbl (call_cont k) = Some (s', k') ->
-                   step (State f (Sgoto lbl) k e le m)
+                   step ge (State f (Sgoto lbl) k e le m)
                      E0 (State f s' k' e le m)
-               | step_internal_function: forall f vargs k m e le m1,
+               | step_internal_function: forall ge f vargs k m e le m1,
                      function_entry f vargs m e le m1 ->
-                     step (Callstate (Internal f) vargs k m)
+                     step ge (Callstate (Internal f) vargs k m)
                        E0 (State f f.(self__Clight.fn_body) k e le m1).
            
                MetaData initial_state.
-               Inductive initial_state (p: self__Clight.program): self__Semantics.state -> Prop :=
+               Inductive initial_state (p: self__Clight.program): self__Sem.state -> Prop :=
                   | initial_state_intro: forall b f m0,
                       let ge := Genv.globalenv p in
                       Genv.init_mem p = Some m0 ->
                       Genv.find_symbol ge p.(prog_main) = Some b ->
                       Genv.find_funct_ptr ge b = Some f ->
                       self__Clight.type_of_fundef f = self__Imp.Tfunction self__Imp.Tnil self__Imp.type_int32s cc_default ->
-                      initial_state p (self__Semantics.Callstate f nil self__Semantics.Kstop m0).
+                      initial_state p (self__Sem.Callstate f nil self__Sem.Kstop m0).
                FEnd initial_state.
                
                MetaData final_state.
-               Inductive final_state: self__Semantics.state -> int -> Prop :=
+               Inductive final_state: self__Sem.state -> int -> Prop :=
                   | final_state_intro: forall r m,
-                      final_state (self__Semantics.Returnstate (Vint r) self__Semantics.Kstop m) r.
+                      final_state (self__Sem.Returnstate (Vint r) self__Sem.Kstop m) r.
                FEnd final_state.
-       FEnd Semantics.
-  FEnd Clight.
+       FEnd Sem.
+  FEnd Clight.  
+  
+  (* C -> Clight *)
+  Family SimplExpr.
+      (* State and error monad *)
+      MetaData monads.
+        Record generator : Type := mkgenerator {
+            gen_next: ident;
+            gen_trail: list (ident * self__Imp.type)
+        }.
 
+      Inductive result (A: Type) (g: generator) : Type :=
+        | Err: Errors.errmsg -> result A g
+        | Res: A -> forall (g': generator), Ple (gen_next g) (gen_next g') -> result A g.
+
+      Arguments Err [A g].
+      Arguments Res [A g].
+
+      Definition mon (A: Type) := forall (g: generator), result A g.
+
+      Definition ret {A: Type} (x: A) : mon A :=
+        fun g => Res x g (Ple_refl (gen_next g)).
+
+      Definition error {A: Type} (msg: Errors.errmsg) : mon A :=
+        fun g => Err msg.
+
+      Definition bind {A B: Type} (x: mon A) (f: A -> mon B) : mon B :=
+        fun g =>
+          match x g with
+            | Err msg => Err msg
+            | Res a g' i =>
+                match f a g' with
+                | Err msg => Err msg
+                | Res b g'' i' => Res b g'' (Ple_trans _ _ _ i i')
+            end
+          end.
+
+      Definition bind2 {A B C: Type} (x: mon (A * B)) (f: A -> B -> mon C) : mon C :=
+        bind x (fun p => f (fst p) (snd p)).
+
+      Declare Scope gensym_monad_scope.
+      Notation "'do' X <- A ; B" := (bind A (fun X => B))
+         (at level 200, X ident, A at level 100, B at level 200)
+         : gensym_monad_scope.
+      Notation "'do' ( X , Y ) <- A ; B" := (bind2 A (fun X Y => B))
+         (at level 200, X ident, Y ident, A at level 100, B at level 200)
+         : gensym_monad_scope.
+
+      Parameter first_unused_ident: unit -> ident.
+
+      Definition initial_generator (x: unit) : generator :=
+        mkgenerator (first_unused_ident x) nil.
+
+      Definition gensym (ty: self__Imp.type): mon ident :=
+        fun (g: generator) =>
+          Res (gen_next g)
+              (mkgenerator (Pos.succ (gen_next g)) ((gen_next g, ty) :: gen_trail g))
+              (Ple_succ (gen_next g)).
+      
+      Fixpoint makeseq_rec (s: self__Imp.Clight.stmt) (l: list self__Imp.Clight.stmt) : self__Imp.Clight.stmt :=
+         match l with
+         | nil => s
+         | s' :: l' => makeseq_rec (self__Imp.Clight.Ssequence s s') l'
+          end.
+
+      Definition makeseq (l: list self__Imp.Clight.stmt) : self__Imp.Clight.stmt :=
+        makeseq_rec self__Imp.Clight.Sskip l.
+
+      Local Open Scope gensym_monad_scope.
+      FEnd monads.
+
+      MetaData destination.
+      Inductive set_destination : Type :=
+          | SDbase (tycast ty: self__Imp.type) (tmp: ident)
+          | SDcons (tycast ty: self__Imp.type) (tmp: ident) (sd: set_destination).
+
+      Inductive destination : Type :=
+        | For_val
+        | For_effects
+        | For_set (sd: set_destination).
+
+      Fixpoint do_set (sd: set_destination) (a: self__Imp.Clight.expr) : list self__Imp.Clight.stmt :=
+         match sd with
+         | SDbase tycast ty tmp => self__Imp.Clight.Sset tmp (self__Imp.Clight.Ecast a tycast) :: nil
+         | SDcons tycast ty tmp sd' => self__Imp.Clight.Sset tmp (self__Imp.Clight.Ecast a tycast) :: do_set sd' (self__Imp.Clight.Etempvar tmp ty)
+         end.
+      
+      Definition finish (dst: destination) (sl: list self__Imp.Clight.stmt) (a: self__Imp.Clight.expr) :=
+        match dst with
+        | For_val => (sl, a)
+        | For_effects => (sl, a)
+        | For_set sd => (sl ++ do_set sd a, a)
+        end.      
+      
+         Definition sd_temp (sd: set_destination) :=
+           match sd with SDbase _ _ tmp => tmp | SDcons _ _ tmp _ => tmp end.
+         
+         Definition sd_head_type (sd: set_destination) :=
+           match sd with SDbase _ ty _ => ty | SDcons _ ty _ _ => ty end.
+         
+         Definition temp_for_sd (ty: self__Imp.type) (sd: set_destination) : self__SimplExpr.mon ident :=
+             (* if type_eq ty (sd_head_type sd) then ret (sd_temp sd) else gensym ty.*)
+             cheat.
+      FEnd destination.
+
+      FDefinition dummy_expr := Clight.Econst_int Int.zero self__Imp.type_int32s.
+      
+      FRecursion eval_simpl_expr about Clight.expr motive (fun (_ : Clight.expr) => option val) by _rect.
+          Case Econst_int := (fun n ty => Some(Vint n)).
+          Case Econst_float := (fun n ty => Some(Vfloat n)).
+          Case Econst_single := (fun n ty => Some(Vsingle n)).
+          Case Econst_long := (fun n ty => Some(Vlong n)).
+          Case Ecast := (fun b eval_simpl_expr_b ty  => 
+                            match eval_simpl_expr_b with
+                            | None => None
+                            | Some v => Clight.Sem.sem_cast v (Clight.typeof b) ty Mem.empty
+                            end).
+          Case Etempvar := (fun id ty => None).
+          Case Esizeof := (fun _ _ => None).
+          Case Ealignof := (fun _ _ => None).
+      FEnd eval_simpl_expr.
+      
+      FDefinition makeif : Clight.expr -> Clight.stmt -> Clight.stmt -> Clight.stmt :=
+        fun a s1 s2 =>
+          match eval_simpl_expr a with
+          | Some v =>
+              match Clight.Sem.bool_val v (Clight.typeof a) Mem.empty with
+              | Some b => if b then s1 else s2
+              | None => Clight.Sifthenelse a s1 s2
+              end
+          | None => Clight.Sifthenelse a s1 s2
+          end.      
+      
+      FRecursion transl_expr about C.expr motive (fun (_ : C.expr) => destination -> self__SimplExpr.mon (list Clight.stmt * Clight.expr)) by _rect.
+          Case Evar := (fun id ty => fun dst => self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Etempvar id ty))).
+          Case Eval := (fun v ty => fun dst => 
+                             match v with 
+                              | Vint n => self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Econst_int n ty)) 
+                              | Vlong n => self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Econst_long n ty))
+                              | Vfloat n => self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Econst_float n ty))
+                              | Vsingle n => self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Econst_single n ty))
+                              | _ =>  self__SimplExpr.error (msg "SimplExpr.transl_expr: Eval") end).
+          Case Ecast := (fun r transl_expr_r ty => fun dst =>
+                           self__SimplExpr.bind2 (transl_expr_r self__SimplExpr.For_val)
+                               (fun sl1 a1 => match dst with
+                            | self__SimplExpr.For_val | self__SimplExpr.For_set _ =>
+                                self__SimplExpr.bind (self__SimplExpr.gensym ty)
+                                   (fun t => self__SimplExpr.ret (self__SimplExpr.finish dst (sl1) (Clight.Ecast a1 ty)))
+                            | self__SimplExpr.For_effects =>
+                                transl_expr_r self__SimplExpr.For_effects end)).                    
+          Case Ecomma := (fun r1 transl_expr_r1 r2 transl_expr_r2 ty => fun dst => 
+                            self__SimplExpr.bind2 (transl_expr_r1 self__SimplExpr.For_effects)
+                              (fun sl1 a1 => 
+                                   self__SimplExpr.bind2 (transl_expr_r2 dst)
+                                      (fun sl2 a2 => self__SimplExpr.ret (sl1 ++ sl2, a2)))).
+          Case Econdition := (fun r1 transl_expr_r1 r2 transl_expr_r2 r3 transl_expr_r3 ty => 
+                                fun dst => 
+                                    self__SimplExpr.bind2 (transl_expr_r1 self__SimplExpr.For_val) 
+                                       (fun sl1 a1 => 
+                                           match dst with
+                                          | self__SimplExpr.For_val =>
+                                              self__SimplExpr.bind (self__SimplExpr.gensym ty) (fun t => 
+                                                  let sd := self__SimplExpr.SDbase ty ty t in
+                                                  self__SimplExpr.bind2 (transl_expr_r2 (self__SimplExpr.For_set sd)) 
+                                                      (fun sl2 a2 => 
+                                                          self__SimplExpr.bind2 (transl_expr_r3 (self__SimplExpr.For_set sd)) 
+                                                              (fun sl3 a3 => 
+                                                                  self__SimplExpr.ret (sl1 ++ makeif a1 (self__SimplExpr.makeseq sl2) (self__SimplExpr.makeseq sl3) :: nil, Clight.Etempvar t ty))))
+                                          | self__SimplExpr.For_effects =>
+                                              self__SimplExpr.bind2 (transl_expr_r2 self__SimplExpr.For_effects) (fun sl2 a2 => 
+                                                  self__SimplExpr.bind2 (transl_expr_r3 self__SimplExpr.For_effects) (fun sl3 a3 => 
+                                                      self__SimplExpr.ret (sl1 ++ makeif a1 (self__SimplExpr.makeseq sl2) (self__SimplExpr.makeseq sl3) :: nil, dummy_expr)))
+                                          | self__SimplExpr.For_set sd =>
+                                              self__SimplExpr.bind (self__SimplExpr.temp_for_sd ty sd) (fun t => 
+                                                  let sd' := self__SimplExpr.SDcons ty ty t sd in
+                                                  self__SimplExpr.bind2 (transl_expr_r2 (self__SimplExpr.For_set sd')) 
+                                                      (fun sl2 a2 => 
+                                                          self__SimplExpr.bind2 (transl_expr_r3 (self__SimplExpr.For_set sd')) 
+                                                              (fun sl3 a3 => 
+                                                                   self__SimplExpr.ret (sl1 ++ makeif a1 (self__SimplExpr.makeseq sl2) (self__SimplExpr.makeseq sl3) :: nil,
+                                                                  dummy_expr))))
+                                          end)).
+          Case Eseqor := (fun r1 transl_expr_r1 r2 transl_expr_r2 ty => fun dst => 
+                            self__SimplExpr.bind2 (transl_expr_r1 self__SimplExpr.For_val)
+                               (fun sl1 a1 =>
+                                    match dst with
+                                    | self__SimplExpr.For_val =>
+                                        self__SimplExpr.bind (self__SimplExpr.gensym ty)
+                                             (fun t => 
+                                                 let sd := self__SimplExpr.SDbase self__Imp.type_bool ty t in
+                                                 self__SimplExpr.bind2 (transl_expr_r2 (self__SimplExpr.For_set sd))
+                                                     (fun sl2 a2 => 
+                                                    self__SimplExpr.ret (sl1 ++
+                                                     makeif a1 (Clight.Sset t (Clight.Econst_int Int.one ty)) (self__SimplExpr.makeseq sl2) :: nil,
+                                                     Clight.Etempvar t ty)))                             
+                                    | self__SimplExpr.For_effects =>
+                                        self__SimplExpr.bind2 (transl_expr_r2 self__SimplExpr.For_effects)
+                                             (fun sl2 a2 => self__SimplExpr.ret (sl1 ++ makeif a1 Clight.Sskip (self__SimplExpr.makeseq sl2) :: nil, dummy_expr))                                        
+                                    | self__SimplExpr.For_set sd =>
+                                        self__SimplExpr.bind (self__SimplExpr.temp_for_sd ty sd)
+                                            (fun t => 
+                                               let sd' := self__SimplExpr.SDcons self__Imp.type_bool ty t sd in
+                                               self__SimplExpr.bind2 (transl_expr_r2 (self__SimplExpr.For_set sd'))
+                                                  (fun sl2 a2 => 
+                                                      self__SimplExpr.ret (sl1 ++
+                                                             makeif a1 (self__SimplExpr.makeseq (self__SimplExpr.do_set sd (Clight.Econst_int Int.one ty))) (self__SimplExpr.makeseq sl2) :: nil,
+                                                          dummy_expr)))                                                                                                                        
+                                    end)).
+          Case Eseqand := (fun r1 transl_expr_r1 r2 transl_expr_r2 ty => fun dst => 
+                               self__SimplExpr.bind2 (transl_expr_r1 self__SimplExpr.For_val)
+                               (fun sl1 a1 =>
+                                    match dst with
+                                    | self__SimplExpr.For_val =>
+                                        self__SimplExpr.bind (self__SimplExpr.gensym ty)
+                                             (fun t => 
+                                                 let sd := self__SimplExpr.SDbase self__Imp.type_bool ty t in
+                                                 self__SimplExpr.bind2 (transl_expr_r2 (self__SimplExpr.For_set sd))
+                                                     (fun sl2 a2 => 
+                                                    self__SimplExpr.ret (sl1 ++
+                                                           makeif a1 (self__SimplExpr.makeseq sl2) (Clight.Sset t (Clight.Econst_int Int.zero ty)) :: nil,
+                                                        Clight.Etempvar t ty)))                      
+                                    | self__SimplExpr.For_effects =>
+                                        self__SimplExpr.bind2 (transl_expr_r2 self__SimplExpr.For_effects)
+                                             (fun sl2 a2 => self__SimplExpr.ret (sl1 ++ makeif a1 Clight.Sskip (self__SimplExpr.makeseq sl2) :: nil, dummy_expr))                                        
+                                    | self__SimplExpr.For_set sd =>
+                                        self__SimplExpr.bind (self__SimplExpr.temp_for_sd ty sd)
+                                            (fun t => 
+                                               let sd' := self__SimplExpr.SDcons self__Imp.type_bool ty t sd in
+                                               self__SimplExpr.bind2 (transl_expr_r2 (self__SimplExpr.For_set sd'))
+                                                  (fun sl2 a2 => 
+                                                      self__SimplExpr.ret (sl1 ++
+                                                             makeif a1 (self__SimplExpr.makeseq sl2) (self__SimplExpr.makeseq (self__SimplExpr.do_set sd (Clight.Econst_int Int.zero ty))) :: nil,
+                                                          dummy_expr)))                                                                                                                      
+                                    end)).                            
+          Case Esizeof := (fun ty' ty => fun dst => 
+                            self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Esizeof ty' ty))).
+          Case Ealignof := (fun ty' ty => fun dst => 
+                            self__SimplExpr.ret (self__SimplExpr.finish dst nil (Clight.Ealignof ty' ty))).          
+          Case Eparen := (fun e tycast ty => fun dst => fun _ => self__SimplExpr.error (msg "SimplExpr.transl_expr: paren")).
+      FEnd transl_expr.
+
+      FDefinition transl_expression : C.expr -> self__SimplExpr.mon (Clight.stmt * Clight.expr) := fun r =>
+          self__SimplExpr.bind2 (transl_expr r self__SimplExpr.For_val) (fun sl a => self__SimplExpr.ret (self__SimplExpr.makeseq sl, a)).
+
+      FDefinition transl_expr_stmt : C.expr -> self__SimplExpr.mon Clight.stmt := fun r =>
+          self__SimplExpr.bind2 (transl_expr r self__SimplExpr.For_effects) (fun sl a => self__SimplExpr.ret (self__SimplExpr.makeseq sl)).          
+
+      FDefinition transl_if : C.expr -> Clight.stmt -> Clight.stmt -> self__SimplExpr.mon Clight.stmt  := fun r s1 s2 => 
+          self__SimplExpr.bind2 (transl_expr r self__SimplExpr.For_val) (fun sl a => self__SimplExpr.ret (self__SimplExpr.makeseq (sl ++ makeif a s1 s2 :: nil))).          
+
+      FLemma is_Sskip:
+        forall s, {s = Clight.Sskip} + {s <> Clight.Sskip}.
+      FProofLemma.
+      apply cheat. Qed.
+      CloseFLemma.
+      
+      FRecursion transl_stmt about C.statement motive (fun (_ : C.statement) => self__SimplExpr.mon Clight.stmt) by _rect.
+          Case Sskip :=  (self__SimplExpr.ret Clight.Sskip).
+          Case Sdo := (fun e => transl_expr_stmt e).
+          Case Ssequence := (fun s1 transl_stmt_s1 s2 transl_stmt_s2 => 
+                              self__SimplExpr.bind (transl_stmt_s1) (fun ts1 => 
+                                  self__SimplExpr.bind (transl_stmt_s2) (fun ts2 => 
+                                      self__SimplExpr.ret (Clight.Ssequence ts1 ts2)))).
+          Case Sifthenelse := (fun e s1 transl_stmt_s1 s2 transl_stmt_s2 =>
+                                self__SimplExpr.bind (transl_stmt_s1) (fun ts1 => 
+                                  self__SimplExpr.bind (transl_stmt_s2) (fun ts2 => 
+                                      self__SimplExpr.bind2 (transl_expression e) (fun s' a => 
+                                          if is_Sskip ts1 && is_Sskip ts2 then
+                                              self__SimplExpr.ret (Clight.Ssequence s' Clight.Sskip)
+                                          else
+                                              self__SimplExpr.ret (Clight.Ssequence s' (Clight.Sifthenelse a ts1 ts2)))))).
+          Case Swhile := (fun e s1 transl_stmt_s1 =>
+                           self__SimplExpr.bind (transl_if e Clight.Sskip Clight.Sbreak) (fun s' => 
+                               self__SimplExpr.bind (transl_stmt_s1) (fun ts1 => 
+                                   self__SimplExpr.ret (Clight.Sloop (Clight.Ssequence s' ts1) Clight.Sskip)))).
+          Case Sdowhile := (fun e s1 transl_stmt_s1 =>
+                              self__SimplExpr.bind (transl_if e Clight.Sskip Clight.Sbreak) (fun s' => 
+                                  self__SimplExpr.bind (transl_stmt_s1) (fun ts1 => 
+                                      self__SimplExpr.ret (Clight.Sloop ts1 s')))).
+          Case Sfor := (fun s1 transl_stmt_s1 e2 s3 transl_stmt_s3 s4 transl_stmt_s4 =>
+                          self__SimplExpr.bind (transl_stmt_s1) (fun ts1 => 
+                              self__SimplExpr.bind (transl_if e2 Clight.Sskip Clight.Sbreak) (fun s' => 
+                                  self__SimplExpr.bind (transl_stmt_s3) (fun ts3 => 
+                                      self__SimplExpr.bind (transl_stmt_s4) (fun ts4 => 
+                                          if is_Sskip ts1 then
+                                              self__SimplExpr.ret (Clight.Sloop (Clight.Ssequence s' ts4) ts3)
+                                          else
+                                              self__SimplExpr.ret (Clight.Ssequence ts1 (Clight.Sloop (Clight.Ssequence s' ts4) ts3))))))).
+          Case Sbreak := (self__SimplExpr.ret Clight.Sbreak).
+          Case Scontinue := (self__SimplExpr.ret Clight.Scontinue).
+          Case Sreturn := (fun e =>
+                            match e with
+                            | None => self__SimplExpr.ret (Clight.Sreturn None)
+                            | Some e => 
+                                self__SimplExpr.bind2 (transl_expression e) (fun s' a => 
+                                    self__SimplExpr.ret (Clight.Ssequence s' (Clight.Sreturn (Some a))))
+                            end).
+          Case Slabel := (fun lbl s1 transl_stmt_s1 => 
+                            self__SimplExpr.bind transl_stmt_s1 (fun ts1 => 
+                                self__SimplExpr.ret (Clight.Slabel lbl ts1))).
+          Case Sgoto := (fun lbl => self__SimplExpr.ret (Clight.Sgoto lbl)).
+      FEnd transl_stmt.
+
+      FDefinition transl_function : C.function -> res Clight.function := fun f => 
+          match transl_stmt f.(self__Imp.C.fn_body) (self__SimplExpr.initial_generator tt) with
+          | self__SimplExpr.Err msg =>
+              Error msg
+          | self__SimplExpr.Res tbody g i =>
+              OK (Clight.mkfunction
+                      f.(self__Imp.C.fn_return)
+                      f.(self__Imp.C.fn_callconv)
+                      f.(self__Imp.C.fn_params)
+                      f.(self__Imp.C.fn_vars)
+                      g.(self__SimplExpr.gen_trail)
+                      tbody)
+          end.      
+
+     FDefinition transl_fundef : C.fundef -> res Clight.fundef := fun fd =>
+          match fd with
+          | Internal f =>
+              bind (transl_function f) (fun tf => OK (Internal tf))              
+          | _ => cheat (* No external yet *)              
+          end.
+     
+     FDefinition transl_program : C.program -> res Clight.program := fun p =>     
+       do p1 <- AST.transform_partial_program (transl_fundef) p; OK p1.
+
+     (* Relational specification of translation *)
+     Family Spec.
+          FDefinition final : self__SimplExpr.destination -> Clight.expr -> list Clight.stmt := fun dst a => 
+              match dst with
+              | self__SimplExpr.For_val => nil
+              | self__SimplExpr.For_effects => nil
+              | self__SimplExpr.For_set sd => self__SimplExpr.do_set sd a
+              end.
+
+          FInductive tr_expr : 
+                  Clight.Sem.temp_env -> 
+                  self__SimplExpr.destination -> C.expr -> list Clight.stmt -> 
+                  Clight.expr -> list ident -> Prop :=              
+             | tr_val_effect: forall le v ty any tmp,
+                 tr_expr le self__SimplExpr.For_effects (C.Eval v ty) nil any tmp
+             | tr_val_value: forall le v ty a tmp,
+                 Clight.typeof a = ty ->
+                 (forall tge e le' m,
+                   (forall id, In id tmp -> le'!id = le!id) ->
+                   Clight.Sem.eval_expr tge e le' m a v) ->
+                 tr_expr le self__SimplExpr.For_val (C.Eval v ty) nil a tmp
+             | tr_val_set: forall le sd v ty a any tmp,
+                 Clight.typeof a = ty ->
+                 (forall tge e le' m,
+                   (forall id, In id tmp -> le'!id = le!id) ->
+                   Clight.Sem.eval_expr tge e le' m a v) ->
+                 tr_expr le (self__SimplExpr.For_set sd) (C.Eval v ty)
+                             (self__SimplExpr.do_set sd a) any tmp
+             | tr_sizeof: forall le dst ty' ty tmp,
+                 tr_expr le dst (C.Esizeof ty' ty)
+                             (final dst (Clight.Esizeof ty' ty))
+                             (Clight.Esizeof ty' ty) tmp
+             | tr_alignof: forall le dst ty' ty tmp,
+                 tr_expr le dst (C.Ealignof ty' ty)
+                             (final dst (Clight.Ealignof ty' ty))
+                             (Clight.Ealignof ty' ty) tmp
+             | tr_cast_effects: forall le e1 ty sl1 a1 any tmp,
+                 tr_expr le self__SimplExpr.For_effects e1 sl1 a1 tmp ->
+                 tr_expr le self__SimplExpr.For_effects (C.Ecast e1 ty)
+                             sl1
+                             any tmp
+             | tr_cast_val: forall le dst e1 ty sl1 a1 tmp,
+                 tr_expr le self__SimplExpr.For_val e1 sl1 a1 tmp ->
+                 tr_expr le dst (C.Ecast e1 ty)
+                             (sl1 ++ final dst (Clight.Ecast a1 ty))
+                             (Clight.Ecast a1 ty) tmp
+             | tr_seqand_val: forall le e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 tmp,
+                 tr_expr le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
+                 tr_expr le (self__SimplExpr.For_set (self__SimplExpr.SDbase self__Imp.type_bool ty t)) e2 sl2 a2 tmp2 ->
+                 list_disjoint tmp1 tmp2 ->
+                 incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
+                 tr_expr le self__SimplExpr.For_val (C.Eseqand e1 e2 ty)
+                               (sl1 ++ makeif a1 (self__SimplExpr.makeseq sl2)
+                                                 (Clight.Sset t (Clight.Econst_int Int.zero ty)) :: nil)
+                               (Clight.Etempvar t ty) tmp
+             | tr_seqand_effects: forall le e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 any tmp,
+                 tr_expr le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
+                 tr_expr le self__SimplExpr.For_effects e2 sl2 a2 tmp2 ->
+                 list_disjoint tmp1 tmp2 ->
+                 incl tmp1 tmp -> incl tmp2 tmp ->
+                 tr_expr le self__SimplExpr.For_effects (C.Eseqand e1 e2 ty)
+                               (sl1 ++ makeif a1 (self__SimplExpr.makeseq sl2) Clight.Sskip :: nil)
+                               any tmp
+             | tr_seqand_set: forall le sd e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 any tmp,
+                 tr_expr le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
+                 tr_expr le (self__SimplExpr.For_set (self__SimplExpr.SDcons self__Imp.type_bool ty t sd)) e2 sl2 a2 tmp2 ->
+                 list_disjoint tmp1 tmp2 ->
+                 incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
+                 tr_expr le (self__SimplExpr.For_set sd) (C.Eseqand e1 e2 ty)
+                               (sl1 ++ makeif a1 (self__SimplExpr.makeseq sl2)
+                                                 (self__SimplExpr.makeseq (self__SimplExpr.do_set sd (Clight.Econst_int Int.zero ty))) :: nil)
+                               any tmp
+             | tr_seqor_val: forall le e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 tmp,
+                 tr_expr le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
+                 tr_expr le (self__SimplExpr.For_set (self__SimplExpr.SDbase self__Imp.type_bool ty t)) e2 sl2 a2 tmp2 ->
+                 list_disjoint tmp1 tmp2 ->
+                 incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
+                 tr_expr le self__SimplExpr.For_val (C.Eseqor e1 e2 ty)
+                               (sl1 ++ makeif a1 (Clight.Sset t (Clight.Econst_int Int.one ty))
+                                                 (self__SimplExpr.makeseq sl2) :: nil)
+                               (Clight.Etempvar t ty) tmp
+             | tr_seqor_effects: forall le e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 any tmp,
+                 tr_expr le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
+                 tr_expr le self__SimplExpr.For_effects e2 sl2 a2 tmp2 ->
+                 list_disjoint tmp1 tmp2 ->
+                 incl tmp1 tmp -> incl tmp2 tmp ->
+                 tr_expr le self__SimplExpr.For_effects (C.Eseqor e1 e2 ty)
+                               (sl1 ++ makeif a1 Clight.Sskip (self__SimplExpr.makeseq sl2) :: nil)
+                               any tmp
+             | tr_seqor_set: forall le sd e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 any tmp,
+                 tr_expr le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
+                 tr_expr le (self__SimplExpr.For_set (self__SimplExpr.SDcons self__Imp.type_bool ty t sd)) e2 sl2 a2 tmp2 ->
+                 list_disjoint tmp1 tmp2 ->
+                 incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
+                 tr_expr le (self__SimplExpr.For_set sd) (C.Eseqor e1 e2 ty)
+                               (sl1 ++ makeif a1 (self__SimplExpr.makeseq (self__SimplExpr.do_set sd (Clight.Econst_int Int.one ty)))
+                               (self__SimplExpr.makeseq sl2) :: nil)
+                               any tmp
+             | tr_condition_val: forall le e1 e2 e3 ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 t tmp,
+                 tr_expr le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
+                 tr_expr le (self__SimplExpr.For_set (self__SimplExpr.SDbase ty ty t)) e2 sl2 a2 tmp2 ->
+                 tr_expr le (self__SimplExpr.For_set (self__SimplExpr.SDbase ty ty t)) e3 sl3 a3 tmp3 ->
+                 list_disjoint tmp1 tmp2 ->
+                 list_disjoint tmp1 tmp3 ->
+                 incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp -> In t tmp ->
+                 tr_expr le self__SimplExpr.For_val (C.Econdition e1 e2 e3 ty)
+                                 (sl1 ++ makeif a1 (self__SimplExpr.makeseq sl2) (self__SimplExpr.makeseq sl3) :: nil)
+                                 (Clight.Etempvar t ty) tmp
+             | tr_condition_effects: forall le e1 e2 e3 ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 any tmp,
+                 tr_expr le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
+                 tr_expr le self__SimplExpr.For_effects e2 sl2 a2 tmp2 ->
+                 tr_expr le self__SimplExpr.For_effects e3 sl3 a3 tmp3 ->
+                 list_disjoint tmp1 tmp2 ->
+                 list_disjoint tmp1 tmp3 ->
+                 incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp ->
+                 tr_expr le self__SimplExpr.For_effects (C.Econdition e1 e2 e3 ty)
+                                 (sl1 ++ makeif a1 (self__SimplExpr.makeseq sl2) (self__SimplExpr.makeseq sl3) :: nil)
+                                 any tmp
+             | tr_condition_set: forall le sd t e1 e2 e3 ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 any tmp,
+                 tr_expr le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
+                 tr_expr le (self__SimplExpr.For_set (self__SimplExpr.SDcons ty ty t sd)) e2 sl2 a2 tmp2 ->
+                 tr_expr le (self__SimplExpr.For_set (self__SimplExpr.SDcons ty ty t sd)) e3 sl3 a3 tmp3 ->
+                 list_disjoint tmp1 tmp2 ->
+                 list_disjoint tmp1 tmp3 ->
+                 incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp -> In t tmp ->
+                 tr_expr le (self__SimplExpr.For_set sd) (C.Econdition e1 e2 e3 ty)
+                                 (sl1 ++ makeif a1 (self__SimplExpr.makeseq sl2) (self__SimplExpr.makeseq sl3) :: nil)
+                                 any tmp                    
+             | tr_comma: forall le dst e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 tmp,
+                 tr_expr le self__SimplExpr.For_effects e1 sl1 a1 tmp1 ->
+                 tr_expr le dst e2 sl2 a2 tmp2 ->
+                 list_disjoint tmp1 tmp2 ->
+                 incl tmp1 tmp -> incl tmp2 tmp ->
+                 tr_expr le dst (C.Ecomma e1 e2 ty) (sl1 ++ sl2) a2 tmp.
+                (*
+                Variable ge: genv.
+                Variable e: env.
+                Variable le: temp_env.
+                Variable m: mem. *)
+
+             MetaData tr_top.
+             Inductive tr_top: 
+               self__Imp.Clight.Sem.genv -> 
+               self__Imp.Clight.Sem.env -> 
+               self__Imp.Clight.Sem.temp_env -> 
+               mem -> 
+               self__SimplExpr.destination -> 
+               self__Imp.C.expr -> 
+               list self__Imp.Clight.stmt -> 
+               self__Imp.Clight.expr -> list ident -> Prop :=
+                  | tr_top_val_val: forall ge e le m v ty a tmp,
+                      self__Imp.Clight.typeof a = ty -> self__Imp.Clight.Sem.eval_expr ge e le m a v ->
+                      tr_top ge e le m self__SimplExpr.For_val (self__Imp.C.Eval v ty) nil a tmp
+                  | tr_top_base: forall ge e le m dst r sl a tmp,
+                      self__Spec.tr_expr le dst r sl a tmp ->
+                      tr_top ge e le m dst r sl a tmp.
+             FEnd tr_top.
+
+             MetaData tr_expression.
+             Inductive tr_expression: self__Imp.C.expr -> self__Imp.Clight.stmt -> self__Imp.Clight.expr -> Prop :=
+                  | tr_expression_intro: forall r sl a tmps,
+                      (forall ge e le m, self__Spec.tr_top ge e le m self__SimplExpr.For_val r sl a tmps) ->
+                      tr_expression r (self__SimplExpr.makeseq sl) a.
+             FEnd tr_expression.
+             
+             MetaData tr_expr_stmt.
+             Inductive tr_expr_stmt: self__Imp.C.expr -> self__Imp.Clight.stmt -> Prop :=
+                  | tr_expr_stmt_intro: forall r sl a tmps,
+                      (forall ge e le m, self__Spec.tr_top ge e le m self__SimplExpr.For_effects r sl a tmps) ->
+                      tr_expr_stmt r (self__SimplExpr.makeseq sl).
+             FEnd tr_expr_stmt.
+
+             MetaData tr_if.
+             Inductive tr_if: self__Imp.C.expr -> self__Imp.Clight.stmt -> self__Imp.Clight.stmt -> self__Imp.Clight.stmt  -> Prop :=
+                  | tr_if_intro: forall r s1 s2 sl a tmps,
+                      (forall ge e le m, self__Spec.tr_top ge e le m self__SimplExpr.For_val r sl a tmps) ->
+                      tr_if r s1 s2 (self__SimplExpr.makeseq (sl ++ self__SimplExpr.makeif a s1 s2 :: nil)).
+             FEnd tr_if.
+
+             FInductive tr_stmt: C.statement -> Clight.stmt -> Prop :=
+                | tr_skip:
+                    tr_stmt C.Sskip Clight.Sskip
+                | tr_do: forall r s,
+                    tr_expr_stmt r s ->
+                    tr_stmt (C.Sdo r) s
+                | tr_seq: forall s1 s2 ts1 ts2,
+                   tr_stmt s1 ts1 -> tr_stmt s2 ts2 ->
+                   tr_stmt (C.Ssequence s1 s2) (Clight.Ssequence ts1 ts2)
+                | tr_ifthenelse_empty: forall r s' a,
+                    tr_expression r s' a ->
+                    tr_stmt (C.Sifthenelse r C.Sskip C.Sskip) (Clight.Ssequence s' Clight.Sskip)
+                | tr_ifthenelse: forall r s1 s2 s' a ts1 ts2,
+                    tr_expression r s' a ->
+                    tr_stmt s1 ts1 -> tr_stmt s2 ts2 ->
+                    tr_stmt (C.Sifthenelse r s1 s2) (Clight.Ssequence s' (Clight.Sifthenelse a ts1 ts2))
+                | tr_while: forall r s1 s' ts1,
+                    tr_if r Clight.Sskip Clight.Sbreak s' ->
+                    tr_stmt s1 ts1 ->
+                    tr_stmt (C.Swhile r s1)
+                            (Clight.Sloop (Clight.Ssequence s' ts1) Clight.Sskip)
+                | tr_dowhile: forall r s1 s' ts1,
+                    tr_if r Clight.Sskip Clight.Sbreak s' ->
+                    tr_stmt s1 ts1 ->
+                    tr_stmt (C.Sdowhile r s1)
+                            (Clight.Sloop ts1 s')
+                | tr_for_1: forall r s3 s4 s' ts3 ts4,
+                    tr_if r Clight.Sskip Clight.Sbreak s' ->
+                    tr_stmt s3 ts3 ->
+                    tr_stmt s4 ts4 ->
+                    tr_stmt (C.Sfor C.Sskip r s3 s4)
+                            (Clight.Sloop (Clight.Ssequence s' ts4) ts3)
+                | tr_for_2: forall s1 r s3 s4 s' ts1 ts3 ts4,
+                    tr_if r Clight.Sskip Clight.Sbreak s' ->
+                    s1 <> C.Sskip ->
+                    tr_stmt s1 ts1 ->
+                    tr_stmt s3 ts3 ->
+                    tr_stmt s4 ts4 ->
+                    tr_stmt (C.Sfor s1 r s3 s4)
+                            (Clight.Ssequence ts1 (Clight.Sloop (Clight.Ssequence s' ts4) ts3))
+                | tr_break:
+                    tr_stmt C.Sbreak Clight.Sbreak
+                | tr_continue:
+                    tr_stmt C.Scontinue Clight.Scontinue
+                | tr_return_none:
+                    tr_stmt (C.Sreturn None) (Clight.Sreturn None)
+                | tr_return_some: forall r s' a,
+                    tr_expression r s' a ->
+                    tr_stmt (C.Sreturn (Some r)) (Clight.Ssequence s' (Clight.Sreturn (Some a)))
+                | tr_label: forall lbl s ts,
+                    tr_stmt s ts ->
+                    tr_stmt (C.Slabel lbl s) (Clight.Slabel lbl ts)
+                | tr_goto: forall lbl,
+                    tr_stmt (C.Sgoto lbl) (Clight.Sgoto lbl).
+             
+                (* Translation meets spec *)
+                (*
+                    Lemma transl_meets_spec:
+                     (forall r dst g sl a g' I,
+                      transl_expr ce dst r g = Res (sl, a) g' I ->
+                      dest_below dst g ->
+                      exists tmps, (forall le, tr_expr le dst r sl a (add_dest dst tmps)) /\ contained tmps g g')
+                    /\
+                     (forall rl g sl al g' I,
+                      transl_exprlist ce rl g = Res (sl, al) g' I ->
+                      exists tmps, (forall le, tr_exprlist le rl sl al tmps) /\ contained tmps g g').
+                  Proof.
+                  
+                  Lemma transl_expr_meets_spec:
+                     forall r dst g sl a g' I,
+                     transl_expr ce dst r g = Res (sl, a) g' I ->
+                     dest_below dst g ->
+                     exists tmps, forall ge e le m, tr_top ge e le m dst r sl a tmps.
+                  Proof.
+                  
+                  Lemma transl_expression_meets_spec:
+                    forall r g s a g' I,
+                    transl_expression ce r g = Res (s, a) g' I ->
+                    tr_expression r s a.
+                  Proof.
+                  
+                  Lemma transl_expr_stmt_meets_spec:
+                    forall r g s g' I,
+                    transl_expr_stmt ce r g = Res s g' I ->
+                    tr_expr_stmt r s.
+                  Proof.
+                  
+                  Lemma transl_if_meets_spec:
+                    forall r s1 s2 g s g' I,
+                    transl_if ce r s1 s2 g = Res s g' I ->
+                    tr_if r s1 s2 s.
+                  Proof.
+                  
+                  Lemma transl_stmt_meets_spec:
+                    forall s g ts g' I, transl_stmt ce s g = Res ts g' I -> tr_stmt s ts
+                  with transl_lblstmt_meets_spec:
+                    forall s g ts g' I, transl_lblstmt ce s g = Res ts g' I -> tr_lblstmts s ts.
+                  Proof.
+                *)
+             
+                MetaData tr_function.
+                Inductive tr_function: self__Imp.C.function -> self__Imp.Clight.function -> Prop :=
+                     | tr_function_intro: forall f tf,
+                         self__Spec.tr_stmt f.(self__Imp.C.fn_body) tf.(self__Imp.Clight.fn_body) ->
+                         self__Imp.Clight.fn_return tf = self__Imp.C.fn_return f ->
+                         self__Imp.Clight.fn_callconv tf = self__Imp.C.fn_callconv f ->
+                         self__Imp.Clight.fn_params tf = self__Imp.C.fn_params f ->
+                         self__Imp.Clight.fn_vars tf = self__Imp.C.fn_vars f ->
+                         tr_function f tf.
+                FEnd tr_function.
+
+                (* Lemma transl_function_spec:
+                    forall f tf,
+                    transl_function ce f = OK tf ->
+                    tr_function f tf. *)
+                
+                MetaData tr_fundef.
+                Inductive tr_fundef (p: self__Imp.C.program): self__Imp.C.fundef -> self__Imp.Clight.fundef -> Prop :=
+                    | tr_internal: forall f tf,
+                        self__Spec.tr_function (* p.(prog_comp_env)*) f tf ->
+                        tr_fundef p (Internal f) (Internal tf).                    
+                FEnd tr_fundef.
+                
+                (* Lemma transl_fundef_spec:
+                   forall p fd tfd,
+                   transl_fundef p.(prog_comp_env) fd = OK tfd ->
+                   tr_fundef p fd tfd.*)
+          FEnd Spec.
+          
+          (* Correctness of the pass *)
+          Family Proof.
+              FDefinition match_prog : C.program -> Clight.program -> Prop := fun p tp => cheat.
+              
+              FInductive match_cont : (* composite_env ->*) C.Sem.cont -> Clight.Sem.cont -> Prop :=
+                   | match_Kstop: 
+                       match_cont C.Sem.Kstop Clight.Sem.Kstop
+                   | match_Kseq: forall s k ts tk,
+                       Spec.tr_stmt s ts ->
+                       match_cont k tk ->
+                       match_cont (C.Sem.Kseq s k) (Clight.Sem.Kseq ts tk)
+                   | match_Kwhile2: forall r s k s' ts tk,
+                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
+                       Spec.tr_stmt s ts ->
+                       match_cont k tk ->
+                       match_cont (C.Sem.Kwhile2 r s k)
+                                  (Clight.Sem.Kloop1 (Clight.Ssequence s' ts) Clight.Sskip tk)
+                   | match_Kdowhile1: forall r s k s' ts tk,
+                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
+                       Spec.tr_stmt s ts ->
+                       match_cont k tk ->
+                       match_cont (C.Sem.Kdowhile1 r s k)
+                                  (Clight.Sem.Kloop1 ts s' tk)
+                   | match_Kfor3: forall r s3 s k ts3 s' ts tk,
+                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
+                       Spec.tr_stmt s3 ts3 ->
+                       Spec.tr_stmt s ts ->
+                       match_cont k tk ->
+                       match_cont (C.Sem.Kfor3 r s3 s k)
+                                  (Clight.Sem.Kloop1 (Clight.Ssequence s' ts) ts3 tk)
+                   | match_Kfor4: forall r s3 s k ts3 s' ts tk,
+                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
+                       Spec.tr_stmt s3 ts3 ->
+                       Spec.tr_stmt s ts ->
+                       match_cont k tk ->
+                       match_cont (C.Sem.Kfor4 r s3 s k)
+                                  (Clight.Sem.Kloop2 (Clight.Ssequence s' ts) ts3 tk)                   
+              with match_cont_exp : (* composite_env*) destination -> Clight.expr -> C.Sem.cont -> Clight.Sem.cont -> Prop :=
+                   | match_Kdo: forall k a tk,
+                       match_cont k tk ->
+                       match_cont_exp self__SimplExpr.For_effects a (C.Sem.Kdo k) tk
+                   | match_Kifthenelse_empty: forall a k tk,
+                       match_cont k tk ->
+                       match_cont_exp self__SimplExpr.For_val a (C.Sem.Kifthenelse C.Sskip C.Sskip k) (Clight.Sem.Kseq Clight.Sskip tk)
+                   | match_Kifthenelse_1: forall a s1 s2 k ts1 ts2 tk,
+                       Spec.tr_stmt s1 ts1 -> Spec.tr_stmt s2 ts2 ->
+                       match_cont k tk ->
+                       match_cont_exp self__SimplExpr.For_val a (C.Sem.Kifthenelse s1 s2 k) (Clight.Sem.Kseq (Clight.Sifthenelse a ts1 ts2) tk)
+                   | match_Kwhile1: forall r s k s' a ts tk,
+                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
+                       Spec.tr_stmt s ts ->
+                       match_cont k tk ->
+                       match_cont_exp self__SimplExpr.For_val a
+                          (C.Sem.Kwhile1 r s k)
+                          (Clight.Sem.Kseq (makeif a Clight.Sskip Clight.Sbreak)
+                            (Clight.Sem.Kseq ts (Clight.Sem.Kloop1 (Clight.Ssequence s' ts) Clight.Sskip tk)))
+                   | match_Kdowhile2: forall r s k s' a ts tk,
+                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
+                       Spec.tr_stmt s ts ->
+                        match_cont k tk ->
+                        match_cont_exp self__SimplExpr.For_val a
+                          (C.Sem.Kdowhile2 r s k)
+                          (Clight.Sem.Kseq (makeif a Clight.Sskip Clight.Sbreak) (Clight.Sem.Kloop2 ts s' tk))
+                   | match_Kfor2: forall r s3 s k s' a ts3 ts tk,
+                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
+                       Spec.tr_stmt s3 ts3 ->
+                       Spec.tr_stmt s ts ->
+                       match_cont k tk ->
+                       match_cont_exp self__SimplExpr.For_val a
+                         (C.Sem.Kfor2 r s3 s k)
+                         (Clight.Sem.Kseq (makeif a Clight.Sskip Clight.Sbreak)
+                           (Clight.Sem.Kseq ts (Clight.Sem.Kloop1 (Clight.Ssequence s' ts) ts3 tk)))
+                   | match_Kreturn: forall k a tk,
+                       match_cont k tk ->
+                       match_cont_exp self__SimplExpr.For_val a (C.Sem.Kreturn k) (Clight.Sem.Kseq (Clight.Sreturn (Some a)) tk).
+
+              MetaData Kseqlist.
+                 Fixpoint Kseqlist (sl: list self__Imp.Clight.stmt) (k: self__Imp.Clight.Sem.cont) :=
+                 match sl with
+                 | nil => k
+                 | s :: l => self__Imp.Clight.Sem.Kseq s (Kseqlist l k)
+                 end.
+              FEnd Kseqlist.
+              
+              MetaData match_states.
+              Inductive match_states: self__Imp.C.Sem.state -> self__Imp.Clight.Sem.state -> Prop :=
+                  | match_exprstates: forall tge f r k e m tf sl tk le dest a tmps (* cu *)
+                      (* (LINK: linkorder cu prog)*)
+                      (TRF: self__SimplExpr.Spec.tr_function (* cu.(prog_comp_env) *) f tf)
+                      (TR: self__SimplExpr.Spec.tr_top (* cu.(prog_comp_env)*) tge e le m dest r sl a tmps)
+                      (MK: self__Proof.match_cont_exp (* cu.(prog_comp_env)*) dest a k tk),
+                      match_states (self__Imp.C.Sem.ExprState f r k e m)
+                                   (self__Imp.Clight.Sem.State tf self__Imp.Clight.Sskip (self__Proof.Kseqlist sl tk) e le m)
+                  | match_regularstates: forall f s k e m tf ts tk le (* cu*)
+                      (* (LINK: linkorder cu prog) *)
+                      (TRF: self__SimplExpr.Spec.tr_function (* cu.(prog_comp_env)*) f tf)
+                      (TR: self__SimplExpr.Spec.tr_stmt (* cu.(prog_comp_env)*) s ts)
+                      (MK: self__Proof.match_cont (* cu.(prog_comp_env)*) k tk),
+                      match_states (self__Imp.C.Sem.State f s k e m)
+                                   (self__Imp.Clight.Sem.State tf ts tk e le m)
+                  | match_callstates: forall fd args k m tfd tk cu
+                      (* (LINK: linkorder cu prog)*)
+                      (TR: self__SimplExpr.Spec.tr_fundef cu fd tfd)
+                      (MK: (* forall ce,*) self__Proof.match_cont (* ce*) k tk),
+                      match_states (self__Imp.C.Sem.Callstate fd args k m)
+                                   (self__Imp.Clight.Sem.Callstate tfd args tk m)
+                  | match_returnstates: forall res k m tk
+                      (MK: (* forall ce,*) self__Proof.match_cont (* ce*) k tk),
+                      match_states (self__Imp.C.Sem.Returnstate res k m)
+                                   (self__Imp.Clight.Sem.Returnstate res tk m)
+                  | match_stuckstate: forall S,
+                      match_states self__Imp.C.Sem.Stuckstate S.
+              FEnd match_states.
+
+              (* Write esize as an FRecursion *)
+              FRecursion esize about C.expr motive (fun (_ : C.expr) => nat) by _rect.                  
+                  Case Evar := (fun _ _ => 1%nat).                                    
+                  Case Eval := (fun _ _ => 0%nat).                                                      
+                  Case Ecast r1 ty := (S(esize r1)).
+                  Case Eseqand r1 r2 ty := (S(esize r1)).
+                  Case Eseqor r1 r2 ty := (S(esize r1)).
+                  Case Econdition r1 r2 r3 ty := (S(esize r1)).
+                  Case Esizeof ty' ty := 1%nat.
+                  Case Ealignof ty' ty:= 1%nat.                                    
+                  Case Ecomma r1 r2 ty := (S(esize r1 + esize r2)%nat).                                    
+                  Case Eparen r1 tycast ty := (S(esize r1)).
+              FEnd esize.
+
+              FRecursion measure_stmt about C.statement motive (fun (_ : C.statement) => nat) by _rect.
+                  Case Sskip := 0%nat.
+                  Case Sdo r := ((esize r + 2)%nat).
+                  Case Sifthenelse r s1 s2 := ((esize r + 2)%nat).                                                      
+                  Case Slabel lbl s := 0%nat.
+                  Case Sgoto lbl := 0%nat. 
+                  Case Ssequence s1 s2 := 0%nat.
+                  Case Swhile e s1 := 0%nat. 
+                  Case Sdowhile e s1 := 0%nat.
+                  Case Sfor s1 e s2 s3 := 0%nat.
+                  Case Sbreak := 0%nat. 
+                  Case Scontinue := 0%nat. 
+                  Case Sreturn e := 0%nat.                   
+              FEnd measure_stmt.
+              
+              FRecursion measure about C.Sem.state motive (fun (_ : C.Sem.state) => nat) by _rect.
+                  Case ExprState f r k e m := ((esize r + 1)%nat).
+                  Case State f s k e m := (measure_stmt s).
+                  Case Callstate f vs k m := 0%nat. 
+                  Case Returnstate v k m := 0%nat.
+                  Case Stuckstate := 0%nat.
+              FEnd measure.
+              
+              FInduction estep_simulation about C.Sem.estep 
+                 motive (fun ge S1 t S2 (_ : C.Sem.estep ge S1 t S2) => 
+                            forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
+                            forall T1 (MS : match_states S1 T1),
+                      exists T2,
+                       (plus Clight.Sem.step tge T1 t T2 \/
+                         (star Clight.Sem.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
+                    /\ match_states S2 T2).
+              FProof.
+                 split.
+                 unfold self__Imp.C.Sem.__handler_type_step_expr_ind_comp.
+                 unfold __motiveTestep_simulation.
+                 intros.
+                 - apply cheat.
+                 - apply cheat.
+              Qed.
+              FEnd estep_simulation.
+              
+              FInduction sstep_simulation about C.Sem.sstep 
+                   motive (fun ge S1 t S2 (_ : C.Sem.sstep ge S1 t S2) => 
+                            forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
+                            forall T1 (MS : match_states S1 T1),
+                      exists T2,
+                       (plus Clight.Sem.step tge T1 t T2 \/
+                         (star Clight.Sem.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
+                    /\ match_states S2 T2).
+              FProof.
+                  apply cheat.
+              Qed.
+              FEnd sstep_simulation.                    
+              
+              FLemma simulation :
+                   (forall ge S1 t S2 (_ : C.Sem.step ge S1 t S2),
+                        forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
+                        forall T1 (MS : match_states S1 T1),
+                      exists T2,
+                       (plus Clight.Sem.step tge T1 t T2 \/
+                         (star Clight.Sem.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
+                    /\ match_states S2 T2).
+              FProofLemma.
+                  intros ge S1 t S2 STEP. destruct STEP.
+                  - apply self__Proof.estep_simulation; auto.
+                  - apply self__Proof.sstep_simulation; auto.
+                Qed.
+              CloseFLemma.                            
+              
+              FLemma transl_initial_states:
+                 forall S prog tprog (_ : match_prog prog tprog),                 
+                 C.Sem.initial_state prog S ->
+                 exists T, Clight.Sem.initial_state tprog T /\ match_states S T.
+              FProofLemma.
+                 apply cheat.
+              Qed.
+              CloseFLemma.
+              
+              FLemma transl_final_states:
+                   forall S T r,
+                   match_states S T -> C.Sem.final_state S r -> Clight.Sem.final_state T r.
+              FProofLemma.
+                  intros. inv H0. inv H. (* specialize (MK (PTree.empty _)).*) inv MK. constructor.
+              Qed.
+              CloseFLemma.
+          FEnd Proof.
+  FEnd SimplExpr.
+  
   Family Csharpminor.
        FInductive constant : Type :=
            | Ointconst: int -> constant (* integer constant *)
@@ -445,7 +1720,6 @@ Inductive signedness : Type :=
             | Sreturn: option expr -> stmt
             | Slabel: label -> stmt -> stmt
             | Sgoto: label -> stmt.
-
        
        MetaData function.
        Record function : Type := mkfunction {
@@ -458,13 +1732,38 @@ Inductive signedness : Type :=
        FEnd function.
        
        FDefinition fundef := AST.fundef function.       
-       FDefinition program : Type := AST.program fundef unit.       
+       FDefinition program : Type := AST.program fundef unit.
+
+       FDefinition funsig := fun (fd: fundef) =>
+         match fd with
+         | Internal f => self__Csharpminor.fn_sig f
+         | External ef => cheat (* No external functions *)
+         end.
          
-       Family Semantics.            
+       Family Sem.
+            FDefinition genv := Genv.t fundef unit.
             FDefinition env := PTree.t (block * Z).
             FDefinition temp_env := PTree.t val.
             FDefinition empty_env : env := PTree.empty (block * Z).
             FDefinition empty_temp_env : temp_env := PTree.empty val.
+
+            MetaData create_undef_temps.
+            Fixpoint create_undef_temps (temps: list ident) : self__Sem.temp_env :=
+             match temps with
+             | nil => PTree.empty val
+             | id :: temps' => PTree.set id Vundef (create_undef_temps temps')
+            end.
+            FEnd create_undef_temps.
+
+            MetaData bind_parameters.
+            Fixpoint bind_parameters (formals: list ident) (args: list val)
+                         (le: self__Sem.temp_env) : option self__Sem.temp_env :=
+                match formals, args with
+                | nil, nil => Some le
+                | id :: xl, v :: vl => bind_parameters xl vl (PTree.set id v le)
+                | _, _ => None
+                end.
+            FEnd bind_parameters.
             
             FInductive cont: Type :=
                | Kstop: cont
@@ -482,14 +1781,11 @@ Inductive signedness : Type :=
                    Case Kblock := (fun c call_cont_c => call_cont_c).
                FEnd call_cont.
                
-            (* FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
+            FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
                    Case Kstop := True.                   
                    Case Kseq := (fun s c call_cont_c => False).
                    Case Kblock := (fun c call_cont_c => False).
-            FEnd is_call_cont. *)
-            MetaData is_call_cont.
-            Axiom is_call_cont : self__Semantics.cont -> Prop.
-            FEnd is_call_cont.
+            FEnd is_call_cont.            
             
             FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect. 
                 Case Sskip := (fun lbl k => None).
@@ -527,92 +1823,102 @@ Inductive signedness : Type :=
                 | eval_Econst: forall e le m cst v,
                     eval_constant cst = Some v ->
                     eval_expr e le m (Econst cst) v.
-            
+
+            MetaData alloc_variables.
+            Inductive alloc_variables: self__Sem.env -> mem ->
+                           list (ident * Z) ->
+                           self__Sem.env -> mem -> Prop :=
+            | alloc_variables_nil:
+              forall e m,
+                alloc_variables e m nil e m
+            | alloc_variables_cons:
+              forall e m id sz vars m1 b1 m2 e2,
+                Mem.alloc m 0 sz = (m1, b1) ->
+                alloc_variables (PTree.set id (b1, sz) e) m1 vars e2 m2 ->
+                alloc_variables e m ((id, sz) :: vars) e2 m2.
+            FEnd alloc_variables.
             
             FDefinition block_of_binding := fun (id_b_sz: ident * (block * Z)) => 
               match id_b_sz with (id, (b, sz)) => (b, 0, sz) end.
             
             FDefinition blocks_of_env : env -> list (block * Z * Z) := fun (e: env) =>
               List.map block_of_binding (PTree.elements e).
-
-               
-            (* (e : env) -> (le : temp_env) -> (m : mem) -> *)
-            FInductive step :  state -> trace -> state -> Prop :=
-                   | step_skip_seq: forall f s k e le m,
-                       step (State f Sskip (Kseq s k) e le m)
+                           
+            FInductive step : genv -> state -> trace -> state -> Prop :=
+                   | step_skip_seq: forall ge f s k e le m,
+                       step ge (State f Sskip (Kseq s k) e le m)
                          E0 (State f s k e le m)
-                   | step_skip_block: forall f k e le m,
-                       step (State f Sskip (Kblock k) e le m)
+                   | step_skip_block: forall ge f k e le m,
+                       step ge (State f Sskip (Kblock k) e le m)
                          E0 (State f Sskip k e le m)
-                   | step_skip_call: forall f k e le m m',
+                   | step_skip_call: forall ge f k e le m m',
                        is_call_cont k ->
                        Mem.free_list m (blocks_of_env e) = Some m' ->
-                       step (State f Sskip k e le m)
+                       step ge (State f Sskip k e le m)
                          E0 (Returnstate Vundef k m')
-                   | step_set: forall f id a k e le m v,
+                   | step_set: forall ge f id a k e le m v,
                        eval_expr e le m a v ->
-                       step (State f (Sset id a) k e le m)
+                       step ge (State f (Sset id a) k e le m)
                          E0 (State f Sskip k e (PTree.set id v le) m)
-                   | step_seq: forall f s1 s2 k e le m,
-                       step (State f (Sseq s1 s2) k e le m)
+                   | step_seq: forall ge f s1 s2 k e le m,
+                       step ge (State f (Sseq s1 s2) k e le m)
                          E0 (State f s1 (Kseq s2 k) e le m)
-                   | step_ifthenelse: forall f a s1 s2 k e le m v b,
+                   | step_ifthenelse: forall ge f a s1 s2 k e le m v b,
                        eval_expr e le m a v ->
                        Val.bool_of_val v b ->
-                       step (State f (Sifthenelse a s1 s2) k e le m)
+                       step ge (State f (Sifthenelse a s1 s2) k e le m)
                          E0 (State f (if b then s1 else s2) k e le m)
-                   | step_loop: forall f s k e le m,
-                       step (State f (Sloop s) k e le m)
+                   | step_loop: forall ge f s k e le m,
+                       step ge (State f (Sloop s) k e le m)
                          E0 (State f s (Kseq (Sloop s) k) e le m)        
-                   | step_block: forall f s k e le m,
-                       step (State f (Sblock s) k e le m)
+                   | step_block: forall ge f s k e le m,
+                       step ge (State f (Sblock s) k e le m)
                          E0 (State f s (Kblock k) e le m)
-                   | step_return_0: forall f k e le m m',
+                   | step_return_0: forall ge f k e le m m',
                        Mem.free_list m (blocks_of_env e) = Some m' ->
-                       step (State f (Sreturn None) k e le m)
+                       step ge (State f (Sreturn None) k e le m)
                          E0 (Returnstate Vundef (call_cont k) m')
-                   | step_return_1: forall f a k e le m v m',
+                   | step_return_1: forall ge f a k e le m v m',
                        eval_expr e le m a v ->
                        Mem.free_list m (blocks_of_env e) = Some m' ->
-                       step (State f (Sreturn (Some a)) k e le m)
+                       step ge (State f (Sreturn (Some a)) k e le m)
                          E0 (Returnstate v (call_cont k) m')
-                   | step_label: forall f lbl s k e le m,
-                       step (State f (Slabel lbl s) k e le m)
+                   | step_label: forall ge f lbl s k e le m,
+                       step ge (State f (Slabel lbl s) k e le m)
                          E0 (State f s k e le m)
-                   | step_goto: forall f lbl k e le m s' k',
+                   | step_goto: forall ge f lbl k e le m s' k',
                        find_label f.(self__Csharpminor.fn_body) lbl (call_cont k) = Some(s', k') ->
-                       step (State f (Sgoto lbl) k e le m)
+                       step ge (State f (Sgoto lbl) k e le m)
                          E0 (State f s' k' e le m)
-                   | step_internal_function: forall f vargs k m m1 e le,
-                        list_norepet (map fst f.(fn_vars)) ->
-                        list_norepet f.(fn_params) ->
-                        list_disjoint f.(fn_params) f.(fn_temps) ->
-                        alloc_variables empty_env m (fn_vars f) e m1 ->
-                        bind_parameters f.(fn_params) vargs (create_undef_temps f.(fn_temps)) = Some le ->
-                        step (Callstate (Internal f) vargs k m)
-                          E0 (State f f.(fn_body) k e le m1)
+                   | step_internal_function: forall ge f vargs k m m1 e le,
+                        list_norepet (map fst f.(self__Csharpminor.fn_vars)) ->
+                        list_norepet f.(self__Csharpminor.fn_params) ->
+                        list_disjoint f.(self__Csharpminor.fn_params) f.(self__Csharpminor.fn_temps) ->
+                        alloc_variables empty_env m (self__Csharpminor.fn_vars f) e m1 ->
+                        bind_parameters f.(self__Csharpminor.fn_params) vargs (create_undef_temps f.(self__Csharpminor.fn_temps)) = Some le ->
+                        step ge (Callstate (Internal f) vargs k m)
+                          E0 (State f f.(self__Csharpminor.fn_body) k e le m1).
             
-            (*MetaData initial_state.
-            Inductive initial_state (p: self__Csharpminor.program): state -> Prop :=
+            MetaData initial_state.
+            Inductive initial_state (p: self__Csharpminor.program): self__Sem.state -> Prop :=
                 | initial_state_intro: forall b f m0,
                     let ge := Genv.globalenv p in
                     Genv.init_mem p = Some m0 ->
                     Genv.find_symbol ge p.(prog_main) = Some b ->
                     Genv.find_funct_ptr ge b = Some f ->
-                    funsig f = signature_main ->
-                    initial_state p (Callstate f nil Kstop m0).
-            FEnd initial_state. *)
+                    self__Csharpminor.funsig f = signature_main ->
+                    initial_state p (self__Sem.Callstate f nil self__Sem.Kstop m0).
+            FEnd initial_state.
             
             MetaData final_state.
-            Inductive final_state: self__Semantics.state -> int -> Prop :=
+            Inductive final_state: self__Sem.state -> int -> Prop :=
                 | final_state_intro: forall r m,
-                    final_state (self__Semantics.Returnstate (Vint r) self__Semantics.Kstop m) r.
+                    final_state (self__Sem.Returnstate (Vint r) self__Sem.Kstop m) r.
             FEnd final_state.
-       FEnd Semantics.
-   FEnd Csharpminor.
-
-   
-   (* Clight -> Csharpminor *)
+       FEnd Sem.
+  FEnd Csharpminor.
+  
+  (* Clight -> Csharpminor *)
   Family Cshmgen.
       FDefinition make_intconst := fun (n: int) => Csharpminor.Econst (Csharpminor.Ointconst n).
       FDefinition make_longconst := fun (f: int64) => Csharpminor.Econst (Csharpminor.Olongconst f).
@@ -624,133 +1930,248 @@ Inductive signedness : Type :=
       
       (* Definition sizeof (ce: composite_env) (t: type) : res Z := *)
       MetaData sizeof.
-      Axiom sizeof : self__Imp.Clight.Semantics.composite_env -> self__Imp.type -> res Z.
+      Axiom sizeof : (* self__Imp.Clight.Sem.composite_env -> *)self__Imp.type -> res Z.
       FEnd sizeof.
       
       MetaData alignof.
-      Axiom alignof : self__Imp.Clight.Semantics.composite_env -> self__Imp.type -> res Z.
+      Axiom alignof : (* self__Imp.Clight.Sem.composite_env ->*) self__Imp.type -> res Z.
       FEnd alignof.
-      
-      FRecursion transl_expr about Clight.expr motive (fun (_ : Clight.expr) => Clight.Semantics.composite_env -> res Csharpminor.expr) by _rect.
-          Case Econst_int := (fun n type => fun ce => OK(make_intconst n)). 
-          Case Econst_float := (fun n type => fun ce => OK(make_floatconst n)).
-          Case Econst_single := (fun n type => fun ce => OK(make_singleconst n)).
-          Case Econst_long := (fun n type => fun ce => OK(make_longconst n)).        
-          Case Etempvar := (fun id ty => fun ce => OK(Csharpminor.Evar id)). 
-          Case Esizeof := (fun ty _ => fun ce => 
-                               do sz <- sizeof ce ty; OK(make_ptrofsconst sz)).                           
-          Case Ealignof := (fun ty _ => fun ce => 
-                               do al <- alignof ce ty; OK(make_ptrofsconst al)).
-      FEnd transl_expr.
 
-       (* (nbrk : nat) -> if Clight.stmt terminates on break return Csharpminor.exit nbrk
-          (ncnt : nat) -> if Clight.smt terminates on continue return Csharpminor.exit ncnt
-        *)
-
-      (* Definition make_boolean (e: expr) (ty: type) := *)
-      MetaData make_boolean.
-      Axiom make_boolean : self__Imp.Csharpminor.expr -> self__Imp.type -> self__Imp.Csharpminor.expr.
-      FEnd make_boolean.
-      
       (* Definition make_cast (from to: type) (e: expr) :=*)
       MetaData make_cast.
       Axiom make_cast : self__Imp.type -> self__Imp.type -> self__Imp.Csharpminor.expr -> res self__Imp.Csharpminor.expr.
       FEnd make_cast.
       
-      FRecursion transl_statement about Clight.stmt motive (fun (_ : Clight.stmt) => Clight.Semantics.composite_env -> type -> nat -> nat -> res Csharpminor.stmt) by _rect.
-           Case Sskip := (fun ce tyret nbrk ncnt => OK Csharpminor.Sskip).   
-           Case Sset := (fun x b => fun ce tyret nbrk ncnt => 
-                            do tb <- transl_expr b ce;
+      FRecursion transl_expr about Clight.expr motive (fun (_ : Clight.expr) => res Csharpminor.expr) by _rect.
+          Case Econst_int := (fun n type => OK(make_intconst n)). 
+          Case Econst_float := (fun n type => OK(make_floatconst n)).
+          Case Econst_single := (fun n type => OK(make_singleconst n)).
+          Case Econst_long := (fun n type => OK(make_longconst n)).        
+          Case Etempvar := (fun id ty => OK(Csharpminor.Evar id)). 
+          Case Esizeof := (fun ty _ =>
+                               do sz <- sizeof ty; OK(make_ptrofsconst sz)).
+          Case Ealignof := (fun ty _ => 
+                               do al <- alignof ty; OK(make_ptrofsconst al)).
+          Case Ecast := (fun b transl_expr_b ty => 
+                                do tb <- transl_expr_b;
+                                make_cast (Clight.typeof b) ty tb).
+      FEnd transl_expr.
+
+       (* (nbrk : nat) -> if Clight.stmt terminates on break return Csharpminor.exit nbrk
+          (ncnt : nat) -> if Clight.smt terminates on continue return Csharpminor.exit ncnt
+        *)
+      
+      (* Definition make_boolean (e: expr) (ty: type) := *)
+      MetaData make_boolean.
+      Axiom make_boolean : self__Imp.Csharpminor.expr -> self__Imp.type -> self__Imp.Csharpminor.expr.
+      FEnd make_boolean.            
+      
+      FRecursion transl_statement about Clight.stmt motive (fun (_ : Clight.stmt) => type -> nat -> nat -> res Csharpminor.stmt) by _rect.
+           Case Sskip := (fun tyret nbrk ncnt => OK Csharpminor.Sskip).   
+           Case Sset := (fun x b => fun tyret nbrk ncnt => 
+                            do tb <- transl_expr b;
                             OK (Csharpminor.Sset x tb)).
            Case Ssequence := (fun s1 transl_s1 s2 transl_s2 =>
-                              fun ce tyret nbrk ncnt => 
-                             do ts1 <- transl_s1 ce tyret nbrk ncnt;
-                             do ts2 <- transl_s2 ce tyret nbrk ncnt;
+                              fun tyret nbrk ncnt => 
+                             do ts1 <- transl_s1 tyret nbrk ncnt;
+                             do ts2 <- transl_s2 tyret nbrk ncnt;
                              OK (Csharpminor.Sseq ts1 ts2)).
            Case Sifthenelse := (fun e s1 transl_s1 s2 transl_s2 => 
-                                  fun ce tyret nbrk ncnt => 
-                                do te <- transl_expr e ce;
-                                do ts1 <- transl_s1 ce tyret nbrk ncnt;
-                                do ts2 <- transl_s2 ce tyret nbrk ncnt;
+                                  fun tyret nbrk ncnt => 
+                                do te <- transl_expr e;
+                                do ts1 <- transl_s1 tyret nbrk ncnt;
+                                do ts2 <- transl_s2 tyret nbrk ncnt;
                                 OK (Csharpminor.Sifthenelse (make_boolean te (Clight.typeof e)) ts1 ts2)).
            Case Sloop := (fun s1 transl_s1 s2 transl_s2 => 
-                          fun ce tyret nbrk ncnt =>
-                             do ts1 <- transl_s1 ce tyret 1%nat 0%nat;
-                             do ts2 <- transl_s2 ce tyret 0%nat (S ncnt);
+                          fun tyret nbrk ncnt =>
+                             do ts1 <- transl_s1 tyret 1%nat 0%nat;
+                             do ts2 <- transl_s2 tyret 0%nat (S ncnt);
                              OK (Csharpminor.Sblock (Csharpminor.Sloop (Csharpminor.Sseq (Csharpminor.Sblock ts1) ts2)))).
-           Case Sbreak := (fun ce tyret nbrk ncnt => OK (Csharpminor.Sexit nbrk)).
-           Case Scontinue := (fun ce tyret nbrk ncnt => OK (Csharpminor.Sexit ncnt)).
-           Case Sreturn := (fun e => fun ce tyret nbrk ncnt =>
+           Case Sbreak := (fun tyret nbrk ncnt => OK (Csharpminor.Sexit nbrk)).
+           Case Scontinue := (fun tyret nbrk ncnt => OK (Csharpminor.Sexit ncnt)).
+           Case Sreturn := (fun e => fun tyret nbrk ncnt =>
                               match e with
                               | None => OK (Csharpminor.Sreturn None)
                               | Some e => 
-                                  do te <- transl_expr e ce;
+                                  do te <- transl_expr e;
                                   do te' <- make_cast (Clight.typeof e) tyret te;
                                   OK (Csharpminor.Sreturn (Some te'))
-                              end).           
+                              end).
            Case Slabel := (fun lbl s transl_s =>
-                           fun ce tyret nbrk ncnt => 
-                             do ts <- transl_s ce tyret nbrk ncnt;
+                           fun tyret nbrk ncnt => 
+                             do ts <- transl_s tyret nbrk ncnt;
                              OK (Csharpminor.Slabel lbl ts)).
            Case Sgoto := (fun lbl =>  
-                            fun ce tyret nbrk ncnt =>  
+                            fun tyret nbrk ncnt =>  
                               OK (Csharpminor.Sgoto lbl)).
-      FEnd transl_statement.
-            
-      
-      Definition transl_var (ce: composite_env) (v: ident * type) :=
-        do sz <- sizeof ce (snd v); OK (fst v, sz).
+      FEnd transl_statement.     
 
-      Definition signature_of_function (f: Clight.function) :=
+      (* Translation of functions *)
+      FDefinition transl_var := fun (v: ident * type) =>
+        do sz <- sizeof (snd v); OK (fst v, sz).
+
+      (* Definition typ_of_type (t: type) : AST.typ :=*)
+      MetaData typ_of_type.
+      Axiom typ_of_type : self__Imp.type -> typ.
+      FEnd typ_of_type.
+
+      (* Definition rettype_of_type (t: type) : AST.rettype :=*)
+      MetaData rettype_of_type.
+      Axiom rettype_of_type : self__Imp.type -> typ.
+      FEnd rettype_of_type.
+      
+      FDefinition signature_of_function := fun (f: Clight.function) =>
         {| sig_args := map typ_of_type (map snd (Clight.fn_params f));
           sig_res  := rettype_of_type (Clight.fn_return f);
           sig_cc   := Clight.fn_callconv f |}.
-
-      Definition transl_function (ce: composite_env) (f: Clight.function) : res function :=
-        do tbody <- transl_statement ce f.(Clight.fn_return) 1%nat 0%nat (Clight.fn_body f);
-        do tvars <- mmap (transl_var ce) (Clight.fn_vars f);
-        OK (mkfunction
+      
+      FDefinition transl_function : Clight.function -> res Csharpminor.function := fun f =>
+        do tbody <- transl_statement (Clight.fn_body f) f.(self__Imp.Clight.fn_return) 1%nat 0%nat;
+        do tvars <- mmap (transl_var) (self__Imp.Clight.fn_vars f);
+        OK (self__Imp.Csharpminor.mkfunction
               (signature_of_function f)
               (map fst (Clight.fn_params f))
               tvars
               (map fst (Clight.fn_temps f))
-              tbody).
+              tbody).      
 
-     Definition transl_fundef (ce: composite_env) (id: ident) (f: Clight.fundef) : res fundef :=
+     FDefinition transl_fundef : ident -> Clight.fundef -> res Csharpminor.fundef := fun id f =>
        match f with
        | Internal g =>
-           do tg <- transl_function ce g; OK(AST.Internal tg)
-       | External ef args res cconv =>
-           if signature_eq (ef_sig ef) (signature_of_type args res cconv)
-           then OK(AST.External ef)
-           else Error(msg "Cshmgen.transl_fundef: wrong external signature")
+           do tg <- transl_function g; OK(AST.Internal tg)
+       | _ =>
+           cheat (* no external*)
        end.
 
      (** ** Translation of programs *)
 
-     Definition transl_globvar (id: ident) (ty: type) := OK tt.
+     FDefinition transl_globvar := fun (id: ident) (ty: type) => OK tt.
 
-     Definition transl_program (p: Clight.program) : res program :=
-       transform_partial_program2 (transl_fundef p.(prog_comp_env)) transl_globvar p.
-       
-     Family Correctness.            
-          FInduction transl_step:
-            forall S1 t S2, Clight.step ge S1 t S2 ->
-            forall T1, match_states S1 T1 ->
-            exists T2, plus step tge T1 t T2 /\ match_states S2 T2.
-          FProof.
+     FDefinition transl_program : Clight.program -> res Csharpminor.program := fun p => 
+       transform_partial_program2 (transl_fundef) transl_globvar p.
+     
+     Family Proof.
+          FInductive match_fundef :  Clight.fundef -> Csharpminor.fundef -> Prop :=
+            | match_fundef_internal: forall f tf,
+                transl_function f = OK tf ->
+                match_fundef (Internal f) (Internal tf).
+
+          FDefinition match_varinfo : self__Imp.type -> unit -> Prop := fun v tb => True.
+
+          FDefinition match_prog : Clight.program -> Csharpminor.program -> Prop := fun p tp => 
+            (* match_program_gen match_fundef match_varinfo p p tp.*) cheat.
+
+     
+          FInductive match_cont : type -> nat -> nat -> Clight.Sem.cont -> Csharpminor.Sem.cont -> Prop :=
+              | match_Kstop: forall tyret nbrk ncnt,
+                  match_cont tyret nbrk ncnt
+                    Clight.Sem.Kstop
+                    Csharpminor.Sem.Kstop
+              | match_Kseq: forall tyret nbrk ncnt s k ts tk,
+                  transl_statement s tyret nbrk ncnt = OK ts ->
+                  match_cont tyret nbrk ncnt k tk ->
+                  match_cont tyret nbrk ncnt
+                             (Clight.Sem.Kseq s k)
+                             (Csharpminor.Sem.Kseq ts tk)
+              | match_Kloop1: forall tyret s1 s2 k ts1 ts2 nbrk ncnt tk,
+                  transl_statement s1 tyret 1%nat 0%nat = OK ts1 ->
+                  transl_statement s2 tyret 0%nat (S ncnt) = OK ts2 ->
+                  match_cont tyret nbrk ncnt k tk ->
+                  match_cont tyret 1%nat 0%nat
+                             (Clight.Sem.Kloop1 s1 s2 k)
+                             (Csharpminor.Sem.Kblock
+                                (Csharpminor.Sem.Kseq ts2
+                                   (Csharpminor.Sem.Kseq
+                                      (Csharpminor.Sloop
+                                         (Csharpminor.Sseq
+                                            (Csharpminor.Sblock ts1) ts2))
+                                      (Csharpminor.Sem.Kblock tk))))
+              | match_Kloop2: forall tyret s1 s2 k ts1 ts2 nbrk ncnt tk,
+                  transl_statement s1 tyret 1%nat 0%nat = OK ts1 ->
+                  transl_statement s2 tyret 0%nat (S ncnt) = OK ts2 ->
+                  match_cont tyret nbrk ncnt k tk ->
+                  match_cont tyret 0%nat (S ncnt)
+                             (Clight.Sem.Kloop2 s1 s2 k)
+                             (Csharpminor.Sem.Kseq
+                                (Csharpminor.Sloop
+                                   (Csharpminor.Sseq
+                                      (Csharpminor.Sblock ts1) ts2))
+                                (Csharpminor.Sem.Kblock tk)).          
           
-          Closing Fact transl_initial_states:
-            forall S, Clight.initial_state prog S ->
-            exists R, initial_state tprog R /\ match_states S R.
-          FProof.
+          MetaData match_states.
+          Record match_env (e: self__Imp.Clight.Sem.env) (te: self__Imp.Csharpminor.Sem.env) : Prop :=
+           mk_match_env {
+             me_local:
+               forall id b ty,
+               e!id = Some (b, ty) -> te!id = Some(b, self__Imp.Clight.Sem.sizeof ty);
+             me_local_inv:
+               forall id b sz,
+               te!id = Some (b, sz) -> exists ty, e!id = Some(b, ty)
+           }.
+
+          Inductive match_transl
+            : self__Imp.Csharpminor.stmt -> self__Imp.Csharpminor.Sem.cont ->
+              self__Imp.Csharpminor.stmt -> self__Imp.Csharpminor.Sem.cont -> Prop :=
+          | match_transl_0: forall ts tk,
+              match_transl ts tk ts tk
+          | match_transl_1: forall ts tk,
+              match_transl (self__Imp.Csharpminor.Sblock ts) tk ts (self__Imp.Csharpminor.Sem.Kblock tk).
           
-          Closing Fact transl_final_states:
+          Inductive match_states: self__Imp.Clight.Sem.state -> self__Imp.Csharpminor.Sem.state -> Prop :=
+              | match_state:
+                  forall f nbrk ncnt s k e le m tf ts tk te ts' tk'
+                      (* (LINK: linkorder cu prog)*)
+                      (TRF: self__Cshmgen.transl_function f = OK tf)
+                      (TR: self__Cshmgen.transl_statement s (self__Imp.Clight.fn_return f) nbrk ncnt = OK ts)
+                      (MTR: match_transl ts tk ts' tk')
+                      (MENV: match_env e te)
+                      (MK: self__Proof.match_cont (self__Imp.Clight.fn_return f) nbrk ncnt k tk),
+                  match_states (self__Imp.Clight.Sem.State f s k e le m)
+                               (self__Imp.Csharpminor.Sem.State tf ts' tk' te le m)
+              | match_callstate:
+                  forall fd args k m tfd tk targs tres cconv 
+                      (* (LINK: linkorder cu prog)*)
+                      (TR: self__Proof.match_fundef fd tfd)
+                      (MK: self__Proof.match_cont tres 0%nat 0%nat k tk)
+                      (ISCC: self__Imp.Clight.Sem.is_call_cont k)
+                      (TY: self__Imp.Clight.type_of_fundef fd = self__Imp.Tfunction targs tres cconv),
+                  match_states (self__Imp.Clight.Sem.Callstate fd args k m)
+                               (self__Imp.Csharpminor.Sem.Callstate tfd args tk m)
+              | match_returnstate:
+                  forall res tres k m tk 
+                      (MK: self__Proof.match_cont tres 0%nat 0%nat k tk),
+                      (* (WT: wt_val res tres),*)
+                  match_states (self__Imp.Clight.Sem.Returnstate res k m)
+                    (self__Imp.Csharpminor.Sem.Returnstate res tk m).
+          FEnd match_states.          
+                 
+          FInduction transl_step about Clight.Sem.step
+            motive (fun ge S1 t S2 (_ : Clight.Sem.step ge S1 t S2) => 
+             forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
+            forall T1, self__Proof.match_states S1 T1 -> 
+            exists T2, plus Csharpminor.Sem.step tge T1 t T2 /\ match_states S2 T2).            
+          FProof.
+              __unfold_ftheorem_motive_nested.
+              apply cheat. Qed.
+          FEnd transl_step.
+                
+          FLemma transl_initial_states:
+            forall S prog tprog, Clight.Sem.initial_state prog S -> transl_program prog = OK tprog ->
+            exists R, Csharpminor.Sem.initial_state tprog R /\ match_states S R.
+          FProofLemma.
+              apply cheat. Qed.
+          CloseFLemma.
+
+          FDisplay PluginScope.
+          
+          FLemma transl_final_states:
             forall S R r,
-            match_states S R -> Clight.final_state S r -> final_state R r.
-          FProof.
-      FEnd Correctness.
-   FEnd Cshmgen.
+            match_states S R -> Clight.Sem.final_state S r -> Csharpminor.Sem.final_state R r.
+          FProofLemma.
+             intros. inv H0. inv H. inv MK. constructor. Qed.
+          CloseFLemma.
+     FEnd Proof.
+  FEnd Cshmgen.
           
    Family Cminor.
        FInductive constant : Type :=
@@ -758,13 +2179,14 @@ Inductive signedness : Type :=
            | Ofloatconst: float -> constant(* double-precision floating-point constant *)
            | Osingleconst: float32 -> constant(* single-precision floating-point constant *)
            | Olongconst: int64 -> constant(* long integer constant *)
-           | Oaddrsymbol: ident -> ptrofs -> constant(* address of the symbol plus the offset *)
-           | Oaddrstack: ptrofs -> constant.(* stack pointer plus the given offset *)       
+           (* | Oaddrsymbol: ident -> ptrofs -> constant(* address of the symbol plus the offset *)*)
+           | Oaddrstack: ptrofs -> constant. (* stack pointer plus the given offset *)       
 
        FInductive expr : Type :=
           | Evar : ident -> expr
-          | Econst : constant -> expr.          
+          | Econst : constant -> expr.
 
+       FDefinition label := ident.
        FInductive stmt : Type :=
           | Sskip: stmt
           | Sassign : ident -> expr -> stmt          
@@ -777,22 +2199,50 @@ Inductive signedness : Type :=
           | Slabel: label -> stmt -> stmt
           | Sgoto: label -> stmt.
 
+       MetaData function.
        Record function : Type := mkfunction {
           fn_sig: signature;
           fn_params: list ident;
           fn_vars: list ident;
           fn_stackspace: Z;
-          fn_body: stmt
+          fn_body: self__Cminor.stmt
        }.
+       FEnd function.
 
-        Family Semantics.
-              Definition genv := Genv.t fundef unit.
-              Definition env := PTree.t val.
+       FDefinition fundef := AST.fundef function.
+       FDefinition program := AST.program fundef unit.
+
+       FDefinition funsig := fun (fd: fundef) =>
+         match fd with
+         | Internal f => self__Cminor.fn_sig f
+         | External ef => cheat
+         end.       
+       
+        Family Sem.
+              FDefinition genv := Genv.t fundef unit.
+              FDefinition env := PTree.t val.
+
+              MetaData set_params.
+              Fixpoint set_params (vl: list val) (il: list ident) {struct il} : self__Sem.env :=
+              match il, vl with
+              | i1 :: is, v1 :: vs => PTree.set i1 v1 (set_params vs is)
+              | i1 :: is, nil => PTree.set i1 Vundef (set_params nil is)
+              | _, _ => PTree.empty val
+              end.
+              FEnd set_params.
+
+              MetaData set_locals.
+              Fixpoint set_locals (il: list ident) (e: self__Sem.env) {struct il} : self__Sem.env :=
+               match il with
+               | nil => e
+               | i1 :: is => PTree.set i1 Vundef (set_locals is e)
+               end.
+              FEnd set_locals.              
 
               FInductive cont: Type :=
                    | Kstop: cont
                    | Kseq: stmt -> cont -> cont
-                   | Kblock: cont -> cont.                   
+                   | Kblock: cont -> cont.              
                
               FInductive state: Type :=
                    | State: function -> stmt -> cont -> val -> env -> mem -> state  
@@ -804,119 +2254,475 @@ Inductive signedness : Type :=
                   Case Olongconst := (fun n => fun sp => Some (Vlong n)).
                   Case Ofloatconst := (fun n => fun sp => Some (Vfloat n)).
                   Case Osingleconst := (fun n => fun sp => Some (Vsingle n)).
-                  Case Oaddrsymbol := (fun id ofs => fun sp => Some (Genv.symbol_address ge s ofs)).
+                  (* Case Oaddrsymbol := (fun s ofs => fun sp => Some (Genv.symbol_address ge s ofs)).*)
                   Case Oaddrstack := (fun ofs => fun sp => Some (Val.offset_ptr sp ofs)).
               FEnd eval_constant.                                
                
-              FInductive eval_expr : (sp : val) -> (e : env) -> (m : mem) -> expr -> val -> Prop :=
-                  | eval_Evar: forall id v,
+              FInductive eval_expr : val -> env -> mem -> expr -> val -> Prop :=
+                  | eval_Evar: forall sp e m id v,
                         PTree.get id e = Some v ->
-                        eval_expr (Evar id) v
-                  | eval_Econst: forall cst v,
-                        eval_constant sp cst = Some v ->
-                        eval_expr (Econst cst) v.              
-                  
-              FInductive eval_exprlist: list expr -> list val -> Prop :=
+                        eval_expr sp e m (Evar id) v
+                  | eval_Econst: forall sp e m cst v,
+                        eval_constant cst sp = Some v ->
+                        eval_expr sp e m (Econst cst) v.              
+              
+              (* FInductive eval_exprlist: list expr -> list val -> Prop :=
                   | eval_Enil:
                       eval_exprlist nil nil
                   | eval_Econs: forall a1 al v1 vl,
                       eval_expr a1 v1 -> eval_exprlist al vl ->
-                      eval_exprlist (a1 :: al) (v1 :: vl).
+                      eval_exprlist (a1 :: al) (v1 :: vl).*)
                
-               FRecursion call_cont about cont motive (fun (_ : cont) => cont).
-                   Case Kstop := Kstop
-                   Case Kseq := (fun s c call_cont_c => call_cont_c)
-                   Case Kblock := (fun s c call_cont_c => call_cont_c)                   
+               FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
+                   Case Kstop := Kstop.
+                   Case Kseq := (fun s c call_cont_c => call_cont_c).
+                   Case Kblock := (fun k call_cont_c => call_cont_c).
                FEnd call_cont.
                
-               FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop).
-                   Case Kstop := True                   
-                   Case Kseq := (fun s c call_cont_c => False)
-                   Case Kblock := (fun s c call_cont_c => False)                   
+               FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
+                   Case Kstop := True.
+                   Case Kseq := (fun s c call_cont_c => False).
+                   Case Kblock := (fun c call_cont_c => False).                  
                FEnd is_call_cont.
                    
-               FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)). 
+               FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect. 
                     Case Sskip := (fun lbl k => None).         
                     Case Sassign := (fun id e lbl k => None).
-                    Case Sseq := := (fun s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
+                    Case Sseq := (fun s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
                                          match find_label_s1 lbl (Kseq s2 k) with 
                                          | Some sk => Some sk 
                                          | None => find_label_s2 lbl k end).
-                    Case Sifthenelse := (fun e s1 _ s2 _ lbl k => fun lbl k => 
+                    Case Sifthenelse := (fun e s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
                                          match find_label_s1 lbl k with 
                                          | Some sk => Some sk 
                                          | None => find_label_s2 lbl k end).
-                    Case Sloop := (fun s _ lbl k => fun lbl k => find_label_s lbl (Kseq (Sloop s) k)).
-                    Case Sblock := (fun s _ lbl k => find_label_s1 lbl (Kblock k)).
+                    Case Sloop := (fun s find_label_s => fun lbl k => find_label_s lbl (Kseq (Sloop s) k)).
+                    Case Sblock := (fun s1 find_label_s1 lbl k => find_label_s1 lbl (Kblock k)).
                     Case Slabel := (fun lbl' s find_label_s => fun lbl k => 
                                        if ident_eq lbl lbl' then 
                                        Some(s, k) else find_label_s lbl k).
-                    Case Sexit := (fun n lbl k => None)
+                    Case Sexit := (fun n lbl k => None).
                     Case Sreturn := (fun _ lbl k => None).
                     Case Sgoto := (fun label lbl k => None).
                FEnd find_label.
                
                (* (sp : val) -> (e : env) -> (m : mem) -> *)
-              FInductive step : state -> trace -> state -> Prop :=
-                 | step_skip_seq: forall f s k sp e m,
-                     step (State f Sskip (Kseq s k) sp e m)
+              FInductive step :  genv -> state -> trace -> state -> Prop :=
+                 | step_skip_seq: forall ge f s k sp e m,
+                     step ge (State f Sskip (Kseq s k) sp e m)
                        E0 (State f s k sp e m)
-                 | step_skip_block: forall f k sp e m,
-                     step (State f Sskip (Kblock k) sp e m)
+                 | step_skip_block: forall ge f k sp e m,
+                     step ge (State f Sskip (Kblock k) sp e m)
                        E0 (State f Sskip k sp e m)
-                 | step_skip_call: forall f k sp e m m',
+                 | step_skip_call: forall ge f k sp e m m',
                      is_call_cont k ->
-                     Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-                     step (State f Sskip k (Vptr sp Ptrofs.zero) e m)
+                     Mem.free m sp 0 f.(self__Cminor.fn_stackspace) = Some m' ->
+                     step ge (State f Sskip k (Vptr sp Ptrofs.zero) e m)
                        E0 (Returnstate Vundef k m')
-                 | step_assign: forall f id a k sp e m v,
+                 | step_assign: forall ge f id a k sp e m v,
                      eval_expr sp e m a v ->
-                     step (State f (Sassign id a) k sp e m)
+                     step ge (State f (Sassign id a) k sp e m)
                        E0 (State f Sskip k sp (PTree.set id v e) m)
-                 | step_seq: forall f s1 s2 k sp e m,
-                     step (State f (Sseq s1 s2) k sp e m)
+                 | step_seq: forall ge f s1 s2 k sp e m,
+                     step ge (State f (Sseq s1 s2) k sp e m)
                        E0 (State f s1 (Kseq s2 k) sp e m)
-                 | step_ifthenelse: forall f a s1 s2 k sp e m v b,
+                 | step_ifthenelse: forall ge f a s1 s2 k sp e m v b,
                      eval_expr sp e m a v ->
                      Val.bool_of_val v b ->
-                     step (State f (Sifthenelse a s1 s2) k sp e m)
+                     step ge (State f (Sifthenelse a s1 s2) k sp e m)
                        E0 (State f (if b then s1 else s2) k sp e m)
-                 | step_loop: forall f s k sp e m,
-                     step (State f (Sloop s) k sp e m)
+                 | step_loop: forall ge f s k sp e m,
+                     step ge (State f (Sloop s) k sp e m)
                        E0 (State f s (Kseq (Sloop s) k) sp e m)
-                 | step_block: forall f s k sp e m,
-                     step (State f (Sblock s) k sp e m)
+                 | step_block: forall ge f s k sp e m,
+                     step ge (State f (Sblock s) k sp e m)
                        E0 (State f s (Kblock k) sp e m)
-                 | step_exit_seq: forall f n s k sp e m,
-                     step (State f (Sexit n) (Kseq s k) sp e m)
+                 | step_exit_seq: forall ge f n s k sp e m,
+                     step ge (State f (Sexit n) (Kseq s k) sp e m)
                        E0 (State f (Sexit n) k sp e m)
-                 | step_exit_block_0: forall f k sp e m,
-                     step (State f (Sexit O) (Kblock k) sp e m)
+                 | step_exit_block_0: forall ge f k sp e m,
+                     step ge (State f (Sexit O) (Kblock k) sp e m)
                        E0 (State f Sskip k sp e m)
-                 | step_exit_block_S: forall f n k sp e m,
-                     step (State f (Sexit (S n)) (Kblock k) sp e m)
+                 | step_exit_block_S: forall ge f n k sp e m,
+                     step ge (State f (Sexit (S n)) (Kblock k) sp e m)
                        E0 (State f (Sexit n) k sp e m)
-                 | step_return_0: forall f k sp e m m',
-                    Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-                    step (State f (Sreturn None) k (Vptr sp Ptrofs.zero) e m)
+                 | step_return_0: forall ge f k sp e m m',
+                    Mem.free m sp 0 f.(self__Cminor.fn_stackspace) = Some m' ->
+                    step ge (State f (Sreturn None) k (Vptr sp Ptrofs.zero) e m)
                       E0 (Returnstate Vundef (call_cont k) m')
-                 | step_return_1: forall f a k sp e m v m',
+                 | step_return_1: forall ge f a k sp e m v m',
                      eval_expr (Vptr sp Ptrofs.zero) e m a v ->
-                     Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-                     step (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m)
+                     Mem.free m sp 0 f.(self__Cminor.fn_stackspace) = Some m' ->
+                     step ge (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m)
                       E0 (Returnstate v (call_cont k) m')
-                 | step_label: forall f lbl s k sp e m,
-                    step (State f (Slabel lbl s) k sp e m)
+                 | step_label: forall ge f lbl s k sp e m,
+                    step ge (State f (Slabel lbl s) k sp e m)
                       E0 (State f s k sp e m)
-                 | step_goto: forall f lbl k sp e m s' k',
-                    find_label lbl f.(fn_body) (call_cont k) = Some(s', k') ->
-                    step (State f (Sgoto lbl) k sp e m)
-                      E0 (State f s' k' sp e m).
-          FEnd Semantics.
+                 | step_goto: forall ge f lbl k sp e m s' k',
+                    find_label f.(self__Cminor.fn_body) lbl (call_cont k) = Some(s', k') ->
+                    step ge (State f (Sgoto lbl) k sp e m)
+                      E0 (State f s' k' sp e m)
+                 | step_internal_function: forall ge f vargs k m m' sp e,
+                     Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp) ->
+                     self__Sem.set_locals
+                       f.(self__Cminor.fn_vars)
+                       (self__Sem.set_params vargs f.(self__Cminor.fn_params)) = e ->
+                     step ge (Callstate (Internal f) vargs k m)
+                       E0 (State f f.(self__Cminor.fn_body) k (Vptr sp Ptrofs.zero) e m').
+
+              MetaData initial_state.
+              Inductive initial_state (p: self__Cminor.program): self__Sem.state -> Prop :=
+                  | initial_state_intro: forall b f m0,
+                      let ge := Genv.globalenv p in
+                      Genv.init_mem p = Some m0 ->
+                      Genv.find_symbol ge p.(prog_main) = Some b ->
+                      Genv.find_funct_ptr ge b = Some f ->
+                      self__Cminor.funsig f = signature_main ->
+                      initial_state p (self__Sem.Callstate f nil self__Sem.Kstop m0).
+              FEnd initial_state.
+
+              MetaData final_state.
+              Inductive final_state: self__Sem.state -> int -> Prop :=
+                  | final_state_intro: forall r m,
+                      final_state (self__Sem.Returnstate (Vint r) self__Sem.Kstop m) r.
+              FEnd final_state.
+          FEnd Sem.
    FEnd Cminor.
 
+   (* Csharpminor -> Cminor *)
+   Family Cminorgen.
+      FDefinition compilenv := PTree.t Z.
+
+      FRecursion translate_constant about
+         Csharpminor.constant motive (fun (_ : Csharpminor.constant) => Cminor.constant) by _rect.
+           Case Ointconst := (fun n => Cminor.Ointconst n).
+           Case Ofloatconst := (fun n => Cminor.Ofloatconst n).
+           Case Osingleconst := (fun n => Cminor.Osingleconst n).
+           Case Olongconst := (fun n => Cminor.Olongconst n).
+      FEnd translate_constant.
+   
+      FRecursion transl_expr about Csharpminor.expr motive (fun (_ : Csharpminor.expr) => compilenv -> res Cminor.expr) by _rect.
+           Case Evar := (fun id => fun cenv => OK (Cminor.Evar id)).
+           Case Econst := (fun cst => fun cenv => OK (Cminor.Econst (translate_constant cst))).
+      FEnd transl_expr.
+
+      FDefinition exit_env := list bool.
+
+      MetaData shift_exit.
+      Fixpoint shift_exit (e: self__Cminorgen.exit_env) (n: nat) {struct e} : nat :=
+        match e, n with
+        | nil, _ => n
+        | false :: e', _ => S (shift_exit e' n)
+        | true :: e', O => O
+        | true :: e', S m => S (shift_exit e' m)
+        end.
+      FEnd shift_exit.
+    
+      FRecursion transl_stmt about Csharpminor.stmt motive (fun (_ : Csharpminor.stmt) => compilenv -> exit_env -> res Cminor.stmt) by _rect.
+            Case Sskip := (fun cenv xenv => OK (Cminor.Sskip)).
+            Case Sset := (fun id e => fun cenv xenv =>
+                         do te <- transl_expr e cenv;
+                         OK (Cminor.Sassign id te)).
+            Case Sseq := (fun s1 transl_stmt_s1 s2 transl_stmt_s2 =>
+                          fun cenv xenv =>
+                            do ts1 <- transl_stmt_s1 cenv xenv;
+                            do ts2 <- transl_stmt_s2 cenv xenv;
+                            OK (Cminor.Sseq ts1 ts2)).
+            Case Sifthenelse := (fun e s1 transl_stmt_s1 s2 transl_stmt_s2 =>
+                                 fun cenv xenv =>
+                                     do te <- transl_expr e cenv;
+                                     do ts1 <- transl_stmt_s1 cenv xenv;
+                                     do ts2 <- transl_stmt_s2 cenv xenv;
+                                     OK (Cminor.Sifthenelse te ts1 ts2)).
+            Case Sloop := (fun s1 transl_stmt_s1 =>
+                           fun cenv xenv =>
+                              do ts <- transl_stmt_s1 cenv xenv;
+                              OK (Cminor.Sloop ts)).
+            Case Sblock := (fun s transl_stmt_s =>
+                            fun cenv xenv =>
+                               do ts <- transl_stmt_s cenv (true :: xenv);
+                               OK (Cminor.Sblock ts)).
+            Case Sexit := (fun n => fun cenv xenv =>  OK (Cminor.Sexit (shift_exit xenv n))).
+            Case Sreturn := (fun expr => fun cenv xenv =>
+                               match expr with
+                               | None => OK (Cminor.Sreturn None)
+                               | Some expr =>
+                                    do te <- transl_expr expr cenv;
+                                    OK (Cminor.Sreturn (Some te))
+                               end).
+            Case Slabel := (fun lbl s transl_stmt_s =>
+                            fun cenv xenv =>
+                              do ts <- transl_stmt_s cenv xenv;
+                              OK (Cminor.Slabel lbl ts)).
+            Case Sgoto := (fun lbl => fun cenv xenv => OK (Cminor.Sgoto lbl)).
+      FEnd transl_stmt.
+
+      (* Stack layout *)
+      FDefinition block_alignment : Z -> Z := fun sz =>
+          if zlt sz 2 then 1
+          else if zlt sz 4 then 2
+          else if zlt sz 8 then 4 else 8.
+
+      FDefinition assign_variable : compilenv * Z -> ident * Z -> compilenv * Z := 
+          fun cenv_stacksize id_sz => 
+          let (id, sz) := id_sz in
+          let (cenv, stacksize) := cenv_stacksize in
+          let ofs := align stacksize (block_alignment sz) in
+          (PTree.set id ofs cenv, ofs + Z.max 0 sz).
+
+      FDefinition assign_variables : compilenv * Z -> list (ident * Z) -> compilenv * Z :=
+          fun cenv_stacksize vars => List.fold_left assign_variable vars cenv_stacksize.
+
+      FDefinition build_compilenv : Csharpminor.function -> compilenv * Z :=
+          fun f => assign_variables (PTree.empty Z, 0) (VarSort.sort (Csharpminor.fn_vars f)).
+
+      (* Translate Function, Fundef, Program *)
+      FDefinition transl_funbody := 
+      fun (cenv: compilenv) (stacksize: Z) (f: Csharpminor.function) =>
+        do tbody <- transl_stmt f.(self__Imp.Csharpminor.fn_body) cenv nil ;
+        OK (Cminor.mkfunction
+              (Csharpminor.fn_sig f)
+              (Csharpminor.fn_params f)
+              (Csharpminor.fn_temps f)
+              stacksize
+              tbody).
+
+      FDefinition transl_function := fun (f: Csharpminor.function) => 
+        let (cenv, stacksize) := build_compilenv f in
+        if zle stacksize Ptrofs.max_unsigned
+        then transl_funbody cenv stacksize f
+        else Error(msg "Cminorgen: too many local variables, stack size exceeded").
+
+      FDefinition transl_fundef : Csharpminor.fundef -> res Cminor.fundef := fun f => 
+        transf_partial_fundef transl_function f.
+
+      FDefinition transl_program : Csharpminor.program -> res Cminor.program := fun p => 
+        transform_partial_program transl_fundef p.
+
+      Family Proof.
+        FDefinition match_prog : Csharpminor.program -> Cminor.program -> Prop :=
+          fun p tp =>
+          match_program (fun cu f tf => transl_fundef f = OK tf) eq p tp.
+
+        MetaData is_reachable_from_env.
+        Inductive is_reachable_from_env (f: meminj) (e: self__Imp.Csharpminor.Sem.env) (sp: block) (ofs: Z) : Prop :=
+          | is_reachable_intro: forall id b sz delta,
+              e!id = Some(b, sz) ->
+              f b = Some(sp, delta) ->
+              delta <= ofs < delta + sz ->
+              is_reachable_from_env f e sp ofs.
+        FEnd is_reachable_from_env.
+
+        FDefinition padding_freeable : meminj -> Csharpminor.Sem.env -> mem -> block -> Z -> Prop :=
+          fun f e tm sp sz =>
+          forall ofs,
+          0 <= ofs < sz -> Mem.perm tm sp ofs Cur Freeable \/ is_reachable_from_env f e sp ofs.
+        
+        FDefinition match_temps : meminj -> Csharpminor.Sem.temp_env -> Cminor.Sem.env -> Prop :=
+            fun f le te =>
+            forall id v, le!id = Some v -> exists v', te!(id) = Some v' /\ Val.inject f v v'.
+
+        MetaData match_var.
+        Inductive match_var (f: meminj) (sp: block): option (block * Z) -> option Z -> Prop :=
+          | match_var_local: forall b sz ofs,
+              Val.inject f (Vptr b Ptrofs.zero) (Vptr sp (Ptrofs.repr ofs)) ->
+              match_var f sp (Some(b, sz)) (Some ofs)
+          | match_var_global:
+              match_var f sp None None.
+        FEnd match_var.
+
+        MetaData match_env.
+        Record match_env (f: meminj) (cenv: self__Cminorgen.compilenv)
+                        (e: self__Imp.Csharpminor.Sem.env) (sp: block)
+                        (lo hi: block) : Prop :=
+          mk_match_env {
+            me_vars:
+              forall id, self__Proof.match_var f sp (e!id) (cenv!id);
+
+            me_low_high:
+              Ple lo hi;
+
+            me_bounded:
+              forall id b sz, PTree.get id e = Some(b, sz) -> Ple lo b /\ Plt b hi;
+
+            me_inv:
+              forall b delta,
+              f b = Some(sp, delta) ->
+              exists id, exists sz, PTree.get id e = Some(b, sz);
+              
+            me_incr:
+              forall b tb delta,
+              f b = Some(tb, delta) -> Plt b lo -> Plt tb sp
+        }.
+        FEnd match_env.
+
+        FDefinition match_bounds : Csharpminor.Sem.env -> mem -> Prop := 
+          fun e m => forall id b sz ofs p, 
+             PTree.get id e = Some(b, sz) -> Mem.perm m b ofs Max p -> 0 <= ofs < sz.  
+
+        MetaData frame.
+        Inductive frame : Type :=
+          Frame(cenv: self__Cminorgen.compilenv)
+              (tf: self__Imp.Cminor.function)
+              (e: self__Imp.Csharpminor.Sem.env)
+              (le: self__Imp.Csharpminor.Sem.temp_env)
+              (te: self__Imp.Cminor.Sem.env)
+              (sp: block)
+              (lo hi: block).
+        FEnd frame.
+
+        FDefinition callstack : Type := list frame.
+
+        MetaData match_globalenvs.
+        Inductive match_globalenvs (ge: self__Imp.Csharpminor.Sem.genv) (f: meminj) (bound: block): Prop :=
+        | mk_match_globalenvs
+            (DOMAIN: forall b, Plt b bound -> f b = Some(b, 0))
+            (IMAGE: forall b1 b2 delta, f b1 = Some(b2, delta) -> Plt b2 bound -> b1 = b2)
+            (SYMBOLS: forall id b, Genv.find_symbol ge id = Some b -> Plt b bound)
+            (FUNCTIONS: forall b fd, Genv.find_funct_ptr ge b = Some fd -> Plt b bound)
+            (VARINFOS: forall b gv, Genv.find_var_info ge b = Some gv -> Plt b bound).
+        FEnd match_globalenvs.
+        
+        MetaData match_callstack.
+        Inductive match_callstack (ge: self__Imp.Csharpminor.Sem.genv) (f: meminj) (m: mem) (tm: mem):
+                          self__Proof.callstack -> block -> block -> Prop :=
+          | mcs_nil:
+              forall hi bound tbound,
+              self__Proof.match_globalenvs ge f hi ->
+              Ple hi bound -> Ple hi tbound ->
+              match_callstack ge f m tm nil bound tbound
+          | mcs_cons:
+              forall cenv tf e le te sp lo hi cs bound tbound
+                (BOUND: Ple hi bound)
+                (TBOUND: Plt sp tbound)
+                (MTMP: self__Proof.match_temps f le te)
+                (MENV: self__Proof.match_env f cenv e sp lo hi)
+                (BOUND: self__Proof.match_bounds e m)
+                (PERM: self__Proof.padding_freeable f e tm sp tf.(self__Imp.Cminor.fn_stackspace))
+                (MCS: match_callstack ge f m tm cs lo sp),
+              match_callstack ge f m tm (self__Proof.Frame cenv tf e le te sp lo hi :: cs) bound tbound.
+        FEnd match_callstack.
+
+        FInductive match_cont: Csharpminor.Sem.cont -> Cminor.Sem.cont -> compilenv -> exit_env -> callstack -> Prop :=
+          | match_Kstop: forall cenv xenv,
+              match_cont Csharpminor.Sem.Kstop Cminor.Sem.Kstop cenv xenv nil
+          | match_Kseq: forall s k ts tk cenv xenv cs,
+              transl_stmt s cenv xenv = OK ts ->
+              match_cont k tk cenv xenv cs ->
+              match_cont (Csharpminor.Sem.Kseq s k) (Cminor.Sem.Kseq ts tk) cenv xenv cs
+          | match_Kseq2: forall s1 s2 k ts1 tk cenv xenv cs,
+              transl_stmt s1 cenv xenv = OK ts1 ->
+              match_cont (Csharpminor.Sem.Kseq s2 k) tk cenv xenv cs ->
+              match_cont (Csharpminor.Sem.Kseq (Csharpminor.Sseq s1 s2) k)
+                        (Cminor.Sem.Kseq ts1 tk) cenv xenv cs
+          | match_Kblock: forall k tk cenv xenv cs,
+              match_cont k tk cenv xenv cs ->
+              match_cont (Csharpminor.Sem.Kblock k) (Cminor.Sem.Kblock tk) cenv (true :: xenv) cs
+          | match_Kblock2: forall k tk cenv xenv cs,
+              match_cont k tk cenv xenv cs ->
+              match_cont k (Cminor.Sem.Kblock tk) cenv (false :: xenv) cs.
+
+          MetaData match_states.
+          Inductive match_states (ge: self__Imp.Csharpminor.Sem.genv) : self__Imp.Csharpminor.Sem.state -> self__Imp.Cminor.Sem.state -> Prop :=
+              | match_state:
+                  forall fn s k e le m tfn ts tk sp te tm cenv xenv f lo hi cs sz
+                  (TRF: self__Cminorgen.transl_funbody cenv sz fn = OK tfn)
+                  (TR: self__Cminorgen.transl_stmt s cenv xenv = OK ts)
+                  (MINJ: Mem.inject f m tm)
+                  (MCS: self__Proof.match_callstack ge f m tm
+                          (self__Proof.Frame cenv tfn e le te sp lo hi :: cs)
+                          (Mem.nextblock m) (Mem.nextblock tm))
+                  (MK: self__Proof.match_cont k tk cenv xenv cs),
+                  match_states ge (self__Imp.Csharpminor.Sem.State fn s k e le m)
+                              (self__Imp.Cminor.Sem.State tfn ts tk (Vptr sp Ptrofs.zero) te tm)
+              | match_state_seq:
+                  forall fn s1 s2 k e le m tfn ts1 tk sp te tm cenv xenv f lo hi cs sz
+                  (TRF: self__Cminorgen.transl_funbody cenv sz fn = OK tfn)
+                  (TR: self__Cminorgen.transl_stmt s1 cenv xenv = OK ts1)
+                  (MINJ: Mem.inject f m tm)
+                  (MCS: self__Proof.match_callstack ge f m tm
+                          (self__Proof.Frame cenv tfn e le te sp lo hi :: cs)
+                          (Mem.nextblock m) (Mem.nextblock tm))
+                  (MK: self__Proof.match_cont (self__Imp.Csharpminor.Sem.Kseq s2 k) tk cenv xenv cs),
+                  match_states ge (self__Imp.Csharpminor.Sem.State fn (self__Imp.Csharpminor.Sseq s1 s2) k e le m)
+                              (self__Imp.Cminor.Sem.State tfn ts1 tk (Vptr sp Ptrofs.zero) te tm)
+              | match_callstate:
+                  forall fd args k m tfd targs tk tm f cs cenv
+                  (TR: self__Cminorgen.transl_fundef fd = OK tfd)
+                  (MINJ: Mem.inject f m tm)
+                  (MCS: self__Proof.match_callstack ge f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
+                  (MK: self__Proof.match_cont k tk cenv nil cs)
+                  (ISCC: self__Imp.Csharpminor.Sem.is_call_cont k)
+                  (ARGSINJ: Val.inject_list f args targs),
+                  match_states ge (self__Imp.Csharpminor.Sem.Callstate fd args k m)
+                              (self__Imp.Cminor.Sem.Callstate tfd targs tk tm)
+              | match_returnstate:
+                  forall v k m tv tk tm f cs cenv
+                  (MINJ: Mem.inject f m tm)
+                  (MCS: self__Proof.match_callstack ge f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
+                  (MK: self__Proof.match_cont k tk cenv nil cs)
+                  (RESINJ: Val.inject f v tv),
+                  match_states ge (self__Imp.Csharpminor.Sem.Returnstate v k m)
+                              (self__Imp.Cminor.Sem.Returnstate tv tk tm).
+          FEnd match_states.
+        (*
+          Variable prog: Csharpminor.program.
+          Variable tprog: program.
+          Hypothesis TRANSL: match_prog prog tprog.
+          Let ge : Csharpminor.genv := Genv.globalenv prog.
+          Let tge: genv := Genv.globalenv tprog. 
+        *)
+
+        FRecursion seq_left_depth about Csharpminor.stmt motive (fun (_ : Csharpminor.stmt) => nat) by _rect.
+              Case Sskip := O.
+              Case Sset := (fun _ _ => O).
+              Case Sseq := (fun s1 seq_left_depth_s1 s2 _ => S (seq_left_depth_s1)).
+              Case Sifthenelse := (fun _ s1 _ s2 _ => O).
+              Case Sloop := (fun s _ => O).
+              Case Sblock := (fun s _ => O).
+              Case Sexit := (fun _ => O).
+              Case Sreturn := (fun e => O).
+              Case Slabel := (fun _ s _ => O).
+              Case Sgoto := (fun _ => O).
+        FEnd seq_left_depth.
+
+        FRecursion measure about Csharpminor.Sem.state motive (fun (_ : Csharpminor.Sem.state) => nat) by _rect.
+              Case State := (fun fn s k e le m => seq_left_depth s).
+              Case Callstate := (fun f args k m => O).
+              Case Returnstate := (fun res k m => O).
+          FEnd measure.
+
+        FInduction transl_step_correct about Csharpminor.Sem.step motive
+          (fun ge S1 t S2 (_ : Csharpminor.Sem.step ge S1 t S2) => 
+             forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->               
+          forall T1, match_states ge S1 T1 -> 
+          (exists T2, plus Cminor.Sem.step tge T1 t T2 /\ match_states ge S2 T2) 
+          \/ (measure S2 < measure S1 /\ t = E0 /\ match_states ge S2 T1)%nat).
+        FProof. 
+          apply cheat.
+        Qed.
+        FEnd transl_step_correct.
+        
+        FLemma transl_initial_states:
+          forall S prog tprog ge, Csharpminor.Sem.initial_state prog S ->
+          transl_program prog = OK tprog ->
+          exists R, Cminor.Sem.initial_state tprog R /\ match_states ge S R.
+            FProofLemma.
+              apply cheat.
+            Qed.
+        CloseFLemma.
+        
+        FLemma transl_final_states:
+          forall S R r ge,
+          match_states ge S R -> Csharpminor.Sem.final_state S r -> Cminor.Sem.final_state R r.
+            FProofLemma.
+              intros. inv H0. inv H. inv MK. inv RESINJ. constructor. Qed.            
+        CloseFLemma.
+      FEnd Proof.
+  FEnd Cminorgen.
+   
     (* RISC-V *)
-   Family Asm.
+  Family Asm.
       (* Operations *)
       FInductive condition : Type :=
         | Ccomp : comparison -> condition.       (**r signed integer comparison *)
@@ -943,12 +2749,12 @@ Inductive signedness : Type :=
         | Ocmp (cond: condition).  (**r [rd = 1] if condition holds, [rd = 0] otherwise. *) 
 
       
-      FRecursion eval_operation about operation motive (fun (_ : operation) => condition -> list val -> mem -> option val) by _rect.
+     FRecursion eval_operation about operation motive (fun (_ : operation) => condition -> list val -> mem -> option val) by _rect.
           Case Ccomp := (fun c => fun ge sp vl m => 
                         match vl with 
                         | v1 :: v2 :: nil => Val.cmp_bool c v1 v2
                         | _ => None end).
-      FEnd eval_operation.
+     FEnd eval_operation.
 
      FRecursion eval_operation about operation motive (fun (_ : operation) => Genv.t -> val -> list val -> mem -> option val) by _rect.
         Case Omove := (fun ge sp vl m => 
@@ -1127,7 +2933,7 @@ Inductive signedness : Type :=
      Definition code := list instruction.
      Record function : Type := mkfunction { fn_sig: signature; fn_code: code }.
       
-     Family Semantics. 
+    Family Sem. 
           Definition regset := Pregmap.t val.
           Definition genv := Genv.t fundef unit.
           
@@ -1290,29 +3096,28 @@ Inductive signedness : Type :=
               rs X10 = Vint r ->
               final_state (State rs m) r.
 
-      FEnd Semantics.                   
+      FEnd Sem.                   
    FEnd Asm.
 
    (* Processor dependent intermediate representations *)
-
    Family CminorSel.
        FInductive expr : Type :=
           | Evar : ident -> expr          
           | Econdition : condexpr -> expr -> expr -> expr
           | Eop : operation -> exprlist -> expr
           | Elet : expr -> expr -> expr
-          | Eletvar : nat -> expr          
+          | Eletvar : nat -> expr
        with exprlist : Type :=
-         | Enil: exprlist
-         | Econs: expr -> exprlist -> exprlist
+          | Enil: exprlist
+          | Econs: expr -> exprlist -> exprlist
        with condexpr : Type :=
-         | CEcond : Asm.condition -> exprlist -> condexpr
-         | CEcondition : condexpr -> condexpr -> condexpr -> condexpr
-         | CElet: expr -> condexpr -> condexpr.
+          | CEcond : Asm.condition -> exprlist -> condexpr
+          | CEcondition : condexpr -> condexpr -> condexpr -> condexpr
+          | CElet: expr -> condexpr -> condexpr.
        
        FInductive stmt : Type :=
           | Sskip: stmt
-          | Sassign : ident -> expr -> stmt          
+          | Sassign : ident -> expr -> stmt
           | Sseq: stmt -> stmt -> stmt
           | Sifthenelse: condexpr -> stmt -> stmt -> stmt
           | Sloop: stmt -> stmt
@@ -1322,15 +3127,15 @@ Inductive signedness : Type :=
           | Slabel: label -> stmt -> stmt
           | Sgoto: label -> stmt.
        
-        Record function : Type := mkfunction {
+       Record function : Type := mkfunction {
           fn_sig: signature;
           fn_params: list ident;
           fn_vars: list ident;
           fn_stackspace: Z;
           fn_body: stmt
-        }.
+       }.
 
-       Family Semantics. 
+       Family Sem. 
           Definition genv := Genv.t fundef unit.
           Definition letenv := list val.
            
@@ -1476,7 +3281,7 @@ Inductive signedness : Type :=
                    find_label lbl f.(fn_body) (call_cont k) = Some(s', k') ->
                    step (State f (Sgoto lbl) k sp e m)
                      E0 (State f s' k' sp e m).
-       FEnd Semantics.
+       FEnd Sem.
     FEnd CminorSel.   
 
    Family RTL.
@@ -1484,7 +3289,7 @@ Inductive signedness : Type :=
       
        FInductive instruction: Type :=
           | Inop: node -> instruction
-          | Iop:Asm.operation -> list reg -> reg -> node -> instruction          
+          | Iop: Asm.operation -> list reg -> reg -> node -> instruction          
           | Icond: condition -> list reg -> node -> node -> instruction
           | Ireturn: option reg -> instruction.
 
@@ -1498,7 +3303,7 @@ Inductive signedness : Type :=
         fn_entrypoint: node
       }.
        
-      Family Semantics. 
+      Family Sem. 
           Definition genv := Genv.t fundef unit.
           Definition regset := Regmap.t val.
            
@@ -1552,7 +3357,7 @@ Inductive signedness : Type :=
                  Inductive final_state: state -> int -> Prop :=
                     | final_state_intro: forall r m,
                         final_state (Returnstate nil (Vint r) m) r.
-      FEnd Semantics.
+      FEnd Sem.
    FEnd RTL.
 
    Family LTL.
@@ -1576,7 +3381,7 @@ Inductive signedness : Type :=
         fn_entrypoint: node
       }.
        
-      Family Semantics.
+      Family Sem.
           Definition genv := Genv.t fundef unit.
           Definition locset := Locmap.t.
            
@@ -1619,7 +3424,7 @@ Inductive signedness : Type :=
              | exec_Lreturn: forall s f sp bb rs m m',
                  Mem.free m sp 0 f.(fn_stacksize) = Some m' ->
                  step (Block s f (Vptr sp Ptrofs.zero) (Lreturn :: bb) rs m)
-                   E0 (Returnstate s (return_regs (parent_locset s) rs) m')  
+                   E0 (Returnstate s (return_regs (parent_locset s) rs) m')
              | exec_return: forall f sp rs1 bb s rs m,
                  step (Returnstate (Stackframe f sp rs1 bb :: s) rs m)
                    E0 (Block s f sp bb rs m).
@@ -1637,7 +3442,7 @@ Inductive signedness : Type :=
               | final_state_intro: forall rs m retcode,
                   Locmap.getpair (map_rpair R (loc_result signature_main)) rs = Vint retcode ->
                   final_state (Returnstate nil rs m) retcode.
-       FEnd Semantics.
+       FEnd Sem.
    FEnd LTL.
 
    Family Linear.
@@ -1658,7 +3463,7 @@ Inductive signedness : Type :=
          fn_code: code
        }.
        
-       Family Semantics.
+       Family Sem.
           Definition genv := Genv.t fundef unit.
           Definition locset := Locmap.t.
 
@@ -1732,7 +3537,7 @@ Inductive signedness : Type :=
               | final_state_intro: forall rs m retcode,
                   Locmap.getpair (map_rpair R (loc_result signature_main)) rs = Vint retcode ->
                   final_state (Returnstate nil rs m) retcode.
-       FEnd Semantics.
+       FEnd Sem.
    FEnd Linear.
 
    Family Mach.
@@ -1755,7 +3560,7 @@ Inductive signedness : Type :=
               fn_link_ofs: ptrofs;
               fn_retaddr_ofs: ptrofs }.
 
-        Family Semantics.
+        Family Sem.
             Definition genv := Genv.t fundef unit.
             Definition locset := Locmap.t.
             
@@ -1783,7 +3588,7 @@ Inductive signedness : Type :=
                       rs' = undef_regs (destroyed_by_setstack ty) rs ->
                       step (State s f sp (Msetstack src ofs ty :: c) rs m)
                         E0 (State s f sp c rs' m')
-                 | exec_Mgetparam:
+                | exec_Mgetparam:
                       forall s fb f sp ofs ty dst c rs m v rs',
                       Genv.find_funct_ptr ge fb = Some (Internal f) ->
                       load_stack m sp Tptr f.(fn_link_ofs) = Some (parent_sp s) ->
@@ -1838,589 +3643,8 @@ Inductive signedness : Type :=
                       loc_result signature_main = One r ->
                       rs r = Vint retcode ->
                       final_state (Returnstate nil rs m) retcode.
-        FEnd Semantics.
-   FEnd Mach.
-
-  (* C -> Clight *)
-   Family SimplExpr.
-      Inductive destination : Type :=
-        | For_val
-        | For_effects
-        | For_set (sd: set_destination).
-
-      Definition finish (dst: destination) (sl: list statement) (a: expr) :=
-        match dst with
-        | For_val => (sl, a)
-        | For_effects => (sl, a)
-        | For_set sd => (sl ++ do_set sd a, a)
-        end.
-     
-      FRecursion transl_expr about C.expr motive (fun (_ : C.expr) => destination -> mon (list Clight.statement * Clight.expr)). 
-          Case Etempvar := (fun id ty => fun dst => ret (finish dst nil (Clight.Etempvar id ty))).
-          Case EVal := (fun v ty => fun dst => 
-                             match v with 
-                              | Vint n => ret (finish dst nil (Clight.Econst_int n ty)) 
-                              | Vlong n => ret (finish dst nil (Clight.Econst_long n ty))
-                              | Vfloat n => ret (finish dst nil (Clight.Econst_float n ty))
-                              | Vsingle n => ret (finish dst nil (Clight.Econst_single n ty))
-                              | _ =>  error (msg "SimplExpr.transl_expr: Eval"))
-          Case Ecast := (fun r ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_val r;
-                            match dst with
-                            | For_val | For_set _ =>
-                                do t <- gensym ty;
-                                ret (finish dst (sl1) (Clight.Ecast a1 ty))
-                            | For_effects =>
-                                transl_expr For_effects r
-                            end).
-          Case Eassign := (fun l r ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_val l;
-                            do (sl2, a2) <- transl_expr For_val r;
-                            do bf <- is_bitfield_access a1;
-                            let ty1 := C.typeof l in
-                            let ty2 := C.typeof r in
-                            match dst with
-                            | For_val | For_set _ =>
-                                do t <- gensym ty1;
-                                ret (finish dst
-                                        (sl1 ++ sl2 ++ Clight.Sset t (Clight.Ecast a2 ty1) :: make_assign bf a1 (Clight.Etempvar t ty1) :: nil)
-                                        (make_assign_value bf (Clight.Etempvar t ty1)))
-                            | For_effects =>
-                                ret (sl1 ++ sl2 ++ make_assign bf a1 a2 :: nil,
-                                    dummy_expr)
-                            end).
-          Case Eassignop := (fun op l r tyres ty => fun dst => 
-                            let ty1 := C.typeof l in
-                            do (sl1, a1) <- transl_expr For_val l;
-                            do (sl2, a2) <- transl_expr For_val r;
-                            do (sl3, a3) <- transl_valof ty1 a1;
-                            do bf <- is_bitfield_access a1;
-                            match dst with
-                            | For_val | For_set _ =>
-                                do t <- gensym ty1;
-                                ret (finish dst
-                                        (sl1 ++ sl2 ++ sl3 ++
-                                        Clight.Sset t (Clight.Ecast (Clight.Ebinop op a3 a2 tyres) ty1) ::
-                                        make_assign bf a1 (Clight.Etempvar t ty1) :: nil)
-                                        (make_assign_value bf (Clight.Etempvar t ty1)))
-                            | For_effects =>
-                                ret (sl1 ++ sl2 ++ sl3 ++ make_assign bf a1 (Clight.Ebinop op a3 a2 tyres) :: nil,
-                                    dummy_expr)
-                            end).
-          Case Epostincr := (fun id l ty => fun dst => 
-                            let ty1 := C.typeof l in
-                            do (sl1, a1) <- transl_expr For_val l;
-                            do bf <- is_bitfield_access a1;
-                            match dst with
-                            | For_val | For_set _ =>
-                                do t <- gensym ty1;
-                                ret (finish dst
-                                        (sl1 ++ make_set bf t a1 ::
-                                        make_assign bf a1 (transl_incrdecr id (Clight.Etempvar t ty1) ty1) :: nil)
-                                        (Clight.Etempvar t ty1))
-                            | For_effects =>
-                                do (sl2, a2) <- transl_valof ty1 a1;
-                                ret (sl1 ++ sl2 ++ make  assign bf a1 (transl_incrdecr id a2 ty1) :: nil,
-                                    dummy_expr) 
-                            end).
-          Case Ecomma := (fun r1 r2 ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_effects r1;
-                            do (sl2, a2) <- transl_expr dst r2;
-                            ret (sl1 ++ sl2, a2)).
-          Case Econdition := (fun r1 r2 r3 ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_val r1;
-                            match dst with
-                            | For_val =>
-                                do t <- gensym ty;
-                                let sd := SDbase ty ty t in
-                                do (sl2, a2) <- transl_expr (For_set sd) r2;
-                                do (sl3, a3) <- transl_expr (For_set sd) r3;
-                                ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
-                                    Clight.Etempvar t ty)
-                            | For_effects =>
-                                do (sl2, a2) <- transl_expr For_effects r2;
-                                do (sl3, a3) <- transl_expr For_effects r3;
-                                ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
-                                    dummy_expr)
-                            | For_set sd =>
-                                do t <- temp_for_sd ty sd;
-                                let sd' := SDcons ty ty t sd in
-                                do (sl2, a2) <- transl_expr (For_set sd') r2;
-                                do (sl3, a3) <- transl_expr (For_set sd') r3;
-                                ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
-                                    dummy_expr)
-                            end).
-          Case Eseqor := (fun r1 r2 ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_val r1;
-                            match dst with
-                            | For_val =>
-                                do t <- gensym ty;
-                                let sd := SDbase type_bool ty t in
-                                do (sl2, a2) <- transl_expr (For_set sd) r2;
-                                ret (sl1 ++
-                                    makeif a1 (Clight.Sset t (Clight.Econst_int Int.one ty)) (makeseq sl2) :: nil,
-                                    Clight.Etempvar t ty)
-                            | For_effects =>
-                                do (sl2, a2) <- transl_expr For_effects r2;
-                                ret (sl1 ++ makeif a1 Clight.Sskip (makeseq sl2) :: nil, dummy_expr)
-                            | For_set sd =>
-                                do t <- temp_for_sd ty sd;
-                                let sd' := SDcons type_bool ty t sd in
-                                do (sl2, a2) <- transl_expr (For_set sd') r2;
-                                ret (sl1 ++
-                                    makeif a1 (makeseq (do_set sd (Clight.Econst_int Int.one ty))) (makeseq sl2) :: nil,
-                                    dummy_expr)
-                            end).
-          Case Eseqand := (fun r1 r2 ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_val r1;
-                            match dst with
-                            | For_val =>
-                                do t <- gensym ty;
-                                let sd := SDbase type_bool ty t in
-                                do (sl2, a2) <- transl_expr (For_set sd) r2;
-                                ret (sl1 ++
-                                    makeif a1 (makeseq sl2) (Clight.Sset t (Clight.Econst_int Int.zero ty)) :: nil,
-                                    Clight.Etempvar t ty)
-                            | For_effects =>
-                                do (sl2, a2) <- transl_expr For_effects r2;
-                                ret (sl1 ++ makeif a1 Clight.Sskip (makeseq sl2) :: nil, dummy_expr)
-                            | For_set sd =>
-                                do t <- temp_for_sd ty sd;
-                                let sd' := SDcons type_bool ty t sd in
-                                do (sl2, a2) <- transl_expr (For_set sd') r2;
-                                ret (sl1 ++
-                                    makeif a1 (makeseq sl2) (makeseq (do_set sd (Clight.Econst_int Int.zero ty))) :: nil,
-                                    dummy_expr)
-                            end).
-          Case Esizeof := (fun ty' ty => fun dst => 
-                            ret (finish dst nil (Clight.Esizeof ty' ty))).
-          Case Ealignof := (fun ty' ty => fun dst => 
-                            ret (finish dst nil (Clight.Ealignof ty' ty))).
-          Case Evalof := (fun l ty => fun dst => 
-                            do (sl1, a1) <- transl_expr For_val l;
-                            do (sl2, a2) <- transl_valof (C.typeof l) a1;
-                            ret (finish dst (sl1 ++ sl2) a2)).
-      FEnd transl_expr.
-
-      Definition transl_expression (r: C.expr) : mon (statement * expr) :=
-          do (sl, a) <- transl_expr For_val r; ret (makeseq sl, a).
-
-      Definition transl_expr_stmt (r: C.expr) : mon statement :=
-          do (sl, a) <- transl_expr For_effects r; ret (makeseq sl).
-
-      Definition transl_if (r: C.expr) (s1 s2: statement) : mon statement :=
-          do (sl, a) <- transl_expr For_val r;
-          ret (makeseq (sl ++ makeif a s1 s2 :: nil)).
-
-      FRecursion transl_stmt about C.statement motive (fun (_ : C.statement) => mon Clight.statement).
-          Case Sskip :=  ret Clight.Sskip.
-          Case Sdo := (fun e => transl_expr_stmt e).
-          Case Ssequence := (fun s1 trans_stmt_s1 s2 transl_stmt_s2 => 
-                              do ts1 <- transl_stmt_s1;
-                              do ts2 <- transl_stmt_s2;
-                              ret (Clight.Ssequence ts1 ts2)).
-          Case Sifthenelse := (fun e s1 transl_stmt_s1 s2 transl_stmt_s2 =>
-                                do ts1 <- transl_stmt_s1;
-                                do ts2 <- transl_stmt_s2;
-                                do (s', a) <- transl_expression e;
-                                if is_Sskip s1 && is_Sskip s2 then
-                                  ret (Clight.Ssequence s' Clight.Sskip)
-                                else
-                                  ret (Clight.Ssequence s' (Clight.Sifthenelse a ts1 ts2))).
-          Case Swhile := (fun e s1 transl_stmt_s1 =>
-                            do s' <- transl_if e Clight.Sskip Clight.Sbreak;
-                            do ts1 <- transl_stmt_s1;
-                            ret (Clight.Sloop (Clight.Ssequence s' ts1) Clight.Sskip)).
-          Case Sdowhile := (fun e s1 transl_stmt_s1 =>
-                              do s' <- transl_if e Clight.Sskip Clight.Sbreak;
-                              do ts1 <- transl_stmt s1;
-                              ret (Clight.Sloop ts1 s')).
-          Case Sfor := (fun s1 transl_stmt_s1 e2 s3 transl_stmt_s3 s4 transl_stmt_s4 =>
-                          do ts1 <- transl_stmt s1;
-                          do s' <- transl_if e2 Clight.Sskip Clight.Sbreak;
-                          do ts3 <- transl_stmt s3;
-                          do ts4 <- transl_stmt s4;
-                          if is_Sskip s1 then
-                            ret (Clight.Sloop (Clight.Ssequence s' ts4) ts3)
-                          else
-                            ret (Clight.Ssequence ts1 (Clight.Sloop (Clight.Ssequence s' ts4) ts3))).
-          Case Sbreak := ret Clight.Sbreak.
-          Case Scontinue := ret Clight.Scontinue.
-          Case Sreturn := (fun e =>
-                            match e with
-                            | None => ret (Clight.Sreturn None)
-                            | Some e => do (s', a) <- transl_expression e;
-                                        ret (Clight.Ssequence s' (Clight.Sreturn (Some a)))
-                            end).
-          Case Slabel := (fun lbl s1 transl_stmt_s1 => 
-                            do ts1 <- transl_stmt_s1;
-                            ret (Clight.Slabel lbl ts1)).
-          Case Sgoto := (fun lbl => ret (Clight.Sgoto lbl)).
-      FEnd transl_stmt.
-
-      Definition transl_function (f: C.function) : res function :=
-          match transl_stmt f.(C.fn_body) (initial_generator tt) with
-          | Err msg =>
-              Error msg
-          | Res tbody g i =>
-              OK (mkfunction
-                      f.(C.fn_return)
-                      f.(C.fn_callconv)
-                      f.(C.fn_params)
-                      f.(C.fn_vars)
-                      g.(gen_trail)
-                      tbody)
-          end.
-
-          (* Relational specification of translation *)
-          Family Specification.
-                FInductive tr_expr: temp_env -> destination -> Csyntax.expr -> list statement -> expr -> list ident -> Prop :=
-                    | tr_var: forall le dst id ty tmp,
-                        tr_expr le dst (Csyntax.Evar id ty)
-                                (final dst (Evar id ty)) (Evar id ty) tmp
-                    | tr_deref: forall le dst e1 ty sl1 a1 tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp ->
-                        tr_expr le dst (Csyntax.Ederef e1 ty)
-                                (sl1 ++ final dst (Ederef' a1 ty)) (Ederef' a1 ty) tmp
-                    | tr_field: forall le dst e1 f ty sl1 a1 tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp ->
-                        tr_expr le dst (Csyntax.Efield e1 f ty)
-                                (sl1 ++ final dst (Efield a1 f ty)) (Efield a1 f ty) tmp
-                    | tr_val_effect: forall le v ty any tmp,
-                        tr_expr le For_effects (Csyntax.Eval v ty) nil any tmp
-                    | tr_val_value: forall le v ty a tmp,
-                        typeof a = ty ->
-                        (forall tge e le' m,
-                          (forall id, In id tmp -> le'!id = le!id) ->
-                          eval_expr tge e le' m a v) ->
-                        tr_expr le For_val (Csyntax.Eval v ty)
-                                            nil a tmp
-                    | tr_val_set: forall le sd v ty a any tmp,
-                        typeof a = ty ->
-                        (forall tge e le' m,
-                          (forall id, In id tmp -> le'!id = le!id) ->
-                          eval_expr tge e le' m a v) ->
-                        tr_expr le (For_set sd) (Csyntax.Eval v ty)
-                                    (do_set sd a) any tmp
-                    | tr_sizeof: forall le dst ty' ty tmp,
-                        tr_expr le dst (Csyntax.Esizeof ty' ty)
-                                    (final dst (Esizeof ty' ty))
-                                    (Esizeof ty' ty) tmp
-                    | tr_alignof: forall le dst ty' ty tmp,
-                        tr_expr le dst (Csyntax.Ealignof ty' ty)
-                                    (final dst (Ealignof ty' ty))
-                                    (Ealignof ty' ty) tmp
-                    | tr_cast_effects: forall le e1 ty sl1 a1 any tmp,
-                        tr_expr le For_effects e1 sl1 a1 tmp ->
-                        tr_expr le For_effects (Csyntax.Ecast e1 ty)
-                                    sl1
-                                    any tmp
-                    | tr_cast_val: forall le dst e1 ty sl1 a1 tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp ->
-                        tr_expr le dst (Csyntax.Ecast e1 ty)
-                                    (sl1 ++ final dst (Ecast a1 ty))
-                                    (Ecast a1 ty) tmp
-                    | tr_seqand_val: forall le e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le (For_set (SDbase type_bool ty t)) e2 sl2 a2 tmp2 ->
-                        list_disjoint tmp1 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
-                        tr_expr le For_val (Csyntax.Eseqand e1 e2 ty)
-                                      (sl1 ++ makeif a1 (makeseq sl2)
-                                                        (Sset t (Econst_int Int.zero ty)) :: nil)
-                                      (Etempvar t ty) tmp
-                    | tr_seqand_effects: forall le e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le For_effects e2 sl2 a2 tmp2 ->
-                        list_disjoint tmp1 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp ->
-                        tr_expr le For_effects (Csyntax.Eseqand e1 e2 ty)
-                                      (sl1 ++ makeif a1 (makeseq sl2) Sskip :: nil)
-                                      any tmp
-                    | tr_seqand_set: forall le sd e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le (For_set (SDcons type_bool ty t sd)) e2 sl2 a2 tmp2 ->
-                        list_disjoint tmp1 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
-                        tr_expr le (For_set sd) (Csyntax.Eseqand e1 e2 ty)
-                                      (sl1 ++ makeif a1 (makeseq sl2)
-                                                        (makeseq (do_set sd (Econst_int Int.zero ty))) :: nil)
-                                      any tmp
-                    | tr_seqor_val: forall le e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le (For_set (SDbase type_bool ty t)) e2 sl2 a2 tmp2 ->
-                        list_disjoint tmp1 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
-                        tr_expr le For_val (Csyntax.Eseqor e1 e2 ty)
-                                      (sl1 ++ makeif a1 (Sset t (Econst_int Int.one ty))
-                                                        (makeseq sl2) :: nil)
-                                      (Etempvar t ty) tmp
-                    | tr_seqor_effects: forall le e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le For_effects e2 sl2 a2 tmp2 ->
-                        list_disjoint tmp1 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp ->
-                        tr_expr le For_effects (Csyntax.Eseqor e1 e2 ty)
-                                      (sl1 ++ makeif a1 Sskip (makeseq sl2) :: nil)
-                                      any tmp
-                    | tr_seqor_set: forall le sd e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le (For_set (SDcons type_bool ty t sd)) e2 sl2 a2 tmp2 ->
-                        list_disjoint tmp1 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
-                        tr_expr le (For_set sd) (Csyntax.Eseqor e1 e2 ty)
-                                      (sl1 ++ makeif a1 (makeseq (do_set sd (Econst_int Int.one ty)))
-                                      (makeseq sl2) :: nil)
-                                      any tmp
-                    | tr_condition_val: forall le e1 e2 e3 ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 t tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le (For_set (SDbase ty ty t)) e2 sl2 a2 tmp2 ->
-                        tr_expr le (For_set (SDbase ty ty t)) e3 sl3 a3 tmp3 ->
-                        list_disjoint tmp1 tmp2 ->
-                        list_disjoint tmp1 tmp3 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp -> In t tmp ->
-                        tr_expr le For_val (Csyntax.Econdition e1 e2 e3 ty)
-                                        (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil)
-                                        (Etempvar t ty) tmp
-                    | tr_condition_effects: forall le e1 e2 e3 ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le For_effects e2 sl2 a2 tmp2 ->
-                        tr_expr le For_effects e3 sl3 a3 tmp3 ->
-                        list_disjoint tmp1 tmp2 ->
-                        list_disjoint tmp1 tmp3 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp ->
-                        tr_expr le For_effects (Csyntax.Econdition e1 e2 e3 ty)
-                                        (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil)
-                                        any tmp
-                    | tr_condition_set: forall le sd t e1 e2 e3 ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le (For_set (SDcons ty ty t sd)) e2 sl2 a2 tmp2 ->
-                        tr_expr le (For_set (SDcons ty ty t sd)) e3 sl3 a3 tmp3 ->
-                        list_disjoint tmp1 tmp2 ->
-                        list_disjoint tmp1 tmp3 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp -> In t tmp ->
-                        tr_expr le (For_set sd) (Csyntax.Econdition e1 e2 e3 ty)
-                                        (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil)
-                                        any tmp
-                    | tr_assign_effects: forall le e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 bf any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le For_val e2 sl2 a2 tmp2 ->
-                        list_disjoint tmp1 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp ->
-                        tr_is_bitfield_access a1 bf ->
-                        tr_expr le For_effects (Csyntax.Eassign e1 e2 ty)
-                                        (sl1 ++ sl2 ++ make_assign bf a1 a2 :: nil)
-                                        any tmp
-                    | tr_assign_val: forall le dst e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 t tmp ty1 ty2 bf,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le For_val e2 sl2 a2 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp ->
-                        list_disjoint tmp1 tmp2 ->
-                        In t tmp -> ~In t tmp1 -> ~In t tmp2 ->
-                        ty1 = Csyntax.typeof e1 ->
-                        ty2 = Csyntax.typeof e2 ->
-                        tr_is_bitfield_access a1 bf ->
-                        tr_expr le dst (Csyntax.Eassign e1 e2 ty)
-                                    (sl1 ++ sl2 ++
-                                      Sset t (Ecast a2 ty1) ::
-                                      make_assign bf a1 (Etempvar t ty1) ::
-                                      final dst (make_assign_value bf (Etempvar t ty1)))
-                                    (make_assign_value bf (Etempvar t ty1)) tmp
-                    | tr_assignop_effects: forall le op e1 e2 tyres ty ty1 sl1 a1 tmp1 sl2 a2 tmp2 bf sl3 a3 tmp3 any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le For_val e2 sl2 a2 tmp2 ->
-                        ty1 = Csyntax.typeof e1 ->
-                        tr_rvalof ty1 a1 sl3 a3 tmp3 ->
-                        list_disjoint tmp1 tmp2 -> list_disjoint tmp1 tmp3 -> list_disjoint tmp2 tmp3 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp ->
-                        tr_is_bitfield_access a1 bf ->
-                        tr_expr le For_effects (Csyntax.Eassignop op e1 e2 tyres ty)
-                                        (sl1 ++ sl2 ++ sl3 ++ make_assign bf a1 (Ebinop op a3 a2 tyres) :: nil)
-                                        any tmp
-                    | tr_assignop_val: forall le dst op e1 e2 tyres ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 t bf tmp ty1,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_expr le For_val e2 sl2 a2 tmp2 ->
-                        tr_rvalof ty1 a1 sl3 a3 tmp3 ->
-                        list_disjoint tmp1 tmp2 -> list_disjoint tmp1 tmp3 -> list_disjoint tmp2 tmp3 ->
-                        incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp ->
-                        In t tmp -> ~In t tmp1 -> ~In t tmp2 -> ~In t tmp3 ->
-                        ty1 = Csyntax.typeof e1 ->
-                        tr_is_bitfield_access a1 bf ->
-                        tr_expr le dst (Csyntax.Eassignop op e1 e2 tyres ty)
-                                    (sl1 ++ sl2 ++ sl3 ++
-                                      Sset t (Ecast (Ebinop op a3 a2 tyres) ty1) ::
-                                      make_assign bf a1 (Etempvar t ty1) ::
-                                      final dst (make_assign_value bf (Etempvar t ty1)))
-                                    (make_assign_value bf (Etempvar t ty1)) tmp
-                    | tr_postincr_effects: forall le id e1 ty ty1 sl1 a1 tmp1 sl2 a2 tmp2 bf any tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        tr_rvalof ty1 a1 sl2 a2 tmp2 ->
-                        ty1 = Csyntax.typeof e1 ->
-                        incl tmp1 tmp -> incl tmp2 tmp ->
-                        list_disjoint tmp1 tmp2 ->
-                        tr_is_bitfield_access a1 bf ->
-                        tr_expr le For_effects (Csyntax.Epostincr id e1 ty)
-                                        (sl1 ++ sl2 ++ make_assign bf a1 (transl_incrdecr id a2 ty1) :: nil)
-                                        any tmp
-                    | tr_postincr_val: forall le dst id e1 ty sl1 a1 tmp1 bf t ty1 tmp,
-                        tr_expr le For_val e1 sl1 a1 tmp1 ->
-                        incl tmp1 tmp -> In t tmp -> ~In t tmp1 ->
-                        ty1 = Csyntax.typeof e1 ->
-                        tr_is_bitfield_access a1 bf ->
-                        tr_expr le dst (Csyntax.Epostincr id e1 ty)
-                                    (sl1 ++ make_set bf t a1 ::
-                                      make_assign bf a1 (transl_incrdecr id (Etempvar t ty1) ty1) ::
-                                      final dst (Etempvar t ty1))
-                                    (Etempvar t ty1) tmp
-                    | tr_comma: forall le dst e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 tmp,
-                        tr_expr le For_effects e1 sl1 a1 tmp1 ->
-                        tr_expr le dst e2 sl2 a2 tmp2 ->
-                        list_disjoint tmp1 tmp2 ->
-                        incl tmp1 tmp -> incl tmp2 tmp ->
-                        tr_expr le dst (Csyntax.Ecomma e1 e2 ty) (sl1 ++ sl2) a2 tmp
-                    | tr_paren_val: forall le e1 tycast ty sl1 a1 t tmp,
-                        tr_expr le (For_set (SDbase tycast ty t)) e1 sl1 a1 tmp ->
-                        In t tmp ->
-                        tr_expr le For_val (Csyntax.Eparen e1 tycast ty)
-                                        sl1
-                                        (Etempvar t ty) tmp.
-                (*
-                Variable ge: genv.
-                Variable e: env.
-                Variable le: temp_env.
-                Variable m: mem. *)
-
-                Inductive tr_top: destination -> Csyntax.expr -> list statement -> expr -> list ident -> Prop :=
-                  | tr_top_val_val: forall v ty a tmp,
-                      typeof a = ty -> eval_expr ge e le m a v ->
-                      tr_top For_val (Csyntax.Eval v ty) nil a tmp
-                  | tr_top_base: forall dst r sl a tmp,
-                      tr_expr le dst r sl a tmp ->
-                      tr_top dst r sl a tmp.
-
-                Inductive tr_expression: Csyntax.expr -> statement -> expr -> Prop :=
-                  | tr_expression_intro: forall r sl a tmps,
-                      (forall ge e le m, tr_top ge e le m For_val r sl a tmps) ->
-                      tr_expression r (makeseq sl) a.
-
-                Inductive tr_expr_stmt: Csyntax.expr -> statement -> Prop :=
-                  | tr_expr_stmt_intro: forall r sl a tmps,
-                      (forall ge e le m, tr_top ge e le m For_effects r sl a tmps) ->
-                      tr_expr_stmt r (makeseq sl).
-
-                Inductive tr_if: Csyntax.expr -> statement -> statement -> statement -> Prop :=
-                  | tr_if_intro: forall r s1 s2 sl a tmps,
-                      (forall ge e le m, tr_top ge e le m For_val r sl a tmps) ->
-                      tr_if r s1 s2 (makeseq (sl ++ makeif a s1 s2 :: nil)).
-
-                FInductive tr_stmt: C.statement -> Clight.statement -> Prop :=
-                    | tr_skip:
-                        tr_stmt C.Sskip Clight.Sskip
-                    | tr_do: forall r s,
-                        tr_expr_stmt r s ->
-                        tr_stmt (C.Sdo r) s
-                    | tr_seq: forall s1 s2 ts1 ts2,
-                        tr_stmt s1 ts1 -> tr_stmt s2 ts2 ->
-                        tr_stmt (C.Ssequence s1 s2) (Clight.Ssequence ts1 ts2)
-                    | tr_ifthenelse_empty: forall r s' a,
-                        tr_expression r s' a ->
-                        tr_stmt (C.Sifthenelse r Csyntax.Sskip Csyntax.Sskip) (Clight.Ssequence s' Sskip)
-                    | tr_ifthenelse: forall r s1 s2 s' a ts1 ts2,
-                        tr_expression r s' a ->
-                        tr_stmt s1 ts1 -> tr_stmt s2 ts2 ->
-                        tr_stmt (C.Sifthenelse r s1 s2) (Clight.Ssequence s' (Clight.Sifthenelse a ts1 ts2))
-                    | tr_while: forall r s1 s' ts1,
-                        tr_if r Sskip Sbreak s' ->
-                        tr_stmt s1 ts1 ->
-                        tr_stmt (C.Swhile r s1)
-                                (Clight.Sloop (Ssequence s' ts1) Sskip)
-                    | tr_dowhile: forall r s1 s' ts1,
-                        tr_if r Sskip Sbreak s' ->
-                        tr_stmt s1 ts1 ->
-                        tr_stmt (C.Sdowhile r s1)
-                                (Clight.Sloop ts1 s')
-                    | tr_for_1: forall r s3 s4 s' ts3 ts4,
-                        tr_if r Sskip Sbreak s' ->
-                        tr_stmt s3 ts3 ->
-                        tr_stmt s4 ts4 ->
-                        tr_stmt (C.Sfor C.Sskip r s3 s4)
-                                (Clight.Sloop (Clight.Ssequence s' ts4) ts3)
-                    | tr_for_2: forall s1 r s3 s4 s' ts1 ts3 ts4,
-                        tr_if r Sskip Sbreak s' ->
-                        s1 <> C.Sskip ->
-                        tr_stmt s1 ts1 ->
-                        tr_stmt s3 ts3 ->
-                        tr_stmt s4 ts4 ->
-                        tr_stmt (C.Sfor s1 r s3 s4)
-                                (Clight.Ssequence ts1 (Clight.Sloop (Clight.Ssequence s' ts4) ts3))
-                    | tr_break:
-                        tr_stmt C.Sbreak Clight.Sbreak
-                    | tr_continue:
-                        tr_stmt C.Scontinue Clight.Scontinue
-                    | tr_return_none:
-                        tr_stmt (C.Sreturn None) (Clight.Sreturn None)
-                    | tr_return_some: forall r s' a,
-                        tr_expression r s' a ->
-                        tr_stmt (C.Sreturn (Some r)) (Clight.Ssequence s' (Clight.Sreturn (Some a)))
-                    | tr_label: forall lbl s ts,
-                        tr_stmt s ts ->
-                        tr_stmt (C.Slabel lbl s) (Clight.Slabel lbl ts)
-                    | tr_goto: forall lbl,
-                        tr_stmt (C.Sgoto lbl) (Clight.Sgoto lbl).
-
-                (* Proof of correctness of translation wrt the specification *)
-          FEnd Specification.
-   FEnd SimplExpr.     
-   
-   (* Csharpminor -> Cminor *)
-   Family Cminorgen.
-      FRecursion translate_constant about
-         Csharpminor.constant motive (fun (_ : Csharpminor.constant) => Cminor.constant) by _rect.
-           Case Ointconst := (fun n => Cminor.Ointconst n).
-           Case Ofloatconst := (fun n => Cminor.Ofloatconst n).
-           Case Osingleconst := (fun n => Cminor.Osingleconst n).
-           Case Olongconst := (fun n => Cminor.Olongconst n).
-      FEnd translate_constant.
-   
-      FRecursion translate_expr about Csharpminor.expr motive (fun (_ : Csharpminor.expr) => Cminor.expr) by _rect.
-           Case Evar := (fun id => Cminor.Evar id).
-           Case Econst := (fun cst => Cminor.Econst (translate_constant cst)).
-      FEnd translate_expr.
-
-      Definition exit_env := list bool.
-
-      Fixpoint shift_exit (e: exit_env) (n: nat) {struct e} : nat :=
-        match e, n with
-        | nil, _ => n
-        | false :: e', _ => S (shift_exit e' n)
-        | true :: e', O => O
-        | true :: e', S m => S (shift_exit e' m)
-        end.
-    
-      FRecursion translate_stmt about Csharpminor.stmt motive (fun (_ : Csharpminor.stmt) => compilenv -> exit_env -> Cminor.stmt) by _rect.
-            Case Sskip := (fun cenv xenv => Cminor.Sskip).
-            Case Sset := (fun id e => fun cenv xenv => Cminor.Sassign id (translate_expr e)).
-            Case Sseq := (fun s1 translate_stmt_s1 s2 translate_stmt_s2 => fun cenv xenv => Cminor.Sseq translate_stmt_s1 translate_stmt_s2).
-            Case Sifthenelse := (fun e s1 translate_stmt_s1 s2 translate_stmt_s2 => fun cenv xenv =>
-                                   Cminor.Sifthenelse (translate_expr e) translate_stmt_s1 translate_stmt_s2).
-            Case Sloop := (fun s1 translate_stmt_s1 => fun cenv xenv => Cminor.Sloop translate_stmt_s1).
-            Case Sblock := (fun s translate_stmt_s => fun cenv xenv => Cminor.Sblock translate_stmt_s).
-            Case Sexit := (fun cenv xenv => Sexit (shift_exit xenv n)).
-            Case Sreturn := (fun expr => fun cenv xenv =>
-                               match expr with
-                               | None => Cminor.Sreturn None
-                               | Some expr => Cminor.Sreturn (Some (translate_expr expr)) end).
-            Case Slabel := (fun lbl s translate_stmt_s => fun cenv xenv => Cminor.Slabel lbl translate_stmt_s).
-            Case Sgoto := (fun lbl => fun cenv xenv => Cminor.Sgoto lbl).
-      FEnd translate_stmt.
-
-
-       (* Translate Function, Fundef, Program *)
-
-
-      Family Correctness.
-      FEnd Correctness.
-  FEnd Cminorgen.    
+        FEnd Sem.
+   FEnd Mach.         
    
    (* Cminor -> CminorSel *)
    Family Selection.
@@ -2730,7 +3954,7 @@ Inductive signedness : Type :=
    3. Cast operators that have no effect are removed 
    4. Conditional branches and multi-way branches are statically resolved into Inop instructions when possible.
    *)
-   Family Constprop.  
+  Family Constprop.  
          FRecursion transf_instr : 
              (instr: instruction) -> (f: RTL.function) -> 
              (an: PMap.t VA.t) -> 
@@ -2766,7 +3990,7 @@ Inductive signedness : Type :=
      2. Combine cond
      3. Combine address
    *)
-   Family CSE.
+  Family CSE.
       FRecursion transfer : (i : instruction) -> (f: function) -> (approx: PMap.t VA.t) -> (before: numbering) -> instruction.
           Case Inop (s) := Inop (s).
           Case Iop (op, args, res, s) := (
@@ -2791,9 +4015,9 @@ Inductive signedness : Type :=
           ).
           Case Ireturn (optarg) := Ireturn (optarg). 
       FEnd transfer.
-   FEnd CSE.
+  FEnd CSE.
    
-   Family Deadcode.
+  Family Deadcode.
       FRecursion trnasf_instr : (i : instruction) -> (f: function) -> (approx: PMap.t VA.t) -> (an: PMap.t NA.t) -> (pc: RTL.node) -> RTL.instruction.
           Case Inop (s) := Inop (s).
           Case Iop (op, args, res, s) := (
@@ -2811,7 +4035,7 @@ Inductive signedness : Type :=
               if peq s1 s2 then Inop s1 else Icond cond args s1 s2
           ).
           Case Ireturn(v) := Ireturn(v).
-   FEnd Deadcode.
+  FEnd Deadcode.
 
    Family Unusedglob.
       (* Checks the ids referenced by an instruction *)
@@ -2826,12 +4050,12 @@ Inductive signedness : Type :=
    (* Allocation is written in OCaml, hence this is a translation validation *)
    (* The correctness is the correctness of the translation validator *)
    Family Allocation.
-        Family Correctness.
-        FEnd Correctness.
+        Family Proof.
+        FEnd Proof.
    FEnd Allocation.
 
   (* RTL -> RTL *)
-   Family Tunneling.
+  Family Tunneling.
       Module U := UnionFind.UF(PTree).
       
     FRecursion record_branch : (i : instruction) -> (uf: U.t) -> (pc: node) -> (b: bblock) -> U.t.
@@ -2856,10 +4080,10 @@ Inductive signedness : Type :=
         Case Lsetstack r sl ofs ty := Lsetstack r sl ofs ty.
         Case Lreturn := Lreturn.
     FEnd tunnel_instr.
-   FEnd Tunneling.
+  FEnd Tunneling.
 
    (* LTL -> Linear *)
-   Family Linearize.
+  Family Linearize.
        FRecursion starts_with_label about Linear.instruction motive (fun (_ : Linear.instruction) => label -> bool).
             Case Llabel := (fun lbl' => fun lbl => peq lbl lbl').
             Case Lop := (fun op args res => fun lbl => false).
@@ -2909,7 +4133,7 @@ Inductive signedness : Type :=
    FEnd Debugvar.
    
    (* Linear -> Mach *)
-   Family Stacking.
+  Family Stacking.
         Definition transl_op (fe: frame_env) (op: operation) :=
             Asm.shift_stack_operation fe.(fe_stack_data) op.
 
@@ -2958,7 +4182,7 @@ Inductive signedness : Type :=
   FEnd Stacking.
 
    (* Mach -> Asm *)
-   Family Asmgen.
+  Family Asmgen.
     FRecursion transl_op about Linear.operation motive (fun (_ : Linear.operation) => list mreg -> mreg -> Asm.code -> Asm.code).
         Case Omove := (fun a1 res k => 
             match preg_of res, preg_of a1 with
@@ -3113,420 +4337,3 @@ Inductive signedness : Type :=
     FEnd translate_instr.
    FEnd Asmgen.
 FEnd Imp.
-
-
-(* Family ImpOperators { }*)
-(* 
-Inductive binarith_cases: Type :=
-                | bin_case_i (s: signedness)(* at int type *)
-                | bin_case_l (s: signedness)(* at long int type *)                
-                | bin_default.(* error *)
-
-            Definition classify_binarith (ty1: type) (ty2: type) : binarith_cases :=
-                match ty1, ty2 with
-                | Tint I32 Unsigned _, Tint _ _ _ => bin_case_i Unsigned
-                | Tint _ _ _, Tint I32 Unsigned _ => bin_case_i Unsigned
-                | Tint _ _ _, Tint _ _ _ => bin_case_i Signed
-                | Tlong Signed _, Tlong Signed _ => bin_case_l Signed
-                | Tlong _ _, Tlong _ _ => bin_case_l Unsigned
-                | Tlong sg _, Tint _ _ _ => bin_case_l sg
-                | Tint _ _ _, Tlong sg _ => bin_case_l sg                
-                | _, _ => bin_default
-                end.
-            
-            Definition binarith_type (c: binarith_cases) : type :=
-                match c with
-                | bin_case_i sg => Tint I32 sg noattr
-                | bin_case_l sg => Tlong sg noattr                
-                | bin_default => Tvoid
-                end.
-            
-            Definition sem_binarith
-                  (sem_int: signedness -> int -> int -> option val)
-                  (sem_long: signedness -> int64 -> int64 -> option val)                  
-                  (v1: val) (t1: type) (v2: val) (t2: type) (m: mem): option val :=
-            let c := classify_binarith t1 t2 in
-            let t := binarith_type c in
-            match sem_cast v1 t1 t m with
-            | None => None
-            | Some v1' =>
-            match sem_cast v2 t2 t m with
-            | None => None
-            | Some v2' =>
-            match c with
-            | bin_case_i sg =>
-                match v1', v2' with
-                | Vint n1, Vint n2 => sem_int sg n1 n2
-                | _, _ => None
-                end            
-            | bin_case_l sg =>
-                match v1', v2' with
-                | Vlong n1, Vlong n2 => sem_long sg n1 n2
-                | _, _ => None
-                end
-            | bin_default => None
-            end end end.
-            
-            (* Addition *)
-            Inductive classify_add_cases : Type :=
-              | add_case_pi (ty: type) (si: signedness)(* pointer, int *)
-              | add_case_pl (ty: type)(* pointer, long *)
-              | add_case_ip (si: signedness) (ty: type)(* int, pointer *)
-              | add_case_lp (ty: type)(* long, pointer *)
-              | add_default.(* numerical type, numerical type *)
-            
-            Definition classify_add (ty1: type) (ty2: type) :=
-              match typeconv ty1, typeconv ty2 with
-              | Tpointer ty _, Tint _ si _ => add_case_pi ty si
-              | Tpointer ty _, Tlong _ _ => add_case_pl ty
-              | Tint _ si _, Tpointer ty _ => add_case_ip si ty
-              | Tlong _ _, Tpointer ty _ => add_case_lp ty
-              | _, _ => add_default
-              end.
-            
-            Definition ptrofs_of_int (si: signedness) (n: int) : ptrofs :=
-              match si with
-              | Signed => Ptrofs.of_ints n
-              | Unsigned => Ptrofs.of_intu n
-              end.
-            
-            Definition sem_add_ptr_int (cenv: composite_env) (ty: type) (si: signedness) (v1 v2: val): option val :=
-              match v1, v2 with
-              | Vptr b1 ofs1, Vint n2 =>
-                  let n2 := ptrofs_of_int si n2 in
-                  Some (Vptr b1 (Ptrofs.add ofs1 (Ptrofs.mul (Ptrofs.repr (sizeof cenv ty)) n2)))
-              | Vint n1, Vint n2 =>
-                  if Archi.ptr64 then None else Some (Vint (Int.add n1 (Int.mul (Int.repr (sizeof cenv ty)) n2)))
-              | Vlong n1, Vint n2 =>
-                  let n2 := cast_int_long si n2 in
-                  if Archi.ptr64 then Some (Vlong (Int64.add n1 (Int64.mul (Int64.repr (sizeof cenv ty)) n2))) else None
-              | _, _ => None
-              end.
-            
-            Definition sem_add_ptr_long (cenv: composite_env) (ty: type) (v1 v2: val): option val :=
-              match v1, v2 with
-              | Vptr b1 ofs1, Vlong n2 =>
-                  let n2 := Ptrofs.of_int64 n2 in
-                  Some (Vptr b1 (Ptrofs.add ofs1 (Ptrofs.mul (Ptrofs.repr (sizeof cenv ty)) n2)))
-              | Vint n1, Vlong n2 =>
-                  let n2 := Int.repr (Int64.unsigned n2) in
-                  if Archi.ptr64 then None else Some (Vint (Int.add n1 (Int.mul (Int.repr (sizeof cenv ty)) n2)))
-              | Vlong n1, Vlong n2 =>
-                  if Archi.ptr64 then Some (Vlong (Int64.add n1 (Int64.mul (Int64.repr (sizeof cenv ty)) n2))) else None
-              | _, _ => None
-              end.
-            
-            Definition sem_add (cenv: composite_env) (v1:val) (t1:type) (v2: val) (t2:type) (m: mem): option val :=
-              match classify_add t1 t2 with
-              | add_case_pi ty si =>(* pointer plus integer *)
-                  sem_add_ptr_int cenv ty si v1 v2
-              | add_case_pl ty =>(* pointer plus long *)
-                  sem_add_ptr_long cenv ty v1 v2
-              | add_case_ip si ty =>(* integer plus pointer *)
-                  sem_add_ptr_int cenv ty si v2 v1
-              | add_case_lp ty =>(* long plus pointer *)
-                  sem_add_ptr_long cenv ty v2 v1
-              | add_default =>
-                  sem_binarith
-                    (fun sg n1 n2 => Some(Vint(Int.add n1 n2)))
-                    (fun sg n1 n2 => Some(Vlong(Int64.add n1 n2)))                    
-                    v1 t1 v2 t2 m
-              end.
-            
-            (* Subtraction *)
-            Inductive classify_sub_cases : Type :=
-               | sub_case_pi (ty: type) (si: signedness)(* pointer, int *)
-               | sub_case_pp (ty: type)(* pointer, pointer *)
-               | sub_case_pl (ty: type)(* pointer, long *)
-               | sub_default.(* numerical type, numerical type *)
-
-            Definition classify_sub (ty1: type) (ty2: type) :=
-              match typeconv ty1, typeconv ty2 with
-              | Tpointer ty _, Tint _ si _ => sub_case_pi ty si
-              | Tpointer ty _ , Tpointer _ _ => sub_case_pp ty
-              | Tpointer ty _, Tlong _ _ => sub_case_pl ty
-              | _, _ => sub_default
-              end.
-
-            Definition sem_sub (cenv: composite_env) (v1:val) (t1:type) (v2: val) (t2:type) (m:mem): option val :=
-              match classify_sub t1 t2 with
-              | sub_case_pi ty si =>(* pointer minus integer *)
-                  match v1, v2 with
-                  | Vptr b1 ofs1, Vint n2 =>
-                      let n2 := ptrofs_of_int si n2 in
-                      Some (Vptr b1 (Ptrofs.sub ofs1 (Ptrofs.mul (Ptrofs.repr (sizeof cenv ty)) n2)))
-                  | Vint n1, Vint n2 =>
-                      if Archi.ptr64 then None else Some (Vint (Int.sub n1 (Int.mul (Int.repr (sizeof cenv ty)) n2)))
-                  | Vlong n1, Vint n2 =>
-                      let n2 := cast_int_long si n2 in
-                      if Archi.ptr64 then Some (Vlong (Int64.sub n1 (Int64.mul (Int64.repr (sizeof cenv ty)) n2))) else None
-                  | _, _ => None
-                  end
-              | sub_case_pl ty =>(* pointer minus long *)
-                  match v1, v2 with
-                  | Vptr b1 ofs1, Vlong n2 =>
-                      let n2 := Ptrofs.of_int64 n2 in
-                      Some (Vptr b1 (Ptrofs.sub ofs1 (Ptrofs.mul (Ptrofs.repr (sizeof cenv ty)) n2)))
-                  | Vint n1, Vlong n2 =>
-                      let n2 := Int.repr (Int64.unsigned n2) in
-                      if Archi.ptr64 then None else Some (Vint (Int.sub n1 (Int.mul (Int.repr (sizeof cenv ty)) n2)))
-                  | Vlong n1, Vlong n2 =>
-                      if Archi.ptr64 then Some (Vlong (Int64.sub n1 (Int64.mul (Int64.repr (sizeof cenv ty)) n2))) else None
-                  | _, _ => None
-                  end
-              | sub_case_pp ty =>(* pointer minus pointer *)
-                  match v1,v2 with
-                  | Vptr b1 ofs1, Vptr b2 ofs2 =>
-                      if eq_block b1 b2 then
-                        let sz := sizeof cenv ty in
-                        if zlt 0 sz && zle sz Ptrofs.max_signed
-                        then Some (Vptrofs (Ptrofs.divs (Ptrofs.sub ofs1 ofs2) (Ptrofs.repr sz)))
-                        else None
-                      else None
-                  | _, _ => None
-                  end
-              | sub_default =>
-                  sem_binarith
-                    (fun sg n1 n2 => Some(Vint(Int.sub n1 n2)))
-                    (fun sg n1 n2 => Some(Vlong(Int64.sub n1 n2)))                    
-                    v1 t1 v2 t2 m
-              end.
-            
-            (* Multiplication *)
-            Definition sem_mul (v1:val) (t1:type) (v2: val) (t2:type) (m:mem) : option val :=
-                sem_binarith
-                  (fun sg n1 n2 => Some(Vint(Int.mul n1 n2)))
-                  (fun sg n1 n2 => Some(Vlong(Int64.mul n1 n2)))
-                  (fun n1 n2 => Some(Vfloat(Float.mul n1 n2)))
-                  (fun n1 n2 => Some(Vsingle(Float32.mul n1 n2)))
-                  v1 t1 v2 t2 m.
-            
-            (* Division *)
-            Definition sem_div (v1:val) (t1:type) (v2: val) (t2:type) (m:mem) : option val :=
-                 sem_binarith
-                   (fun sg n1 n2 =>
-                     match sg with
-                     | Signed =>
-                         if Int.eq n2 Int.zero
-                         || Int.eq n1 (Int.repr Int.min_signed) && Int.eq n2 Int.mone
-                         then None else Some(Vint(Int.divs n1 n2))
-                     | Unsigned =>
-                         if Int.eq n2 Int.zero
-                         then None else Some(Vint(Int.divu n1 n2))
-                     end)
-                   (fun sg n1 n2 =>
-                     match sg with
-                     | Signed =>
-                         if Int64.eq n2 Int64.zero
-                         || Int64.eq n1 (Int64.repr Int64.min_signed) && Int64.eq n2 Int64.mone
-                         then None else Some(Vlong(Int64.divs n1 n2))
-                     | Unsigned =>
-                         if Int64.eq n2 Int64.zero
-                         then None else Some(Vlong(Int64.divu n1 n2))
-                     end)                   
-                   v1 t1 v2 t2 m.
-            
-            Inductive classify_cmp_cases : Type :=
-                | cmp_case_pp(* pointer, pointer *)
-                | cmp_case_pi (si: signedness)(* pointer, int *)
-                | cmp_case_ip (si: signedness)(* int, pointer *)
-                | cmp_case_pl(* pointer, long *)
-                | cmp_case_lp(* long, pointer *)
-                | cmp_default.(* numerical, numerical *)
-
-            Definition classify_cmp (ty1: type) (ty2: type) :=
-              match typeconv ty1, typeconv ty2 with
-              | Tpointer _ _ , Tpointer _ _ => cmp_case_pp
-              | Tpointer _ _ , Tint _ si _ => cmp_case_pi si
-              | Tint _ si _, Tpointer _ _ => cmp_case_ip si
-              | Tpointer _ _ , Tlong _ _ => cmp_case_pl
-              | Tlong _ _ , Tpointer _ _ => cmp_case_lp
-              | _, _ => cmp_default
-              end.
-            
-            Definition cmp_ptr (m: mem) (c: comparison) (v1 v2: val): option val :=
-              option_map Val.of_bool
-               (if Archi.ptr64
-                then Val.cmplu_bool (Mem.valid_pointer m) c v1 v2
-                else Val.cmpu_bool (Mem.valid_pointer m) c v1 v2).
-
-            (* Comparison *)
-            Definition sem_cmp (c:comparison)
-                  (v1: val) (t1: type) (v2: val) (t2: type)
-                  (m: mem): option val :=
-               match classify_cmp t1 t2 with
-               | cmp_case_pp =>
-                   cmp_ptr m c v1 v2
-               | cmp_case_pi si =>
-                   match v2 with
-                   | Vint n2 =>
-                       let v2' := Vptrofs (ptrofs_of_int si n2) in
-                       cmp_ptr m c v1 v2'
-                   | Vptr b ofs =>
-                       if Archi.ptr64 then None else cmp_ptr m c v1 v2
-                   | _ =>
-                       None
-                   end
-               | cmp_case_ip si =>
-                   match v1 with
-                   | Vint n1 =>
-                       let v1' := Vptrofs (ptrofs_of_int si n1) in
-                       cmp_ptr m c v1' v2
-                   | Vptr b ofs =>
-                       if Archi.ptr64 then None else cmp_ptr m c v1 v2
-                   | _ =>
-                       None
-                   end
-               | cmp_case_pl =>
-                   match v2 with
-                   | Vlong n2 =>
-                       let v2' := Vptrofs (Ptrofs.of_int64 n2) in
-                       cmp_ptr m c v1 v2'
-                   | Vptr b ofs =>
-                       if Archi.ptr64 then cmp_ptr m c v1 v2 else None
-                   | _ =>
-                       None
-                   end
-               | cmp_case_lp =>
-                   match v1 with
-                   | Vlong n1 =>
-                     let v1' := Vptrofs (Ptrofs.of_int64 n1) in
-                     cmp_ptr m c v1' v2
-                   | Vptr b ofs =>
-                       if Archi.ptr64 then cmp_ptr m c v1 v2 else None
-                   | _ => None    
-               end
-               | cmp_default =>
-               sem_binarith
-                 (fun sg n1 n2 =>
-                     Some(Val.of_bool(match sg with Signed => Int.cmp c n1 n2 | Unsigned => Int.cmpu c n1 n2 end)))
-                 (fun sg n1 n2 =>
-                     Some(Val.of_bool(match sg with Signed => Int64.cmp c n1 n2 | Unsigned => Int64.cmpu c n1 n2 end)))                 
-                 v1 t1 v2 t2 m
-          end.
-
-          Definition sem_notbool (v: val) (ty: type) (m: mem): option val :=
-              option_map (fun b => Val.of_bool (negb b)) (bool_val v ty m).
-
-          (* Bitwise complement *)
-          Inductive classify_notint_cases : Type :=
-              | notint_case_i(s: signedness)(* int *)
-              | notint_case_l(s: signedness)(* long *)
-              | notint_default.
-
-          Definition classify_notint (ty: type) : classify_notint_cases :=
-              match ty with
-              | Tint I32 Unsigned _ => notint_case_i Unsigned
-              | Tint _ _ _ => notint_case_i Signed
-              | Tlong si _ => notint_case_l si
-              | _ => notint_default
-              end.
-
-          Definition sem_notint (v: val) (ty: type): option val :=
-              match classify_notint ty with
-              | notint_case_i sg =>
-                  match v with
-                  | Vint n => Some (Vint (Int.not n))
-                  | _ => None
-                  end
-              | notint_case_l sg =>
-                  match v with
-                  | Vlong n => Some (Vlong (Int64.not n))
-                  | _ => None
-                  end
-              | notint_default => None
-              end.
-          
-          Inductive classify_bool_cases : Type :=
-                | bool_case_i(* integer *)
-                | bool_case_l(* long *)                
-                | bool_default.
-
-            Definition classify_bool (ty: type) : classify_bool_cases :=
-              match typeconv ty with
-              | Tint _ _ _ => bool_case_i
-              | Tpointer _ _ => if Archi.ptr64 then bool_case_l else bool_case_i
-              | Tlong _ _ => bool_case_l
-              | _ => bool_default
-              end.
-          
-          (* Oppositve values *)
-          Inductive classify_neg_cases : Type :=
-              | neg_case_i(s: signedness)(* int *)
-              | neg_case_l(s: signedness)(* long *)
-              | neg_default.
-
-            Definition classify_neg (ty: type) : classify_neg_cases :=
-              match ty with
-              | Tint I32 Unsigned _ => neg_case_i Unsigned
-              | Tint _ _ _ => neg_case_i Signed
-              | Tlong si _ => neg_case_l si
-              | _ => neg_default
-              end.
-
-            Definition sem_neg (v: val) (ty: type) : option val :=
-              match classify_neg ty with
-              | neg_case_i sg =>
-                  match v with
-                  | Vint n => Some (Vint (Int.neg n))
-                  | _ => None
-                  end
-              | neg_case_l sg =>
-                  match v with
-                  | Vlong n => Some (Vlong (Int64.neg n))
-                  | _ => None
-                  end
-              | neg_default => None
-              end.
-
-          FRecursion sem_unary_operation about unary_operation motive (fun (_ : unary_operation) => val -> type -> mem -> option val).
-              Case Onotbool := (fun v ty m =>  sem_notbool v ty m).
-              Case Onotint := (fun v ty m => sem_notint v ty).
-              Case Oneg := (fun v ty m =>  sem_neg v ty).
-          FEnd sem_unary_operation.
-            
-          FRecursion sem_binary_operation about binary_operation
-               motive (fun (_ : binary_operation) => composite_env ->                                                     
-                                                     val -> type ->
-                                                     val -> type ->
-                                                     mem -> option val).
-               Case Oadd := (fun cenv v1 t1 v2 t2 m => sem_add ce v1 t1 v2 t2 m).
-               Case Osub := (fun cenv v1 t1 v2 t2 m => sem_sub ce v1 t1 v2 t2 m).
-               Case Omul := (fun cenv v1 t1 v2 t2 m => sem_mul v1 t1 v2 t2 m).
-               Case Odiv := (fun cenv v1 t1 v2 t2 m => sem_div v1 t1 v2 t2 m).
-               Case Oeq := (fun cenv v1 t1 v2 t2 m =>  sem_cmp Ceq v1 t1 v2 t2 m).
-               Case One := (fun cenv v1 t1 v2 t2 m =>  sem_cmp Cne v1 t1 v2 t2 m).
-               Case Olt := (fun cenv v1 t1 v2 t2 m => sem_cmp Clt v1 t1 v2 t2 m).
-               Case Ogt := (fun cenv v1 t1 v2 t2 m => sem_cmp Cgt v1 t1 v2 t2 m).
-               Case Ole := (fun cenv v1 t1 v2 t2 m => sem_cmp Cle v1 t1 v2 t2 m).
-               Case Oge := (fun cenv v1 t1 v2 t2 m => sem_cmp Cge v1 t1 v2 t2 m).
-          FEnd sem_binary_operation.
-
-
-Family Selection { 
-      FRecursion sel_constant about Cminor.constant motive (fun (_ : Cminor.constant) => CminorSel.expr).            
-            Case Ointconst := (fun n => CminorSel.Eop cheat cheat).
-        FEnd sel_constant.
-
-        FRecursion sel_unop about Cminor.unary_operation motive (fun (_ : Cminor.unary_operation) => CminorSel.expr -> CminorSel.expr).
-            Case Onegint := (fun arg => cheat).
-            Case Onotint := (fun arg => cheat).
-        FEnd sel_unop.
-
-        FRecursion sel_binop about Cminor.binary_operation motive (fun (_ : Cminor.binary_operation) => CminorSel.expr -> Cminor.Sel -> CminorSel.expr).
-            Case Oadd := (fun arg1 arg2 => cheat). 
-            Case Osub := (fun arg1 arg2 => cheat).
-            Case Omul := (fun arg1 arg2 => cheat).
-            Case Odiv := (fun arg1 arg2 => cheat).
-            Case Ocmp := (fun arg1 arg2 => cheat).
-            Case Ocmpu := (fun arg1 arg2 => cheat).
-        FEnd sel_binop.
-}
-
- FRecursion transl_exitexpr about CminorSel.exitexpr motive (fun (_ : CminorSel.exitexpr) => mapping -> list node -> node).
-             Case XEexit := (fun n => fun map nexits => cheat).
-             Case XEjumptable := (fun a tbl => fun map nexits => cheat).
-             Case XEcondition := (fun a b c => fun map nexits => cheat).
-             Case XElet := (fun a b => fun map nexists => cheat).
-        FEnd transl_exitexpr.   
-*)

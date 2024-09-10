@@ -10,9 +10,9 @@ let finductive inductive_definitions =
 let fend scope_name =
   match PluginScopes.pop scope_name with
   | None -> Errors.fail ~info:"There is no open scope"
-  | Some scope ->
-      let PluginCmdScope.{ close; _ } = scope in
-      close ()
+  | Some scope ->      
+      let PluginCmdScope.{ close; _ } = scope in      
+      close ()      
 
 let family name =
   Family.open_family name;
@@ -74,25 +74,17 @@ let finduction_extension ~(name : Names.Id.t) =
 (* FProof *)
 let fproof () = Theorem.start_proving ()
 
+let fproof_lemma = Lemma.prepare_proving
+
 (* FQed *)
 let fqed () = Theorem.end_proving ()
 
-(*
-   let counter = Summary.ref ~name:"persistent_counter" 0
+let flemma name t =
+  Lemma.open_flemma name t
+  (* PluginScopes.push
+    PluginCmdScope.
+      { name; command = PluginCmd.Lemma; close = Lemma.close_flemma }*)
 
-   let cache_count v = counter := v
-
-   let declare_counter : int -> Libobject.obj =
-     let open Libobject in
-     declare_object
-       {
-         (default_object "COUNTER") with
-         cache_function = cache_count;
-         load_function = (fun _ -> cache_count);
-       }
-
-   let increment () =
-     Lib.add_leaf (declare_counter (succ !counter))
-
-   let value () = !counter
-*)
+let close_flemma = Lemma.close_flemma 
+  
+let display_plugin_scope = PluginScopes.display

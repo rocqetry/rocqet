@@ -87,7 +87,7 @@ let close_family () : unit =
       (* Note that we only want to do this when late binding of family names
          happens in the linkage *)
       let linkage = Codegen.compute_linkage None linkage in
-      Codegen.compile_linkage linkage |> ignore;
+      (* Codegen.compile_linkage linkage |> ignore;*)
       Linkages.add linkage
   | LinkageCtx.Nested (upper, linkage) as context ->
       (* let further_base = Context.further_bound_linkage context in*)
@@ -164,7 +164,7 @@ let close_family () : unit =
             Linkage.concatenate_recursive ~base ~derived:linkage
       in
       (* Again should not do this all the time: *)
-      let linkage = Codegen.compute_linkage (Some context) linkage in
+      (* let linkage = Codegen.compute_linkage (Some context) linkage in*)
       let signature = Codegen.compile_linkage_signature linkage in
       let impl = Codegen.compile_nested_linkage linkage in
       let elem =
