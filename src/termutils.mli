@@ -32,7 +32,7 @@ val apply_module :
   Constrexpr.module_ast
 
 val generate_computational_axioms :
-  provenance:Names.Id.t ->
+  inductive:VernacInductive.t ->
   constructors:Names.Id.t list ->
   recursor:Names.Id.t ->
   prefix:Libnames.qualid option ->

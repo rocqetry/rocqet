@@ -17,8 +17,7 @@ module Ctx = struct
     module_name : Names.Id.t;
     compiled_context : CompiledModuleType.t;
     name : Names.Id.t;
-    inductive : VernacInductive.t;
-    provenance : Linkage.t;
+    inductive : VernacInductive.t;    
     motive : CompiledModule.t;
     motive_expr : Constrexpr.constr_expr list;
     suffix : RecKind.t;
@@ -52,8 +51,7 @@ let close_recursion () =
           inductive;
           suffix;
           compiled_context;
-          motive;
-          provenance;
+          motive;          
           parameters;
           module_name;
           handler_cases;
@@ -71,7 +69,7 @@ let close_recursion () =
   let handlers = handler_types |> List.map fst in
   let compiled_impl, computational_axioms =
     Codegen.compile_recursive_definition_implementation ~rec_principle_prefix
-      ~inductive ~provenance ~recursor_name:name ~handlers ~suffix
+      ~inductive ~recursor_name:name ~handlers ~suffix
       ~ctx:parameters ~handler_cases:module_name
   in
   let compiled_signature =
@@ -138,7 +136,7 @@ let open_recursion ~(name : Names.Id.t) ~(inductive_path : Libnames.qualid)
     Codegen.compile_motives ~names:[ name ] ~motives:[ motive_expr ]
       ~ctx:parameters ~family_name:name
   in
-  let inductive, compiled_recursors, provenance =
+  let inductive, compiled_recursors, _provenance =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
@@ -169,8 +167,7 @@ let open_recursion ~(name : Names.Id.t) ~(inductive_path : Libnames.qualid)
         compiled_context;
         motive;
         motive_expr = [ motive_expr ];
-        inductive;
-        provenance;
+        inductive;        
         arguments;
         rec_principle_prefix;
       }
@@ -204,7 +201,7 @@ let open_recursion_extension ~name =
     Codegen.compile_motives ~names:[ name ] ~motives ~ctx:parameters
       ~family_name:name
   in
-  let inductive, compiled_recursors, provenance =
+  let inductive, compiled_recursors, _provenance =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
@@ -239,8 +236,7 @@ let open_recursion_extension ~name =
         motive;
         motive_expr = motives;
         inductive;
-        inductive_path;
-        provenance;
+        inductive_path;        
         arguments;
         rec_principle_prefix;
       }

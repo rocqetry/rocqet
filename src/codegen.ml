@@ -393,7 +393,7 @@ let compile_recursive_definition_signature ~(names : Names.Id.t list)
 
 (* Return the compiled module and the generated computation behaviour *)
 let compile_recursive_definition_implementation ~inductive
-    ~(provenance : Linkage.t) ~recursor_name ~handlers
+     ~recursor_name ~handlers
     ~(rec_principle_prefix : Libnames.qualid option) ~suffix ~ctx
     ~(handler_cases : CompiledModule.t) :
     CompiledModule.t * (Names.Id.t * Constrexpr.constr_expr) list =
@@ -446,8 +446,10 @@ let compile_recursive_definition_implementation ~inductive
     let* () =
       thunk (fun () ->
           let result =
-            Termutils.generate_computational_axioms ~prefix:rec_principle_prefix
-              ~provenance:provenance.name ~constructors ~recursor:recursor_name
+            Termutils.generate_computational_axioms 
+              ~inductive
+              ~prefix:rec_principle_prefix
+              ~constructors ~recursor:recursor_name
           in
           computational_axioms := result;
           result
@@ -1168,7 +1170,7 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
         let compiled_context, parameters =
           compile_linkage_context ~field_name:name context
         in
-        let inductive, compiled_recursors, provenance =
+        let inductive, compiled_recursors, _provenance =
           Env.Context.lookup_inductive_for_recursion ~name:inductive_path
             context
         in
@@ -1191,7 +1193,7 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
         in
         let compiled_impl, computational_axioms =
           compile_recursive_definition_implementation ~rec_principle_prefix
-            ~inductive ~provenance ~recursor_name:name ~handlers ~suffix
+            ~inductive ~recursor_name:name ~handlers ~suffix
             ~ctx:parameters ~handler_cases:recursor_module
         in
         let compiled_signature =

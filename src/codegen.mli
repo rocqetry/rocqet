@@ -60,8 +60,7 @@ val compile_recursive_definition_signature :
   CompiledModuleType.t
 
 val compile_recursive_definition_implementation :
-  inductive:VernacInductive.t ->
-  provenance:Linkage.t ->
+  inductive:VernacInductive.t ->  
   recursor_name:Names.Id.t ->
   handlers:Names.Id.t list ->
   rec_principle_prefix:Libnames.qualid option ->

@@ -149,9 +149,42 @@ let apply_module ~(functor_expr : Constrexpr.module_ast)
     (fun op x -> CAst.make (CMapply (op, x)))
     functor_expr arguments
 
+let flatten_inductive_constructor_type 
+      ~(inductive : VernacInductive.t) 
+      ~(constructor : Names.Id.t) = 
+  let ind_name =
+    VernacInductive.extract_inductive_name inductive |> Libnames.qualid_of_ident
+  in
+  let constructor_type =
+    inductive
+    |> List.map (fun (inductive_expr, _) ->
+           inductive_expr |> VernacInductive.extract_type_and_cstrs)
+    |> List.find_map (fun (_, ctrs) -> List.assoc_opt constructor ctrs)
+  in
+  let constructor_type =
+    match constructor_type with
+    | None -> Errors.fail ~info:"Couldn't find constructor"
+    | Some c -> c
+  in
+  let rec unflatten (c : Constrexpr.constr_expr) =
+    match c.v with
+    | CNotation (_, (_, "_ -> _"), ([ domain; codomain ], _, _, _)) -> (
+        match domain.v with
+        | Constrexpr.CRef (ty_name, _) when ind_name.v = ty_name.v ->                      
+           Some (ty_name.v) :: unflatten codomain        
+        | _ -> None :: unflatten codomain)
+    | _ -> []
+  in
+  unflatten constructor_type
+  
+
 (* This has to be called with recursor_path and constructor_path exposed *)
-let calculate_computational_axiom_for_constructor ~recursor_name ~recursor_path
-    ~constructor_name ~constructor_path =
+let calculate_computational_axiom_for_constructor 
+      ~inductive
+      ~recursor_name 
+      ~recursor_path
+      ~constructor_name 
+      ~constructor_path =
   let open Constrexpr_ops in
   let constructor_params, fully_applied_constr =
     extract_variables_and_apply (mkRefC constructor_path)
@@ -166,36 +199,51 @@ let calculate_computational_axiom_for_constructor ~recursor_name ~recursor_path
   let recursor_applied =
     mkAppC
       (mkRefC recursor_path, fully_applied_constr :: recursor_remained_arguments)
+  in  
+  let handler =     
+    let extract_name ({ CAst.v = n; _ } : Names.lname) : Names.Id.t =
+        match n with        
+        | Names.Name n -> n
+        | _ -> Errors.fail ~info:"Expected non anonymous argument"
+    in    
+    let types = flatten_inductive_constructor_type ~inductive ~constructor:constructor_name in
+    let arguments = 
+      constructor_params 
+      |> List.map (fun ((lnames, _, _), _) -> 
+          lnames 
+          |> List.hd 
+          |> extract_name 
+          |> Libnames.qualid_of_ident 
+          |> mkRefC)
+    in
+    let f ty arg = 
+      match ty with 
+      | None -> [arg]
+      | Some _ ->          
+         let hypothesis = mkAppC (mkRefC recursor_path, [arg]) in 
+         [arg; hypothesis]
+    in 
+    let arguments = List.concat (List.map2 f types arguments) in 
+    let handler = 
+       mkRefC @@
+         Libnames.qualid_of_ident @@
+            Naming.handler_name 
+              ~recursor:recursor_name 
+              ~case:constructor_name 
+    in 
+    mkAppC (handler, arguments)
   in
   let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in
   let id_on_fully_applied_r =
-    mkAppC (eq_cstr, [ recursor_applied; recursor_applied ])
-  in
+    mkAppC (eq_cstr, [ recursor_applied; handler ])
+  in  
   let closed_recursor_applied =
     List.fold_right
       (fun (a, b, c) body -> mkProdC (a, b, c, body))
       (List.map fst params) id_on_fully_applied_r
   in
   (* The final axiom is an equation *)
-  let equation =
-    let reflected =
-      closed_recursor_applied |> cbn_type_check |> reflect_checked_term
-    in
-    let _, body = collect_argument_and_ret_of_type reflected in
-    let destEq { CAst.v = t; _ } =
-      match t with
-      | Constrexpr.CNotation (_, (_, "_ = _"), ([ lhs; rhs ], _, _, _)) ->
-          (lhs, rhs)
-      | _ -> Errors.fail ~info:"Expected CNotation"
-    in
-    let normalized, _ = destEq body in
-    let id_on_applied_and_normalized =
-      mkAppC (eq_cstr, [ recursor_applied; normalized ])
-    in
-    List.fold_right
-      (fun (a, b, c) body -> mkProdC (a, b, c, body))
-      (List.map fst params) id_on_applied_and_normalized
-  in
+  let equation = closed_recursor_applied in  
   let equation_name =
     Names.Id.to_string recursor_name
     ^ "_"
@@ -205,9 +253,8 @@ let calculate_computational_axiom_for_constructor ~recursor_name ~recursor_path
   in
   (equation_name, equation)
 
-let generate_computational_axioms ~provenance ~constructors ~recursor ~prefix =
+let generate_computational_axioms ~inductive ~constructors ~recursor ~prefix =
   (* let prefix = Libnames.qualid_of_ident (Naming.self_version provenance) in*)
-  provenance |> ignore;
   let recursor_name = recursor in
   let recursor_path = Libnames.qualid_of_ident recursor in
   let constructors =
@@ -216,7 +263,9 @@ let generate_computational_axioms ~provenance ~constructors ~recursor ~prefix =
   in
   constructors
   |> List.map (fun (constructor_name, constructor_path) ->
-         calculate_computational_axiom_for_constructor ~recursor_name
+         calculate_computational_axiom_for_constructor 
+           ~inductive
+           ~recursor_name
            ~recursor_path ~constructor_name ~constructor_path)
 
 (* Given a recursor name and a compiled recursor return the type
