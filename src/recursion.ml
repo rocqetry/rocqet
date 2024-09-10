@@ -75,7 +75,7 @@ let close_recursion () =
   let compiled_signature =
     Codegen.compile_recursive_definition_signature ~names:[ name ]
       ~motive_module:motive ~handler_cases:module_name ~ctx:parameters
-      ~family_name:name ~computational_behaviour:`Exposed ~computational_axioms
+      ~family_name:name ~computational_behaviour:`Exposed ~inductive ~prefix:rec_principle_prefix
   in
   (* Feedback the defined Computational Axioms *)
   let print_constr_expr expr =

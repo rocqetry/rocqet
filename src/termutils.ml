@@ -255,10 +255,18 @@ let calculate_computational_axiom_for_constructor
   in
   (equation_name, equation)
 
-let generate_computational_axioms ~inductive ~constructors ~recursor ~prefix =
+let generate_computational_axioms ~(inductive : VernacInductive.t)  ~recursor ~prefix =
   (* let prefix = Libnames.qualid_of_ident (Naming.self_version provenance) in*)
   let recursor_name = recursor in
   let recursor_path = Libnames.qualid_of_ident recursor in
+  let constructors = 
+    inductive 
+    |> List.hd 
+    |> fst
+    |> VernacInductive.extract_type_and_cstrs  
+    |> snd 
+    |> List.map fst
+  in
   let constructors =
     constructors
     |> List.map (fun name -> (name, Naming.qualid_point prefix name))

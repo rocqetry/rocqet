@@ -45,8 +45,7 @@ val flatten_inductive_constructor_type :
      constructor:Names.Id.t -> Libnames.qualid_r option list
 
 val generate_computational_axioms :
-  inductive:VernacInductive.t ->
-  constructors:Names.Id.t list ->
+  inductive:VernacInductive.t ->  
   recursor:Names.Id.t ->
   prefix:Libnames.qualid option ->
   (Names.Id.t * Constrexpr.constr_expr) list

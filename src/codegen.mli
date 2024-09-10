@@ -56,7 +56,8 @@ val compile_recursive_definition_signature :
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
   family_name:Names.Id.t ->
   computational_behaviour:[ `Exposed | `Hidden ] ->
-  computational_axioms:(Names.Id.t * Constrexpr.constr_expr) list ->
+  inductive:VernacInductive.t ->
+  prefix:Libnames.qualid option ->
   CompiledModuleType.t
 
 val compile_recursive_definition_implementation :

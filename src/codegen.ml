@@ -318,11 +318,14 @@ let compile_motives ~(names : Names.Id.t list)
                 B.define_term ~name motive)
          |> B.flatmap)
 
-let compile_recursive_definition_signature ~(names : Names.Id.t list)
-    ~(motive_module : CompiledModule.t) ~(handler_cases : CompiledModule.t)
+let compile_recursive_definition_signature 
+    ~(names : Names.Id.t list)
+    ~(motive_module : CompiledModule.t) 
+    ~(handler_cases : CompiledModule.t)
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name
-    ~(computational_behaviour : [ `Exposed | `Hidden ])
-    ~(computational_axioms : (Names.Id.t * Constrexpr.constr_expr) list) :
+    ~(computational_behaviour : [ `Exposed | `Hidden ]) 
+    ~(inductive: VernacInductive.t)
+    ~(prefix : Libnames.qualid option):    
     CompiledModuleType.t =
   let module_name =
     Naming.module_name_of ~family_name (Naming.concat_names names)
@@ -377,18 +380,22 @@ let compile_recursive_definition_signature ~(names : Names.Id.t list)
            in
            (* Computational Axioms *)
            let* () =
-             match computational_behaviour with
-             | `Exposed ->
-                 let* _ =
-                   thunk (fun () ->
-                       computational_axioms
-                       |> List.map (fun (name, ty) -> postulate_axiom ~name ~ty)
-                       |> flatmap |> run;
-                       return ())
-                 in
-                 return ()
+             match computational_behaviour with 
+             | `Exposed -> 
+                 thunk (fun () ->
+                     let recursor = List.hd names in
+                     let result =
+                       Termutils.generate_computational_axioms 
+                         ~inductive
+                         ~prefix
+                         ~recursor
+                     in                 
+                     result
+                     |> List.map (fun (name, ty) -> postulate_axiom ~name ~ty)
+                     |> flatmap |> run;
+                     return ())
              | `Hidden -> return ()
-           in
+           in           
            return ()))
 
 (* Return the compiled module and the generated computation behaviour *)
@@ -396,7 +403,7 @@ let compile_recursive_definition_implementation
       ~inductive
       ~recursor_name 
       ~handlers
-      ~(rec_principle_prefix : Libnames.qualid option) ~suffix ~ctx
+     ~(rec_principle_prefix : Libnames.qualid option) ~suffix ~ctx
     ~(handler_cases : CompiledModule.t) :
     CompiledModule.t * (Names.Id.t * Constrexpr.constr_expr) list =
   let module_name = Naming.fresh_name ~prefix:"RecImpl" in
@@ -430,13 +437,7 @@ let compile_recursive_definition_implementation
     let* _ = include_module ~module_expr in
     let* _ = define_term ~name:recursor_name recursor in
 
-    (* Generate the computational behaviour: *)
-    let constructors =
-      let _, constructors =
-        inductive |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs
-      in
-      constructors |> List.map fst
-    in
+    (* Generate the computational behaviour: *)    
     let auto_tactic (* : Tacexpr.raw_tactic_expr*) =
       let open Ltac_plugin in
       CAst.make
@@ -451,7 +452,7 @@ let compile_recursive_definition_implementation
             Termutils.generate_computational_axioms 
               ~inductive
               ~prefix:rec_principle_prefix
-              ~constructors ~recursor:recursor_name
+              ~recursor:recursor_name
           in
           computational_axioms := result;
           result
@@ -1193,7 +1194,7 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
           in
           Some prefix
         in
-        let compiled_impl, computational_axioms =
+        let compiled_impl, _computational_axioms =
           compile_recursive_definition_implementation ~rec_principle_prefix
             ~inductive ~recursor_name:name ~handlers ~suffix
             ~ctx:parameters ~handler_cases:recursor_module
@@ -1201,7 +1202,7 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
         let compiled_signature =
           compile_recursive_definition_signature ~handler_cases:recursor_module
             ~names:[ name ] ~motive_module ~ctx:parameters ~family_name:name
-            ~computational_behaviour:`Exposed ~computational_axioms
+            ~computational_behaviour:`Exposed ~inductive ~prefix:rec_principle_prefix
         in
         let elem =
           LinkageElem.RecursorDefinition

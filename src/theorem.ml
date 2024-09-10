@@ -331,7 +331,7 @@ let close_theorem () =
     Codegen.compile_recursive_definition_signature ~names:[ name ]
       ~motive_module:compiled_motive ~handler_cases:compiled_handlers
       ~ctx:parameters ~family_name ~computational_behaviour:`Hidden
-      ~computational_axioms:[]
+      ~inductive ~prefix:(Some rec_principle_prefix)
   in
   let elem =
     LinkageElem.TheoremDefinition
