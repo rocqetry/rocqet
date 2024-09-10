@@ -624,9 +624,8 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
   | Bwd.Snoc
       ( _,
         ( _,
-          LinkageElem.InductiveDefinition
-            (* Exposed parameter *)
-            { compiled_context; compiled_impl = compiled_signature; compiled_recursors; _ } ) ) ->
+          LinkageElem.InductiveDefinition            
+            { compiled_context; compiled_signature; compiled_recursors; _ } ) ) ->
       let signature_name =
         B.(
           run
@@ -840,10 +839,9 @@ let compile_linkage_signature linkage =
                  return ()))
     | Bwd.Snoc
         ( _,
-          ( _,
-            (* Exposed parameter *)
+          ( _,            
             LinkageElem.InductiveDefinition
-              { compiled_recursors; compiled_context; compiled_impl = compiled_signature; _ } ) ) ->
+              { compiled_recursors; compiled_context; compiled_signature; _ } ) ) ->
         B.(
           run
           @@ define_moduletype ~module_name:helper
