@@ -1676,7 +1676,7 @@ Inductive bitfield : Type :=
                   (* do 2 *)
                   + apply cheat.
                   (* seq *)
-                  + apply cheat.
+                  + intros. apply cheat.
                   (* skip seq *)
                   + apply cheat.
                   (* continue seq *)
@@ -1751,7 +1751,7 @@ Inductive bitfield : Type :=
                   - apply self__Proof.estep_simulation; auto.
                   - apply self__Proof.sstep_simulation; auto.
                 Qed.
-              CloseFLemma.                            
+              CloseFLemma.
               
               FLemma transl_initial_states:
                  forall S prog tprog (_ : match_prog prog tprog),                 
@@ -2226,8 +2226,42 @@ Inductive bitfield : Type :=
             forall T1, self__Proof.match_states S1 T1 -> 
             exists T2, plus Csharpminor.Sem.step tge T1 t T2 /\ match_states S2 T2).            
           FProof.
-              __unfold_ftheorem_motive_nested.
-              apply cheat. Qed.
+              finduction.
+              (* set *)
+              + apply cheat.
+              (* seq *)
+              + apply cheat.
+              (* skip seq *)
+              + apply cheat.
+              (* continue seq *)
+              + apply cheat.
+              (* break seq *)
+              + apply cheat.
+              (* ifthenelse *)
+              + apply cheat.
+              (* loop *)
+              + apply cheat.
+              (* skip-or-continue loop *)
+              + apply cheat.
+              (* break loop1 *)
+              + intros. apply cheat.
+              (* skip loop2 *)
+              + apply cheat.
+              (* break loop2 *)
+              + apply cheat.
+              (* return none *)
+              + apply cheat.
+              (* return some *)
+              + intros. apply cheat.
+              (* skip call *)
+              + apply cheat.
+              (* label *)
+              + apply cheat.
+              (* goto *)
+              + intros. apply cheat.
+              (* internal function *)
+              + intros. apply cheat.
+          Qed.
           FEnd transl_step.
                 
           FLemma transl_initial_states:
@@ -2765,7 +2799,7 @@ Inductive bitfield : Type :=
               Case State := (fun fn s k e le m => seq_left_depth s).
               Case Callstate := (fun f args k m => O).
               Case Returnstate := (fun res k m => O).
-          FEnd measure.
+        FEnd measure.
 
         FInduction transl_step_correct about Csharpminor.Sem.step motive
           (fun ge S1 t S2 (_ : Csharpminor.Sem.step ge S1 t S2) => 
@@ -2774,7 +2808,33 @@ Inductive bitfield : Type :=
           (exists T2, plus Cminor.Sem.step tge T1 t T2 /\ match_states ge S2 T2) 
           \/ (measure S2 < measure S1 /\ t = E0 /\ match_states ge S2 T1)%nat).
         FProof. 
-          apply cheat.
+          finduction.
+          (* skip seq *)
+          + intros. apply cheat.
+          (* skip block *)
+          + intros. apply cheat.
+          (* skip call *)
+          + intros. apply cheat.
+          (* set *)
+          + intros. apply cheat.
+          (* seq *)
+          + intros. apply cheat.
+          (* ifthenelse *)
+          + intros. apply cheat.
+          (* loop *)
+          + apply cheat.
+          (* block *)
+          + apply cheat.
+          (* return none *)
+          + apply cheat.
+          (* return some *)
+          + apply cheat.
+          (* label *)
+          + apply cheat.
+          (* goto *)
+          + apply cheat.
+          (* internal function *)
+          + intros. apply cheat.
         Qed.
         FEnd transl_step_correct.
         
