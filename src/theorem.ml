@@ -98,6 +98,18 @@ let start_proving () =
     in
     Tacinterp.interp __unfold_motive_helper
   in
+  let split_cases_into_goals =
+    let helper =
+      CAst.make
+        (Tacexpr.TacArg
+           (Tacexpr.TacCall
+              (CAst.make
+                 ( Libnames.qualid_of_ident
+                     (Names.Id.of_string "finduction"),
+                   [] ))))
+    in
+    Tacinterp.interp helper
+  in
   let repeat_split =
     Tacticals.tclREPEAT
       (Tactics.split_with_bindings false [ Tactypes.NoBindings ])
@@ -109,6 +121,7 @@ let start_proving () =
   let starting_operation =
     if split then repeat_split_then_unfold else unfold_nonsplit
   in
+  let starting_operation = Tacticals.tclTHEN starting_operation split_cases_into_goals in 
   let ongoing_proof, _ = Declare.Proof.by starting_operation ongoing_proof in
   Ctx.update_proof ongoing_proof;
   ongoing_proof
