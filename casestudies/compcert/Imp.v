@@ -2859,98 +2859,197 @@ Inductive bitfield : Type :=
     (* RISC-V *)
   Family Asm.
       (* Operations *)
-      FInductive condition : Type :=
-        | Ccomp : comparison -> condition.       (**r signed integer comparison *)
+      MetaData condition.
+      Inductive condition : Type :=
+        | Ccomp (c: comparison)       (**r signed integer comparison *)
+        | Ccompu (c: comparison)      (**r unsigned integer comparison *)
+        | Ccompimm (c: comparison) (n: int) (**r signed integer comparison with a constant *)
+        | Ccompuimm (c: comparison) (n: int)  (**r unsigned integer comparison with a constant *)
+        | Ccompl (c: comparison)      (**r signed 64-bit integer comparison *)
+        | Ccomplu (c: comparison)     (**r unsigned 64-bit integer comparison *)
+        | Ccomplimm (c: comparison) (n: int64) (**r signed 64-bit integer comparison with a constant *)
+        | Ccompluimm (c: comparison) (n: int64)  (**r unsigned 64-bit integer comparison with a constant *)
+        | Ccompf (c: comparison)      (**r 64-bit floating-point comparison *)
+        | Cnotcompf (c: comparison)   (**r negation of a floating-point comparison *)
+        | Ccompfs (c: comparison)     (**r 32-bit floating-point comparison *)
+        | Cnotcompfs (c: comparison). (**r negation of a floating-point comparison *)        
+      FEnd condition.
 
 (** Arithmetic and logical operations.  In the descriptions, [rd] is the
   result of the operation and [r1], [r2], etc, are the arguments. *)
 
      FInductive operation : Type :=
-        | Omove                    (**r [rd = r1] *)
-        | Ointconst (n: int)       (**r [rd] is set to the given integer constant *)
-        | Olongconst (n: int64)    (**r [rd] is set to the given integer constant *)
-        | Oaddrsymbol (id: ident) (ofs: ptrofs)  (**r [rd] is set to the address of the symbol plus the given offset *)
-        | Oaddrstack (ofs: ptrofs) (**r [rd] is set to the stack pointer plus the given offset *)
-      (*c 32-bit integer arithmetic: *)
-        | Ocast8signed             (**r [rd] is 8-bit sign extension of [r1] *)
-        | Ocast16signed            (**r [rd] is 16-bit sign extension of [r1] *)
-        | Oadd                     (**r [rd = r1 + r2] *)
-        | Oaddimm (n: int)         (**r [rd = r1 + n] *)
-        | Oneg                     (**r [rd = - r1]   *)                     
-        | Osub                     (**r [rd = r1 - r2] *)
-        | Omul                     (**r [rd = r1 * r2] *)
-        | Odiv                     (**r [rd = r1 / r2] (signed) *)
-      (*c Boolean tests: *)
-        | Ocmp (cond: condition).  (**r [rd = 1] if condition holds, [rd = 0] otherwise. *) 
+        | Omove : operation                    (**r [rd = r1] *)
+        | Ointconst : int -> operation       (**r [rd] is set to the given integer constant *)
+        | Olongconst : int64 -> operation    (**r [rd] is set to the given integer constant *)
+        | Ofloatconst : float -> operation   (**r [rd] is set to the given float constant *)
+        | Osingleconst : float32 -> operation (**r [rd] is set to the given float constant *)
+        (* | Oaddrsymbol : ident -> ptrofs -> operation*)  (**r [rd] is set to the address of the symbol plus the given offset *)
+        | Oaddrstack : ptrofs -> operation (**r [rd] is set to the stack pointer plus the given offset *)        
+          
+        (*c 32-bit integer arithmetic: *)
+        | Ocast8signed : operation             (**r [rd] is 8-bit sign extension of [r1] *)
+        | Ocast16signed : operation            (**r [rd] is 16-bit sign extension of [r1] *)                             
+                            
+        | Osingleoffloat : operation           (**r [rd] is [r1] truncated to single-precision float *)
+        | Ofloatofsingle : operation           (**r [rd] is [r1] extended to double-precision float *)
+            
+        (*c Conversions between int and float: *)
+        | Ointoffloat : operation              (**r [rd = signed_int_of_float64(r1)] *)
+        | Ointuoffloat : operation             (**r [rd = unsigned_int_of_float64(r1)] *)
+        | Ofloatofint : operation              (**r [rd = float64_of_signed_int(r1)] *)
+        | Ofloatofintu : operation             (**r [rd = float64_of_unsigned_int(r1)] *)
+        | Ointofsingle : operation             (**r [rd = signed_int_of_float32(r1)] *)
+        | Ointuofsingle : operation            (**r [rd = unsigned_int_of_float32(r1)] *)
+        | Osingleofint : operation             (**r [rd = float32_of_signed_int(r1)] *)
+        | Osingleofintu : operation            (**r [rd = float32_of_unsigned_int(r1)] *)
+        | Olongoffloat : operation             (**r [rd = signed_long_of_float64(r1)] *)
+        | Olonguoffloat : operation            (**r [rd = unsigned_long_of_float64(r1)] *)
+        | Ofloatoflong : operation             (**r [rd = float64_of_signed_long(r1)] *)
+        | Ofloatoflongu : operation            (**r [rd = float64_of_unsigned_long(r1)] *)
+        | Olongofsingle : operation            (**r [rd = signed_long_of_float32(r1)] *)
+        | Olonguofsingle : operation           (**r [rd = unsigned_long_of_float32(r1)] *)
+        | Osingleoflong : operation            (**r [rd = float32_of_signed_long(r1)] *)
+        | Osingleoflongu : operation           (**r [rd = float32_of_unsigned_int(r1)] *)
+            
+        (*c Boolean tests: *)
+        | Ocmp : condition -> operation.  (**r [rd = 1] if condition holds, [rd = 0] otherwise. *)
+           
+     FDefinition eval_condition := fun (cond: condition) (vl: list val) (m: mem) =>
+         match cond, vl with
+         | self__Asm.Ccomp c, v1 :: v2 :: nil => Val.cmp_bool c v1 v2
+         | self__Asm.Ccompu c, v1 :: v2 :: nil => Val.cmpu_bool (Mem.valid_pointer m) c v1 v2
+         | self__Asm.Ccompimm c n, v1 :: nil => Val.cmp_bool c v1 (Vint n)
+         | self__Asm.Ccompuimm c n, v1 :: nil => Val.cmpu_bool (Mem.valid_pointer m) c v1 (Vint n)
+         | self__Asm.Ccompl c, v1 :: v2 :: nil => Val.cmpl_bool c v1 v2
+         | self__Asm.Ccomplu c, v1 :: v2 :: nil => Val.cmplu_bool (Mem.valid_pointer m) c v1 v2
+         | self__Asm.Ccomplimm c n, v1 :: nil => Val.cmpl_bool c v1 (Vlong n)
+         | self__Asm.Ccompluimm c n, v1 :: nil => Val.cmplu_bool (Mem.valid_pointer m) c v1 (Vlong n)
+         | self__Asm.Ccompf c, v1 :: v2 :: nil => Val.cmpf_bool c v1 v2
+         | self__Asm.Cnotcompf c, v1 :: v2 :: nil => option_map negb (Val.cmpf_bool c v1 v2)
+         | self__Asm.Ccompfs c, v1 :: v2 :: nil => Val.cmpfs_bool c v1 v2
+         | self__Asm.Cnotcompfs c, v1 :: v2 :: nil => option_map negb (Val.cmpfs_bool c v1 v2)
+         | _, _ => None
+         end.
 
-      
-     FRecursion eval_operation about operation motive (fun (_ : operation) => condition -> list val -> mem -> option val) by _rect.
-          Case Ccomp := (fun c => fun ge sp vl m => 
-                        match vl with 
-                        | v1 :: v2 :: nil => Val.cmp_bool c v1 v2
-                        | _ => None end).
-     FEnd eval_operation.
-
-     FRecursion eval_operation about operation motive (fun (_ : operation) => Genv.t -> val -> list val -> mem -> option val) by _rect.
-        Case Omove := (fun ge sp vl m => 
+     FRecursion eval_operation about operation motive (fun (_ : operation) => forall F V, Genv.t F V -> val -> list val -> mem -> option val) by _rect.
+        Case Omove := (fun F V ge sp vl m => 
                     match vl with 
                     | v1 :: nil => Some v1 
                     | _ => None end).
-        Case Ointconst := (fun n => fun ge sp vl m =>  
+        Case Ointconst := (fun n => fun F V ge sp vl m =>  
                            match vl with 
-                           | nil => (Some (Vint n)
+                           | nil => Some (Vint n)
                            | _ => None end).
-        Case Olongconst := (fun n => fun ge sp vl m =>  
+        Case Olongconst := (fun n => fun F V ge sp vl m =>  
                            match vl with 
-                           | nil => (Some (Vlong n)
+                           | nil => Some (Vlong n)
                            | _ => None end).
-        Case Oaddrsymbol := (fun s ofs => fun ge sp vl m =>
+        Case Ofloatconst := (fun n => fun F V ge sp vl m =>  
+                           match vl with 
+                           | nil => Some (Vfloat n)
+                           | _ => None end).
+        Case Osingleconst := (fun n => fun F V ge sp vl m =>  
+                           match vl with 
+                           | nil => Some (Vsingle n)
+                           | _ => None end).                
+        (* Case Oaddrsymbol := (fun s ofs => fun F V ge sp vl m =>
                            match vl with 
                            | nil => Some (Genv.symbol_address genv s ofs)
-                           | _ => None end).
-        Case Oaddrstack := (fun ofs => fun ge sp vl m =>
+                           | _ => None end).*)
+        Case Oaddrstack := (fun ofs => fun F V ge sp vl m =>
                            match vl with 
                            | nil => Some (Val.offset_ptr sp ofs)
-                           | _ => None end)
-        Case Ocast8signed := (fun ge sp vl m =>
+                           | _ => None end).
+        Case Ocast8signed := (fun F V ge sp vl m =>
                            match vl with 
                            | v1 :: nil => Some (Val.sign_ext 8 v1)
                            | _ => None end).
-        Case Ocast16signed := (fun ge sp vl m =>
+        Case Ocast16signed := (fun F V ge sp vl m =>
                            match vl with 
                            | v1 :: nil => Some (Val.sign_ext 16 v1)
-                           | _ => None end)
-        Case Oadd := (fun ge sp vl m =>
-                  match vl with 
-                  | v1 :: v2 :: nil => Some(Val.add v1 v2)
-                  | _ => None end).
-        Case Oaddimm := (fun n => fun ge sp vl m =>
-                  match vl with 
-                  | v1 :: nil => Some(Val.add v1 (Vint n))
-                  | _ => None end).
-        Case Oneg := (fun ge sp vl m =>
-                  match vl with 
-                  | v1 :: nil => Some(Val.neg v1)
-                  | _ => None end).
-        Case Osub := (fun ge sp vl m =>
-                  match vl with 
-                  | v1 :: v2 :: nil => Some(Val.sub v1 v2)
-                  | _ => None end).
-        Case Omul := (fun ge sp vl m =>
-                  match vl with 
-                  | v1 :: v2 :: nil => Some(Val.mul v1 v2)
-                  | _ => None end).
-        Case Odiv := (fun ge sp vl m =>
-                  match vl with 
-                  | v1 :: v2 :: nil => Some(Val.divs v1 v2)
-                  | _ => None end).
-        Case Ocmp := (fun c => fun ge sp vl m =>
+                           | _ => None end).        
+        Case Osingleoffloat := (fun F V ge sp vl m =>
+                           match vl with 
+                           | v1 :: nil => Some (Val.singleoffloat v1)
+                           | _ => None end).        
+        Case Ofloatofsingle := (fun F V ge sp vl m =>
+                           match vl with 
+                           | v1 :: nil => Some (Val.floatofsingle v1)
+                           | _ => None end).
+
+        Case Ointoffloat := (fun F V ge sp vl m => 
+                           match vl with 
+                           | v1 :: nil => Some (Val.intoffloat v1)
+                           | _ => None end).
+        Case Ointuoffloat := (fun F V ge sp vl m => 
+                           match vl with 
+                           | v1 :: nil => Some (Val.intuoffloat v1)
+                           | _ => None end).
+        Case Ofloatofint := (fun F V ge sp vl m => 
+                           match vl with 
+                           | v1 :: nil => Some (Val.floatofint v1)
+                           | _ => None end).
+        
+        Case Ofloatofintu := (fun F V ge sp vl m => 
+                           match vl with 
+                           | v1 :: nil => Some (Val.floatofintu v1)
+                           | _ => None end).
+        Case Ointofsingle := (fun F V ge sp vl m => 
+                           match vl with 
+                           | v1 :: nil => Some (Val.intofsingle v1)
+                           | _ => None end).
+        Case Ointuofsingle := (fun F V ge sp vl m => 
+                           match vl with 
+                           | v1 :: nil => Some (Val.intuofsingle v1)
+                           | _ => None end).
+        Case Osingleofint := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => Some (Val.singleofint v1)
+                            | _ => None end).
+        Case Osingleofintu := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => Some (Val.singleofintu v1)
+                            | _ => None end).
+        Case Olongoffloat := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => Some (Val.longoffloat v1)
+                            | _ => None end).
+        Case Olonguoffloat := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => Some (Val.longuoffloat v1)
+                            | _ => None end).
+        Case Ofloatoflong := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => Some (Val.floatoflong v1)
+                            | _ => None end).
+        Case Ofloatoflongu := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => Some (Val.floatoflongu v1)
+                            | _ => None end).
+        Case Olongofsingle := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => Some (Val.longofsingle v1)
+                            | _ => None end).
+        Case Olonguofsingle := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => Some (Val.longuofsingle v1)
+                            | _ => None end).
+        Case Osingleoflong := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => Some (Val.singleoflong v1)
+                            | _ => None end).
+        Case Osingleoflongu := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => Some (Val.singleoflongu v1)
+                            | _ => None end).
+        Case Ocmp := (fun c => fun F V ge sp vl m =>
                   match vl with 
                   | v1 :: v2 :: nil =>  Some (Val.of_optbool (eval_condition c vl m))
                   | _ => None end).
      FEnd eval_operation.
 
-    FRecursion shift_stack_operation about operation motive (fun (_ : operation) => Z -> operation) by _rect.
+    (* FRecursion shift_stack_operation about operation motive (fun (_ : operation) => Z -> operation) by _rect.
         Case Omove := (fun delta => Omove).
         Case Ointconst := (fun delta n => Ointconst n).
         Case Olongconst := (fun delta n => Olongconst n).
@@ -2965,9 +3064,10 @@ Inductive bitfield : Type :=
         Case Omul := (fun delta => Omul).
         Case Odiv := (fun delta => Odiv).
         Case Ocmp := (fun delta c => Ocmp c).
-    FEnd shift_stack_operation.
-      
-     Inductive ireg: Type :=
+    FEnd shift_stack_operation.*)
+    
+    MetaData ireg.
+    Inductive ireg: Type :=
          | X1:  ireg | X2:  ireg | X3:  ireg | X4:  ireg | X5:  ireg
          | X6:  ireg | X7:  ireg | X8:  ireg | X9:  ireg | X10: ireg
          | X11: ireg | X12: ireg | X13: ireg | X14: ireg | X15: ireg
@@ -2975,63 +3075,34 @@ Inductive bitfield : Type :=
          | X21: ireg | X22: ireg | X23: ireg | X24: ireg | X25: ireg
          | X26: ireg | X27: ireg | X28: ireg | X29: ireg | X30: ireg
          | X31: ireg.
+    FEnd ireg.
 
-     Inductive ireg0: Type :=
+    MetaData ireg0.
+    Inductive ireg0: Type :=
         | X0: ireg0 | X: ireg -> ireg0.
+    FEnd Ireg0.
       
-      (* Non-extensible inductive *)
-     Inductive preg: Type :=
+    MetaData preg. 
+    Inductive preg: Type :=
          | IR: ireg -> preg                    (**r integer registers *)
          | FR: freg -> preg                    (**r double-precision float registers *)
          | PC: preg.                           (**r program counter *)
+    FEnd preg.
       
-     Notation "'SP'" := X2 (only parsing) : asm.
-     Notation "'RA'" := X1 (only parsing) : asm.
+    (* Notation "'SP'" := X2 (only parsing) : asm.
+     Notation "'RA'" := X1 (only parsing) : asm.*)
       
-      (* Non-extensible inductive *)
-     Inductive offset : Type :=
+    MetaData offset.
+    Inductive offset : Type :=
         | Ofsimm (ofs: ptrofs)
         | Ofslow (id: ident) (ofs: ptrofs).
+    FEnd offset.
 
-     Definition label := positive.
+    FDefinition label := positive.
 
-     FInductive instruction : Type :=
-         | Pmv     (rd: ireg) (rs: ireg)                    (**r integer move *)
-       
-       (** 32-bit integer register-immediate instructions *)
-         | Paddiw  (rd: ireg) (rs: ireg0) (imm: int)        (**r add immediate *)
-         | Psltiw  (rd: ireg) (rs: ireg0) (imm: int)        (**r set-less-than immediate *)
-         | Psltiuw (rd: ireg) (rs: ireg0) (imm: int)        (**r set-less-than unsigned immediate *)
-         | Pandiw  (rd: ireg) (rs: ireg0) (imm: int)        (**r and immediate *)
-         | Poriw   (rd: ireg) (rs: ireg0) (imm: int)        (**r or immediate *)
-         | Pxoriw  (rd: ireg) (rs: ireg0) (imm: int)        (**r xor immediate *)
-         | Pslliw  (rd: ireg) (rs: ireg0) (imm: int)        (**r shift-left-logical immediate *)
-         | Psrliw  (rd: ireg) (rs: ireg0) (imm: int)        (**r shift-right-logical immediate *)
-         | Psraiw  (rd: ireg) (rs: ireg0) (imm: int)        (**r shift-right-arith immediate *)
-         | Pluiw   (rd: ireg)             (imm: int)        (**r load upper-immediate *)
-       (** 32-bit integer register-register instructions *)
-         | Paddw   (rd: ireg) (rs1 rs2: ireg0)              (**r integer addition *)
-         | Psubw   (rd: ireg) (rs1 rs2: ireg0)              (**r integer subtraction *)
-                   
-         | Pmulw   (rd: ireg) (rs1 rs2: ireg0)              (**r integer multiply low *)
-         | Pmulhw  (rd: ireg) (rs1 rs2: ireg0)              (**r integer multiply high signed *)
-         | Pmulhuw (rd: ireg) (rs1 rs2: ireg0)              (**r integer multiply high unsigned *)
-         | Pdivw   (rd: ireg) (rs1 rs2: ireg0)              (**r integer division *)
-         | Pdivuw  (rd: ireg) (rs1 rs2: ireg0)              (**r unsigned integer division *)
-         | Premw   (rd: ireg) (rs1 rs2: ireg0)              (**r integer remainder *)
-         | Premuw  (rd: ireg) (rs1 rs2: ireg0)              (**r unsigned integer remainder *)
-         | Psltw   (rd: ireg) (rs1 rs2: ireg0)              (**r set-less-than *)
-         | Psltuw  (rd: ireg) (rs1 rs2: ireg0)              (**r set-less-than unsigned *)
-         | Pseqw   (rd: ireg) (rs1 rs2: ireg0)              (**r [rd <- rs1 == rs2] (pseudo) *)
-         | Psnew   (rd: ireg) (rs1 rs2: ireg0)              (**r [rd <- rs1 != rs2] (pseudo) *)
-         | Pandw   (rd: ireg) (rs1 rs2: ireg0)              (**r bitwise and *)
-         | Porw    (rd: ireg) (rs1 rs2: ireg0)              (**r bitwise or *)
-         | Pxorw   (rd: ireg) (rs1 rs2: ireg0)              (**r bitwise xor *)
-         | Psllw   (rd: ireg) (rs1 rs2: ireg0)              (**r shift-left-logical *)
-         | Psrlw   (rd: ireg) (rs1 rs2: ireg0)              (**r shift-right-logical *)
-         | Psraw   (rd: ireg) (rs1 rs2: ireg0)              (**r shift-right-arith *)    
-
-
+    FInductive instruction : Type :=
+        | Pmv     (rd: ireg) (rs: ireg)                    (**r integer move *)
+              
         (* Loads and stores *)
         | Plb     (rd: ireg) (ra: ireg) (ofs: offset)     (**r load signed int8 *)
         | Plbu    (rd: ireg) (ra: ireg) (ofs: offset)     (**r load unsigned int8 *)
@@ -3047,11 +3118,64 @@ Inductive bitfield : Type :=
         | Psw     (rs: ireg) (ra: ireg) (ofs: offset)     (**r store int32 *)
         | Psw_a   (rs: ireg) (ra: ireg) (ofs: offset)     (**r store any32 *)
         | Psd     (rs: ireg) (ra: ireg) (ofs: offset)     (**r store int64 *)
-        | Psd_a   (rs: ireg) (ra: ireg) (ofs: offset)     (**r store any64 *)                         
+        | Psd_a   (rs: ireg) (ra: ireg) (ofs: offset)     (**r store any64 *)
+        
+          (* floating point register move *)
+        | Pfmv     (rd: freg) (rs: freg)                  (**r move *)
+        | Pfmvxs   (rd: ireg) (rs: freg)                  (**r move FP single to integer register *)
+        | Pfmvsx   (rd: freg) (rs: ireg)                  (**r move integer register to FP single *)
+        | Pfmvxd   (rd: ireg) (rs: freg)                  (**r move FP double to integer register *)
+        | Pfmvdx   (rd: freg) (rs: ireg)                  (**r move integer register to FP double *)
       
-      (* Unconditional jumps.  Links are always to X1/RA. *)
-       | Pj_l    (l: label)                              (**r jump to label *)
-       | Pj_r    (r: ireg)     (sg: signature)           (**r jump register *)
+        (* 32-bit (single-precision) floating point *)
+        | Pfls     (rd: freg) (ra: ireg) (ofs: offset)    (**r load float *)
+        | Pfss     (rs: freg) (ra: ireg) (ofs: offset)    (**r store float *)
+      
+        | Pfnegs   (rd: freg) (rs: freg)                  (**r negation *)
+        | Pfabss   (rd: freg) (rs: freg)                  (**r absolute value *)
+                   
+        
+        | Pfcvtws  (rd: ireg) (rs: freg)                  (**r float32 -> int32 conversion *)
+        | Pfcvtwus (rd: ireg) (rs: freg)                  (**r float32 -> unsigned int32 conversion *)
+        | Pfcvtsw  (rd: freg) (rs: ireg0)                 (**r int32 -> float32 conversion *)
+        | Pfcvtswu (rd: freg) (rs: ireg0)                 (**r unsigned int32 -> float32 conversion *)
+      
+        | Pfcvtls  (rd: ireg) (rs: freg)                  (**r float32 -> int64 conversion *)
+        | Pfcvtlus (rd: ireg) (rs: freg)                  (**r float32 -> unsigned int64 conversion *)
+        | Pfcvtsl  (rd: freg) (rs: ireg0)                 (**r int64 -> float32 conversion *)
+        | Pfcvtslu (rd: freg) (rs: ireg0)                 (**r unsigned int 64-> float32 conversion *)
+
+          (* 64-bit (double-precision) floating point *)
+        | Pfld     (rd: freg) (ra: ireg) (ofs: offset)    (**r load 64-bit float *)
+        | Pfld_a   (rd: freg) (ra: ireg) (ofs: offset)    (**r load any64 *)
+        | Pfsd     (rd: freg) (ra: ireg) (ofs: offset)    (**r store 64-bit float *)
+        | Pfsd_a   (rd: freg) (ra: ireg) (ofs: offset)    (**r store any64 *)
+
+        | Pfcvtwd  (rd: ireg) (rs: freg)                  (**r float -> int32 conversion *)
+        | Pfcvtwud (rd: ireg) (rs: freg)                  (**r float -> unsigned int32 conversion *)
+        | Pfcvtdw  (rd: freg) (rs: ireg0)                 (**r int32 -> float conversion *)
+        | Pfcvtdwu (rd: freg) (rs: ireg0)                 (**r unsigned int32 -> float conversion *)
+      
+        | Pfcvtld  (rd: ireg) (rs: freg)                  (**r float -> int64 conversion *)
+        | Pfcvtlud (rd: ireg) (rs: freg)                  (**r float -> unsigned int64 conversion *)
+        | Pfcvtdl  (rd: freg) (rs: ireg0)                 (**r int64 -> float conversion *)
+        | Pfcvtdlu (rd: freg) (rs: ireg0)                 (**r unsigned int64 -> float conversion *)
+      
+        | Pfcvtds  (rd: freg) (rs: freg)                  (**r float32 -> float   *)
+        | Pfcvtsd  (rd: freg) (rs: freg)                  (**r float   -> float32 *)                   
+        
+        | Pfeqd    (rd: ireg) (rs1 rs2: freg)             (**r compare equal *)
+        | Pfltd    (rd: ireg) (rs1 rs2: freg)             (**r compare less-than *)
+        | Pfled    (rd: ireg) (rs1 rs2: freg)             (**r compare less-than/equal *)                   
+
+
+        | Pfeqs    (rd: ireg) (rs1 rs2: freg)             (**r compare equal *)
+        | Pflts    (rd: ireg) (rs1 rs2: freg)             (**r compare less-than *)
+        | Pfles    (rd: ireg) (rs1 rs2: freg)             (**r compare less-than/equal *)
+      
+       (* Unconditional jumps.  Links are always to X1/RA. *)
+        | Pj_l    (l: label)                              (**r jump to label *)
+        | Pj_r    (r: ireg)     (sg: signature)           (**r jump register *)
      
        (* Conditional branches, 32-bit comparisons *)
        | Pbeqw   (rs1 rs2: ireg0) (l: label)             (**r branch-if-equal *)
@@ -3060,6 +3184,13 @@ Inductive bitfield : Type :=
        | Pbltuw  (rs1 rs2: ireg0) (l: label)             (**r branch-if-less unsigned *)
        | Pbgew   (rs1 rs2: ireg0) (l: label)             (**r branch-if-greater-or-equal signed *)
        | Pbgeuw  (rs1 rs2: ireg0) (l: label)             (**r branch-if-greater-or-equal unsigned *)
+       
+       | Pbeql   (rs1 rs2: ireg0) (l: label)             (**r branch-if-equal *)
+       | Pbnel   (rs1 rs2: ireg0) (l: label)             (**r branch-if-not-equal signed *)
+       | Pbltl   (rs1 rs2: ireg0) (l: label)             (**r branch-if-less signed *)
+       | Pbltul  (rs1 rs2: ireg0) (l: label)             (**r branch-if-less unsigned *)
+       | Pbgel   (rs1 rs2: ireg0) (l: label)             (**r branch-if-greater-or-equal signed *)
+       | Pbgeul  (rs1 rs2: ireg0) (l: label)             (**r branch-if-greater-or-equal unsigned *)                 
 
       (* Pseudo-instructions *)
        | Plabel  (lbl: label)                            (**r define a code label *)    
