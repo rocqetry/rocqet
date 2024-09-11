@@ -24,7 +24,7 @@ module Ctx = struct
     arguments : Names.Id.t list;
         (* the name of the arguments to this FRecursion *)
     inductive_path : Libnames.qualid;
-    rec_principle_prefix : Libnames.qualid option;
+    rec_principle_prefix: Libnames.qualid;
   }
 
   let store = Summary.ref ~name:"RecursionCtx" (None : t option)
@@ -69,7 +69,7 @@ let close_recursion () =
   let compiled_signature =
     Codegen.compile_recursive_definition_signature ~names:[ name ]
       ~motive_module:motive ~handler_cases:module_name ~ctx:parameters
-      ~family_name:name ~computational_behaviour:`Exposed ~inductive ~prefix:rec_principle_prefix
+      ~family_name:name ~computational_behaviour:`Exposed ~inductive ~prefix:(Some rec_principle_prefix)
   in  
   let elem =
     LinkageElem.RecursorDefinition
@@ -124,8 +124,7 @@ let open_recursion ~(name : Names.Id.t) ~(inductive_path : Libnames.qualid)
   in
   let _ = VB.(run (include_module ~module_expr:applied_motive)) in
   let handler_types = Termutils.handler_types_table resolved_inductive_path name recursor suffix in
-  let rec_principle_prefix =
-    Some
+  let rec_principle_prefix =    
       (Codegen.calculate_rec_principle_prefix ~inductive_path ~context)
   in
   let recursion_ctx =
@@ -193,8 +192,7 @@ let open_recursion_extension ~name =
         (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
   in
   let _ = VB.(run @@ include_module ~module_expr:previous_cases) in
-  let rec_principle_prefix =
-    Some
+  let rec_principle_prefix =    
       (Codegen.calculate_rec_principle_prefix ~inductive_path ~context)
   in
   let recursion_ctx =
