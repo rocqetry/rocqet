@@ -249,6 +249,7 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;        
         arguments : Names.Id.t list;
+        prefix: Libnames.qualid;
       }
     | PrincipleDefinition of {
         compiled_context : CompiledModuleType.t;

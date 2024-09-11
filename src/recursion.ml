@@ -86,6 +86,7 @@ let close_recursion () =
         suffix;
         handler_types;
         arguments;
+        prefix = rec_principle_prefix;
       }
   in
   Context.add_field ~name ~elem;

@@ -560,7 +560,7 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
       ( _,
         ( _,
           LinkageElem.PrincipleDefinition
-            { compiled_context; compiled_impl = compiled_signature; _ } ) )
+            { compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
         ( _,
@@ -680,17 +680,25 @@ let compile_linkage (linkage : Linkage.t) =
   let rec compile_fields fields (ctx : CompiledModule.t list) =
     match fields with
     | Bwd.Emp -> B.return ()
-    | Bwd.Snoc (fields, (_, LinkageElem.RecursorDefinition { names; inductive; handler_types; suffix; recursor_module;  _ })) -> 
+    | Bwd.Snoc (fields, (_, LinkageElem.RecursorDefinition { prefix; names; inductive; handler_types; suffix; recursor_module;  _ })) -> 
        let open B in 
        let* _ = compile_fields fields ctx in
        let recursor_name = List.hd names in
        let handlers = handler_types |> List.map fst in
        let handler_cases = recursor_module in 
+       let rec_principle_prefix =
+         let l, stripped_prefix =            
+            Naming.to_name_optionqualid prefix 
+         in
+         let l = Naming.un_self_version l in 
+         if l = linkage.name then stripped_prefix 
+         else Some prefix
+       in 
        compile_recursive_definition_implementation 
          ~inductive 
          ~recursor_name 
          ~handlers
-         ~rec_principle_prefix:None
+         ~rec_principle_prefix
          ~suffix
          ~ctx
          ~handler_cases
@@ -815,7 +823,7 @@ let compile_linkage_signature linkage =
         ( _,
           ( _,
             LinkageElem.PrincipleDefinition
-              { compiled_context; compiled_impl = compiled_signature; _ } ) )
+              { compiled_context; compiled_signature; _ } ) )
     | Bwd.Snoc
         ( _,
           ( _,
@@ -1230,12 +1238,12 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
           let prefix =
             calculate_rec_principle_prefix ~inductive_path ~context              
           in
-          Some prefix
+          prefix
         in        
         let compiled_signature =
           compile_recursive_definition_signature ~handler_cases:recursor_module
             ~names:[ name ] ~motive_module ~ctx:parameters ~family_name:name
-            ~computational_behaviour:`Exposed ~inductive ~prefix:rec_principle_prefix
+            ~computational_behaviour:`Exposed ~inductive ~prefix:(Some rec_principle_prefix)
         in
         let elem =
           LinkageElem.RecursorDefinition
@@ -1252,6 +1260,7 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
               suffix;
               handler_types;
               arguments;
+              prefix = rec_principle_prefix;
             }
         in
         add_field ~name ~elem linkage
