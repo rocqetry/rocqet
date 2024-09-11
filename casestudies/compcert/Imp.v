@@ -2225,8 +2225,7 @@ Inductive bitfield : Type :=
              forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
             forall T1, self__Proof.match_states S1 T1 -> 
             exists T2, plus Csharpminor.Sem.step tge T1 t T2 /\ match_states S2 T2).            
-          FProof.
-              finduction.
+          FProof.              
               (* set *)
               + apply cheat.
               (* seq *)
@@ -3196,12 +3195,17 @@ Inductive bitfield : Type :=
        | Plabel  (lbl: label)                            (**r define a code label *)    
        | Pnop : instruction                             (**r nop instruction *)       
                   
-     Definition code := list instruction.
-     Record function : Type := mkfunction { fn_sig: signature; fn_code: code }.
+    FDefinition code := list instruction.
+    MetaData function.
+    Record function : Type := mkfunction { fn_sig: signature; fn_code: code }.
+    FEnd function.
+    FDefinition fundef := AST.fundef function.
+    FDefinition program := AST.program fundef unit.
+
       
     Family Sem. 
-          Definition regset := Pregmap.t val.
-          Definition genv := Genv.t fundef unit.
+          FDefinition regset := Pregmap.t val.
+          FDefinition genv := Genv.t fundef unit.
           
           Inductive outcome: Type :=
              | Next:  regset -> mem -> outcome
