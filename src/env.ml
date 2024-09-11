@@ -11,8 +11,11 @@ module PluginScopes = struct
     match peek () with
     | None
     | Some
-        { command = PluginCmd.(Family | Recursion | Induction | MetaData | Lemma); _ }
-      ->
+        {
+          command =
+            PluginCmd.(Family | Recursion | Induction | MetaData | Lemma);
+          _;
+        } ->
         scopes := scope :: !scopes
 
   (* Basically, the caller wants to close the scope with
@@ -25,36 +28,35 @@ module PluginScopes = struct
       when name = scope_name ->
         scopes := scopes_rest;
         Some scope
-    | { PluginCmdScope.name; command; _ }  :: rest ->
-       let command =
-         match command with
-         | Lemma -> "FLemma"
-         | Family -> "Family"
-         | Induction -> "FInduction"
-         | Recursion -> "FRecursion"
-         | MetaData -> "MetaData"
-       in
-       let rest =
-         rest
-         |> List.map (fun (scope: PluginCmdScope.t) -> scope.name)
-         |> List.map Names.Id.to_string
-         |> String.concat ", "
-       in
-       let info =
-         Printf.sprintf
-           "Closing wrong scope: expected to \
-            close a scope which was opened by \"%s %s.\" \
-            Commands waiting to be closed: %s."
-           command (Names.Id.to_string name) rest
-       in
-       Errors.fail ~info
+    | { PluginCmdScope.name; command; _ } :: rest ->
+        let command =
+          match command with
+          | Lemma -> "FLemma"
+          | Family -> "Family"
+          | Induction -> "FInduction"
+          | Recursion -> "FRecursion"
+          | MetaData -> "MetaData"
+        in
+        let rest =
+          rest
+          |> List.map (fun (scope : PluginCmdScope.t) -> scope.name)
+          |> List.map Names.Id.to_string
+          |> String.concat ", "
+        in
+        let info =
+          Printf.sprintf
+            "Closing wrong scope: expected to close a scope which was opened \
+             by \"%s %s.\" Commands waiting to be closed: %s."
+            command (Names.Id.to_string name) rest
+        in
+        Errors.fail ~info
 
   let display () =
     let rest =
-       !scopes
-       |> List.map (fun (scope: PluginCmdScope.t) -> scope.name)
-       |> List.map Names.Id.to_string
-       |> String.concat ", "
+      !scopes
+      |> List.map (fun (scope : PluginCmdScope.t) -> scope.name)
+      |> List.map Names.Id.to_string
+      |> String.concat ", "
     in
     Feedback.msg_info (Pp.str rest)
 

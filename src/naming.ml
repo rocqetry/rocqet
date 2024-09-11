@@ -80,10 +80,10 @@ let make_module_path head path =
     (fun module_path x -> qualid_point (Some module_path) x)
     head path
 
-let list_to_path (names : Names.Id.t list) : Libnames.qualid = 
-  match names with 
+let list_to_path (names : Names.Id.t list) : Libnames.qualid =
+  match names with
   | [] -> Errors.fail ~info:"list_to_path: expected a non empty list"
-  | head :: path -> make_module_path head path 
+  | head :: path -> make_module_path head path
 
 (* extract a path into (name "." path) *)
 let to_name_qualid (path : Libnames.qualid) : Names.Id.t * Libnames.qualid =

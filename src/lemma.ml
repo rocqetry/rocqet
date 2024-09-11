@@ -8,11 +8,11 @@ module DB = Backend.Declare
 (* Private store *)
 module Ctx = struct
   type t = {
-      name : Names.Id.t;
-      compiled_context : CompiledModuleType.t;
-      parameters : (Names.Id.t * Constrexpr.module_ast) list;
-      goal : Constrexpr.constr_expr;
-      module_name : Names.Id.t;
+    name : Names.Id.t;
+    compiled_context : CompiledModuleType.t;
+    parameters : (Names.Id.t * Constrexpr.module_ast) list;
+    goal : Constrexpr.constr_expr;
+    module_name : Names.Id.t;
   }
 
   let store = Summary.ref ~name:"LemmaCtx" (None : t option)
@@ -27,18 +27,9 @@ module Ctx = struct
 end
 
 let prepare_proving () =
-  let Ctx.
-        {
-          module_name;          
-          parameters;
-          goal;
-          name;
-          _;
-        } =
-    Ctx.get ()
-  in  
+  let Ctx.{ module_name; parameters; goal; name; _ } = Ctx.get () in
   let _ = DB.start_module module_name parameters in
-  let sigma, env = Termutils.global_env () in 
+  let sigma, env = Termutils.global_env () in
   let sigma, internalized_goal = Termutils.internalize env goal sigma in
   let info = Declare.Info.make () in
   let cinfo = Declare.CInfo.make ~name ~typ:internalized_goal () in
@@ -51,25 +42,19 @@ let open_flemma name t =
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:name context
   in
-  let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in  
-  let ctx =
-    Ctx.{ name; compiled_context; parameters; goal; module_name }
-  in 
-  Ctx.update ctx  
+  let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in
+  let ctx = Ctx.{ name; compiled_context; parameters; goal; module_name } in
+  Ctx.update ctx
 
-let close_flemma () =  
-  let Ctx.
-        {          
-          parameters;
-          goal;
-          name;
-          compiled_context;          
-          _;
-        } =
-    Ctx.get ()
-  in  
-  let compiled_impl = DB.end_module () in    
-  let compiled_signature = Codegen.compile_lemma_signature ~name ~ty:goal ~parameters in
-  let elem = LinkageElem.OpaqueFieldDefinition { compiled_context; compiled_impl; compiled_signature } in  
-  Context.add_field ~name ~elem;  
-  Ctx.clear ()  
+let close_flemma () =
+  let Ctx.{ parameters; goal; name; compiled_context; _ } = Ctx.get () in
+  let compiled_impl = DB.end_module () in
+  let compiled_signature =
+    Codegen.compile_lemma_signature ~name ~ty:goal ~parameters
+  in
+  let elem =
+    LinkageElem.OpaqueFieldDefinition
+      { compiled_context; compiled_impl; compiled_signature }
+  in
+  Context.add_field ~name ~elem;
+  Ctx.clear ()

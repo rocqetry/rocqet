@@ -247,9 +247,9 @@ module rec LinkageElem : sig
         motive_module : CompiledModule.t;
         suffix : RecKind.t;
         compiled_context : CompiledModuleType.t;
-        compiled_signature : CompiledModuleType.t;        
+        compiled_signature : CompiledModuleType.t;
         arguments : Names.Id.t list;
-        prefix: Libnames.qualid;
+        prefix : Libnames.qualid;
       }
     | PrincipleDefinition of {
         compiled_context : CompiledModuleType.t;
@@ -266,7 +266,7 @@ module rec LinkageElem : sig
         inductive_path : Libnames.qualid;
         handlers : (Names.Id.t * Constrexpr.constr_expr) list;
         compiled_handlers : CompiledModule.t;
-        compiled_context : CompiledModuleType.t;        
+        compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
       }
     | MetaDataSection of {
@@ -335,9 +335,9 @@ end = struct
   let rec path_substitution_elem elem ~source ~target =
     match elem with
     | LinkageElem.MetaDataSection metadata ->
-       LinkageElem.MetaDataSection metadata
+        LinkageElem.MetaDataSection metadata
     | LinkageElem.OpaqueFieldDefinition definition ->
-       LinkageElem.OpaqueFieldDefinition definition
+        LinkageElem.OpaqueFieldDefinition definition
     | LinkageElem.FamilyDefinition family ->
         let g (name, expr) =
           if Names.Id.equal source name then (target, expr) else (name, expr)
@@ -369,15 +369,18 @@ end = struct
           definition.motives
           |> List.map (Naming.replace_qualid_root ~source ~target)
         in
-        let handler_types = 
+        let handler_types =
           definition.handler_types
-          |> List.map (fun (name, e) -> name, Naming.replace_qualid_root ~source ~target e)
+          |> List.map (fun (name, e) ->
+                 (name, Naming.replace_qualid_root ~source ~target e))
         in
-        let handler_cases = 
+        let handler_cases =
           definition.handler_cases
-          |> List.map (fun (name, e) -> name, Naming.replace_qualid_root ~source ~target e)
-        in 
-        RecursorDefinition { definition with motives; handler_types; handler_cases; }
+          |> List.map (fun (name, e) ->
+                 (name, Naming.replace_qualid_root ~source ~target e))
+        in
+        RecursorDefinition
+          { definition with motives; handler_types; handler_cases }
     | LinkageElem.TheoremDefinition definition ->
         let motives =
           definition.motives

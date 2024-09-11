@@ -107,9 +107,9 @@ module rec LinkageElem : sig
         motive_module : CompiledModule.t;
         suffix : RecKind.t;
         compiled_context : CompiledModuleType.t;
-        compiled_signature : CompiledModuleType.t;        
+        compiled_signature : CompiledModuleType.t;
         arguments : Names.Id.t list;
-        prefix: Libnames.qualid;
+        prefix : Libnames.qualid;
       }
     | PrincipleDefinition of {
         compiled_context : CompiledModuleType.t;
@@ -126,7 +126,7 @@ module rec LinkageElem : sig
         inductive_path : Libnames.qualid;
         handlers : (Names.Id.t * Constrexpr.constr_expr) list;
         compiled_handlers : CompiledModule.t;
-        compiled_context : CompiledModuleType.t;        
+        compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
       }
     | MetaDataSection of {

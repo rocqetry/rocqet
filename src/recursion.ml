@@ -17,14 +17,14 @@ module Ctx = struct
     module_name : Names.Id.t;
     compiled_context : CompiledModuleType.t;
     name : Names.Id.t;
-    inductive : VernacInductive.t;    
+    inductive : VernacInductive.t;
     motive : CompiledModule.t;
     motive_expr : Constrexpr.constr_expr list;
     suffix : RecKind.t;
     arguments : Names.Id.t list;
         (* the name of the arguments to this FRecursion *)
     inductive_path : Libnames.qualid;
-    rec_principle_prefix: Libnames.qualid;
+    rec_principle_prefix : Libnames.qualid;
   }
 
   let store = Summary.ref ~name:"RecursionCtx" (None : t option)
@@ -51,7 +51,7 @@ let close_recursion () =
           inductive;
           suffix;
           compiled_context;
-          motive;          
+          motive;
           parameters;
           module_name;
           handler_cases;
@@ -65,12 +65,13 @@ let close_recursion () =
   in
   Checks.check_exhaustive ~name ~inductive ~handlers:handler_cases;
   module_name |> ignore;
-  let module_name = DB.end_module () in  
+  let module_name = DB.end_module () in
   let compiled_signature =
     Codegen.compile_recursive_definition_signature ~names:[ name ]
       ~motive_module:motive ~handler_cases:module_name ~ctx:parameters
-      ~family_name:name ~computational_behaviour:`Exposed ~inductive ~prefix:(Some rec_principle_prefix)
-  in  
+      ~family_name:name ~computational_behaviour:`Exposed ~inductive
+      ~prefix:(Some rec_principle_prefix)
+  in
   let elem =
     LinkageElem.RecursorDefinition
       {
@@ -81,7 +82,7 @@ let close_recursion () =
         recursor_module = module_name;
         motive_module = motive;
         motives = motive_expr;
-        compiled_signature;        
+        compiled_signature;
         compiled_context;
         suffix;
         handler_types;
@@ -116,7 +117,9 @@ let open_recursion ~(name : Names.Id.t) ~(inductive_path : Libnames.qualid)
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
   let _module_name = DB.start_module module_name parameters in
-  let resolved_inductive_path = Resolver.resolve_qualid ~context ~qualid:inductive_path in 
+  let resolved_inductive_path =
+    Resolver.resolve_qualid ~context ~qualid:inductive_path
+  in
   let applied_motive =
     Termutils.apply_module
       ~functor_expr:(Termutils.ident_to_module_expr motive)
@@ -124,9 +127,11 @@ let open_recursion ~(name : Names.Id.t) ~(inductive_path : Libnames.qualid)
         (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
   in
   let _ = VB.(run (include_module ~module_expr:applied_motive)) in
-  let handler_types = Termutils.handler_types_table resolved_inductive_path name recursor suffix in
-  let rec_principle_prefix =    
-      (Codegen.calculate_rec_principle_prefix ~inductive_path ~context)
+  let handler_types =
+    Termutils.handler_types_table resolved_inductive_path name recursor suffix
+  in
+  let rec_principle_prefix =
+    Codegen.calculate_rec_principle_prefix ~inductive_path ~context
   in
   let recursion_ctx =
     Ctx.
@@ -141,7 +146,7 @@ let open_recursion ~(name : Names.Id.t) ~(inductive_path : Libnames.qualid)
         compiled_context;
         motive;
         motive_expr = [ motive_expr ];
-        inductive;        
+        inductive;
         arguments;
         rec_principle_prefix;
       }
@@ -179,13 +184,17 @@ let open_recursion_extension ~name =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
-  let resolved_inductive_path = Resolver.resolve_qualid ~context ~qualid:inductive_path in
-  let handler_types = Termutils.handler_types_table resolved_inductive_path name recursor suffix in  
+  let resolved_inductive_path =
+    Resolver.resolve_qualid ~context ~qualid:inductive_path
+  in
+  let handler_types =
+    Termutils.handler_types_table resolved_inductive_path name recursor suffix
+  in
   let recursor_module =
     Codegen.compile_handler_cases ~name ~context ~motive ~handler_cases
-      ~handler_types ~parameters 
+      ~handler_types ~parameters
   in
-  let _module_name = DB.start_module module_name parameters in  
+  let _module_name = DB.start_module module_name parameters in
   let previous_cases =
     Termutils.apply_module
       ~functor_expr:(Termutils.ident_to_module_expr recursor_module)
@@ -193,8 +202,8 @@ let open_recursion_extension ~name =
         (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
   in
   let _ = VB.(run @@ include_module ~module_expr:previous_cases) in
-  let rec_principle_prefix =    
-      (Codegen.calculate_rec_principle_prefix ~inductive_path ~context)
+  let rec_principle_prefix =
+    Codegen.calculate_rec_principle_prefix ~inductive_path ~context
   in
   let recursion_ctx =
     Ctx.
@@ -209,48 +218,41 @@ let open_recursion_extension ~name =
         motive;
         motive_expr = motives;
         inductive;
-        inductive_path;        
+        inductive_path;
         arguments;
         rec_principle_prefix;
       }
   in
   Ctx.update recursion_ctx
 
-let extend_argumets_with_inductive_case 
-    ~(recursor : Names.Id.t)
-    ~(constructor : Names.Id.t) 
-    ~(arguments : Names.Id.t list)
-    ~(inductive : VernacInductive.t) =  
-  let types = 
-    Termutils.flatten_inductive_constructor_type 
-      ~inductive 
-      ~constructor 
-  in   
-  (* Give a good error message for this, e.g as user to fallback 
+let extend_argumets_with_inductive_case ~(recursor : Names.Id.t)
+    ~(constructor : Names.Id.t) ~(arguments : Names.Id.t list)
+    ~(inductive : VernacInductive.t) =
+  let types =
+    Termutils.flatten_inductive_constructor_type ~inductive ~constructor
+  in
+  (* Give a good error message for this, e.g as user to fallback
       to the regular syntax if we cannot infer handlers *)
-  let result = 
-    match List.combine arguments types with 
-    | result -> result 
-    | exception Invalid_argument _ -> 
-       let name = Names.Id.to_string constructor in 
-       let types_len = List.length types in 
-       let arg_len = List.length arguments in
-       let info = 
-         Printf.sprintf "%s exptects %d arguments, \ 
-                         but you provided %d" 
-           name 
-           types_len arg_len 
-       in       
-       Errors.fail ~info
+  let result =
+    match List.combine arguments types with
+    | result -> result
+    | exception Invalid_argument _ ->
+        let name = Names.Id.to_string constructor in
+        let types_len = List.length types in
+        let arg_len = List.length arguments in
+        let info =
+          Printf.sprintf
+            "%s exptects %d arguments,  \n\
+            \                         but you provided %d" name types_len
+            arg_len
+        in
+        Errors.fail ~info
   in
   result
   |> List.concat_map (fun (arg, ty) ->
          let r = Names.Id.to_string recursor ^ "_" ^ Names.Id.to_string arg in
          let r = Names.Id.of_string r in
-         match ty with
-         | None -> [ arg]
-         | Some _ -> 
-            [arg; r])
+         match ty with None -> [ arg ] | Some _ -> [ arg; r ])
 
 (* Given a recursor name `r` and an argument `n`
    replace the expression r n (i.e r applied to n) with the

@@ -61,9 +61,7 @@ val compile_recursive_definition_signature :
   CompiledModuleType.t
 
 val calculate_rec_principle_prefix :
-  inductive_path:Libnames.qualid ->
-  context:LinkageCtx.t ->  
-  Libnames.qualid
+  inductive_path:Libnames.qualid -> context:LinkageCtx.t -> Libnames.qualid
 
 val compile_handler_cases :
   name:Names.Id.t ->
@@ -71,9 +69,8 @@ val compile_handler_cases :
   parameters:(Names.Id.t * Constrexpr.module_ast) list ->
   motive:CompiledModule.t ->
   handler_cases:(Names.Id.t * Constrexpr.constr_expr) list ->
-  handler_types:(Names.Id.t * Constrexpr.constr_expr) list ->  
+  handler_types:(Names.Id.t * Constrexpr.constr_expr) list ->
   CompiledModule.t
-
 
 (* Compiling Linkage Contexts *)
 val compile_linkage_context :
@@ -95,11 +92,11 @@ val compile_definition :
   CompiledModule.t
 
 (* Compiling FLemma signatures *)
-val compile_lemma_signature : 
-    name:Names.Id.t ->
-    ty:Constrexpr.constr_expr ->
-    parameters:(Names.Id.t * Constrexpr.module_ast) list ->
-    CompiledModuleType.t
+val compile_lemma_signature :
+  name:Names.Id.t ->
+  ty:Constrexpr.constr_expr ->
+  parameters:(Names.Id.t * Constrexpr.module_ast) list ->
+  CompiledModuleType.t
 
 (* Linkage computation *)
 val compute_linkage : LinkageCtx.t option -> Linkage.t -> Linkage.t

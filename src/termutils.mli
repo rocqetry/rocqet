@@ -31,6 +31,10 @@ val apply_module :
   arguments:Libnames.qualid list ->
   Constrexpr.module_ast
 
+val flatten_inductive_constructor_type :
+  inductive:VernacInductive.t ->
+  constructor:Names.Id.t ->
+  Libnames.qualid_r option list
 (** Given a constructor name [n] in an inductive type [i], 
    [flatten_inductive_constructor_type i n] returns a list 
    of optional names. This list correspoinds to the types of 
@@ -40,18 +44,19 @@ val apply_module :
    We are effectively tracking the recursive location in 
    the constructor where the inductived type appears 
    recursively. *)
-val flatten_inductive_constructor_type : 
-     inductive:VernacInductive.t -> 
-     constructor:Names.Id.t -> Libnames.qualid_r option list
 
 val generate_computational_axioms :
-  inductive:VernacInductive.t ->  
+  inductive:VernacInductive.t ->
   recursor:Names.Id.t ->
   prefix:Libnames.qualid option ->
   (Names.Id.t * Constrexpr.constr_expr) list
 
 val handler_types_table :
-  Libnames.qualid -> Names.Id.t -> CompiledRecursor.t -> RecKind.t -> (Names.Id.t * Constrexpr.constr_expr) list
+  Libnames.qualid ->
+  Names.Id.t ->
+  CompiledRecursor.t ->
+  RecKind.t ->
+  (Names.Id.t * Constrexpr.constr_expr) list
 
 val extract_handlers_from_inductive_proof :
   Names.Id.t list ->
@@ -60,7 +65,7 @@ val extract_handlers_from_inductive_proof :
   (Names.Id.t * Constrexpr.constr_expr) list
 
 val calculate_inductive_proof_goal :
-  handler_types:Constrexpr.constr_expr list ->    
+  handler_types:Constrexpr.constr_expr list ->
   suffix:RecKind.t ->
   Constrexpr.constr_expr
 
