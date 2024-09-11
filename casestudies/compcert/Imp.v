@@ -3442,7 +3442,7 @@ Inductive bitfield : Type :=
        FInductive expr : Type :=
           | Evar : ident -> expr          
           | Econdition : condexpr -> expr -> expr -> expr
-          | Eop : operation -> exprlist -> expr
+          | Eop : Asm.operation -> exprlist -> expr
           | Elet : expr -> expr -> expr
           | Eletvar : nat -> expr
        with exprlist : Type :=
@@ -3452,56 +3452,69 @@ Inductive bitfield : Type :=
           | CEcond : Asm.condition -> exprlist -> condexpr
           | CEcondition : condexpr -> condexpr -> condexpr -> condexpr
           | CElet: expr -> condexpr -> condexpr.
-       
+
+       FDefinition label := ident.
        FInductive stmt : Type :=
           | Sskip: stmt
           | Sassign : ident -> expr -> stmt
           | Sseq: stmt -> stmt -> stmt
-          | Sifthenelse: condexpr -> stmt -> stmt -> stmt
+          | Sifthenelse: self__CminorSel.condexpr -> stmt -> stmt -> stmt
           | Sloop: stmt -> stmt
           | Sblock: stmt -> stmt
           | Sexit: nat -> stmt
           | Sreturn: option expr -> stmt
           | Slabel: label -> stmt -> stmt
           | Sgoto: label -> stmt.
-       
+
+       MetaData function.
        Record function : Type := mkfunction {
           fn_sig: signature;
           fn_params: list ident;
           fn_vars: list ident;
           fn_stackspace: Z;
-          fn_body: stmt
+          fn_body: self__CminorSel.stmt
        }.
+       FEnd function.
+
+       FDefinition fundef := AST.fundef function.
+       FDefinition program := AST.program fundef unit.
+
+       FDefinition funsig := fun (fd: fundef) =>
+         match fd with
+         | Internal f => self__CminorSel.fn_sig f
+         | External ef => cheat
+         end.       
 
        Family Sem. 
-          Definition genv := Genv.t fundef unit.
-          Definition letenv := list val.
+          FDefinition genv := Genv.t fundef unit.
+          FDefinition letenv := list val.
+           FDefinition env := PTree.t val.
            
           FInductive cont : Type := 
              | Kstop: cont
              | Kseq: stmt -> cont -> cont
              | Kblock: cont -> cont.             
 
-          FRecursion call_cont about cont motive (fun (_ : cont) => cont).
+          FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
               Case Kstop := Kstop.
               Case Kseq := (fun s k call_cont_k => call_cont_k).                
               Case Kblock := (fun k call_cont_k => call_cont_k).              
           FEnd call_cont.
             
-          FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop).
+          FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
              Case Kstop := True.
              Case Kseq := (fun s k _ => False).                
              Case Kblock := (fun k _ => False).              
           FEnd is_call_cont.
 
-          FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)). 
-              Case Sskip := (fun lbl k => None)
-              Case Sassign := (fun id e lbl k => None)
+          FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect. 
+              Case Sskip := (fun lbl k => None).
+              Case Sassign := (fun id e lbl k => None).
               Case Sseq := (fun s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
                                        match find_label_s1 lbl (Kseq s2 k) with 
                                        | Some sk => Some sk 
                                        | None => find_label_s2 lbl k end).
-              Case Sifthenelse := (fun e s1 _ s2 _ => fun lbl k => 
+              Case Sifthenelse := (fun e s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
                                        match find_label_s1 lbl k with 
                                        | Some sk => Some sk 
                                        | None => find_label_s2 lbl k end).
@@ -3517,44 +3530,50 @@ Inductive bitfield : Type :=
           FEnd find_label.
            
           FInductive state: Type :=
-               | State : function -> stmt -> cont -> val -> env -> mem -> state                   
+               | State : function -> stmt -> cont -> val -> env -> mem -> state
                | Callstate : fundef -> list val -> cont -> mem -> state                   
                | Returnstate : val -> cont -> mem -> state.
-           
-          FInductive eval_expr: letenv -> expr -> val -> Prop :=
-              | eval_Evar: forall le id v,
+
+          
+          (*
+          Variable ge : genv  
+          Variable sp: val.
+          Variable e: env.
+          Variable m: mem.*)
+          FInductive eval_expr: genv -> val -> env -> mem -> letenv -> expr -> val -> Prop :=
+              | eval_Evar: forall ge sp e m le id v,
                   PTree.get id e = Some v ->
-                  eval_expr le (Evar id) v              
-              | eval_Econdition: forall le a b c va v,
-                  eval_condexpr le a va ->
-                  eval_expr le (if va then b else c) v ->
-                  eval_expr le (Econdition a b c) v
-              | eval_Elet: forall le a b v1 v2,
-                  eval_expr le a v1 ->
-                  eval_expr (v1 :: le) b v2 ->
-                  eval_expr le (Elet a b) v2
-              | eval_Eletvar: forall le n v,
+                  eval_expr ge sp e m le (Evar id) v              
+              | eval_Econdition: forall ge sp e m le a b c va v,
+                  eval_condexpr ge sp e m le a va ->
+                  eval_expr ge sp e m le (if va then b else c) v ->
+                  eval_expr ge sp e m le (Econdition a b c) v
+              | eval_Elet: forall ge sp e m le a b v1 v2,
+                  eval_expr ge sp e m le a v1 ->
+                  eval_expr ge sp e m (v1 :: le) b v2 ->
+                  eval_expr ge sp e m le (Elet a b) v2
+              | eval_Eletvar: forall ge sp e m le n v,
                   nth_error le n = Some v ->
-                  eval_expr le (Eletvar n) v              
-          with eval_exprlist: letenv -> exprlist -> list val -> Prop :=
-             | eval_Enil: forall le,
-                 eval_exprlist le Enil nil
-             | eval_Econs: forall le a1 al v1 vl,
-                 eval_expr le a1 v1 -> eval_exprlist le al vl ->
-                 eval_exprlist le (Econs a1 al) (v1 :: vl)
-          with eval_condexpr: letenv -> condexpr -> bool -> Prop :=
-             | eval_CEcond: forall le cond al vl vb,
-                 eval_exprlist le al vl ->
+                  eval_expr ge sp e m le (Eletvar n) v
+          with eval_exprlist: genv -> val -> env -> mem -> letenv -> self__CminorSel.exprlist -> list val -> Prop :=
+             | eval_Enil: forall ge sp e m le,
+                 eval_exprlist ge sp e m le Enil nil
+             | eval_Econs: forall ge sp e m le a1 al v1 vl,
+                 eval_expr ge sp e m le a1 v1 -> eval_exprlist ge sp e m le al vl ->
+                 eval_exprlist ge sp e m le (Econs a1 al) (v1 :: vl)
+          with eval_condexpr: genv -> val -> env -> mem -> letenv -> self__CminorSel.condexpr -> bool -> Prop :=
+             | eval_CEcond: forall ge sp e m le cond al vl vb,
+                 eval_exprlist ge sp e m le al vl ->
                  Asm.eval_condition cond vl m = Some vb ->
-                 eval_condexpr le (CEcond cond al) vb
-             | eval_CEcondition: forall le a b c va v,
-                 eval_condexpr le a va ->
-                 eval_condexpr le (if va then b else c) v ->
-                 eval_condexpr le (CEcondition a b c) v
-             | eval_CElet: forall le a b v1 v2,
-                 eval_expr le a v1 ->
-                 eval_condexpr (v1 :: le) b v2 ->
-                 eval_condexpr le (CElet a b) v2.
+                 eval_condexpr ge sp e m le (CEcond cond al) vb
+             | eval_CEcondition: forall ge sp e m le a b c va v,
+                 eval_condexpr ge sp e m le a va ->
+                 eval_condexpr ge sp e m le (if va then b else c) v ->
+                 eval_condexpr ge sp e m le (CEcondition a b c) v
+             | eval_CElet: forall ge sp e m le a b v1 v2,
+                 eval_expr ge sp e m le a v1 ->
+                 eval_condexpr ge sp e m (v1 :: le) b v2 ->
+                 eval_condexpr ge sp e m le (CElet a b) v2.
            
           FInductive step: state -> trace -> state -> Prop :=
              | step_skip_seq: forall f s k sp e m,
