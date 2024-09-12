@@ -3730,7 +3730,111 @@ Inductive bitfield : Type :=
          transf_partial_fundef (sel_function) f.
 
        FDefinition sel_program : Cminor.program -> res program := fun p =>         
-        transform_partial_program (sel_fundef) p.
+        transform_partial_program (sel_fundef) p.       
+       
+       Family Proof. 
+           Inductive match_cont: Cminor.program -> helper_functions -> known_idents -> typenv -> Cminor.cont -> CminorSel.cont -> Prop :=
+               | match_cont_seq: forall cunit hf ki env s s' k k',
+                   sel_stmt (prog_defmap cunit) ki env s = OK s' ->
+                   match_cont cunit hf ki env k k' ->
+                   match_cont cunit hf ki env (Cminor.Kseq s k) (Kseq s' k')
+               | match_cont_block: forall cunit hf ki env k k',
+                   match_cont cunit hf ki env k k' ->
+                   match_cont cunit hf ki env (Cminor.Kblock k) (Kblock k')
+               | match_cont_other: forall cunit hf ki env k k',
+                   match_call_cont k k' ->
+                   match_cont cunit hf ki env k k'
+           with match_call_cont: Cminor.cont -> CminorSel.cont -> Prop :=
+             | match_cont_stop:
+                 match_call_cont Cminor.Kstop Kstop
+             | match_cont_call: forall cunit hf env id f sp e k f' e' k',
+                 linkorder cunit prog ->
+                 helper_functions_declared cunit hf ->
+                 sel_function (prog_defmap cunit) hf f = OK f' ->
+                 type_function f = OK env ->
+                 match_cont cunit hf (known_id f) env k k' ->
+                 env_lessdef e e' ->
+                 match_call_cont (Cminor.Kcall id f sp e k) (Kcall id f' sp e' k').
+
+       Inductive match_states: Cminor.state -> CminorSel.state -> Prop :=
+         | match_state: forall cunit hf f f' s k s' k' sp e m e' m' env
+               (LINK: linkorder cunit prog)
+               (HF: helper_functions_declared cunit hf)
+               (TF: sel_function (prog_defmap cunit) hf f = OK f')
+               (TYF: type_function f = OK env)
+               (TS: sel_stmt (prog_defmap cunit) (known_id f) env s = OK s')
+               (MC: match_cont cunit hf (known_id f) env k k')
+               (LD: env_lessdef e e')
+               (ME: Mem.extends m m'),
+             match_states
+               (Cminor.State f s k sp e m)
+               (State f' s' k' sp e' m')
+         | match_callstate: forall cunit f f' args args' k k' m m'
+               (LINK: linkorder cunit prog)
+               (TF: match_fundef cunit f f')
+               (MC: match_call_cont k k')
+               (LD: Val.lessdef_list args args')
+               (ME: Mem.extends m m'),
+             match_states
+               (Cminor.Callstate f args k m)
+               (Callstate f' args' k' m')
+         | match_returnstate: forall v v' k k' m m'
+               (MC: match_call_cont k k')
+               (LD: Val.lessdef v v')
+               (ME: Mem.extends m m'),
+             match_states
+               (Cminor.Returnstate v k m)
+               (Returnstate v' k' m')
+         | match_builtin_1: forall cunit hf ef args optid f sp e k m al f' e' k' m' env
+               (LINK: linkorder cunit prog)
+               (HF: helper_functions_declared cunit hf)
+               (TF: sel_function (prog_defmap cunit) hf f = OK f')
+               (TYF: type_function f = OK env)
+               (MC: match_cont cunit hf (known_id f) env k k')
+               (EA: Cminor.eval_exprlist ge sp e m al args)
+               (LDE: env_lessdef e e')
+               (ME: Mem.extends m m'),
+             match_states
+               (Cminor.Callstate (External ef) args (Cminor.Kcall optid f sp e k) m)
+               (State f' (sel_builtin optid ef al) k' sp e' m')
+         | match_builtin_2: forall cunit hf v v' optid f sp e k m f' e' m' k' env
+               (LINK: linkorder cunit prog)
+               (HF: helper_functions_declared cunit hf)
+               (TF: sel_function (prog_defmap cunit) hf f = OK f')
+               (TYF: type_function f = OK env)
+               (MC: match_cont cunit hf (known_id f) env k k')
+               (LDV: Val.lessdef v v')
+               (LDE: env_lessdef (set_optvar optid v e) e')
+               (ME: Mem.extends m m'),
+             match_states
+               (Cminor.Returnstate v (Cminor.Kcall optid f sp e k) m)
+               (State f' Sskip k' sp e' m').
+
+           Definition measure (s: Cminor.state) : nat :=
+              match s with
+              | Cminor.Callstate _ _ _ _ => 0%nat
+              | Cminor.State _ _ _ _ _ _ => 1%nat
+              | Cminor.Returnstate _ _ _ => 2%nat
+              end.
+
+           Lemma sel_step_correct:
+             forall S1 t S2, Cminor.step ge S1 t S2 ->
+             forall T1, match_states S1 T1 -> wt_state S1 ->
+             (exists T2, plus step tge T1 t T2 /\ match_states S2 T2)
+             \/ (measure S2 < measure S1 /\ t = E0 /\ match_states S2 T1)%nat
+             \/ (exists T2 n, step tge T1 t T2 /\ eventually n S2 (fun S3 => match_states S3 T2)).
+           Proof.
+           
+           Lemma sel_initial_states:
+             forall S, Cminor.initial_state prog S ->
+             exists R, initial_state tprog R /\ match_states S R.
+           Proof.
+           
+           Lemma sel_final_states:
+             forall S R r,
+             match_states S R -> Cminor.final_state S r -> final_state R r.
+           Proof.
+       FEnd Proof.
 
   FEnd Selection.
 
