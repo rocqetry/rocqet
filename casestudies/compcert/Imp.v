@@ -1669,8 +1669,7 @@ Inductive bitfield : Type :=
                        (plus Clight.Sem.step tge T1 t T2 \/
                          (star Clight.Sem.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
                     /\ match_states S2 T2).
-              FProof.
-                  finduction.
+              FProof.                  
                   (* do 1 *)
                   + apply cheat.
                   (* do 2 *)
@@ -1726,7 +1725,7 @@ Inductive bitfield : Type :=
                   (* return some 1 *)
                   + apply cheat.
                   (* return some 2 *)
-                  + apply cheat.
+                  + intros. apply cheat.
                   (* skip return *)
                   + apply cheat.
                   (* label *)
@@ -3489,6 +3488,8 @@ Inductive bitfield : Type :=
           FDefinition genv := Genv.t fundef unit.
           FDefinition letenv := list val.
           FDefinition env := PTree.t val.
+          
+          FDefinition eval_operation := fun op => Asm.eval_operation op fundef unit.
 
           MetaData set_params.
            Fixpoint set_params (vl: list val) (il: list ident) {struct il} : self__Sem.env :=
@@ -3677,7 +3678,7 @@ Inductive bitfield : Type :=
    FEnd CminorSel.
 
    (* Cminor -> CminorSel *)
-   Family Selection.       
+   Family Selection.
        FDefinition longconst : int64 -> expr := fun n =>
           if Archi.splitlong then SplitLong.longconst n else CminorSel.Eop (Asm.Olongconst n) CminorSel.Enil.
 
@@ -3692,6 +3693,26 @@ Inductive bitfield : Type :=
            Case Evar := (fun id => CminorSel.Evar id).
            Case Econst := (fun cst => sel_constant cst).           
        FEnd sel_expr.
+       
+       FRecursion select_condition about Asm.operation motive (fun (_ : Asm.operation) => CminorSel.exprlist -> condition) by _rect.
+           Case Ocmp := (fun c args => CminorSel.CEcond c args).
+       FEnd select_condition.
+       
+       FRecursion condexpr_of_expr about CminorSel.expr motive (fun (_ : Cminor.expr) => CminorSel.condexpr) by _rect.
+           Case Eop op args := select_condition op args.
+           Case Econdition a b c := (CminorSel.CEcondition a (condexpr_of_expr b) (condexpr_of_expr c))
+           Case Elet a b := (CElet a (condexpr_of_expr b)).
+           Case Eletvar n := (CminorSel.CEcond (Asm.Ccompuimm Cne Int.zero) (CminorSel.Econs e Cminor.Enil)).
+           Case Evar i := (CminorSel.CEcond (Asm.Ccompuimm Cne Int.zero) (CminorSel.Econs e Cminor.Enil)).
+       FEnd condexpr_of_expr.
+
+       Function condexpr_of_expr (e: expr) : condexpr :=
+           match e with
+           | Eop (Ocmp c) el => CEcond c el
+           | Econdition a b c => CEcondition a (condexpr_of_expr b) (condexpr_of_expr c)
+           | Elet a b => CElet a (condexpr_of_expr b)
+           | _ => CEcond (Ccompuimm Cne Int.zero) (e ::: Enil)
+           end.
        
        FRecursion sel_stmt about Cminor.stmt 
                             motive (fun (_ : Cminor.stmt) => res CminorSel.stmt) by _rect.
