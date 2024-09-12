@@ -3674,46 +3674,65 @@ Inductive bitfield : Type :=
                       final_state (self__Sem.Returnstate (Vint r) self__Sem.Kstop m) r.
              FEnd final_state.
        FEnd Sem.
-   FEnd CminorSel.   
+   FEnd CminorSel.
 
    (* Cminor -> CminorSel *)
-   Family Selection.
-       Definition longconst (n: int64) : expr :=
-          if Archi.splitlong then SplitLong.longconst n else Eop (Olongconst n) Enil.
+   Family Selection.       
+       FDefinition longconst : int64 -> expr := fun n =>
+          if Archi.splitlong then SplitLong.longconst n else CminorSel.Eop (Asm.Olongconst n) CminorSel.Enil.
 
        FRecurcion sel_constant about Cminor.constant motive (fun (_ : Cminor.constant) => CminorSel.constant).
-           Case Ointconst := (fun n => CminorSel.Eop (Asm.Ointconst n) Enil).
-           Case Ofloatconst := (fun n => CminorSel.Eop (Asm.Ofloatconst f) Enil).
-           Case Osingleconst := (fun n =>  Eop (Osingleconst f) Enil).
+           Case Ointconst := (fun n => CminorSel.Eop (Asm.Ointconst n) CminorSel.Enil).
+           Case Ofloatconst := (fun n => CminorSel.Eop (Asm.Ofloatconst f) CminorSel.Enil).
+           Case Osingleconst := (fun n =>  CminorSel.Eop (Asm.Osingleconst f) CminorSel.Enil).
            Case Olongconst := (fun n => longconst n).
-        FEnd sel_constant.
+       FEnd sel_constant.
 
-        FRecursion sel_expr about Cminor.expr motive (fun (_ : Cminor.expr) => CminorSel.expr).          
+       FRecursion sel_expr about Cminor.expr motive (fun (_ : Cminor.expr) => CminorSel.expr).          
            Case Evar := (fun id => CminorSel.Evar id).
-           Case Econst := (fun cst => sel_constant cst).
-        FEnd sel_expr.        
+           Case Econst := (fun cst => sel_constant cst).           
+       FEnd sel_expr.
        
-        FRecursion sel_stmt about Cminor.stmt 
-                            motive (fun (_ : Cminor.stmt) => known_idents -> typeenv -> CminorSel.stmt).
-          Case Sskip := (fun ki env => CminorSel.Sskip).
-          Case Sassign := (fun id e => fun ki env => CminorSel.Sassign id (sel_expr e)).
-          Case Sseq := (fun s1 sel_s1 s2 sel_s2 => fun ki env => CminorSel.Sseq (sel_s1 ki env) (sel_s1 ki env)).
-          Case Sifthenelse := 
-                (fun e ifso sel_ifso ifnot sel_ifnot => fun ki env => 
-                      (* Don't use the if conversion heuristics *)
-                      do ifso' <- sel_ifso ki env; do ifnot' <- sel_ifnot ki env;
-                      OK (Sifthenelse (condexpr_of_expr (sel_expr e)) ifso' ifnot')).
-          Case Sloop := (fun s sel_s1 => fun ki env => CminorSel.Sloop (sel_s1 ki env)).
-          Case Sblock := (fun s sel_s1 => fun ki env => CminorSel.Sblock (sel_s1 ki env)).
-          Case Sexit := (fun n => fun ki env => CminorSel.Sexit n).
-          Case Sreturn := (fun e => fun ki env => 
-                               match e with 
-                               | None => CminorSel.Sreturn None 
-                               | Some e => CminorSel.Sreturn (Some (sel_expr e))).
-          Case Slabel := (fun lbl s sel_s => fun ki env => CminorSel.Slabel (sel_s ki env)).
-          Case Sgoto := (fun lbl => fun ki env => CminorSel.Sgoto lbl).
+       FRecursion sel_stmt about Cminor.stmt 
+                            motive (fun (_ : Cminor.stmt) => res CminorSel.stmt) by _rect.
+          Case Sskip := (OK CminorSel.Sskip).
+          Case Sassign id e := (OK (CminorSel.Sassign id (sel_expr e))).
+          Case Sseq s1 s2 := (
+                 do s1' <- sel_stmt s1 ; 
+                 do s2' <- sel_stmt s2 ;
+                 OK (CminorSel.Sseq s1' s2')).
+          Case Sifthenelse e ifso ifnot := (
+               (* For simplicity, don't use the
+                  "if conversion heuristics" present in CompCert *)                      
+                 do ifso' <- sel_stmt ifso ;
+                 do ifnot' <- sel_stmt ifnot ;
+                 OK (Sifthenelse (condexpr_of_expr (sel_expr e)) ifso' ifnot')).
+          Case Sloop body := (do body' <- sel_stmt body; OK (CminorSel.Sloop body')).
+          Case Sblock s := (do body' <- sel_stmt body; OK (CminorSel.Sblock body')). 
+          Case Sexit := (OK (CminorSel.Sexit n)).
+          Case Sreturn e := (match e with 
+                             | None => OK (CminorSel.Sreturn None) 
+                             | Some e => OK (CminorSel.Sreturn (Some (sel_expr e)))).
+          Case Slabel lbl body := (do body' <- sel_stmt body; OK (CminorSel.Slabel lbl body')) 
+          Case Sgoto := (OK (CminorSel.Sgoto lbl)).
         FEnd sel_stmt.
-   FEnd Selection.
+
+       FDefinition sel_function : Cminor.function -> res function := fun f =>             
+             do body' <- sel_stmt f.(self__Imp.Cminor.fn_body);
+             OK (self__Imp.CminorSel.mkfunction
+                   f.(self__Imp.Cminor.fn_sig)
+                   f.(self__Imp.Cminor.fn_params)
+                   f.(self__Imp.Cminor.fn_vars)
+                   f.(self__Imp.Cminor.fn_stackspace)
+                   body').
+
+       FDefinition sel_fundef : Cminor.fundef -> res fundef := fun f =>
+         transf_partial_fundef (sel_function) f.
+
+       FDefinition sel_program : Cminor.program -> res program := fun p =>         
+        transform_partial_program (sel_fundef) p.
+
+  FEnd Selection.
 
    
    Family RTL.
