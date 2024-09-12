@@ -2381,19 +2381,19 @@ Inductive bitfield : Type :=
                       eval_expr a1 v1 -> eval_exprlist al vl ->
                       eval_exprlist (a1 :: al) (v1 :: vl).*)
                
-               FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
+              FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
                    Case Kstop := Kstop.
                    Case Kseq := (fun s c call_cont_c => call_cont_c).
                    Case Kblock := (fun k call_cont_c => call_cont_c).
-               FEnd call_cont.
+              FEnd call_cont.
                
-               FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
+              FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
                    Case Kstop := True.
                    Case Kseq := (fun s c call_cont_c => False).
                    Case Kblock := (fun c call_cont_c => False).                  
-               FEnd is_call_cont.
+              FEnd is_call_cont.
                    
-               FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect. 
+              FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect. 
                     Case Sskip := (fun lbl k => None).         
                     Case Sassign := (fun id e lbl k => None).
                     Case Sseq := (fun s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
@@ -2412,7 +2412,7 @@ Inductive bitfield : Type :=
                     Case Sexit := (fun n lbl k => None).
                     Case Sreturn := (fun _ lbl k => None).
                     Case Sgoto := (fun label lbl k => None).
-               FEnd find_label.
+              FEnd find_label.
                
                (* (sp : val) -> (e : env) -> (m : mem) -> *)
               FInductive step :  genv -> state -> trace -> state -> Prop :=
@@ -3488,7 +3488,24 @@ Inductive bitfield : Type :=
        Family Sem. 
           FDefinition genv := Genv.t fundef unit.
           FDefinition letenv := list val.
-           FDefinition env := PTree.t val.
+          FDefinition env := PTree.t val.
+
+          MetaData set_params.
+           Fixpoint set_params (vl: list val) (il: list ident) {struct il} : self__Sem.env :=
+           match il, vl with
+           | i1 :: is, v1 :: vs => PTree.set i1 v1 (set_params vs is)
+           | i1 :: is, nil => PTree.set i1 Vundef (set_params nil is)
+           | _, _ => PTree.empty val
+           end.
+          FEnd set_params.
+
+          MetaData set_locals.
+          Fixpoint set_locals (il: list ident) (e: self__Sem.env) {struct il} : self__Sem.env :=
+           match il with
+           | nil => e
+           | i1 :: is => PTree.set i1 Vundef (set_locals is e)
+           end.
+          FEnd set_locals.              
            
           FInductive cont : Type := 
              | Kstop: cont
@@ -3533,7 +3550,6 @@ Inductive bitfield : Type :=
                | State : function -> stmt -> cont -> val -> env -> mem -> state
                | Callstate : fundef -> list val -> cont -> mem -> state                   
                | Returnstate : val -> cont -> mem -> state.
-
           
           (*
           Variable ge : genv  
@@ -3543,7 +3559,11 @@ Inductive bitfield : Type :=
           FInductive eval_expr: genv -> val -> env -> mem -> letenv -> expr -> val -> Prop :=
               | eval_Evar: forall ge sp e m le id v,
                   PTree.get id e = Some v ->
-                  eval_expr ge sp e m le (Evar id) v              
+                  eval_expr ge sp e m le (Evar id) v
+              | eval_Eop: forall ge sp e m le op al vl v,
+                  eval_exprlist ge sp e m le al vl ->
+                  Asm.eval_operation ge sp op vl m = Some v ->
+                  eval_expr ge sp e m le (Eop op al) v
               | eval_Econdition: forall ge sp e m le a b c va v,
                   eval_condexpr ge sp e m le a va ->
                   eval_expr ge sp e m le (if va then b else c) v ->
@@ -3575,72 +3595,127 @@ Inductive bitfield : Type :=
                  eval_condexpr ge sp e m (v1 :: le) b v2 ->
                  eval_condexpr ge sp e m le (CElet a b) v2.
            
-          FInductive step: state -> trace -> state -> Prop :=
-             | step_skip_seq: forall f s k sp e m,
-                   step (State f Sskip (Kseq s k) sp e m)
+          FInductive step: genv -> state -> trace -> state -> Prop :=
+             | step_skip_seq: forall ge f s k sp e m,
+                   step ge (State f Sskip (Kseq s k) sp e m)
                      E0 (State f s k sp e m)
-             | step_skip_block: forall f k sp e m,
-                   step (State f Sskip (Kblock k) sp e m)
+             | step_skip_block: forall ge f k sp e m,
+                   step ge (State f Sskip (Kblock k) sp e m)
                      E0 (State f Sskip k sp e m)
-             | step_skip_call: forall f k sp e m m',
+             | step_skip_call: forall ge f k sp e m m',
                    is_call_cont k ->
-                   Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-                   step (State f Sskip k (Vptr sp Ptrofs.zero) e m)
+                   Mem.free m sp 0 f.(self__CminorSel.fn_stackspace) = Some m' ->
+                   step ge (State f Sskip k (Vptr sp Ptrofs.zero) e m)
                      E0 (Returnstate Vundef k m')
-
-             | step_assign: forall f id a k sp e m v,
-                   eval_expr sp e m nil a v ->
-                   step (State f (Sassign id a) k sp e m)
+             | step_assign: forall ge f id a k sp e m v,
+                   eval_expr ge sp e m nil a v ->
+                   step ge (State f (Sassign id a) k sp e m)
                      E0 (State f Sskip k sp (PTree.set id v e) m)
-
-             | step_seq: forall f s1 s2 k sp e m,
-                   step (State f (Sseq s1 s2) k sp e m)
+             | step_seq: forall ge f s1 s2 k sp e m,
+                   step ge (State f (Sseq s1 s2) k sp e m)
                      E0 (State f s1 (Kseq s2 k) sp e m)
-
              | step_ifthenelse: forall f c s1 s2 k sp e m b,
-                   eval_condexpr sp e m nil c b ->
-                   step (State f (Sifthenelse c s1 s2) k sp e m)
+                   eval_condexpr ge sp e m nil c b ->
+                   step ge (State f (Sifthenelse c s1 s2) k sp e m)
                      E0 (State f (if b then s1 else s2) k sp e m)
-
-             | step_loop: forall f s k sp e m,
-                   step (State f (Sloop s) k sp e m)
+             | step_loop: forall ge f s k sp e m,
+                   step ge (State f (Sloop s) k sp e m)
                      E0 (State f s (Kseq (Sloop s) k) sp e m)
-
-             | step_block: forall f s k sp e m,
-                   step (State f (Sblock s) k sp e m)
+             | step_block: forall ge f s k sp e m,
+                   step ge (State f (Sblock s) k sp e m)
                      E0 (State f s (Kblock k) sp e m)
-
-             | step_exit_seq: forall f n s k sp e m,
-                   step (State f (Sexit n) (Kseq s k) sp e m)
+             | step_exit_seq: forall ge f n s k sp e m,
+                   step ge (State f (Sexit n) (Kseq s k) sp e m)
                      E0 (State f (Sexit n) k sp e m)
-             | step_exit_block_0: forall f k sp e m,
-                   step (State f (Sexit O) (Kblock k) sp e m)
+             | step_exit_block_0: forall ge f k sp e m,
+                   step ge (State f (Sexit O) (Kblock k) sp e m)
                      E0 (State f Sskip k sp e m)
-             | step_exit_block_S: forall f n k sp e m,
-                   step (State f (Sexit (S n)) (Kblock k) sp e m)
+             | step_exit_block_S: forall ge f n k sp e m,
+                   step ge (State f (Sexit (S n)) (Kblock k) sp e m)
                      E0 (State f (Sexit n) k sp e m)
-
-             | step_return_0: forall f k sp e m m',
-                   Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-                   step (State f (Sreturn None) k (Vptr sp Ptrofs.zero) e m)
+             | step_return_0: forall ge f k sp e m m',
+                   Mem.free m sp 0 f.(self__CminorSel.fn_stackspace) = Some m' ->
+                   step ge (State f (Sreturn None) k (Vptr sp Ptrofs.zero) e m)
                      E0 (Returnstate Vundef (call_cont k) m')
-             | step_return_1: forall f a k sp e m v m',
-                   eval_expr (Vptr sp Ptrofs.zero) e m nil a v ->
-                   Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-                   step (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m)
+             | step_return_1: forall ge f a k sp e m v m',
+                   eval_expr ge (Vptr sp Ptrofs.zero) e m nil a v ->
+                   Mem.free m sp 0 f.(self__CminorSel.fn_stackspace) = Some m' ->
+                   step ge (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m)
                      E0 (Returnstate v (call_cont k) m')
-
-             | step_label: forall f lbl s k sp e m,
-                   step (State f (Slabel lbl s) k sp e m)
+             | step_label: forall ge f lbl s k sp e m,
+                   step ge (State f (Slabel lbl s) k sp e m)
                      E0 (State f s k sp e m)
+             | step_goto: forall ge f lbl k sp e m s' k',
+                   find_label lbl f.(self__CminorSel.fn_body) (call_cont k) = Some(s', k') ->
+                   step ge (State f (Sgoto lbl) k sp e m)
+                     E0 (State f s' k' sp e m)
+             | step_internal_function: forall ge f vargs k m m' sp e,
+                  Mem.alloc m 0 f.(self__CminorSel.fn_stackspace) = (m', sp) ->
+                  set_locals
+                    f.(self__CminorSel.fn_vars)
+                    (set_params vargs f.(self__CminorSel.fn_params)) = e ->
+                  step ge (Callstate (Internal f) vargs k m)
+                    E0 (State f f.(self__CminorSel.fn_body) k (Vptr sp Ptrofs.zero) e m')
 
-             | step_goto: forall f lbl k sp e m s' k',
-                   find_label lbl f.(fn_body) (call_cont k) = Some(s', k') ->
-                   step (State f (Sgoto lbl) k sp e m)
-                     E0 (State f s' k' sp e m).
+             MetaData initial_state.
+              Inductive initial_state (p: self__CminorSel.program): self__Sem.state -> Prop :=
+                  | initial_state_intro: forall b f m0,
+                      let ge := Genv.globalenv p in
+                      Genv.init_mem p = Some m0 ->
+                      Genv.find_symbol ge p.(prog_main) = Some b ->
+                      Genv.find_funct_ptr ge b = Some f ->
+                      self__CminorSel.funsig f = signature_main ->
+                      initial_state p (self__Sem.Callstate f nil self__Sem.Kstop m0).
+             FEnd initial_state.
+
+             MetaData final_state.
+              Inductive final_state: self__Sem.state -> int -> Prop :=
+                  | final_state_intro: forall r m,
+                      final_state (self__Sem.Returnstate (Vint r) self__Sem.Kstop m) r.
+             FEnd final_state.
        FEnd Sem.
-    FEnd CminorSel.   
+   FEnd CminorSel.   
 
+   (* Cminor -> CminorSel *)
+   Family Selection.
+       Definition longconst (n: int64) : expr :=
+          if Archi.splitlong then SplitLong.longconst n else Eop (Olongconst n) Enil.
+
+       FRecurcion sel_constant about Cminor.constant motive (fun (_ : Cminor.constant) => CminorSel.constant).
+           Case Ointconst := (fun n => CminorSel.Eop (Asm.Ointconst n) Enil).
+           Case Ofloatconst := (fun n => CminorSel.Eop (Asm.Ofloatconst f) Enil).
+           Case Osingleconst := (fun n =>  Eop (Osingleconst f) Enil).
+           Case Olongconst := (fun n => longconst n).
+        FEnd sel_constant.
+
+        FRecursion sel_expr about Cminor.expr motive (fun (_ : Cminor.expr) => CminorSel.expr).          
+           Case Evar := (fun id => CminorSel.Evar id).
+           Case Econst := (fun cst => sel_constant cst).
+        FEnd sel_expr.        
+       
+        FRecursion sel_stmt about Cminor.stmt 
+                            motive (fun (_ : Cminor.stmt) => known_idents -> typeenv -> CminorSel.stmt).
+          Case Sskip := (fun ki env => CminorSel.Sskip).
+          Case Sassign := (fun id e => fun ki env => CminorSel.Sassign id (sel_expr e)).
+          Case Sseq := (fun s1 sel_s1 s2 sel_s2 => fun ki env => CminorSel.Sseq (sel_s1 ki env) (sel_s1 ki env)).
+          Case Sifthenelse := 
+                (fun e ifso sel_ifso ifnot sel_ifnot => fun ki env => 
+                      (* Don't use the if conversion heuristics *)
+                      do ifso' <- sel_ifso ki env; do ifnot' <- sel_ifnot ki env;
+                      OK (Sifthenelse (condexpr_of_expr (sel_expr e)) ifso' ifnot')).
+          Case Sloop := (fun s sel_s1 => fun ki env => CminorSel.Sloop (sel_s1 ki env)).
+          Case Sblock := (fun s sel_s1 => fun ki env => CminorSel.Sblock (sel_s1 ki env)).
+          Case Sexit := (fun n => fun ki env => CminorSel.Sexit n).
+          Case Sreturn := (fun e => fun ki env => 
+                               match e with 
+                               | None => CminorSel.Sreturn None 
+                               | Some e => CminorSel.Sreturn (Some (sel_expr e))).
+          Case Slabel := (fun lbl s sel_s => fun ki env => CminorSel.Slabel (sel_s ki env)).
+          Case Sgoto := (fun lbl => fun ki env => CminorSel.Sgoto lbl).
+        FEnd sel_stmt.
+   FEnd Selection.
+
+   
    Family RTL.
        Definition node := positive.
       
@@ -4001,46 +4076,7 @@ Inductive bitfield : Type :=
                       rs r = Vint retcode ->
                       final_state (Returnstate nil rs m) retcode.
         FEnd Sem.
-   FEnd Mach.         
-   
-   (* Cminor -> CminorSel *)
-   Family Selection.
-       Definition longconst (n: int64) : expr :=
-          if Archi.splitlong then SplitLong.longconst n else Eop (Olongconst n) Enil.
-
-       FRecurcion sel_constant about Cminor.constant motive (fun (_ : Cminor.constant) => CminorSel.constant).
-           Case Ointconst := (fun n => CminorSel.Eop (Asm.Ointconst n) Enil).
-           Case Ofloatconst := (fun n => CminorSel.Eop (Asm.Ofloatconst f) Enil).
-           Case Osingleconst := (fun n =>  Eop (Osingleconst f) Enil).
-           Case Olongconst := (fun n => longconst n).
-        FEnd sel_constant.
-
-        FRecursion sel_expr about Cminor.expr motive (fun (_ : Cminor.expr) => CminorSel.expr).          
-           Case Evar := (fun id => CminorSel.Evar id).
-           Case Econst := (fun cst => sel_constant cst).
-        FEnd sel_expr.        
-       
-        FRecursion sel_stmt about Cminor.stmt 
-                            motive (fun (_ : Cminor.stmt) => known_idents -> typeenv -> CminorSel.stmt).
-          Case Sskip := (fun ki env => CminorSel.Sskip).
-          Case Sassign := (fun id e => fun ki env => CminorSel.Sassign id (sel_expr e)).
-          Case Sseq := (fun s1 sel_s1 s2 sel_s2 => fun ki env => CminorSel.Sseq (sel_s1 ki env) (sel_s1 ki env)).
-          Case Sifthenelse := 
-                (fun e ifso sel_ifso ifnot sel_ifnot => fun ki env => 
-                      (* Don't use the if conversion heuristics *)
-                      do ifso' <- sel_ifso ki env; do ifnot' <- sel_ifnot ki env;
-                      OK (Sifthenelse (condexpr_of_expr (sel_expr e)) ifso' ifnot')).
-          Case Sloop := (fun s sel_s1 => fun ki env => CminorSel.Sloop (sel_s1 ki env)).
-          Case Sblock := (fun s sel_s1 => fun ki env => CminorSel.Sblock (sel_s1 ki env)).
-          Case Sexit := (fun n => fun ki env => CminorSel.Sexit n).
-          Case Sreturn := (fun e => fun ki env => 
-                               match e with 
-                               | None => CminorSel.Sreturn None 
-                               | Some e => CminorSel.Sreturn (Some (sel_expr e))).
-          Case Slabel := (fun lbl s sel_s => fun ki env => CminorSel.Slabel (sel_s ki env)).
-          Case Sgoto := (fun lbl => fun ki env => CminorSel.Sgoto lbl).
-        FEnd sel_stmt.
-   FEnd Selection.
+   FEnd Mach.      
 
    (* CminorSel -> RTL *)
    Family RTLgen.
