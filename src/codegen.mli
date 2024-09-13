@@ -58,15 +58,14 @@ val compile_handler_types:
       CompiledModule.t
 
 val compile_recursive_definition_signature :
-  names:Names.Id.t list ->
-  motive_module:CompiledModule.t ->
+  names:Names.Id.t list ->  
   handler_cases:CompiledModule.t ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
   family_name:Names.Id.t ->
   computational_behaviour:[ `Exposed | `Hidden ] ->
   inductive:VernacInductive.t ->
   prefix:Libnames.qualid option ->
-  CompiledModuleType.t
+  CompiledModuleType.t * Constrexpr.constr_expr
 
 val calculate_rec_principle_prefix :
   inductive_path:Libnames.qualid -> context:LinkageCtx.t -> Libnames.qualid

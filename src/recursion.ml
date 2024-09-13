@@ -66,9 +66,9 @@ let close_recursion () =
   Checks.check_exhaustive ~name ~inductive ~handlers:handler_cases;
   module_name |> ignore;
   let module_name = DB.end_module () in
-  let compiled_signature =
+  let compiled_signature, signature =
     Codegen.compile_recursive_definition_signature ~names:[ name ]
-      ~motive_module:motive ~handler_cases:module_name ~ctx:parameters
+       ~handler_cases:module_name ~ctx:parameters
       ~family_name:name ~computational_behaviour:`Exposed ~inductive
       ~prefix:(Some rec_principle_prefix)
   in
@@ -88,6 +88,7 @@ let close_recursion () =
         handler_types;
         arguments;
         prefix = rec_principle_prefix;
+        signature;
       }
   in
   Context.add_field ~name ~elem;

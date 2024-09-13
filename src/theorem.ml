@@ -289,8 +289,7 @@ let close_theorem () =
           name;
           implementing_handler_names;
           inherited_handlers;
-          motive;
-          compiled_motive;
+          motive;          
           goal;
           goal_name;
           inductive;
@@ -322,9 +321,9 @@ let close_theorem () =
   let _ = VB.run @@ VB.flatmap implemented_handlers in
   let compiled_handlers = DB.end_module () in  
   let family_name = Context.family_name (Context.get ()) in
-  let compiled_signature =
+  let compiled_signature, signature =
     Codegen.compile_recursive_definition_signature ~names:[ name ]
-      ~motive_module:compiled_motive ~handler_cases:compiled_handlers
+       ~handler_cases:compiled_handlers
       ~ctx:parameters ~family_name ~computational_behaviour:`Hidden ~inductive
       ~prefix:(Some rec_principle_prefix)
   in
@@ -341,6 +340,7 @@ let close_theorem () =
         handlers = all_handlers;
         inductive_path;
         suffix;
+        signature;
       }
   in
   Context.add_field ~name ~elem;
