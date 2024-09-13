@@ -1640,10 +1640,9 @@ Inductive bitfield : Type :=
                        (plus Clight.Sem.step tge T1 t T2 \/
                          (star Clight.Sem.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
                     /\ match_states S2 T2).
-              FProof.                 
-                 finduction.                 
+              FProof.                                  
                  (* expr *)
-                 + apply cheat.                 
+                 + intros. apply cheat.                 
                  (* seqand true *)                  
                  + intros. apply cheat.
                  (* seqand false *)                 
@@ -1677,7 +1676,7 @@ Inductive bitfield : Type :=
                   (* seq *)
                   + intros. apply cheat.
                   (* skip seq *)
-                  + apply cheat.
+                  + intros. apply cheat.
                   (* continue seq *)
                   + apply cheat.
                   (* break seq *)
