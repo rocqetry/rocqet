@@ -93,7 +93,9 @@ let close_recursion () =
   Context.add_field ~name ~elem;
   Ctx.clear ()
 
-let open_recursion ~(name : Names.Id.t) ~(inductive_path : Libnames.qualid)
+let open_recursion
+    ~(name : Names.Id.t)
+    ~(inductive_path : Libnames.qualid)
     ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t)
     ~(arguments : Names.Id.t list) =
   Inheritance.inherit_dependencies ~prefix:name;
@@ -107,15 +109,17 @@ let open_recursion ~(name : Names.Id.t) ~(inductive_path : Libnames.qualid)
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:module_name context
   in
-  let motive_expr = Resolver.resolve_constrexpr ~context ~expression:motive in
-  let motive =
-    Codegen.compile_motives ~names:[ name ] ~motives:[ motive_expr ]
-      ~ctx:parameters ~family_name:name
-  in
+  let motive_expr = Resolver.resolve_constrexpr ~context ~expression:motive in  
   let inductive, compiled_recursors, _provenance =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
+  let motive =
+    Codegen.compile_motives
+      ~names:[ name ] ~motives:[ motive_expr ]
+      ~ctx:parameters ~family_name:name
+      ~recursor ~inductive_path
+  in
   let _module_name = DB.start_module module_name parameters in
   let resolved_inductive_path =
     Resolver.resolve_qualid ~context ~qualid:inductive_path
@@ -175,15 +179,15 @@ let open_recursion_extension ~name =
   in
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:module_name context
-  in
-  let motive =
-    Codegen.compile_motives ~names:[ name ] ~motives ~ctx:parameters
-      ~family_name:name
-  in
+  in  
   let inductive, compiled_recursors, _provenance =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
+  let motive =
+    Codegen.compile_motives ~names:[ name ] ~motives ~ctx:parameters
+      ~family_name:name ~recursor ~inductive_path
+  in
   let resolved_inductive_path =
     Resolver.resolve_qualid ~context ~qualid:inductive_path
   in

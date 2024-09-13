@@ -242,7 +242,7 @@ let compile_recursors ~(ind_def : VernacInductive.t)
         @@ define_module ~module_name ~parameters:ctx ~body:(fun _ ->
                let* () =
                  define_term
-                   ~name:(Nameops.add_prefix "__recursor_type_" recursor_name)
+                   ~name:(Naming.recursor_type ~inductive:recursor_name (RecKind.to_string suffix))
                    recursor
                in
                return ()))
@@ -304,10 +304,14 @@ let compile_principle_implementation ctx =
   B.run
     (B.define_module ~module_name ~parameters:ctx ~body:(fun _ -> B.return ()))
 
-let compile_motives ~(names : Names.Id.t list)
+let compile_motives
+    ~(names : Names.Id.t list)
     ~(motives : Constrexpr.constr_expr list)
-    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
-    CompiledModule.t =
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name
+    ~(recursor: CompiledRecursor.t)
+    ~(inductive_path : Libnames.qualid):
+      CompiledModule.t =
+  Printf.printf "%s\n" (Pretty.pretty_qualid inductive_path);  
   let module_name =
     Naming.module_name_of ~family_name
       (Nameops.add_prefix "motive_of" (Naming.concat_names names))
@@ -316,8 +320,30 @@ let compile_motives ~(names : Names.Id.t list)
   @@ B.define_module ~module_name ~parameters:ctx ~body:(fun _ ->
          List.combine names motives
          |> List.map (fun (name, motive) ->
-                let name = Naming.motive_of name in
-                B.define_term ~name motive)
+                let open B in
+                let motive_name = Naming.motive_of name in                
+                let* () = B.define_term ~name:motive_name motive in
+                let* () =
+                  recursor.handlers
+                  |> List.map (fun (case_name, handler) ->
+                         let handler_name =
+                           Naming.recursion_handler_type
+                             ~function_name:name
+                             ~case_name
+                         in
+                         let target =
+                           match inductive_path |> Naming.path_to_list |> List.rev with
+                           | [] 
+                           | [_] -> None
+                           | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
+                         in
+                         let handler = Naming.replace_self_qualification ~target handler in
+                         let handler = Resolver.resolve_constrexpr ~context:(Env.Context.get ()) ~expression:handler in
+                         let* () = B.define_term ~name:handler_name handler in
+                         return ())
+                  |> flatmap
+                in 
+                return ())
          |> B.flatmap)
 
 let compile_recursive_definition_signature ~(names : Names.Id.t list)
@@ -610,7 +636,7 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
       ( _,
         ( _,
           LinkageElem.InductiveDefinition
-            { compiled_context; compiled_signature; compiled_recursors; _ } ) )
+            { compiled_context; compiled_signature; _ } ) )
     ->
       let signature_name =
         B.(
@@ -631,27 +657,7 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
                        (Termutils.ident_to_module_expr compiled_signature)
                      ~arguments:parameters
                  in
-                 let* () = include_module ~module_expr:signature in
-                 let recursors =
-                   let compiled_recursors = !compiled_recursors in
-                   compiled_recursors.recursors |> RecursorStore.to_list
-                   |> List.map snd
-                   |> List.concat_map
-                        (fun
-                          CompiledRecursor.
-                            { compiled_recursor; compiled_handlers; _ }
-                        -> compiled_recursor :: List.map snd compiled_handlers)
-                   |> List.map (fun compiled_recursors ->
-                          Termutils.apply_module
-                            ~functor_expr:
-                              (Termutils.ident_to_module_expr compiled_recursors)
-                            ~arguments:parameters)
-                 in
-                 let* () =
-                   recursors
-                   |> List.map (fun module_expr -> include_module ~module_expr)
-                   |> flatmap
-                 in
+                 let* () = include_module ~module_expr:signature in                 
                  return ()))
       in
       let signature =
@@ -726,7 +732,7 @@ let compile_linkage (linkage : Linkage.t) =
         ( fields,
           ( _,
             LinkageElem.InductiveDefinition
-              { compiled_impl; compiled_recursors; _ } ) ) ->
+              { compiled_impl; _ } ) ) ->
         let open B in
         let* _ = compile_fields fields ctx in
         let module_expr = Termutils.ident_to_module_expr compiled_impl in
@@ -734,25 +740,7 @@ let compile_linkage (linkage : Linkage.t) =
           Termutils.apply_module ~functor_expr:module_expr
             ~arguments:(Linkage.context_parameters linkage)
         in
-        let* _ = include_module ~module_expr in
-        let recursors =
-          let compiled_recursors = !compiled_recursors in
-          compiled_recursors.recursors |> RecursorStore.to_list |> List.map snd
-          |> List.concat_map
-               (fun
-                 CompiledRecursor.{ compiled_recursor; compiled_handlers; _ } ->
-                 compiled_recursor :: List.map snd compiled_handlers)
-          |> List.map (fun compiled_recursors ->
-                 Termutils.apply_module
-                   ~functor_expr:
-                     (Termutils.ident_to_module_expr compiled_recursors)
-                   ~arguments:(Linkage.context_parameters linkage))
-        in
-        let* () =
-          recursors
-          |> List.map (fun module_expr -> include_module ~module_expr)
-          |> flatmap
-        in
+        let* _ = include_module ~module_expr in        
         return ()
   in
   B.run
@@ -854,7 +842,7 @@ let compile_linkage_signature linkage =
         ( _,
           ( _,
             LinkageElem.InductiveDefinition
-              { compiled_recursors; compiled_context; compiled_signature; _ } )
+              { compiled_context; compiled_signature; _ } )
         ) ->
         B.(
           run
@@ -873,27 +861,7 @@ let compile_linkage_signature linkage =
                        (Termutils.ident_to_module_expr compiled_signature)
                      ~arguments:ctx
                  in
-                 let* () = include_module ~module_expr:signature_module_expr in
-                 let recursors =
-                   let compiled_recursors = !compiled_recursors in
-                   compiled_recursors.recursors |> RecursorStore.to_list
-                   |> List.map snd
-                   |> List.concat_map
-                        (fun
-                          CompiledRecursor.
-                            { compiled_recursor; compiled_handlers; _ }
-                        -> compiled_recursor :: List.map snd compiled_handlers)
-                   |> List.map (fun compiled_recursors ->
-                          Termutils.apply_module
-                            ~functor_expr:
-                              (Termutils.ident_to_module_expr compiled_recursors)
-                            ~arguments:ctx)
-                 in
-                 let* () =
-                   recursors
-                   |> List.map (fun module_expr -> include_module ~module_expr)
-                   |> flatmap
-                 in
+                 let* () = include_module ~module_expr:signature_module_expr in                 
                  return ()))
   in
   let sig_final = Naming.fresh_name ~prefix:"Sig" in
@@ -1216,14 +1184,15 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
         let compiled_context, parameters =
           compile_linkage_context ~field_name:name context
         in
-        let inductive, _compiled_recursors, _provenance =
+        let inductive, compiled_recursors, _provenance =
           Env.Context.lookup_inductive_for_recursion ~name:inductive_path
             context
         in
         Checks.check_exhaustive ~name ~inductive ~handlers:handler_cases;
+        let recursor = RecursorStore.find suffix compiled_recursors.recursors in
         let motive_module =
           compile_motives ~names:[ name ] ~motives ~ctx:parameters
-            ~family_name:name
+            ~family_name:name ~recursor ~inductive_path
         in
         let recursor_module =
           compile_handler_cases ~name ~parameters ~handler_cases ~handler_types

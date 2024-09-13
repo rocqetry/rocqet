@@ -47,6 +47,8 @@ val compile_motives :
   motives:Constrexpr.constr_expr list ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
   family_name:Names.Id.t ->
+  recursor:CompiledRecursor.t ->
+  inductive_path:Libnames.qualid ->
   CompiledModule.t
 
 val compile_recursive_definition_signature :

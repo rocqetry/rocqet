@@ -137,16 +137,16 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     Codegen.compile_linkage_context ~field_name:name context
   in
   let family_name = Context.family_name context in
-  let motive = Resolver.resolve_constrexpr ~context ~expression:motive in
-  let compiled_motive =
-    Codegen.compile_motives ~names:[ name ] ~ctx:parameters ~motives:[ motive ]
-      ~family_name
-  in
+  let motive = Resolver.resolve_constrexpr ~context ~expression:motive in  
   let inductive, compiled_recursors, _ =
     Context.lookup_inductive_for_recursion ~name:inductive context
   in
   let suffix = RecKind.IndComplete in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
+  let compiled_motive =
+    Codegen.compile_motives ~names:[ name ] ~ctx:parameters ~motives:[ motive ]
+      ~family_name ~recursor ~inductive_path
+  in
   let handler_names = recursor.compiled_handlers |> List.map fst in
   let implementing_handler_names = handler_names in
   let resolved_inductive_path =
@@ -207,16 +207,15 @@ let open_theorem_extension ~name =
   in
   let motives =
     Resolver.resolve_constrexpr_list ~context ~expressions:motives
-  in
-  let compiled_motive =
-    Codegen.compile_motives ~names:[ name ] ~ctx:parameters ~motives
-      ~family_name
-  in
+  in  
   let inductive, compiled_recursors, _ =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
-
+  let compiled_motive =
+    Codegen.compile_motives ~names:[ name ] ~ctx:parameters ~motives
+      ~family_name ~recursor ~inductive_path
+  in
   let handler_names =
     recursor.compiled_handlers |> List.map fst
     (* Termutils.handler_types_table name recursor suffix |> List.map fst*)

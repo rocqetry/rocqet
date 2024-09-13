@@ -2,6 +2,7 @@ val motive_of : Names.Id.t -> Names.Id.t
 val internal_name : Names.Id.t -> Names.Id.t
 val recursor_type : inductive:Names.Id.t -> string -> Names.Id.t
 val handler_type : Names.Id.t -> suffix:string -> Names.Id.t
+val recursion_handler_type : function_name:Names.Id.t -> case_name:Names.Id.t -> Names.Id.t
 val principle_name : inductive:Names.Id.t -> kind:string -> Names.Id.t
 val point_qualid : Names.Id.t -> Libnames.qualid -> Libnames.qualid
 val qualid_point : Libnames.qualid option -> Names.Id.t -> Libnames.qualid
@@ -30,6 +31,11 @@ val self_version : Names.Id.t -> Names.Id.t
 val un_self_version : Names.Id.t -> Names.Id.t
 val module_name_of : family_name:Names.Id.t -> Names.Id.t -> Names.Id.t
 val fresh_name : prefix:string -> Names.Id.t
+
+val replace_self_qualification :
+  target:Libnames.qualid option ->
+  Constrexpr.constr_expr ->
+  Constrexpr.constr_expr
 
 val name_map_with :
   (Names.Id.t -> Names.Id.t) -> Names.Id.t list -> Names.Id.t Names.Id.Map.t

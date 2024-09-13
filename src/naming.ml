@@ -11,6 +11,10 @@ let recursor_type ~inductive suffix =
 let handler_type name ~suffix =
   Nameops.add_suffix (Nameops.add_prefix "__handler_type_" name) suffix
 
+let recursion_handler_type ~function_name ~case_name =
+  let name = Printf.sprintf "%s_%s_type" (Names.Id.to_string function_name) (Names.Id.to_string case_name) in
+  Names.Id.of_string name
+
 let handler_name ~recursor ~case =
   Names.Id.to_string recursor ^ Names.Id.to_string case |> Names.Id.of_string
 
@@ -126,6 +130,36 @@ let replace_qualid_root ~source ~target =
         match Names.Id.equal (take_root_of_path qid) source with
         | true ->
             let qid = replace_root_of_path qid target in
+            CAst.make (CRef (qid, us))
+        | false -> x)
+    | cn ->
+        map_constr_expr_with_binders (fun _ _ -> ()) replace_qualid_path () cn
+  in
+  replace_qualid_path ()
+
+let replace_self_qualification ~(target : Libnames.qualid option) =
+  let open Constrexpr_ops in
+  let open Constrexpr in
+  let open Libnames in
+  let take_root_of_path (t : qualid) : Names.Id.t = fst (to_name_qualid t) in
+  let replace_root_of_path (t : qualid) : qualid =
+    let _, tail = to_name_qualid t in
+    let tail = path_to_list tail in
+    match target with
+    | None -> list_to_path tail
+    | Some target ->
+       let target = path_to_list target in
+       list_to_path (target @ tail)
+  in
+  let rec replace_qualid_path _ r =
+    match r with
+    | { CAst.loc = _; v = CRef (qid, us) } as x when not (qualid_is_ident qid)
+      -> (
+        (* rename the  *)
+        let source = Names.Id.to_string (take_root_of_path qid) in
+        match String.starts_with ~prefix:"self__" source with
+        | true ->
+            let qid = replace_root_of_path qid in
             CAst.make (CRef (qid, us))
         | false -> x)
     | cn ->
