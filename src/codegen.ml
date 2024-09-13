@@ -795,6 +795,12 @@ let compile_linkage_signature linkage =
     | Bwd.Snoc
         ( _,
           ( _,
+            LinkageElem.InductiveDefinition
+              { compiled_context; compiled_signature; _ } )
+        )
+    | Bwd.Snoc
+        ( _,
+          ( _,
             LinkageElem.RecursorDefinition
               { compiled_context; compiled_signature; _ } ) ) ->
         B.(
@@ -815,32 +821,7 @@ let compile_linkage_signature linkage =
                      ~arguments:ctx
                  in
                  let* _ = include_module ~module_expr:signature_module_expr in
-                 return ()))
-    | Bwd.Snoc
-        ( _,
-          ( _,
-            LinkageElem.InductiveDefinition
-              { compiled_context; compiled_signature; _ } )
-        ) ->
-        B.(
-          run
-          @@ define_moduletype ~module_name:helper
-               ~parameters:(Bwd.to_list context) ~body:(fun ctx ->
-                 let context_module_expr =
-                   Termutils.apply_module
-                     ~functor_expr:
-                       (Termutils.ident_to_module_expr compiled_context)
-                     ~arguments:ctx
-                 in
-                 let* () = include_module ~module_expr:context_module_expr in
-                 let signature_module_expr =
-                   Termutils.apply_module
-                     ~functor_expr:
-                       (Termutils.ident_to_module_expr compiled_signature)
-                     ~arguments:ctx
-                 in
-                 let* () = include_module ~module_expr:signature_module_expr in                 
-                 return ()))
+                 return ()))    
   in
   let sig_final = Naming.fresh_name ~prefix:"Sig" in
   B.(
