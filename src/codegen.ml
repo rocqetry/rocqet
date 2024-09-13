@@ -54,8 +54,10 @@ let compile_inductive_signature ~(ind_def : VernacInductive.t)
            let* () = flatmap all_decls in
            return ()))
 
-let compile_inductive_implementation ~(ind_def : VernacInductive.t)
-    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
+let compile_inductive_implementation
+    ~(ind_def : VernacInductive.t)
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
+    ~family_name :
     CompiledModule.t
     * (Names.Id.t list * Constrexpr.constr_expr) RecursorStore.t =
   (* Generate a definition mapping of the inductive type and
@@ -310,8 +312,7 @@ let compile_motives
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name
     ~(recursor: CompiledRecursor.t)
     ~(inductive_path : Libnames.qualid):
-      CompiledModule.t =
-  Printf.printf "%s\n" (Pretty.pretty_qualid inductive_path);  
+      CompiledModule.t =  
   let module_name =
     Naming.module_name_of ~family_name
       (Nameops.add_prefix "motive_of" (Naming.concat_names names))
@@ -447,8 +448,14 @@ let compile_recursive_definition_signature ~(names : Names.Id.t list)
 
 (* Return the compiled module and the generated computation behaviour *)
 let compile_recursive_definition_implementation ~inductive ~recursor_name
-    ~handlers ~(rec_principle_prefix : Libnames.qualid option) ~suffix ~ctx
+    ~handlers ~(inductive_path : Libnames.qualid) ~suffix ~ctx
     ~(handler_cases : CompiledModule.t) : unit B.t =
+  let prefix =
+        match inductive_path |> Naming.path_to_list |> List.rev with
+        | [] 
+        | [_] -> None
+        | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
+  in
   let computation =
     let module_expr = Termutils.ident_to_module_expr handler_cases in
     let module_expr =
@@ -465,8 +472,8 @@ let compile_recursive_definition_implementation ~inductive ~recursor_name
     let recursor =
       let recursor =
         Nameops.add_suffix inductive_name (RecKind.to_string suffix)
-      in
-      let recursor_path = Naming.qualid_point rec_principle_prefix recursor in
+      in      
+      let recursor_path = Naming.qualid_point prefix recursor in
       let motive =
         recursor_name |> Naming.motive_of |> Libnames.qualid_of_ident
         |> Constrexpr_ops.mkRefC
@@ -491,7 +498,7 @@ let compile_recursive_definition_implementation ~inductive ~recursor_name
       thunk (fun () ->
           let result =
             Termutils.generate_computational_axioms ~inductive
-              ~prefix:rec_principle_prefix ~recursor:recursor_name
+              ~prefix ~recursor:recursor_name
           in
           result
           |> List.map (fun (name, ty) ->
@@ -506,7 +513,13 @@ let compile_recursive_definition_implementation ~inductive ~recursor_name
 let compile_theorem_implementation ~(name : Names.Id.t) ~ctx
     ~(compiled_handlers : CompiledModule.t) ~(inductive_name : Names.Id.t)
     ~(suffix : RecKind.t) ~(goal : Constrexpr.constr_expr)
-    ~(handler_names : Names.Id.t list) ~(prefix : Libnames.qualid option) =
+    ~(handler_names : Names.Id.t list) ~inductive_path  =
+  let prefix =
+      match inductive_path |> Naming.path_to_list |> List.rev with
+      | [] 
+      | [_] -> None
+      | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
+  in
   let open Constrexpr_ops in
   let open B in
   let module_expr =
@@ -673,7 +686,7 @@ let compile_linkage (linkage : Linkage.t) =
           ( _,
             LinkageElem.RecursorDefinition
               {
-                prefix;
+                inductive_path;
                 names;
                 inductive;
                 handler_types;
@@ -685,19 +698,16 @@ let compile_linkage (linkage : Linkage.t) =
         let* _ = compile_fields fields ctx in
         let recursor_name = List.hd names in
         let handlers = handler_types |> List.map fst in
-        let handler_cases = recursor_module in
-        let rec_principle_prefix =
-          let l, stripped_prefix = Naming.to_name_optionqualid prefix in
-          let l = Naming.un_self_version l in
-          if l = linkage.name then stripped_prefix else Some prefix
-        in
-        compile_recursive_definition_implementation ~inductive ~recursor_name
-          ~handlers ~rec_principle_prefix ~suffix ~ctx ~handler_cases
+        let handler_cases = recursor_module in        
+        compile_recursive_definition_implementation
+          ~inductive ~recursor_name
+          ~handlers ~inductive_path
+          ~suffix ~ctx ~handler_cases
     | Bwd.Snoc
         ( fields,
           ( _,
             LinkageElem.TheoremDefinition
-              { handlers; goal; names; compiled_handlers; inductive; suffix; _ }
+              { inductive_path; handlers; goal; names; compiled_handlers; inductive; suffix; _ }
           ) ) ->
         let open B in
         let* _ = compile_fields fields ctx in
@@ -705,7 +715,7 @@ let compile_linkage (linkage : Linkage.t) =
         let inductive_name = VernacInductive.extract_inductive_name inductive in
         let handler_names = List.map fst handlers in
         compile_theorem_implementation ~name ~ctx ~compiled_handlers
-          ~inductive_name ~suffix ~prefix:None ~goal ~handler_names
+          ~inductive_name ~inductive_path ~suffix ~goal ~handler_names
     | Bwd.Snoc (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.MetaDataSection { compiled_impl; _ }))
     | Bwd.Snoc
@@ -720,14 +730,17 @@ let compile_linkage (linkage : Linkage.t) =
         let* _ = compile_fields fields ctx in
         let module_expr = Termutils.ident_to_module_expr compiled_impl in
         let module_expr =
-          Termutils.apply_module ~functor_expr:module_expr
+          Termutils.apply_module
+            ~functor_expr:module_expr
             ~arguments:(Linkage.context_parameters linkage)
         in
         let* _ = include_module ~module_expr in
         return ()    
   in
   B.run
-  @@ B.define_module ~module_name:name ~parameters:(Bwd.to_list context)
+  @@ B.define_module
+       ~module_name:name
+       ~parameters:(Bwd.to_list context)
        ~body:(compile_fields fields)
 
 let compile_nested_linkage (linkage : Linkage.t) =
@@ -738,10 +751,13 @@ let compile_nested_linkage (linkage : Linkage.t) =
   let wrapper = Naming.fresh_name ~prefix in
   B.(
     run
-    @@ define_module ~module_name:wrapper
+    @@ define_module
+         ~module_name:wrapper
          ~parameters:(Bwd.to_list linkage.context) ~body:(fun _ctx ->
            let* _ =
-             define_module ~module_name:linkage.name ~parameters:[]
+             define_module
+               ~module_name:linkage.name
+               ~parameters:[]
                ~body:(fun _ ->
                  let arguments =
                    linkage.context |> Bwd.to_list |> List.map fst
