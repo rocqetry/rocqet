@@ -46,10 +46,16 @@ val compile_motives :
   names:Names.Id.t list ->
   motives:Constrexpr.constr_expr list ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-  family_name:Names.Id.t ->
-  recursor:CompiledRecursor.t ->
-  inductive_path:Libnames.qualid ->
+  family_name:Names.Id.t ->  
   CompiledModule.t
+
+val compile_handler_types:
+    names:Names.Id.t list ->
+    ctx:(Names.Id.t * Constrexpr.module_ast) list ->
+    recursor:CompiledRecursor.t ->
+    inductive_path:Libnames.qualid ->
+    cases:Names.Id.t list ->
+      CompiledModule.t
 
 val compile_recursive_definition_signature :
   names:Names.Id.t list ->

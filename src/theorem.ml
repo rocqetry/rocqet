@@ -12,8 +12,7 @@ module DB = Backend.Declare
 (* Private store *)
 module Ctx = struct
   type t = {
-    name : Names.Id.t;
-    proof : Declare.Proof.t option;
+    name : Names.Id.t;    
     implementing_handler_names : Names.Id.t list;
     inherited_handlers : (Names.Id.t * Constrexpr.constr_expr) list;
     compiled_context : CompiledModuleType.t;
@@ -27,6 +26,8 @@ module Ctx = struct
     rec_principle_prefix : Libnames.qualid;
     inductive_path : Libnames.qualid;
     suffix : RecKind.t;
+    previous_cases : CompiledModule.t option;
+    compiled_handler_types: CompiledModule.t;
   }
 
   let store = Summary.ref ~name:"TheoremCtx" (None : t option)
@@ -35,25 +36,47 @@ module Ctx = struct
   let get () =
     match !store with
     | None -> Errors.fail ~info:"There is no theorem context open"
-    | Some store -> store
-
-  let update_proof proof =
-    let s = get () in
-    store := Some { s with proof = Some proof }
+    | Some store -> store  
 
   let clear () = store := None
 end
 
 let prepare_proving () =
-  let Ctx.{ module_name; parameters; compiled_motive; _ } = Ctx.get () in
-  let _ = DB.start_module module_name parameters in
-  let applied_motive =
-    Termutils.apply_module
-      ~functor_expr:(Termutils.ident_to_module_expr compiled_motive)
-      ~arguments:
-        (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
-  in
-  VB.run (VB.include_module ~module_expr:applied_motive)
+  let Ctx.{ compiled_handler_types; module_name; parameters; compiled_motive; previous_cases; _ } = Ctx.get () in  
+  let _ = DB.start_module module_name parameters in  
+  match previous_cases with
+  | None ->
+     let applied_motive =
+       Termutils.apply_module
+         ~functor_expr:(Termutils.ident_to_module_expr compiled_motive)
+         ~arguments:
+           (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
+     in  
+     VB.run (VB.include_module ~module_expr:applied_motive);
+
+     let applied_compiled_handler =
+       Termutils.apply_module
+         ~functor_expr:(Termutils.ident_to_module_expr compiled_handler_types)
+         ~arguments:
+           (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
+     in  
+     VB.run (VB.include_module ~module_expr:applied_compiled_handler)
+  | Some previous_cases ->
+     let applied_cases =
+        Termutils.apply_module
+          ~functor_expr:(Termutils.ident_to_module_expr previous_cases)
+          ~arguments:
+            (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
+     in  
+     VB.run (VB.include_module ~module_expr:applied_cases);
+
+     let applied_compiled_handler =
+       Termutils.apply_module
+         ~functor_expr:(Termutils.ident_to_module_expr compiled_handler_types)
+         ~arguments:
+           (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
+     in  
+     VB.run (VB.include_module ~module_expr:applied_compiled_handler)
 
 let start_proving () =
   let Ctx.{ goal; goal_name; _ } = Ctx.get () in
@@ -113,21 +136,8 @@ let start_proving () =
   let starting_operation =
     Tacticals.tclTHEN starting_operation split_cases_into_goals
   in
-  let ongoing_proof, _ = Declare.Proof.by starting_operation ongoing_proof in
-  Ctx.update_proof ongoing_proof;
+  let ongoing_proof, _ = Declare.Proof.by starting_operation ongoing_proof in  
   ongoing_proof
-
-let end_proving () =
-  let Ctx.{ proof; goal_name; _ } = Ctx.get () in
-  let proof =
-    match proof with
-    | None -> Errors.fail ~info:"Not in proof mode"
-    | Some proof -> proof
-  in
-  let pm = Declare.OblState.empty in
-  Declare.Proof.save ~pm ~proof ~opaque:Vernacexpr.Transparent
-    ~idopt:(Some (CAst.make goal_name))
-  |> ignore
 
 let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     ~(motive : Constrexpr.constr_expr) =
@@ -145,19 +155,23 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
   let compiled_motive =
     Codegen.compile_motives ~names:[ name ] ~ctx:parameters ~motives:[ motive ]
-      ~family_name ~recursor ~inductive_path
+      ~family_name
   in
-  let handler_names = recursor.compiled_handlers |> List.map fst in
-  let implementing_handler_names = handler_names in
   let resolved_inductive_path =
     Resolver.resolve_qualid ~context ~qualid:inductive_path
   in
-  let handler_types =
-    List.map snd
+  let handler_types =    
       (Termutils.handler_types_table resolved_inductive_path name recursor
          suffix)
   in
-  let goal = Termutils.calculate_inductive_proof_goal ~handler_types ~suffix in
+  let cases = List.map fst handler_types in
+  let compiled_handler_types =
+    Codegen.compile_handler_types ~names:[name]
+        ~ctx:parameters ~recursor ~inductive_path ~cases
+  in 
+  let handler_names = recursor.compiled_handlers |> List.map fst in
+  let implementing_handler_names = handler_names in  
+  let goal = Termutils.calculate_inductive_proof_goal ~handler_types:(List.map snd handler_types) ~suffix in
   let rec_principle_prefix =
     Codegen.calculate_rec_principle_prefix ~inductive_path ~context
   in
@@ -176,12 +190,13 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
         inductive;
         compiled_context;
         compiled_motive;
+        compiled_handler_types;
         rec_principle_prefix;
         inductive_path;
         motive;
         parameters;
         suffix;
-        proof = None;
+        previous_cases = None;
       }
   in
   Ctx.update ctx;
@@ -196,13 +211,13 @@ let open_theorem_extension ~name =
   let family_name = Context.family_name context in
   let linkage = Context.family_linkage context in
   let elem = Inheritance.inherit_element ~field:name ~linkage ~context in
-  let inductive_path, motives, inherited_handlers, suffix =
+  let inductive_path, motives, inherited_handlers, suffix, compiled_handlers =
     match elem with
     | None -> Errors.fail ~info:"There is no such FInduction in a base family"
     | Some
         (LinkageElem.TheoremDefinition
-          { inductive_path; motives; handlers; suffix; _ }) ->
-        (inductive_path, motives, handlers, suffix)
+          { inductive_path; motives; handlers; suffix; compiled_handlers; _ }) ->
+        (inductive_path, motives, handlers, suffix, compiled_handlers)
     | _ -> Errors.fail ~info:"Expected to inherit an FInduction"
   in
   let motives =
@@ -214,17 +229,20 @@ let open_theorem_extension ~name =
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
   let compiled_motive =
     Codegen.compile_motives ~names:[ name ] ~ctx:parameters ~motives
-      ~family_name ~recursor ~inductive_path
+      ~family_name
   in
   let handler_names =
-    recursor.compiled_handlers |> List.map fst
-    (* Termutils.handler_types_table name recursor suffix |> List.map fst*)
+    recursor.compiled_handlers |> List.map fst    
   in
   let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
   let implementing_handler_names =
     let inherited_handlers = List.map fst inherited_handlers in
     handler_names |> List.filter (fun x -> not (inside x inherited_handlers))
   in
+  let compiled_handler_types =
+    Codegen.compile_handler_types ~names:[name]
+        ~ctx:parameters ~recursor ~inductive_path ~cases:implementing_handler_names
+  in   
   let resolved_inductive_path =
     Resolver.resolve_qualid ~context ~qualid:inductive_path
   in
@@ -238,8 +256,8 @@ let open_theorem_extension ~name =
   let rec_principle_prefix =
     Codegen.calculate_rec_principle_prefix ~inductive_path ~context
   in
-  let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in
-  let goal_name = Naming.fresh_name ~prefix:"Goal" in
+  let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in  
+  let goal_name = Naming.fresh_name ~prefix:"Goal" in  
   let motive = List.hd motives in
   let ctx =
     Ctx.
@@ -257,8 +275,9 @@ let open_theorem_extension ~name =
         inductive_path;
         motive;
         parameters;
-        suffix;
-        proof = None;
+        suffix;        
+        previous_cases = Some compiled_handlers;
+        compiled_handler_types;
       }
   in
   Ctx.update ctx;
@@ -291,26 +310,17 @@ let close_theorem () =
   in
   let all_handlers = inherited_handlers @ implemented_handlers in
   let f x = x |> Termutils.cbn_type_check |> Termutils.reflect_checked_term in
-  let all_handlers =
-    List.map (fun (name, expr) -> (name, f expr)) all_handlers
+  let implemented_handlers =
+    List.map (fun (name, expr) -> (name, f expr)) implemented_handlers
   in
-  let all_compiled_handlers =
+  let implemented_handlers =
     List.map
       (fun (x, y) ->
         VB.define_term ~name:(Naming.handler_name ~recursor:name ~case:x) y)
-      all_handlers
+      implemented_handlers
   in
-  let _ = VB.run @@ VB.flatmap all_compiled_handlers in
-  let compiled_handlers = DB.end_module () in
-  (* let the_motive = Naming.motive_of name in*)
-  (*let compiled_impl =
-      Codegen.compile_theorem_implementation ~name ~parameters ~compiled_handlers
-        ~inductive_name:(VernacInductive.extract_inductive_name inductive)
-        ~suffix
-        ~goal
-        ~handler_names
-        ~rec_principle_prefix
-    in*)
+  let _ = VB.run @@ VB.flatmap implemented_handlers in
+  let compiled_handlers = DB.end_module () in  
   let family_name = Context.family_name (Context.get ()) in
   let compiled_signature =
     Codegen.compile_recursive_definition_signature ~names:[ name ]

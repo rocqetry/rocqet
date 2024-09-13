@@ -310,9 +310,7 @@ let compile_motives
     ~(names : Names.Id.t list)
     ~(motives : Constrexpr.constr_expr list)
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name
-    ~(recursor: CompiledRecursor.t)
-    ~(inductive_path : Libnames.qualid):
-      CompiledModule.t =  
+    : CompiledModule.t =  
   let module_name =
     Naming.module_name_of ~family_name
       (Nameops.add_prefix "motive_of" (Naming.concat_names names))
@@ -323,29 +321,50 @@ let compile_motives
          |> List.map (fun (name, motive) ->
                 let open B in
                 let motive_name = Naming.motive_of name in                
-                let* () = B.define_term ~name:motive_name motive in
-                let* () =
-                  recursor.handlers
-                  |> List.map (fun (case_name, handler) ->
-                         let handler_name =
-                           Naming.recursion_handler_type
-                             ~function_name:name
-                             ~case_name
-                         in
-                         let target =
-                           match inductive_path |> Naming.path_to_list |> List.rev with
-                           | [] 
-                           | [_] -> None
-                           | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
-                         in
-                         let handler = Naming.replace_self_qualification ~target handler in
-                         let handler = Resolver.resolve_constrexpr ~context:(Env.Context.get ()) ~expression:handler in
-                         let* () = B.define_term ~name:handler_name handler in
-                         return ())
-                  |> flatmap
-                in 
+                let* () = B.define_term ~name:motive_name motive in                
                 return ())
          |> B.flatmap)
+
+(** Compile the handler types for induction/recursion
+   [cases] is the constructor cases to compile types for
+ *)
+let compile_handler_types
+    ~(names : Names.Id.t list)    
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
+    ~(recursor: CompiledRecursor.t)
+    ~(inductive_path : Libnames.qualid)
+    ~(cases : Names.Id.t list):
+      CompiledModule.t =
+  let function_name = names |> List.hd  in
+  let prefix = Printf.sprintf "HandlerTypesFor_%s" (Names.Id.to_string function_name) in
+  let module_name =
+    Naming.fresh_name ~prefix
+  in
+  B.run
+  @@ B.define_module ~module_name ~parameters:ctx ~body:(fun _ ->                  
+         let open B in         
+         let* () =
+           recursor.handlers
+           |> List.filter (fun (case_name, _) -> (cases |> List.exists ((=) case_name)))
+           |> List.map (fun (case_name, handler) ->                  
+                  let handler_name =
+                    Naming.recursion_handler_type
+                      ~function_name
+                      ~case_name
+                  in
+                  let target =
+                    match inductive_path |> Naming.path_to_list |> List.rev with
+                    | [] 
+                    | [_] -> None
+                    | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
+                  in
+                  let handler = Naming.replace_self_qualification ~target handler in
+                  let handler = Resolver.resolve_constrexpr ~context:(Env.Context.get ()) ~expression:handler in
+                  let* () = B.define_term ~name:handler_name handler in
+                  return ())
+           |> flatmap
+         in 
+         return ())         
 
 let compile_recursive_definition_signature ~(names : Names.Id.t list)
     ~(motive_module : CompiledModule.t) ~(handler_cases : CompiledModule.t)
@@ -896,7 +915,11 @@ let calculate_rec_principle_prefix ~inductive_path ~context =
   let path = inductive_path |> Naming.path_to_list |> remove_last in
   make_module_path containing_family path
 
-let compile_handler_cases ~name ~(context : LinkageCtx.t) ~parameters ~motive
+let compile_handler_cases
+    ~name
+    ~(context : LinkageCtx.t)
+    ~parameters
+    ~motive
     ~(handler_cases : (Names.Id.t * Constrexpr.constr_expr) list)
     ~(handler_types : (Names.Id.t * Constrexpr.constr_expr) list) =
   let family = context |> Env.Context.family_name |> Names.Id.to_string in
@@ -1045,12 +1068,7 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
            CompiledRecursors.{ compiled_context; recursors = compiled_recs });
         linkage
     | LinkageElem.TheoremDefinition
-        { names; motives; inductive; suffix; handlers; _ } ->
-        names |> ignore;
-        motives |> ignore;
-        inductive |> ignore;
-        suffix |> ignore;
-        handlers |> ignore;
+        { names = _; _ } ->       
         (* let name = List.hd names in
            let family_name = Env.Context.family_name linkage in
            let compiled_context, parameters =
@@ -1125,16 +1143,11 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
         Errors.fail ~info:"Not yet implemented"
     | LinkageElem.RecursorDefinition
         {
-          inductive_path;
-          handler_cases;
-          handler_types;
-          names;
-          suffix;
-          motives;
-          arguments;
+          inductive_path = _;          
           _;
         } ->
-        let name = List.hd names in
+       (*
+         let name = List.hd names in
         let context = linkage in
         let compiled_context, parameters =
           compile_linkage_context ~field_name:name context
@@ -1183,7 +1196,8 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
               prefix = rec_principle_prefix;
             }
         in
-        add_field ~name ~elem linkage
+        add_field ~name ~elem linkage*)
+        linkage
   in
   match Bwd.fold_left f initial_context linkage.fields with
   | LinkageCtx.Nested (_, l) | LinkageCtx.Toplevel l -> l

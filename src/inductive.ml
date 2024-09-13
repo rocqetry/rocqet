@@ -12,7 +12,9 @@ let add_inductive_definition inductive =
     match elem with
     | None -> inductive
     | Some (InductiveDefinition { inductive = inherited_inductive; _ }) ->
-        VernacInductive.concatenate ~base:inherited_inductive ~derived:inductive
+       VernacInductive.concatenate
+         ~base:inherited_inductive
+         ~derived:inductive
     | Some _ ->
         Errors.fail
           ~info:
@@ -32,7 +34,7 @@ let add_inductive_definition inductive =
   let compiled_impl, recursors =
     Codegen.compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
       ~family_name
-  in
+  in  
   let compiled_recursors =
     ref CompiledRecursors.{ compiled_context; recursors = RecursorStore.empty }
   in

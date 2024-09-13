@@ -24,7 +24,7 @@ module Ctx = struct
     arguments : Names.Id.t list;
         (* the name of the arguments to this FRecursion *)
     inductive_path : Libnames.qualid;
-    rec_principle_prefix : Libnames.qualid;
+    rec_principle_prefix : Libnames.qualid;    
   }
 
   let store = Summary.ref ~name:"RecursionCtx" (None : t option)
@@ -117,13 +117,20 @@ let open_recursion
   let motive =
     Codegen.compile_motives
       ~names:[ name ] ~motives:[ motive_expr ]
-      ~ctx:parameters ~family_name:name
-      ~recursor ~inductive_path
+      ~ctx:parameters ~family_name:name      
   in
-  let _module_name = DB.start_module module_name parameters in
   let resolved_inductive_path =
     Resolver.resolve_qualid ~context ~qualid:inductive_path
   in
+  let handler_types =
+    Termutils.handler_types_table resolved_inductive_path name recursor suffix
+  in
+  let cases = handler_types |> List.map fst in
+  let compiled_handler_types =
+    Codegen.compile_handler_types ~names:[name]
+        ~ctx:parameters ~recursor ~inductive_path ~cases
+  in 
+  let _module_name = DB.start_module module_name parameters in  
   let applied_motive =
     Termutils.apply_module
       ~functor_expr:(Termutils.ident_to_module_expr motive)
@@ -131,9 +138,13 @@ let open_recursion
         (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
   in
   let _ = VB.(run (include_module ~module_expr:applied_motive)) in
-  let handler_types =
-    Termutils.handler_types_table resolved_inductive_path name recursor suffix
+  let applied_handler_types =
+    Termutils.apply_module
+      ~functor_expr:(Termutils.ident_to_module_expr compiled_handler_types)
+      ~arguments:
+        (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
   in
+  let _ = VB.(run (include_module ~module_expr:applied_handler_types)) in  
   let rec_principle_prefix =
     Codegen.calculate_rec_principle_prefix ~inductive_path ~context
   in
@@ -152,7 +163,7 @@ let open_recursion
         motive_expr = [ motive_expr ];
         inductive;
         arguments;
-        rec_principle_prefix;
+        rec_principle_prefix;        
       }
   in
   Ctx.update recursion_ctx
@@ -162,13 +173,13 @@ let open_recursion_extension ~name =
   let context = Context.get () in
   let linkage = Context.family_linkage context in
   let elem = Inheritance.inherit_element ~field:name ~linkage ~context in
-  let inductive_path, motives, handler_cases, suffix, arguments =
+  let inductive_path, motives, handler_cases, suffix, arguments, recursor_module =
     match elem with
     | None -> Errors.fail ~info:"There is no such FRecursion in a base family"
     | Some
         (RecursorDefinition
-          { inductive_path; suffix; motives; handler_cases; arguments; _ }) ->
-        (inductive_path, motives, handler_cases, suffix, arguments)
+          { inductive_path; suffix; motives; handler_cases; arguments; recursor_module;_ }) ->
+        (inductive_path, motives, handler_cases, suffix, arguments, recursor_module)
     | _ -> Errors.fail ~info:"Expected to inherit an FRecrusion"
   in
   let module_name =
@@ -186,7 +197,7 @@ let open_recursion_extension ~name =
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
   let motive =
     Codegen.compile_motives ~names:[ name ] ~motives ~ctx:parameters
-      ~family_name:name ~recursor ~inductive_path
+      ~family_name:name
   in
   let resolved_inductive_path =
     Resolver.resolve_qualid ~context ~qualid:inductive_path
@@ -194,10 +205,20 @@ let open_recursion_extension ~name =
   let handler_types =
     Termutils.handler_types_table resolved_inductive_path name recursor suffix
   in
-  let recursor_module =
+  let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
+  let implementing_handler_names =
+    let inherited_handlers = List.map fst handler_cases in
+    handler_types |> List.map fst |> List.filter (fun x -> not (inside x inherited_handlers))
+  in
+  let compiled_handler_types =
+    Codegen.compile_handler_types ~names:[name]
+        ~ctx:parameters ~recursor ~inductive_path ~cases:implementing_handler_names
+  in   
+  (* Should be used directly and not recompiled *)
+  (* let recursor_module =
     Codegen.compile_handler_cases ~name ~context ~motive ~handler_cases
       ~handler_types ~parameters
-  in
+  in*)
   let _module_name = DB.start_module module_name parameters in
   let previous_cases =
     Termutils.apply_module
@@ -206,6 +227,13 @@ let open_recursion_extension ~name =
         (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
   in
   let _ = VB.(run @@ include_module ~module_expr:previous_cases) in
+  let applied_compiled_handler_types =
+    Termutils.apply_module
+      ~functor_expr:(Termutils.ident_to_module_expr compiled_handler_types)
+      ~arguments:
+        (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
+  in
+  let _ = VB.(run @@ include_module ~module_expr:applied_compiled_handler_types) in
   let rec_principle_prefix =
     Codegen.calculate_rec_principle_prefix ~inductive_path ~context
   in
@@ -223,7 +251,7 @@ let open_recursion_extension ~name =
         motive_expr = motives;
         inductive;
         inductive_path;
-        arguments;
+        arguments;        
         rec_principle_prefix;
       }
   in

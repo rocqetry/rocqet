@@ -387,7 +387,7 @@ end = struct
     let fields = linkage.fields |> Bwd.map f in
     { linkage with fields }
 
-  let rec concatenate_elem elem0 elem1 =
+  let rec concatenate_elem elem1 elem0  =
     let remove_duplicates lst =
       let rec aux seen = function
         | [] -> []

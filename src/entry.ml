@@ -69,14 +69,15 @@ let finduction ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
       { name; command = PluginCmd.Induction; close = Theorem.close_theorem }
 
 let finduction_extension ~(name : Names.Id.t) =
-  Theorem.open_theorem_extension ~name
+  Theorem.open_theorem_extension ~name;
+  PluginScopes.push
+    PluginCmdScope.
+      { name; command = PluginCmd.Induction; close = Theorem.close_theorem }
 
 (* FProof *)
 let fproof () = Theorem.start_proving ()
 let fproof_lemma = Lemma.prepare_proving
 
-(* FQed *)
-let fqed () = Theorem.end_proving ()
 let flemma name t = Lemma.open_flemma name t
 (* PluginScopes.push
    PluginCmdScope.
