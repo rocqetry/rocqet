@@ -567,12 +567,7 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
           ~arguments:parameters
       in
       ( signature_name,
-        linkage.context @> [ (Naming.self_version linkage.name, signature) ] )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          LinkageElem.PrincipleDefinition
-            { compiled_context; compiled_signature; _ } ) )
+        linkage.context @> [ (Naming.self_version linkage.name, signature) ] )  
   | Bwd.Snoc
       ( _,
         ( _,
@@ -716,9 +711,11 @@ let compile_linkage (linkage : Linkage.t) =
     | Bwd.Snoc
         (fields, (_, LinkageElem.OpaqueFieldDefinition { compiled_impl; _ }))
     | Bwd.Snoc
-        (fields, (_, LinkageElem.PrincipleDefinition { compiled_impl; _ }))
-    | Bwd.Snoc (fields, (_, LinkageElem.FieldDefinition { compiled_impl; _ }))
-      ->
+        ( fields,
+          ( _,
+            LinkageElem.InductiveDefinition
+              { compiled_impl; _ } ) )
+    | Bwd.Snoc (fields, (_, LinkageElem.FieldDefinition { compiled_impl; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in
         let module_expr = Termutils.ident_to_module_expr compiled_impl in
@@ -727,21 +724,7 @@ let compile_linkage (linkage : Linkage.t) =
             ~arguments:(Linkage.context_parameters linkage)
         in
         let* _ = include_module ~module_expr in
-        return ()
-    | Bwd.Snoc
-        ( fields,
-          ( _,
-            LinkageElem.InductiveDefinition
-              { compiled_impl; _ } ) ) ->
-        let open B in
-        let* _ = compile_fields fields ctx in
-        let module_expr = Termutils.ident_to_module_expr compiled_impl in
-        let module_expr =
-          Termutils.apply_module ~functor_expr:module_expr
-            ~arguments:(Linkage.context_parameters linkage)
-        in
-        let* _ = include_module ~module_expr in        
-        return ()
+        return ()    
   in
   B.run
   @@ B.define_module ~module_name:name ~parameters:(Bwd.to_list context)
@@ -798,12 +781,7 @@ let compile_linkage_signature linkage =
         ( _,
           ( _,
             LinkageElem.FieldDefinition
-              { compiled_context; compiled_impl = compiled_signature; _ } ) )
-    | Bwd.Snoc
-        ( _,
-          ( _,
-            LinkageElem.PrincipleDefinition
-              { compiled_context; compiled_signature; _ } ) )
+              { compiled_context; compiled_impl = compiled_signature; _ } ) )    
     | Bwd.Snoc
         ( _,
           ( _,
@@ -970,8 +948,7 @@ let add_field ~name ~elem context =
 let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
     =
   let f (linkage : LinkageCtx.t) (name, field) =
-    match field with
-    | LinkageElem.PrincipleDefinition _ -> linkage
+    match field with    
     | LinkageElem.OpaqueFieldDefinition def ->
         let elem = LinkageElem.OpaqueFieldDefinition def in
         add_field ~name ~elem linkage
@@ -1069,26 +1046,7 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
         in
         (compiled_recursors :=
            CompiledRecursors.{ compiled_context; recursors = compiled_recs });
-        let compiled_context, parameters =
-          compile_linkage_context ~field_name:inductive_name linkage
-        in
-        let principle_signature =
-          compile_principle_signature ~ind_def:inductive ~recursors
-            ~ctx:parameters ~family_name
-        in
-        let principle_impl = compile_principle_implementation parameters in
-        let principle =
-          LinkageElem.PrincipleDefinition
-            {
-              compiled_context;
-              inductive;
-              compiled_signature = principle_signature;
-              compiled_impl = principle_impl;
-            }
-        in
-        let name = Nameops.add_suffix name "IndPrinciple" in
-        let next_linkage = add_field ~name ~elem:principle linkage in
-        next_linkage
+        linkage
     | LinkageElem.TheoremDefinition
         { names; motives; inductive; suffix; handlers; _ } ->
         names |> ignore;

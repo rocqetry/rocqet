@@ -110,13 +110,7 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         arguments : Names.Id.t list;
         prefix : Libnames.qualid;
-      }
-    | PrincipleDefinition of {
-        compiled_context : CompiledModuleType.t;
-        inductive : VernacInductive.t;
-        compiled_impl : CompiledModule.t;
-        compiled_signature : CompiledModuleType.t;
-      }
+      }    
     | TheoremDefinition of {
         names : Names.Id.t list;
         motives : Constrexpr.constr_expr list;

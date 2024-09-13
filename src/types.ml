@@ -250,13 +250,7 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         arguments : Names.Id.t list;
         prefix : Libnames.qualid;
-      }
-    | PrincipleDefinition of {
-        compiled_context : CompiledModuleType.t;
-        inductive : VernacInductive.t;
-        compiled_impl : CompiledModule.t;
-        compiled_signature : CompiledModuleType.t;
-      }
+      }    
     | TheoremDefinition of {
         names : Names.Id.t list;
         motives : Constrexpr.constr_expr list;
@@ -386,9 +380,7 @@ end = struct
           definition.motives
           |> List.map (Naming.replace_qualid_root ~source ~target)
         in
-        TheoremDefinition { definition with motives }
-    | LinkageElem.PrincipleDefinition principle ->
-        LinkageElem.PrincipleDefinition principle
+        TheoremDefinition { definition with motives }    
 
   and path_subtitution linkage ~source ~target =
     let f (name, elem) = (name, path_substitution_elem elem ~source ~target) in
@@ -429,8 +421,7 @@ end = struct
         in
         LinkageElem.FamilyDefinition { e0 with linkage }
     | FieldDefinition _, FieldDefinition e1 ->
-        FieldDefinition e1 (* Override a field? *)
-    | PrincipleDefinition _, PrincipleDefinition e1 -> PrincipleDefinition e1
+        FieldDefinition e1 (* Override a field? *)    
     | MetaDataSection _, MetaDataSection m -> MetaDataSection m
     | _, _ -> Errors.fail ~info:"Invalid concatnenation arguments"
 
