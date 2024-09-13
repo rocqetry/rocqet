@@ -79,15 +79,14 @@ let close_family () : unit =
                 ~source:(Naming.self_version base_linkage.name)
                 ~target:(Naming.self_version linkage.name)
             in
-            Linkage.concatenate_recursive ~base:base_linkage ~derived:linkage
+            Linkage.concatenate ~base:base_linkage ~derived:linkage
       in
       (* store := None; *)
       Context.destructive_update None;
-
       (* Note that we only want to do this when late binding of family names
          happens in the linkage *)
-      let linkage = Codegen.compute_linkage None linkage in
-      (* Codegen.compile_linkage linkage |> ignore;*)
+      (* let linkage = Codegen.compute_linkage None linkage in*)
+      Codegen.compile_linkage linkage |> ignore;
       Linkages.add linkage
   | LinkageCtx.Nested (upper, linkage) as context ->
       (* let further_base = Context.further_bound_linkage context in*)
