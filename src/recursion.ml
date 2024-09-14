@@ -107,14 +107,18 @@ let open_recursion
     let name = Names.Id.to_string name in
     Naming.fresh_name ~prefix:name
   in
-  let compiled_context, parameters =
-    Codegen.compile_linkage_context ~field_name:module_name context
-  in
+  
   let motive_expr = Resolver.resolve_constrexpr ~context ~expression:motive in  
   let inductive, compiled_recursors, _provenance =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
+  let motive_name = Naming.motive_of name in
+  let () = Definition.add_definition ~name:motive_name motive_expr in
+  let context = Context.get () in
+  let compiled_context, parameters =
+    Codegen.compile_linkage_context ~field_name:module_name context
+  in
   let motive =
     Codegen.compile_motives
       ~names:[ name ] ~motives:[ motive_expr ]
@@ -132,13 +136,13 @@ let open_recursion
         ~ctx:parameters ~recursor ~inductive_path ~cases
   in 
   let _module_name = DB.start_module module_name parameters in  
-  let applied_motive =
+  (*let applied_motive =
     Termutils.apply_module
       ~functor_expr:(Termutils.ident_to_module_expr motive)
       ~arguments:
         (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
   in
-  let _ = VB.(run (include_module ~module_expr:applied_motive)) in
+  let _ = VB.(run (include_module ~module_expr:applied_motive)) in*)
   let applied_handler_types =
     Termutils.apply_module
       ~functor_expr:(Termutils.ident_to_module_expr compiled_handler_types)

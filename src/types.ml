@@ -251,7 +251,7 @@ module rec LinkageElem : sig
         arguments : Names.Id.t list;
         prefix : Libnames.qualid;
         signature: Constrexpr.constr_expr;
-      }    
+      }
     | TheoremDefinition of {
         names : Names.Id.t list;
         motives : Constrexpr.constr_expr list;
@@ -482,7 +482,10 @@ end = struct
     Linkage.{ derived with fields }
 
   (* Naive concatenation of the linkage before a particular field *)
-  let concatenate_prefix ~prefix ~(derived : Linkage.t) ~(base : Linkage.t) =
+  let concatenate_prefix
+        ~prefix
+        ~(derived : Linkage.t)
+        ~(base : Linkage.t) =
     let rec calculate_dependencies fields =
       match fields with
       | Bwd.Emp -> concatenate ~derived ~base

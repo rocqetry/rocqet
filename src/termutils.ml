@@ -268,24 +268,17 @@ let handler_types_table inductive_path name (recursor : CompiledRecursor.t)
     suffix =
   let motive = Naming.motive_of name in
   recursor.compiled_handlers
-  |> List.map (fun (handler_name, _) ->
+  |> List.map (fun (handler_name, _) ->         
          let motive_term =
-           Constrexpr_ops.mkRefC (Libnames.qualid_of_ident motive)
+           let self = Naming.self_version (Env.Context.family_name (Env.Context.get ())) in
+           let motive = Naming.list_to_path [self;motive] in
+           Constrexpr_ops.mkRefC motive
          in
          let handler_type =
-           Naming.recursion_handler_type ~function_name:name ~case_name:handler_name 
-           (* Naming.handler_type handler_name ~suffix:(RecKind.to_string suffix) *)
+           Naming.recursion_handler_type ~function_name:name ~case_name:handler_name            
          in
          inductive_path |> ignore; suffix |> ignore;
-         let handler_type = Libnames.qualid_of_ident handler_type in
-         (*let inductive_family =
-           inductive_path |> Naming.path_to_list |> List.rev |> List.tl
-           (* Remove the inductive name suffix *) |> List.rev
-           |> Naming.list_to_path
-         in*)
-         (*let handler_type =
-           Naming.qualid_point (Some inductive_family) handler_type
-         in*)
+         let handler_type = Libnames.qualid_of_ident handler_type in         
          let handler_type = Constrexpr_ops.mkRefC handler_type in
          let handler_type =
            Constrexpr_ops.mkAppC (handler_type, [ motive_term ])

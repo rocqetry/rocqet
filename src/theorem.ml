@@ -42,18 +42,11 @@ module Ctx = struct
 end
 
 let prepare_proving () =
-  let Ctx.{ compiled_handler_types; module_name; parameters; compiled_motive; previous_cases; _ } = Ctx.get () in  
+  let Ctx.{ compiled_handler_types; module_name; parameters; compiled_motive; previous_cases; _ } = Ctx.get () in
+  compiled_motive |> ignore;
   let _ = DB.start_module module_name parameters in  
   match previous_cases with
-  | None ->
-     let applied_motive =
-       Termutils.apply_module
-         ~functor_expr:(Termutils.ident_to_module_expr compiled_motive)
-         ~arguments:
-           (parameters |> List.map fst |> List.map Libnames.qualid_of_ident)
-     in  
-     VB.run (VB.include_module ~module_expr:applied_motive);
-
+  | None ->    
      let applied_compiled_handler =
        Termutils.apply_module
          ~functor_expr:(Termutils.ident_to_module_expr compiled_handler_types)
@@ -143,16 +136,22 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     ~(motive : Constrexpr.constr_expr) =
   let inductive_path = inductive in
   let context = Context.get () in
-  let compiled_context, parameters =
+  (*let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:name context
-  in
+  in*)
   let family_name = Context.family_name context in
   let motive = Resolver.resolve_constrexpr ~context ~expression:motive in  
   let inductive, compiled_recursors, _ =
     Context.lookup_inductive_for_recursion ~name:inductive context
-  in
+  in  
   let suffix = RecKind.IndComplete in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
+  let motive_name = Naming.motive_of name in
+  let () = Definition.add_definition ~name:motive_name motive in
+  let context = Context.get () in
+  let compiled_context, parameters =
+    Codegen.compile_linkage_context ~field_name:name context
+  in
   let compiled_motive =
     Codegen.compile_motives ~names:[ name ] ~ctx:parameters ~motives:[ motive ]
       ~family_name

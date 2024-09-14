@@ -398,7 +398,13 @@ let compile_recursive_definition_signature
                 names
                 |> List.map (fun name ->
                        let open Constrexpr_ops in
-                       let motiveT = Naming.motive_of name |> mkIdentC in
+                       (* let motiveT = Naming.motive_of name |> mkIdentC in*)
+                       let motive = Naming.motive_of name in
+                       let motiveT =
+                         let self = Naming.self_version (Env.Context.family_name (Env.Context.get ())) in
+                         let motive = Naming.list_to_path [self;motive] in
+                         Constrexpr_ops.mkRefC motive
+                       in
                        (* This is evaluated inside the module, hence the thunk *)
                        thunk (fun () ->
                            let parameter_count =
@@ -469,7 +475,9 @@ let compile_recursive_definition_signature
                 in
                 return ()))
   in
-  return_module, List.hd (!return_type)
+  (* We want to remove the self__ prefix from this expression *)
+  let return_type = Naming.replace_self_qualification ~target:None (List.hd (!return_type)) in
+  return_module, return_type
 
 (* Return the compiled module and the generated computation behaviour *)
 let compile_recursive_definition_implementation ~inductive ~recursor_name
