@@ -1,5 +1,7 @@
 open Env
 open Types
+open Bwd
+
 (* Generic inheritance operators *)
 
 (* Inherit Element from both the base and *all* further bound families *)
@@ -43,6 +45,70 @@ let inherit_element ~field ~linkage ~context =
   | None, Some base -> Some base
   | Some further, Some base -> Some (Linkage.concatenate_elem further base)
 
+
+let inherit_one
+      ~(name: Names.Id.t)
+      ~(element: LinkageElem.t)
+      ~(linkage: Linkage.t) =
+  let rec find_field = function
+    | Bwd.Emp -> false
+    | Bwd.Snoc (_, (field, _)) when Names.Id.equal name field -> true
+    | Bwd.Snoc (fields, _) -> find_field fields
+  in  
+  match find_field linkage.fields with
+  | true -> linkage
+  | false ->
+     (* Various checks to ensure correctness *)
+     (* We need to update the context of the inherited fields *)
+     (* Just a hack as compile_linkage_context accepts a ctx, but unwraps 
+       it and looks at the parameters anyway. *)
+     let context = LinkageCtx.Toplevel linkage in
+     let compiled_context, _ = Codegen.compile_linkage_context ~field_name:name context in
+     let element = 
+          match element with
+          | LinkageElem.InductiveDefinition inductive -> 
+              LinkageElem.InductiveDefinition { inductive  with compiled_context}
+          (* Update wrt late bound base family *)
+          | LinkageElem.FamilyDefinition  family -> 
+              (* TODO: Update wrt late bound base family *)
+              LinkageElem.FamilyDefinition { family  with compiled_context}             
+          | LinkageElem.FieldDefinition field -> 
+              LinkageElem.FieldDefinition { field with compiled_context}
+          | LinkageElem.MetaDataSection metadata -> 
+              LinkageElem.MetaDataSection { metadata with compiled_context}
+          | LinkageElem.OpaqueFieldDefinition field -> 
+              LinkageElem.OpaqueFieldDefinition { field with compiled_context}
+          (* Exhaustiveness checks *)
+          | LinkageElem.RecursorDefinition recursive -> 
+              LinkageElem.RecursorDefinition { recursive with compiled_context}
+          | LinkageElem.TheoremDefinition  theorem -> 
+              LinkageElem.TheoremDefinition { theorem with compiled_context}
+      in 
+      let fields = Bwd.Snoc (linkage.fields, (name, element)) in
+      { linkage with fields }
+
+let inherit_elements
+      ~(elements: (Names.Id.t * LinkageElem.t) list)
+      ~(linkage : Linkage.t) =
+  List.fold_left 
+    (fun linkage (name, element) -> inherit_one ~name ~element ~linkage) 
+    linkage 
+    elements
+
+let inherit_deps
+      ~(field : Names.Id.t)
+      ~(base : Linkage.t)
+      ~(derived : Linkage.t) =
+  let rec find_dependencies fields =
+      match fields with
+      | Bwd.Emp -> []
+      | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name field ->
+           Bwd.to_list fields
+      | Bwd.Snoc (fields, _) -> find_dependencies fields
+  in
+  let deps = find_dependencies base.fields in
+  inherit_elements ~elements:deps ~linkage:derived
+
 (* This updates the context so you must call Context.get again after using this *)
 let inherit_dependencies ~prefix =
   let context = Context.get () in
@@ -72,21 +138,23 @@ let inherit_dependencies ~prefix =
     match (base, further) with
     | None, None -> linkage
     | Some base, None ->
-        let base =
+        (*let base =
           match Linkage.context_match base linkage with
           | `Less | `More ->
               Codegen.compute_linkage None
                 { base with context = linkage.context }
           | `Equal -> base
-        in
+        in*)
         let base =
           Linkage.path_subtitution base
             ~source:(Naming.self_version base.name)
             ~target:(Naming.self_version linkage.name)
         in
-        Linkage.concatenate_prefix ~prefix ~derived:linkage ~base
+        (* Linkage.concatenate_prefix ~prefix ~derived:linkage ~base*)
+        inherit_deps ~field:prefix ~base ~derived:linkage
     | None, Some further ->
-        Linkage.concatenate_prefix ~prefix ~derived:linkage ~base:further
+        (* Linkage.concatenate_prefix ~prefix ~derived:linkage ~base:further *)
+        inherit_deps ~field:prefix ~base:further ~derived:linkage
     | Some base, Some further ->
         let base =
           match Linkage.context_match base linkage with
@@ -109,3 +177,17 @@ let inherit_dependencies ~prefix =
         Codegen.compute_linkage None linkage
   in
   Context.replace ~linkage
+  
+(* 
+let inherit_one_element ~element ~linkage =
+  failwith ""
+
+let inherit_elements ~elements ~linkage =
+   failwith ""
+
+let path_substitution ~source ~target = 
+
+(* derived has the preference over base *)
+let linkage_concatenate ~base ~derived =
+  failwith ""
+ *)

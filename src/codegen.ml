@@ -479,7 +479,7 @@ let compile_recursive_definition_signature
   let return_type = Naming.replace_self_qualification ~target:None (List.hd (!return_type)) in
   return_module, return_type
 
-(* Return the compiled module and the generated computation behaviour *)
+(* Return the compiled module and the generated computational behaviour *)
 let compile_recursive_definition_implementation ~inductive ~recursor_name
     ~handlers ~(inductive_path : Libnames.qualid) ~suffix ~ctx
     ~(handler_cases : CompiledModule.t) ~(signature : Constrexpr.constr_expr) : unit B.t =
