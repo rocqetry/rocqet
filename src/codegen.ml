@@ -452,9 +452,8 @@ let compile_theorem_definition_signature
 (* Return the compiled module and the type of this recursive definition *)
 let compile_recursive_definition_signature
     ~(names : Names.Id.t list)    
-    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name    
-    ~(inductive : VernacInductive.t) ~(prefix : Libnames.qualid option) :
-    CompiledModuleType.t  =
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name
+    : CompiledModuleType.t  =
   let module_name =
     Naming.module_name_of ~family_name (Naming.concat_names names)
   in  
@@ -505,44 +504,7 @@ let compile_recursive_definition_signature
                            let prod_type = mkProdCN binders func_body in                           
                            assume_parameter ~name ~ty:prod_type))
                 |> flatmap
-              in
-              (* Computational Axioms *)
-              let* _ =
-                thunk (fun () ->
-                        let recursor = List.hd names in
-                        let context = Some (Env.Context.get ()) in
-                        let computational_axioms =
-                          Termutils.generate_computational_axioms ~inductive
-                            ~prefix ~recursor ~context
-                        in                        
-                        computational_axioms
-                        |> List.map (fun (name, ty) -> postulate_axiom ~name ~ty)
-                        |> flatmap |> run;
-   
-                        (* User feedback *)
-                     let print_constr_expr expr =
-                       let sigma, env = Termutils.global_env () in
-                       Ppconstr.pr_constr_expr env sigma expr
-                     in
-                     let print_name name =
-                       name |> Names.Id.to_string |> Pp.str
-                     in
-                     let print_single_equation (name, eq) =
-                       let open Pp in
-                       print_name name ++ Pp.str " : " ++ print_constr_expr eq
-                     in
-                     let _ =
-                       let open Pp in
-                       Feedback.msg_info
-                         (str "Computational Axioms for "
-                         ++ print_name recursor
-                         ++ str " are defined as follows:");
-                       computational_axioms
-                       |> List.iter (fun eq ->
-                              Feedback.msg_info (print_single_equation eq))
-                     in
-                     return ())
-              in               
+              in              
               return ()))
   in  
   return_module
@@ -551,7 +513,9 @@ let compile_recursive_definition_signature
 let compile_recursive_definition_implementation
     ~inductive
     ~recursor_name
-    ~handlers ~(inductive_path : Libnames.qualid) ~suffix
+    ~handlers
+    ~(inductive_path : Libnames.qualid)
+    ~suffix
     : unit B.t =
   let prefix =
         match inductive_path |> Naming.path_to_list |> List.rev with
@@ -559,11 +523,7 @@ let compile_recursive_definition_implementation
         | [_] -> None
         | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
   in
-  let computation =
-    (*let module_expr = Termutils.ident_to_module_expr handler_cases in*)
-    (*let module_expr =
-      Termutils.apply_module ~functor_expr:module_expr ~arguments:ctx
-    in*)
+  let computation =    
     let inductive_name = inductive |> VernacInductive.extract_inductive_name in
     let handlers =
       handlers
@@ -584,34 +544,65 @@ let compile_recursive_definition_implementation
       Constrexpr_ops.mkAppC
         (Constrexpr_ops.mkRefC recursor_path, motive :: handlers)
     in
-    let open B in
-    (* let* _ = include_module ~module_expr in *)
-    let* _ = define_term ~name:recursor_name recursor in
+    let open B in    
+    let* _ = define_term ~name:recursor_name recursor in    
+    return ()
+  in
+  computation
 
-    (* Generate the computational behaviour: *)
-    let auto_tactic (* : Tacexpr.raw_tactic_expr*) =
+let compile_computational_axiom_implementation
+      ~axiom_name ~axiom_expr =
+  let auto_tactic (* : Tacexpr.raw_tactic_expr*) =
       let open Ltac_plugin in
       CAst.make
         (Tacexpr.TacArg
            (Tacexpr.TacCall
               (CAst.make
                  (Libnames.qualid_of_ident (Names.Id.of_string "eauto"), []))))
-    in
-    let* () =
-      thunk (fun () ->
-          let result =
-            Termutils.generate_computational_axioms ~inductive ~context:None
-              ~prefix ~recursor:recursor_name
-          in
-          result
-          |> List.map (fun (name, ty) ->
-                 construct_term_using_proof ~name ~proof:auto_tactic ~ty ())
-          |> flatmap |> run;
-          return ())
-    in
-    return ()
   in
-  computation
+  let ty = Naming.replace_self_qualification ~target:None axiom_expr in
+  B.thunk (B.construct_term_using_proof ~name:axiom_name ~proof:auto_tactic ~ty)
+
+(* The name of the equation to generate axioms for *)
+let compile_computational_axiom_signature
+      ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
+      ~(constructor_name : Names.Id.t)
+      ~(inductive : VernacInductive.t)
+      ~(recursor_name: Names.Id.t)
+      ~(prefix : Libnames.qualid option) :
+      (Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t) =
+  (* Actually will actually be self qualified *)
+  let self__ = Naming.self_version (Env.Context.family_name (Env.Context.get ())) in
+  let recursor_path = Naming.list_to_path [self__; recursor_name] in
+  let constructor_path = Naming.qualid_point prefix constructor_name in
+  let context = Some (Env.Context.get ()) in  
+  let module_name = Naming.fresh_name ~prefix:"ComputationalAxiom" in
+  let axiom_name = ref None in
+  let axiom_expr = ref None in
+  let compiled_signature =
+    B.run @@
+     B.define_moduletype
+       ~module_name ~parameters:ctx ~body:(fun _ctx ->
+         let open B in         
+         let* _ =
+            thunk (fun () ->
+               let name, axiom =
+                 Termutils.generate_one_computational_axiom
+                   ~inductive
+                   ~recursor_name
+                   ~recursor_path
+                   ~constructor_name
+                   ~constructor_path
+                   ~context
+               in
+               axiom_name := Some name;
+               axiom_expr := Some axiom;
+               postulate_axiom ~name ~ty:axiom)
+         in
+         return ()
+       )
+  in
+  Option.get !axiom_name, Option.get !axiom_expr, compiled_signature
 
 let compile_theorem_implementation ~(name : Names.Id.t) ~ctx
     ~(compiled_handlers : CompiledModule.t) ~(inductive_name : Names.Id.t)
@@ -822,10 +813,10 @@ let compile_linkage (linkage : Linkage.t) =
         let handler_names = List.map fst handlers in
         compile_theorem_implementation ~name ~ctx ~compiled_handlers
           ~inductive_name ~inductive_path ~suffix ~handler_names
-    | Bwd.Snoc (fields, (_, LinkageElem.ComputationalAxiom _ )) ->
+    | Bwd.Snoc (fields, (_, LinkageElem.ComputationalAxiom { name; axiom; _ } )) ->
        let open B in
-       let* _ = compile_fields fields ctx in
-       Errors.fail ~info:"Compulation of computational axiom"
+       let* _ = compile_fields fields ctx in       
+       compile_computational_axiom_implementation ~axiom_name:name ~axiom_expr:axiom
     | Bwd.Snoc (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.MetaDataSection { compiled_impl; _ }))
     | Bwd.Snoc

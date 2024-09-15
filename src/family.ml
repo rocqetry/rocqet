@@ -153,14 +153,14 @@ let close_family () : unit =
                 ~source:(Naming.self_version base.name)
                 ~target:(Naming.self_version linkage.name)
             in
-            Linkage.concatenate_recursive ~base ~derived:linkage
+            Linkage.concatenate ~base ~derived:linkage
         | Some further, _ ->
             let base =
               Linkage.path_subtitution further
                 ~source:(Linkage.top_most_self_name further)
                 ~target:(Linkage.top_most_self_name linkage)
             in
-            Linkage.concatenate_recursive ~base ~derived:linkage
+            Linkage.concatenate ~base ~derived:linkage
       in
       (* Again should not do this all the time: *)
       (* let linkage = Codegen.compute_linkage (Some context) linkage in*)

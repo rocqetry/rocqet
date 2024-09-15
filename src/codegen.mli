@@ -71,12 +71,18 @@ val compile_theorem_definition_signature :
     family_name:Names.Id.t ->     
     CompiledModuleType.t
 
+val compile_computational_axiom_signature :
+    ctx:(Names.Id.t * Constrexpr.module_ast) list ->
+    constructor_name:Names.Id.t ->
+    inductive:VernacInductive.t ->
+    recursor_name:Names.Id.t ->
+    prefix:Libnames.qualid option ->
+      (Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t)
+
 val compile_recursive_definition_signature :
   names:Names.Id.t list ->    
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-  family_name:Names.Id.t ->  
-  inductive:VernacInductive.t ->
-  prefix:Libnames.qualid option ->
+  family_name:Names.Id.t ->   
   CompiledModuleType.t
 
 val calculate_rec_principle_prefix :

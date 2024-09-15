@@ -179,7 +179,9 @@ let flatten_inductive_constructor_type ~(inductive : VernacInductive.t)
   unflatten constructor_type
 
 (* This has to be called with recursor_path and constructor_path exposed *)
-let calculate_computational_axiom_for_constructor
+(* i.e is must be called inside a parameterized module *)
+(* it must almost be called when there is LinkageCtx present *)
+let generate_one_computational_axiom
     ~inductive
     ~recursor_name
     ~recursor_path
@@ -277,7 +279,8 @@ let generate_computational_axioms
   in
   constructors
   |> List.map (fun (constructor_name, constructor_path) ->
-         calculate_computational_axiom_for_constructor ~inductive ~recursor_name ~context
+         generate_one_computational_axiom
+           ~inductive ~recursor_name ~context
            ~recursor_path ~constructor_name ~constructor_path)
 
 (* Given a recursor name and a compiled recursor return the type

@@ -45,6 +45,15 @@ val flatten_inductive_constructor_type :
    the constructor where the inductived type appears 
    recursively. *)
 
+val generate_one_computational_axiom :
+    inductive:VernacInductive.t ->
+    recursor_name:Names.Id.t ->
+    recursor_path:Libnames.qualid ->
+    constructor_name:Names.Id.t ->
+    constructor_path:Libnames.qualid ->
+    context:LinkageCtx.t option ->
+    Names.Id.t * Constrexpr.constr_expr
+
 val generate_computational_axioms :
   inductive:VernacInductive.t ->
   recursor:Names.Id.t ->
