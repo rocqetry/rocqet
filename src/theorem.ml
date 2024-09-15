@@ -321,7 +321,7 @@ let close_theorem () =
   let _ = VB.run @@ VB.flatmap implemented_handlers in
   let compiled_handlers = DB.end_module () in  
   let family_name = Context.family_name (Context.get ()) in
-  let compiled_signature, signature =
+  let compiled_signature =
     Codegen.compile_theorem_definition_signature ~names:[ name ]
        ~handler_cases:compiled_handlers
       ~ctx:parameters ~family_name      
@@ -338,8 +338,7 @@ let close_theorem () =
         compiled_handlers;
         handlers = all_handlers;
         inductive_path;
-        suffix;
-        signature;
+        suffix;        
       }
   in
   Context.add_field ~name ~elem;

@@ -69,7 +69,7 @@ val compile_theorem_definition_signature :
     handler_cases:CompiledModule.t ->
     ctx:(Names.Id.t * Constrexpr.module_ast) list ->
     family_name:Names.Id.t ->     
-    CompiledModuleType.t * Constrexpr.constr_expr
+    CompiledModuleType.t
 
 val compile_recursive_definition_signature :
   names:Names.Id.t list ->    
@@ -77,7 +77,7 @@ val compile_recursive_definition_signature :
   family_name:Names.Id.t ->  
   inductive:VernacInductive.t ->
   prefix:Libnames.qualid option ->
-  CompiledModuleType.t * Constrexpr.constr_expr
+  CompiledModuleType.t
 
 val calculate_rec_principle_prefix :
   inductive_path:Libnames.qualid -> context:LinkageCtx.t -> Libnames.qualid

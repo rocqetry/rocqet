@@ -247,8 +247,7 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         arguments : Names.Id.t list;
-        prefix : Libnames.qualid;
-        signature: Constrexpr.constr_expr;
+        prefix : Libnames.qualid;        
       }
     | TheoremDefinition of {
         names : Names.Id.t list;
@@ -260,8 +259,7 @@ module rec LinkageElem : sig
         handlers : (Names.Id.t * Constrexpr.constr_expr) list;
         compiled_handlers : CompiledModule.t;
         compiled_context : CompiledModuleType.t;
-        compiled_signature : CompiledModuleType.t;
-        signature: Constrexpr.constr_expr;
+        compiled_signature : CompiledModuleType.t;        
       }
     | MetaDataSection of {
         name : Names.Id.t;

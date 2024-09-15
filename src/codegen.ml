@@ -387,11 +387,10 @@ let compile_theorem_definition_signature
     ~(handler_cases : CompiledModule.t)
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
     ~family_name :
-    CompiledModuleType.t * Constrexpr.constr_expr =
+    CompiledModuleType.t  =
   let module_name =
     Naming.module_name_of ~family_name (Naming.concat_names names)
-  in
-  let return_type = ref [] in
+  in  
   let rec get_product_parameter_count (t : Constr.constr) : int =
     if Constr.isProd t then
       let _, _, body = Constr.destProd t in
@@ -442,27 +441,23 @@ let compile_theorem_definition_signature
                            let func_body =
                              mkAppC (motiveT, vars |> List.map mkIdentC)
                            in
-                           let prod_type = mkProdCN binders func_body in
-                           return_type := prod_type :: !return_type;
+                           let prod_type = mkProdCN binders func_body in                           
                            assume_parameter ~name ~ty:prod_type))
                 |> flatmap
               in              
               return ()))
   in
-  (* We want to remove the self__ prefix from this expression *)
-  let return_type = Naming.replace_self_qualification ~target:None (List.hd (!return_type)) in
-  return_module, return_type
+  return_module
 
 (* Return the compiled module and the type of this recursive definition *)
 let compile_recursive_definition_signature
     ~(names : Names.Id.t list)    
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name    
     ~(inductive : VernacInductive.t) ~(prefix : Libnames.qualid option) :
-    CompiledModuleType.t * Constrexpr.constr_expr =
+    CompiledModuleType.t  =
   let module_name =
     Naming.module_name_of ~family_name (Naming.concat_names names)
-  in
-  let return_type = ref [] in
+  in  
   let rec get_product_parameter_count (t : Constr.constr) : int =
     if Constr.isProd t then
       let _, _, body = Constr.destProd t in
@@ -507,8 +502,7 @@ let compile_recursive_definition_signature
                            let func_body =
                              mkAppC (motiveT, vars |> List.map mkIdentC)
                            in
-                           let prod_type = mkProdCN binders func_body in
-                           return_type := prod_type :: !return_type;
+                           let prod_type = mkProdCN binders func_body in                           
                            assume_parameter ~name ~ty:prod_type))
                 |> flatmap
               in
@@ -550,17 +544,15 @@ let compile_recursive_definition_signature
                      return ())
               in               
               return ()))
-  in
-  (* We want to remove the self__ prefix from this expression *)
-  let return_type = Naming.replace_self_qualification ~target:None (List.hd (!return_type)) in
-  return_module, return_type
+  in  
+  return_module
 
 (* Return the compiled module and the generated computational behaviour *)
 let compile_recursive_definition_implementation
     ~inductive
     ~recursor_name
     ~handlers ~(inductive_path : Libnames.qualid) ~suffix
-    ~(signature : Constrexpr.constr_expr) : unit B.t =
+    : unit B.t =
   let prefix =
         match inductive_path |> Naming.path_to_list |> List.rev with
         | [] 
@@ -594,7 +586,7 @@ let compile_recursive_definition_implementation
     in
     let open B in
     (* let* _ = include_module ~module_expr in *)
-    let* _ = define_term ~name:recursor_name ~ty:signature recursor in
+    let* _ = define_term ~name:recursor_name recursor in
 
     (* Generate the computational behaviour: *)
     let auto_tactic (* : Tacexpr.raw_tactic_expr*) =
@@ -623,7 +615,7 @@ let compile_recursive_definition_implementation
 
 let compile_theorem_implementation ~(name : Names.Id.t) ~ctx
     ~(compiled_handlers : CompiledModule.t) ~(inductive_name : Names.Id.t)
-    ~(suffix : RecKind.t) ~(signature : Constrexpr.constr_expr)
+    ~(suffix : RecKind.t)
     ~(handler_names : Names.Id.t list) ~inductive_path  =
   let prefix =
       match inductive_path |> Naming.path_to_list |> List.rev with
@@ -659,7 +651,7 @@ let compile_theorem_implementation ~(name : Names.Id.t) ~ctx
     Constrexpr_ops.mkAppC
       (Constrexpr_ops.mkRefC recursor_path, motive :: handler_names)
   in
-  let* _ = define_term ~name ~ty:signature recursor in
+  let* _ = define_term ~name recursor in
   return ()
 
 let compile_linkage_context ~field_name (context : LinkageCtx.t) :
@@ -800,8 +792,7 @@ let compile_linkage (linkage : Linkage.t) =
                 names;
                 inductive;
                 handler_types;
-                suffix;                
-                signature;
+                suffix;                                
                 _;
               } ) ) ->
         let open B in
@@ -809,8 +800,7 @@ let compile_linkage (linkage : Linkage.t) =
         let recursor_name = List.hd names in
         let handlers = handler_types |> List.map fst in
         (* let handler_cases = compiled_handlers in        *)
-        compile_recursive_definition_implementation
-          ~signature
+        compile_recursive_definition_implementation          
           ~inductive ~recursor_name
           ~handlers ~inductive_path
           ~suffix
@@ -818,14 +808,14 @@ let compile_linkage (linkage : Linkage.t) =
         ( fields,
           ( _,
             LinkageElem.TheoremDefinition
-              { inductive_path; handlers; names; compiled_handlers; inductive; suffix; signature; _ }
+              { inductive_path; handlers; names; compiled_handlers; inductive; suffix; _ }
           ) ) ->
         let open B in
         let* _ = compile_fields fields ctx in
         let name = List.hd names in
         let inductive_name = VernacInductive.extract_inductive_name inductive in
         let handler_names = List.map fst handlers in
-        compile_theorem_implementation ~name ~ctx ~compiled_handlers ~signature
+        compile_theorem_implementation ~name ~ctx ~compiled_handlers
           ~inductive_name ~inductive_path ~suffix ~handler_names
     | Bwd.Snoc (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.MetaDataSection { compiled_impl; _ }))

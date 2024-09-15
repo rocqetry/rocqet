@@ -60,7 +60,7 @@ let close_recursion () =
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:module_name context
   in
-  let compiled_signature, signature =
+  let compiled_signature =
     Codegen.compile_recursive_definition_signature
       ~names:[ name ]
       ~ctx:parameters
@@ -80,8 +80,7 @@ let close_recursion () =
         suffix;
         handler_types;
         arguments;
-        prefix = rec_principle_prefix;
-        signature;
+        prefix = rec_principle_prefix;        
       }
   in
   Context.add_field ~name ~elem;
