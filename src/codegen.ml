@@ -691,6 +691,11 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
   | Bwd.Snoc
       ( _,
         ( _,
+          LinkageElem.ComputationalAxiom
+            { compiled_context; compiled_signature; _ } ) )
+  | Bwd.Snoc
+      ( _,
+        ( _,
           LinkageElem.TheoremDefinition
             { compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
@@ -817,6 +822,10 @@ let compile_linkage (linkage : Linkage.t) =
         let handler_names = List.map fst handlers in
         compile_theorem_implementation ~name ~ctx ~compiled_handlers
           ~inductive_name ~inductive_path ~suffix ~handler_names
+    | Bwd.Snoc (fields, (_, LinkageElem.ComputationalAxiom _ )) ->
+       let open B in
+       let* _ = compile_fields fields ctx in
+       Errors.fail ~info:"Compulation of computational axiom"
     | Bwd.Snoc (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.MetaDataSection { compiled_impl; _ }))
     | Bwd.Snoc
@@ -888,6 +897,11 @@ let compile_linkage_signature linkage =
         ( _,
           ( _,
             LinkageElem.FamilyDefinition
+              { compiled_context; compiled_signature; _ } ) )
+    | Bwd.Snoc
+        ( _,
+          ( _,
+            LinkageElem.ComputationalAxiom
               { compiled_context; compiled_signature; _ } ) )
     | Bwd.Snoc
         ( _,
@@ -1050,7 +1064,10 @@ let add_field ~name ~elem context =
 let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
     =
   let f (linkage : LinkageCtx.t) (name, field) =
-    match field with    
+    match field with
+    | LinkageElem.ComputationalAxiom comp ->
+       let elem = LinkageElem.ComputationalAxiom comp in
+       add_field ~name ~elem linkage
     | LinkageElem.OpaqueFieldDefinition def ->
         let elem = LinkageElem.OpaqueFieldDefinition def in
         add_field ~name ~elem linkage

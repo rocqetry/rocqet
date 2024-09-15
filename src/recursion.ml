@@ -49,7 +49,6 @@ let close_recursion () =
     Ctx.get ()
   in
   Checks.check_exhaustive ~name ~inductive ~handlers:handler_cases;  
-  (* let module_name = DB.end_module () in*)
   let context = Context.get () in
   let family = context |> Context.family_name |> Names.Id.to_string in
   let module_name =

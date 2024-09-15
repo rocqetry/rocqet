@@ -261,6 +261,12 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;        
       }
+    | ComputationalAxiom of {
+        name : Names.Id.t;
+        axiom : Constrexpr.constr_expr;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+    }
     | MetaDataSection of {
         name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
@@ -329,7 +335,10 @@ end = struct
     | LinkageElem.MetaDataSection metadata ->
         LinkageElem.MetaDataSection metadata
     | LinkageElem.OpaqueFieldDefinition definition ->
-        LinkageElem.OpaqueFieldDefinition definition
+       LinkageElem.OpaqueFieldDefinition definition
+    | LinkageElem.ComputationalAxiom comp ->
+       let axiom = Naming.replace_qualid_root ~source ~target comp.axiom in
+       LinkageElem.ComputationalAxiom { comp with axiom } 
     | LinkageElem.FamilyDefinition family ->
         let g (name, expr) =
           if Names.Id.equal source name then (target, expr) else (name, expr)

@@ -72,7 +72,9 @@ let inherit_one
               LinkageElem.InductiveDefinition { inductive with compiled_context }
           (* TODO: Update wrt late bound base family *)
           | LinkageElem.FamilyDefinition  family ->               
-              LinkageElem.FamilyDefinition { family with compiled_context }             
+             LinkageElem.FamilyDefinition { family with compiled_context }
+          | LinkageElem.ComputationalAxiom comp ->
+            LinkageElem.ComputationalAxiom { comp with compiled_context } 
           | LinkageElem.FieldDefinition field -> 
               LinkageElem.FieldDefinition { field with compiled_context}
           | LinkageElem.MetaDataSection metadata -> 

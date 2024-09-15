@@ -121,6 +121,12 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;        
       }
+    | ComputationalAxiom of {
+        name : Names.Id.t;
+        axiom : Constrexpr.constr_expr;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+      }
     | MetaDataSection of {
         name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
