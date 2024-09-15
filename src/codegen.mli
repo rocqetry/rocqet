@@ -55,14 +55,26 @@ val compile_handler_types:
     recursor:CompiledRecursor.t ->
     inductive_path:Libnames.qualid ->
     cases:Names.Id.t list ->
-      CompiledModule.t
+    CompiledModule.t
+
+val compile_handler_case : 
+   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
+   name:Names.Id.t ->
+   body:Constrexpr.constr_expr ->
+   ty:Constrexpr.constr_expr ->
+   CompiledModule.t
+
+val compile_theorem_definition_signature : 
+    names:Names.Id.t list ->
+    handler_cases:CompiledModule.t ->
+    ctx:(Names.Id.t * Constrexpr.module_ast) list ->
+    family_name:Names.Id.t ->     
+    CompiledModuleType.t * Constrexpr.constr_expr
 
 val compile_recursive_definition_signature :
-  names:Names.Id.t list ->  
-  handler_cases:CompiledModule.t ->
+  names:Names.Id.t list ->    
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-  family_name:Names.Id.t ->
-  computational_behaviour:[ `Exposed | `Hidden ] ->
+  family_name:Names.Id.t ->  
   inductive:VernacInductive.t ->
   prefix:Libnames.qualid option ->
   CompiledModuleType.t * Constrexpr.constr_expr

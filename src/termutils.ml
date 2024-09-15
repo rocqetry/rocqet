@@ -179,8 +179,13 @@ let flatten_inductive_constructor_type ~(inductive : VernacInductive.t)
   unflatten constructor_type
 
 (* This has to be called with recursor_path and constructor_path exposed *)
-let calculate_computational_axiom_for_constructor ~inductive ~recursor_name
-    ~recursor_path ~constructor_name ~constructor_path =
+let calculate_computational_axiom_for_constructor
+    ~inductive
+    ~recursor_name
+    ~recursor_path
+    ~constructor_name
+    ~constructor_path
+    ~context =
   let open Constrexpr_ops in
   let constructor_params, fully_applied_constr =
     extract_variables_and_apply (mkRefC constructor_path)
@@ -221,8 +226,18 @@ let calculate_computational_axiom_for_constructor ~inductive ~recursor_name
     in
     let arguments = List.concat (List.map2 f types arguments) in
     let handler =
-      mkRefC @@ Libnames.qualid_of_ident
-      @@ Naming.handler_name ~recursor:recursor_name ~case:constructor_name
+      let handler_name =
+        match context with
+        | None ->
+           Libnames.qualid_of_ident @@
+             Naming.handler_name ~recursor:recursor_name ~case:constructor_name
+        | Some context -> 
+           let prefix = Env.Context.family_name context in
+           Naming.list_to_path
+             [Naming.self_version prefix;
+              Naming.handler_name ~recursor:recursor_name ~case:constructor_name]
+      in
+      mkRefC @@ handler_name
     in
     mkAppC (handler, arguments)
   in
@@ -244,7 +259,10 @@ let calculate_computational_axiom_for_constructor ~inductive ~recursor_name
   in
   (equation_name, equation)
 
-let generate_computational_axioms ~(inductive : VernacInductive.t) ~recursor
+let generate_computational_axioms
+    ~(inductive : VernacInductive.t)
+    ~recursor
+    ~context 
     ~prefix =
   (* let prefix = Libnames.qualid_of_ident (Naming.self_version provenance) in*)
   let recursor_name = recursor in
@@ -259,7 +277,7 @@ let generate_computational_axioms ~(inductive : VernacInductive.t) ~recursor
   in
   constructors
   |> List.map (fun (constructor_name, constructor_path) ->
-         calculate_computational_axiom_for_constructor ~inductive ~recursor_name
+         calculate_computational_axiom_for_constructor ~inductive ~recursor_name ~context
            ~recursor_path ~constructor_name ~constructor_path)
 
 (* Given a recursor name and a compiled recursor return the type
@@ -269,7 +287,7 @@ let handler_types_table inductive_path name (recursor : CompiledRecursor.t)
   let motive = Naming.motive_of name in
   recursor.compiled_handlers
   |> List.map (fun (handler_name, _) ->         
-         let motive_term =
+         let motive_term =           
            let self = Naming.self_version (Env.Context.family_name (Env.Context.get ())) in
            let motive = Naming.list_to_path [self;motive] in
            Constrexpr_ops.mkRefC motive
@@ -284,6 +302,31 @@ let handler_types_table inductive_path name (recursor : CompiledRecursor.t)
            Constrexpr_ops.mkAppC (handler_type, [ motive_term ])
          in
          (handler_name, handler_type))
+
+let handler_type_for_recursion
+      ~(name : Names.Id.t)
+      ~(inductive_path : Libnames.qualid)
+      ~(recursor : CompiledRecursor.t) : (Names.Id.t * Constrexpr.constr_expr) list =
+  let motive_term =
+    let motive = Naming.motive_of name in
+    let self = Naming.self_version (Env.Context.family_name (Env.Context.get ())) in
+    let motive = Naming.list_to_path [self;motive] in
+    Constrexpr_ops.mkRefC motive
+  in
+  recursor.handlers
+  |> List.map (fun (case_name, handler) ->                
+      let target =
+        match inductive_path |> Naming.path_to_list |> List.rev with
+        | [] 
+        | [_] -> None
+        | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
+      in
+      let handler = Naming.replace_self_qualification ~target handler in
+      let handler = Resolver.resolve_constrexpr ~context:(Env.Context.get ()) ~expression:handler in
+      let handler_type =
+           Constrexpr_ops.mkAppC (handler, [ motive_term ])
+         in
+      case_name, handler_type)
 
 let rec extract_handlers_from_inductive_proof
     (all_recur_names : Names.Id.t list)

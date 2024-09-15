@@ -301,6 +301,7 @@ let close_theorem () =
         } =
     Ctx.get ()
   in
+  rec_principle_prefix |> ignore;
   let open Constrexpr_ops in
   let implemented_handlers =
     Termutils.extract_handlers_from_inductive_proof implementing_handler_names
@@ -321,10 +322,9 @@ let close_theorem () =
   let compiled_handlers = DB.end_module () in  
   let family_name = Context.family_name (Context.get ()) in
   let compiled_signature, signature =
-    Codegen.compile_recursive_definition_signature ~names:[ name ]
+    Codegen.compile_theorem_definition_signature ~names:[ name ]
        ~handler_cases:compiled_handlers
-      ~ctx:parameters ~family_name ~computational_behaviour:`Hidden ~inductive
-      ~prefix:(Some rec_principle_prefix)
+      ~ctx:parameters ~family_name      
   in
   let elem =
     LinkageElem.TheoremDefinition

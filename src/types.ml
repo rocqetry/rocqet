@@ -242,9 +242,7 @@ module rec LinkageElem : sig
         handler_types : (Names.Id.t * Constrexpr.constr_expr) list;
         handler_cases : (Names.Id.t * Constrexpr.constr_expr) list;
         inductive : VernacInductive.t;
-        inductive_path : Libnames.qualid;
-        recursor_module : Libnames.qualid;
-        motive_module : CompiledModule.t;
+        inductive_path : Libnames.qualid;        
         suffix : RecKind.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;

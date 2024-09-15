@@ -323,11 +323,9 @@ let compile_motives
                 let motive_name = Naming.motive_of name in                
                 let* () = B.define_term ~name:motive_name motive in                
                 return ())
-         |> B.flatmap)
+         |> B.flatmap)  
 
-(** Compile the handler types for induction/recursion
-   [cases] is the constructor cases to compile types for
- *)
+(* Return the compiled handler type for each case *)
 let compile_handler_types
     ~(names : Names.Id.t list)    
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
@@ -340,12 +338,15 @@ let compile_handler_types
   let module_name =
     Naming.fresh_name ~prefix
   in
+  let implementing_handlers =
+    recursor.handlers
+    |> List.filter (fun (case_name, _) -> (cases |> List.exists ((=) case_name)))
+  in
   B.run
   @@ B.define_module ~module_name ~parameters:ctx ~body:(fun _ ->                  
          let open B in         
          let* () =
-           recursor.handlers
-           |> List.filter (fun (case_name, _) -> (cases |> List.exists ((=) case_name)))
+           implementing_handlers
            |> List.map (fun (case_name, handler) ->                  
                   let handler_name =
                     Naming.recursion_handler_type
@@ -364,15 +365,28 @@ let compile_handler_types
                   return ())
            |> flatmap
          in 
-         return ())         
+         return ())
 
-(* Return the compiled module and the type of this recursive definition *)
-let compile_recursive_definition_signature
-    ~(names : Names.Id.t list)
+let compile_handler_case
+      ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
+      ~(name : Names.Id.t)
+      ~(body : Constrexpr.constr_expr)
+      ~(ty : Constrexpr.constr_expr) : CompiledModule.t =
+  let prefix = Printf.sprintf "%s" (Names.Id.to_string name) in
+  let module_name =
+    Naming.fresh_name ~prefix
+  in
+  B.run @@
+    B.define_module ~module_name ~parameters:ctx ~body:(fun _ ->
+      let open B in
+      let* () = define_term ~name ~ty body in
+      return ())
+
+let compile_theorem_definition_signature
+     ~(names : Names.Id.t list)
     ~(handler_cases : CompiledModule.t)
-    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name
-    ~(computational_behaviour : [ `Exposed | `Hidden ])
-    ~(inductive : VernacInductive.t) ~(prefix : Libnames.qualid option) :
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
+    ~family_name :
     CompiledModuleType.t * Constrexpr.constr_expr =
   let module_name =
     Naming.module_name_of ~family_name (Naming.concat_names names)
@@ -432,18 +446,81 @@ let compile_recursive_definition_signature
                            return_type := prod_type :: !return_type;
                            assume_parameter ~name ~ty:prod_type))
                 |> flatmap
+              in              
+              return ()))
+  in
+  (* We want to remove the self__ prefix from this expression *)
+  let return_type = Naming.replace_self_qualification ~target:None (List.hd (!return_type)) in
+  return_module, return_type
+
+(* Return the compiled module and the type of this recursive definition *)
+let compile_recursive_definition_signature
+    ~(names : Names.Id.t list)    
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name    
+    ~(inductive : VernacInductive.t) ~(prefix : Libnames.qualid option) :
+    CompiledModuleType.t * Constrexpr.constr_expr =
+  let module_name =
+    Naming.module_name_of ~family_name (Naming.concat_names names)
+  in
+  let return_type = ref [] in
+  let rec get_product_parameter_count (t : Constr.constr) : int =
+    if Constr.isProd t then
+      let _, _, body = Constr.destProd t in
+      1 + get_product_parameter_count body
+    else 0
+  in
+  let return_module = 
+     B.(
+       run
+       @@ define_moduletype ~module_name ~parameters:ctx ~body:(fun _ctx ->              
+              let* _ =
+                names
+                |> List.map (fun name ->
+                       let open Constrexpr_ops in
+                       (* let motiveT = Naming.motive_of name |> mkIdentC in*)
+                       let motive = Naming.motive_of name in
+                       let motiveT =
+                         let self = Naming.self_version (Env.Context.family_name (Env.Context.get ())) in
+                         let motive = Naming.list_to_path [self;motive] in
+                         Constrexpr_ops.mkRefC motive
+                       in
+                       (* This is evaluated inside the module, hence the thunk *)
+                       thunk (fun () ->
+                           let parameter_count =
+                             motiveT |> Termutils.checked_type_of
+                             |> get_product_parameter_count
+                           in
+                           let vars =
+                             List.init parameter_count (fun x -> x + 1)
+                             |> List.map (fun x ->
+                                    "v" ^ string_of_int x |> Names.Id.of_string)
+                           in
+                           let binders =
+                             vars
+                             |> List.map (fun var ->
+                                    let open Constrexpr in
+                                    CLocalAssum
+                                      ( [ CAst.make @@ Names.Name.mk_name var ],
+                                        Default Glob_term.Explicit,
+                                        CAst.make @@ CHole None ))
+                           in
+                           let func_body =
+                             mkAppC (motiveT, vars |> List.map mkIdentC)
+                           in
+                           let prod_type = mkProdCN binders func_body in
+                           return_type := prod_type :: !return_type;
+                           assume_parameter ~name ~ty:prod_type))
+                |> flatmap
               in
               (* Computational Axioms *)
-              let* () =
-                match computational_behaviour with
-                | `Exposed ->
-                    thunk (fun () ->
+              let* _ =
+                thunk (fun () ->
                         let recursor = List.hd names in
+                        let context = Some (Env.Context.get ()) in
                         let computational_axioms =
                           Termutils.generate_computational_axioms ~inductive
-                            ~prefix ~recursor
-                        in
-   
+                            ~prefix ~recursor ~context
+                        in                        
                         computational_axioms
                         |> List.map (fun (name, ty) -> postulate_axiom ~name ~ty)
                         |> flatmap |> run;
@@ -471,18 +548,19 @@ let compile_recursive_definition_signature
                               Feedback.msg_info (print_single_equation eq))
                      in
                      return ())
-                  | `Hidden -> return ()
-                in
-                return ()))
+              in               
+              return ()))
   in
   (* We want to remove the self__ prefix from this expression *)
   let return_type = Naming.replace_self_qualification ~target:None (List.hd (!return_type)) in
   return_module, return_type
 
 (* Return the compiled module and the generated computational behaviour *)
-let compile_recursive_definition_implementation ~inductive ~recursor_name
-    ~handlers ~(inductive_path : Libnames.qualid) ~suffix ~ctx
-    ~(handler_cases : CompiledModule.t) ~(signature : Constrexpr.constr_expr) : unit B.t =
+let compile_recursive_definition_implementation
+    ~inductive
+    ~recursor_name
+    ~handlers ~(inductive_path : Libnames.qualid) ~suffix
+    ~(signature : Constrexpr.constr_expr) : unit B.t =
   let prefix =
         match inductive_path |> Naming.path_to_list |> List.rev with
         | [] 
@@ -490,10 +568,10 @@ let compile_recursive_definition_implementation ~inductive ~recursor_name
         | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
   in
   let computation =
-    let module_expr = Termutils.ident_to_module_expr handler_cases in
-    let module_expr =
+    (*let module_expr = Termutils.ident_to_module_expr handler_cases in*)
+    (*let module_expr =
       Termutils.apply_module ~functor_expr:module_expr ~arguments:ctx
-    in
+    in*)
     let inductive_name = inductive |> VernacInductive.extract_inductive_name in
     let handlers =
       handlers
@@ -515,7 +593,7 @@ let compile_recursive_definition_implementation ~inductive ~recursor_name
         (Constrexpr_ops.mkRefC recursor_path, motive :: handlers)
     in
     let open B in
-    let* _ = include_module ~module_expr in    
+    (* let* _ = include_module ~module_expr in *)
     let* _ = define_term ~name:recursor_name ~ty:signature recursor in
 
     (* Generate the computational behaviour: *)
@@ -530,7 +608,7 @@ let compile_recursive_definition_implementation ~inductive ~recursor_name
     let* () =
       thunk (fun () ->
           let result =
-            Termutils.generate_computational_axioms ~inductive
+            Termutils.generate_computational_axioms ~inductive ~context:None
               ~prefix ~recursor:recursor_name
           in
           result
@@ -580,7 +658,7 @@ let compile_theorem_implementation ~(name : Names.Id.t) ~ctx
     in
     Constrexpr_ops.mkAppC
       (Constrexpr_ops.mkRefC recursor_path, motive :: handler_names)
-  in  
+  in
   let* _ = define_term ~name ~ty:signature recursor in
   return ()
 
@@ -722,8 +800,7 @@ let compile_linkage (linkage : Linkage.t) =
                 names;
                 inductive;
                 handler_types;
-                suffix;
-                recursor_module;
+                suffix;                
                 signature;
                 _;
               } ) ) ->
@@ -731,12 +808,12 @@ let compile_linkage (linkage : Linkage.t) =
         let* _ = compile_fields fields ctx in
         let recursor_name = List.hd names in
         let handlers = handler_types |> List.map fst in
-        let handler_cases = recursor_module in        
+        (* let handler_cases = compiled_handlers in        *)
         compile_recursive_definition_implementation
           ~signature
           ~inductive ~recursor_name
           ~handlers ~inductive_path
-          ~suffix ~ctx ~handler_cases
+          ~suffix
     | Bwd.Snoc
         ( fields,
           ( _,

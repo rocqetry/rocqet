@@ -48,6 +48,7 @@ val flatten_inductive_constructor_type :
 val generate_computational_axioms :
   inductive:VernacInductive.t ->
   recursor:Names.Id.t ->
+  context:LinkageCtx.t option ->
   prefix:Libnames.qualid option ->
   (Names.Id.t * Constrexpr.constr_expr) list
 
@@ -57,6 +58,12 @@ val handler_types_table :
   CompiledRecursor.t ->
   RecKind.t ->
   (Names.Id.t * Constrexpr.constr_expr) list
+
+val handler_type_for_recursion:
+    name:Names.Id.t ->
+    inductive_path: Libnames.qualid ->
+    recursor:CompiledRecursor.t ->
+    (Names.Id.t * Constrexpr.constr_expr) list
 
 val extract_handlers_from_inductive_proof :
   Names.Id.t list ->

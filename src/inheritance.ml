@@ -46,6 +46,8 @@ let inherit_element ~field ~linkage ~context =
   | Some further, Some base -> Some (Linkage.concatenate_elem further base)
 
 
+(* We want to inherit element from a base family into 
+   a derived family in interactive mode *)
 let inherit_one
       ~(name: Names.Id.t)
       ~(element: LinkageElem.t)
@@ -56,7 +58,7 @@ let inherit_one
     | Bwd.Snoc (fields, _) -> find_field fields
   in  
   match find_field linkage.fields with
-  | true -> linkage
+  | true -> linkage (* Field has already been inherited *)
   | false ->
      (* Various checks to ensure correctness *)
      (* We need to update the context of the inherited fields *)
@@ -67,11 +69,10 @@ let inherit_one
      let element = 
           match element with
           | LinkageElem.InductiveDefinition inductive -> 
-              LinkageElem.InductiveDefinition { inductive  with compiled_context}
-          (* Update wrt late bound base family *)
-          | LinkageElem.FamilyDefinition  family -> 
-              (* TODO: Update wrt late bound base family *)
-              LinkageElem.FamilyDefinition { family  with compiled_context}             
+              LinkageElem.InductiveDefinition { inductive with compiled_context }
+          (* TODO: Update wrt late bound base family *)
+          | LinkageElem.FamilyDefinition  family ->               
+              LinkageElem.FamilyDefinition { family with compiled_context }             
           | LinkageElem.FieldDefinition field -> 
               LinkageElem.FieldDefinition { field with compiled_context}
           | LinkageElem.MetaDataSection metadata -> 
@@ -80,9 +81,9 @@ let inherit_one
               LinkageElem.OpaqueFieldDefinition { field with compiled_context}
           (* Exhaustiveness checks *)
           | LinkageElem.RecursorDefinition recursive -> 
-              LinkageElem.RecursorDefinition { recursive with compiled_context}
-          | LinkageElem.TheoremDefinition  theorem -> 
-              LinkageElem.TheoremDefinition { theorem with compiled_context}
+              LinkageElem.RecursorDefinition { recursive with compiled_context }
+          | LinkageElem.TheoremDefinition theorem -> 
+              LinkageElem.TheoremDefinition { theorem with compiled_context }
       in 
       let fields = Bwd.Snoc (linkage.fields, (name, element)) in
       { linkage with fields }
