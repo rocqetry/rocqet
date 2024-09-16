@@ -224,9 +224,7 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
       }
-    | FieldDefinition of {
-        body_expr : Constrexpr.constr_expr;
-        body_type : Constrexpr.constr_expr option;
+    | FieldDefinition of {        
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
       }
@@ -252,8 +250,7 @@ module rec LinkageElem : sig
         goal : Constrexpr.constr_expr;
         suffix : RecKind.t;
         inductive_path : Libnames.qualid;
-        handlers : (Names.Id.t * Constrexpr.constr_expr) list;
-        compiled_handlers : CompiledModule.t;
+        handlers : (Names.Id.t * Constrexpr.constr_expr) list;        
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;        
       }
@@ -352,15 +349,8 @@ end = struct
               VernacInductive.path_subtitution definition.inductive ~source
                 ~target;
           }
-    | LinkageElem.FieldDefinition field ->
-        let body_expr =
-          Naming.replace_qualid_root ~source ~target field.body_expr
-        in
-        let body_type =
-          field.body_type
-          |> Option.map (Naming.replace_qualid_root ~source ~target)
-        in
-        FieldDefinition { field with body_expr; body_type }
+    | LinkageElem.FieldDefinition field ->        
+        FieldDefinition field
     | LinkageElem.RecursorDefinition definition ->                
         RecursorDefinition definition          
     | LinkageElem.TheoremDefinition definition ->

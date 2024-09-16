@@ -65,8 +65,7 @@ val compile_handler_case :
    CompiledModule.t
 
 val compile_theorem_definition_signature : 
-    names:Names.Id.t list ->
-    handler_cases:CompiledModule.t ->
+    names:Names.Id.t list ->    
     ctx:(Names.Id.t * Constrexpr.module_ast) list ->
     family_name:Names.Id.t ->     
     CompiledModuleType.t

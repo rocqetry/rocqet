@@ -18,6 +18,6 @@ let add_definition ~name ?body_type body_expr =
   in
   let elem =
     LinkageElem.FieldDefinition
-      { body_expr; body_type; compiled_context; compiled_impl }
+      {  compiled_context; compiled_impl }
   in
   Context.add_field ~name ~elem

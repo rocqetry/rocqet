@@ -85,9 +85,7 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
       }
-    | FieldDefinition of {
-        body_expr : Constrexpr.constr_expr;
-        body_type : Constrexpr.constr_expr option;
+    | FieldDefinition of {        
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModuleType.t;
       }
@@ -112,8 +110,7 @@ module rec LinkageElem : sig
         goal : Constrexpr.constr_expr;
         suffix : RecKind.t;        
         inductive_path : Libnames.qualid;
-        handlers : (Names.Id.t * Constrexpr.constr_expr) list;
-        compiled_handlers : CompiledModule.t;
+        handlers : (Names.Id.t * Constrexpr.constr_expr) list;        
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;        
       }

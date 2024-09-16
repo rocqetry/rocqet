@@ -383,8 +383,7 @@ let compile_handler_case
       return ())
 
 let compile_theorem_definition_signature
-     ~(names : Names.Id.t list)
-    ~(handler_cases : CompiledModule.t)
+    ~(names : Names.Id.t list)    
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
     ~family_name :
     CompiledModuleType.t  =
@@ -400,13 +399,7 @@ let compile_theorem_definition_signature
   let return_module = 
      B.(
        run
-       @@ define_moduletype ~module_name ~parameters:ctx ~body:(fun ctx ->
-              let handler_cases =
-                Termutils.apply_module
-                  ~functor_expr:(Termutils.ident_to_module_expr handler_cases)
-                  ~arguments:ctx
-              in
-              let* _ = include_module ~module_expr:handler_cases in
+       @@ define_moduletype ~module_name ~parameters:ctx ~body:(fun _ctx ->              
               let* _ =
                 names
                 |> List.map (fun name ->
@@ -603,8 +596,9 @@ let compile_computational_axiom_signature
   in
   Option.get !axiom_name, Option.get !axiom_expr, compiled_signature
 
-let compile_theorem_implementation ~(name : Names.Id.t) ~ctx
-    ~(compiled_handlers : CompiledModule.t) ~(inductive_name : Names.Id.t)
+let compile_theorem_implementation
+    ~(name : Names.Id.t)
+    ~(inductive_name : Names.Id.t)
     ~(suffix : RecKind.t)
     ~(handler_names : Names.Id.t list) ~inductive_path  =
   let prefix =
@@ -614,20 +608,16 @@ let compile_theorem_implementation ~(name : Names.Id.t) ~ctx
       | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
   in
   let open Constrexpr_ops in
-  let open B in
-  let module_expr =
-    Termutils.apply_module
-      ~functor_expr:(Termutils.ident_to_module_expr compiled_handlers)
-      ~arguments:ctx
-  in
-  let* _ = B.include_module ~module_expr in
+  let open B in  
   let handler_names =
     handler_names
     |> List.map (fun handler ->
            Naming.handler_name ~recursor:name ~case:handler)
   in
   let handler_names =
-    handler_names |> List.map Libnames.qualid_of_ident |> List.map mkRefC
+    handler_names
+    |> List.map Libnames.qualid_of_ident
+    |> List.map mkRefC
   in
   let recursor =
     let recursor =
@@ -801,14 +791,14 @@ let compile_linkage (linkage : Linkage.t) =
         ( fields,
           ( _,
             LinkageElem.TheoremDefinition
-              { inductive_path; handlers; names; compiled_handlers; suffix; _ }
+              { inductive_path; handlers; names; suffix; _ }
           ) ) ->
         let open B in
         let* _ = compile_fields fields ctx in
         let name = List.hd names in        
         let handler_names = List.map fst handlers in
         let inductive_name = inductive_path |> Naming.path_to_list |> List.rev |> List.hd in
-        compile_theorem_implementation ~name ~ctx ~compiled_handlers
+        compile_theorem_implementation ~name 
           ~inductive_name ~inductive_path ~suffix ~handler_names
     | Bwd.Snoc (fields, (_, LinkageElem.ComputationalAxiom { name; axiom; _ } )) ->
        let open B in
@@ -1059,16 +1049,10 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
     | LinkageElem.OpaqueFieldDefinition def ->
         let elem = LinkageElem.OpaqueFieldDefinition def in
         add_field ~name ~elem linkage
-    | LinkageElem.FieldDefinition { body_expr; body_type; _ } ->
-        let compiled_context, parameters =
-          compile_linkage_context ~field_name:name linkage
-        in
-        let compiled_impl =
-          compile_definition ~name ?body_type ~body_expr parameters
-        in
+    | LinkageElem.FieldDefinition field ->        
         let elem =
           LinkageElem.FieldDefinition
-            { body_expr; body_type; compiled_context; compiled_impl }
+            field
         in
         add_field ~name ~elem linkage
     | LinkageElem.MetaDataSection m ->
