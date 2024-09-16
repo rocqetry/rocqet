@@ -1,4 +1,4 @@
-(* Core implementation for extensible proofs *)
+(* Core implementation of extensible proofs *)
 open Env
 open Types
 
@@ -20,8 +20,7 @@ module Ctx = struct
     compiled_motive : CompiledModuleType.t;
     motive : Constrexpr.constr_expr;
     goal : Constrexpr.constr_expr;
-    goal_name : Names.Id.t;
-    inductive : VernacInductive.t;
+    goal_name : Names.Id.t;    
     module_name : Names.Id.t;
     rec_principle_prefix : Libnames.qualid;
     inductive_path : Libnames.qualid;
@@ -135,13 +134,10 @@ let start_proving () =
 let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     ~(motive : Constrexpr.constr_expr) =
   let inductive_path = inductive in
-  let context = Context.get () in
-  (*let compiled_context, parameters =
-    Codegen.compile_linkage_context ~field_name:name context
-  in*)
+  let context = Context.get () in  
   let family_name = Context.family_name context in
   let motive = Resolver.resolve_constrexpr ~context ~expression:motive in  
-  let inductive, compiled_recursors, _ =
+  let _inductive, compiled_recursors, _ =
     Context.lookup_inductive_for_recursion ~name:inductive context
   in  
   let suffix = RecKind.IndComplete in
@@ -185,8 +181,7 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
         implementing_handler_names;
         inherited_handlers;
         goal;
-        goal_name;
-        inductive;
+        goal_name;        
         compiled_context;
         compiled_motive;
         compiled_handler_types;
@@ -222,7 +217,7 @@ let open_theorem_extension ~name =
   let motives =
     Resolver.resolve_constrexpr_list ~context ~expressions:motives
   in  
-  let inductive, compiled_recursors, _ =
+  let _inductive, compiled_recursors, _ =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let recursor = RecursorStore.find suffix compiled_recursors.recursors in
@@ -266,8 +261,7 @@ let open_theorem_extension ~name =
         inherited_handlers;
         module_name;
         goal;
-        goal_name;
-        inductive;
+        goal_name;        
         compiled_context;
         compiled_motive;
         rec_principle_prefix;
@@ -290,8 +284,7 @@ let close_theorem () =
           inherited_handlers;
           motive;          
           goal;
-          goal_name;
-          inductive;
+          goal_name;          
           parameters;
           compiled_context;
           suffix;
@@ -330,8 +323,7 @@ let close_theorem () =
     LinkageElem.TheoremDefinition
       {
         names = [ name ];
-        goal;
-        inductive;
+        goal;        
         compiled_signature;
         compiled_context;
         motives = [ motive ];

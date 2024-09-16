@@ -15,10 +15,10 @@ open Bwd
 let rec linear_ctx_mapping context =
   let f (linkage : Linkage.t) (name, elem) =
     match elem with
-    | LinkageElem.RecursorDefinition { names; handler_cases; _ } ->
+    | LinkageElem.RecursorDefinition { names; handlers; _ } ->
         let recursor = names |> List.hd in
         let names =
-          handler_cases |> List.map fst
+          handlers
           |> List.map (fun case -> Naming.handler_name ~recursor ~case)
           |> List.map (fun name -> (name, Naming.self_version linkage.name))
         in

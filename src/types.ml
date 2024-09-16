@@ -237,12 +237,9 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
       }
     | RecursorDefinition of {
-        names : Names.Id.t list;
-        motives : Constrexpr.constr_expr list;
-        handler_types : (Names.Id.t * Constrexpr.constr_expr) list;
-        handler_cases : (Names.Id.t * Constrexpr.constr_expr) list;
-        inductive : VernacInductive.t;
-        inductive_path : Libnames.qualid;        
+        names : Names.Id.t list;        
+        handlers : Names.Id.t list;
+        inductive_path : Libnames.qualid;
         suffix : RecKind.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
@@ -253,8 +250,7 @@ module rec LinkageElem : sig
         names : Names.Id.t list;
         motives : Constrexpr.constr_expr list;
         goal : Constrexpr.constr_expr;
-        suffix : RecKind.t;
-        inductive : VernacInductive.t;
+        suffix : RecKind.t;       
         inductive_path : Libnames.qualid;
         handlers : (Names.Id.t * Constrexpr.constr_expr) list;
         compiled_handlers : CompiledModule.t;
@@ -266,7 +262,7 @@ module rec LinkageElem : sig
         axiom : Constrexpr.constr_expr;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-    }
+     }
     | MetaDataSection of {
         name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
@@ -365,23 +361,8 @@ end = struct
           |> Option.map (Naming.replace_qualid_root ~source ~target)
         in
         FieldDefinition { field with body_expr; body_type }
-    | LinkageElem.RecursorDefinition definition ->
-        let motives =
-          definition.motives
-          |> List.map (Naming.replace_qualid_root ~source ~target)
-        in
-        let handler_types =
-          definition.handler_types
-          |> List.map (fun (name, e) ->
-                 (name, Naming.replace_qualid_root ~source ~target e))
-        in
-        let handler_cases =
-          definition.handler_cases
-          |> List.map (fun (name, e) ->
-                 (name, Naming.replace_qualid_root ~source ~target e))
-        in
-        RecursorDefinition
-          { definition with motives; handler_types; handler_cases }
+    | LinkageElem.RecursorDefinition definition ->                
+        RecursorDefinition definition          
     | LinkageElem.TheoremDefinition definition ->
         let motives =
           definition.motives
@@ -405,11 +386,8 @@ end = struct
     in
     match (elem0, elem1) with
     | LinkageElem.RecursorDefinition e0, LinkageElem.RecursorDefinition e1 ->
-        let handler_cases = e0.handler_cases @ e1.handler_cases in
-        let handler_cases = remove_duplicates handler_cases in
-        let handler_types = e0.handler_types @ e1.handler_types in
-        let handler_types = remove_duplicates handler_types in
-        LinkageElem.RecursorDefinition { e1 with handler_cases; handler_types }
+       let handlers = e0.handlers @ e1.handlers in
+       LinkageElem.RecursorDefinition  { e0 with handlers }
     | LinkageElem.TheoremDefinition e0, LinkageElem.TheoremDefinition e1 ->
         let handler_cases = e0.handlers @ e1.handlers in
         let handlers = remove_duplicates handler_cases in

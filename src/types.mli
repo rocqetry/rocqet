@@ -97,11 +97,8 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
       }
     | RecursorDefinition of {
-        names : Names.Id.t list;
-        motives : Constrexpr.constr_expr list;
-        handler_types : (Names.Id.t * Constrexpr.constr_expr) list;
-        handler_cases : (Names.Id.t * Constrexpr.constr_expr) list;
-        inductive : VernacInductive.t;
+        names : Names.Id.t list;        
+        handlers : Names.Id.t list;
         inductive_path : Libnames.qualid;        
         suffix : RecKind.t;
         compiled_context : CompiledModuleType.t;
@@ -113,8 +110,7 @@ module rec LinkageElem : sig
         names : Names.Id.t list;
         motives : Constrexpr.constr_expr list;
         goal : Constrexpr.constr_expr;
-        suffix : RecKind.t;
-        inductive : VernacInductive.t;
+        suffix : RecKind.t;        
         inductive_path : Libnames.qualid;
         handlers : (Names.Id.t * Constrexpr.constr_expr) list;
         compiled_handlers : CompiledModule.t;

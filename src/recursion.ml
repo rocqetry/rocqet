@@ -4,15 +4,16 @@ open Env
 (* Private store *)
 module Ctx = struct
   type t = {    
-    handler_types : (Names.Id.t * Constrexpr.constr_expr) list;
-    handler_cases : (Names.Id.t * Constrexpr.constr_expr) list;
+    handler_types : (Names.Id.t * Constrexpr.constr_expr) list;    
+    (* The name of the handlers that were supposed to be implemented *)    
     implementing_handlers : Names.Id.t list;
+    (* The handlers actually implemented or inherited *)
+    defined_handlers: Names.Id.t list;
     name : Names.Id.t;
     inductive : VernacInductive.t;    
-    motive_expr : Constrexpr.constr_expr list;
     suffix : RecKind.t;
     (* the name of the arguments to this FRecursion *)
-    arguments : Names.Id.t list;        
+    arguments : Names.Id.t list;
     inductive_path : Libnames.qualid;
     rec_principle_prefix : Libnames.qualid;    
   }
@@ -27,21 +28,19 @@ module Ctx = struct
   let clear () = store := None
   let update recursion_data = store := Some recursion_data
 
-  let add_handler_case name expr =
+  let add_handler name  =
     let ctx = get () in
-    let ctx = { ctx with handler_cases = (name, expr) :: ctx.handler_cases } in
+    let ctx = { ctx with defined_handlers = name :: ctx.defined_handlers } in
     update ctx  
 end
 
 let close_recursion () =
   let Ctx.
-        {
-          handler_types;
+        {          
           name;
           inductive;
           suffix;          
-          handler_cases;
-          motive_expr;
+          defined_handlers;          
           arguments;
           inductive_path;
           rec_principle_prefix;
@@ -50,7 +49,13 @@ let close_recursion () =
         } =
     Ctx.get ()
   in
-  Checks.check_exhaustive ~name ~inductive ~handlers:handler_cases;  
+  Checks.check_exhaustive ~name ~inductive ~handlers:defined_handlers;
+  let handlers =
+    let _, constructors =
+      inductive |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs
+    in
+    constructors |> List.map fst
+  in
   let context = Context.get () in
   let family = context |> Context.family_name |> Names.Id.to_string in
   let module_name =
@@ -70,15 +75,12 @@ let close_recursion () =
   let elem =
     LinkageElem.RecursorDefinition
       {
-        handler_cases;
-        names = [ name ];
-        inductive;
-        inductive_path;        
-        motives = motive_expr;
+        handlers;
+        names = [ name ];        
+        inductive_path;                
         compiled_signature;
         compiled_context;
-        suffix;
-        handler_types;
+        suffix;        
         arguments;
         prefix = rec_principle_prefix;        
       }
@@ -88,8 +90,7 @@ let close_recursion () =
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:module_name context
   in  
-  let _ =
-    (* Should only be for the implementing handlers *)
+  let _ =    
     implementing_handlers
     |> List.iter (fun constructor_name ->
            let axiom_name, axiom, compiled_signature =
@@ -103,6 +104,7 @@ let close_recursion () =
            in
            Context.add_field ~name:axiom_name ~elem)
   in
+  (* TODO: Inherit the computation axioms from the other cases if any *)
   Ctx.clear ()
 
 let open_recursion
@@ -131,13 +133,12 @@ let open_recursion
   let recursion_ctx =
     Ctx.
       {        
-        handler_cases = [];
+        defined_handlers = [];
         implementing_handlers;
         suffix;
         inductive_path;
         handler_types;        
         name;        
-        motive_expr = [ motive_expr ];
         inductive;
         arguments;
         rec_principle_prefix;        
@@ -150,13 +151,13 @@ let open_recursion_extension ~name =
   let context = Context.get () in
   let linkage = Context.family_linkage context in
   let elem = Inheritance.inherit_element ~field:name ~linkage ~context in
-  let inductive_path, motives, handler_cases, suffix, arguments =
+  let inductive_path, inherited_handlers, suffix, arguments =
     match elem with
     | None -> Errors.fail ~info:"There is no such FRecursion in a base family"
     | Some
         (RecursorDefinition
-          { inductive_path; suffix; motives; handler_cases; arguments; _ }) ->
-        (inductive_path, motives, handler_cases, suffix, arguments)
+          { inductive_path; suffix; handlers; arguments; _ }) ->
+        (inductive_path, handlers, suffix, arguments)
     | _ -> Errors.fail ~info:"Expected to inherit an FRecrusion"
   in    
   let inductive, compiled_recursors, _provenance =
@@ -167,8 +168,7 @@ let open_recursion_extension ~name =
     Termutils.handler_type_for_recursion ~name ~inductive_path ~recursor     
   in
   let implementing_handlers =
-    let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
-    let inherited_handlers = List.map fst handler_cases in
+    let inside x l = List.exists (fun k -> Names.Id.equal k x) l in    
     handler_types |> List.filter_map (fun (x, _) -> if not (inside x inherited_handlers) then Some x else None)
   in
   let rec_principle_prefix =
@@ -176,13 +176,12 @@ let open_recursion_extension ~name =
   in
   let recursion_ctx =
     Ctx.
-      {        
-        handler_cases;
+    {
+        defined_handlers = inherited_handlers;
         implementing_handlers;
         suffix;
         handler_types;        
         name;        
-        motive_expr = motives;
         inductive;
         inductive_path;
         arguments;        
@@ -291,7 +290,7 @@ let add_handler ~name ~arguments ~handler =
             Termutils.mk_lambda arguments handler
       in
       let () = Definition.add_definition ~name:case_name ~body_type:ty handler in      
-      Ctx.add_handler_case name handler
+      Ctx.add_handler name 
 
 let extract = function
   | [] -> None (* Empty list case *)

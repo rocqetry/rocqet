@@ -11,7 +11,7 @@ let check_exhaustive ~name ~inductive ~handlers =
   in
   constructors
   |> List.iter (fun constructor ->
-         match List.assoc_opt constructor handlers with
+         match List.find_opt (Names.Id.equal constructor) handlers with
          | Some _ -> ()
          | None ->
              let info =

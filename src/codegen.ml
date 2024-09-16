@@ -511,7 +511,7 @@ let compile_recursive_definition_signature
 
 (* Return the compiled module and the generated computational behaviour *)
 let compile_recursive_definition_implementation
-    ~inductive
+    ~inductive_name
     ~recursor_name
     ~handlers
     ~(inductive_path : Libnames.qualid)
@@ -524,7 +524,6 @@ let compile_recursive_definition_implementation
         | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
   in
   let computation =    
-    let inductive_name = inductive |> VernacInductive.extract_inductive_name in
     let handlers =
       handlers
       |> List.map (fun handler ->
@@ -785,32 +784,30 @@ let compile_linkage (linkage : Linkage.t) =
             LinkageElem.RecursorDefinition
               {
                 inductive_path;
-                names;
-                inductive;
-                handler_types;
+                handlers;
+                names;                                
                 suffix;                                
                 _;
               } ) ) ->
         let open B in
         let* _ = compile_fields fields ctx in
-        let recursor_name = List.hd names in
-        let handlers = handler_types |> List.map fst in
-        (* let handler_cases = compiled_handlers in        *)
+        let recursor_name = List.hd names in        
+        let inductive_name = inductive_path |> Naming.path_to_list |> List.rev |> List.hd in
         compile_recursive_definition_implementation          
-          ~inductive ~recursor_name
+          ~inductive_name ~recursor_name
           ~handlers ~inductive_path
           ~suffix
     | Bwd.Snoc
         ( fields,
           ( _,
             LinkageElem.TheoremDefinition
-              { inductive_path; handlers; names; compiled_handlers; inductive; suffix; _ }
+              { inductive_path; handlers; names; compiled_handlers; suffix; _ }
           ) ) ->
         let open B in
         let* _ = compile_fields fields ctx in
-        let name = List.hd names in
-        let inductive_name = VernacInductive.extract_inductive_name inductive in
+        let name = List.hd names in        
         let handler_names = List.map fst handlers in
+        let inductive_name = inductive_path |> Naming.path_to_list |> List.rev |> List.hd in
         compile_theorem_implementation ~name ~ctx ~compiled_handlers
           ~inductive_name ~inductive_path ~suffix ~handler_names
     | Bwd.Snoc (fields, (_, LinkageElem.ComputationalAxiom { name; axiom; _ } )) ->
