@@ -812,7 +812,7 @@ let compile_linkage (linkage : Linkage.t) =
           ~inductive_name ~inductive_path ~suffix ~handler_names
     | Bwd.Snoc (fields, (_, LinkageElem.ComputationalAxiom { name; axiom; _ } )) ->
        let open B in
-       let* _ = compile_fields fields ctx in       
+       let* _ = compile_fields fields ctx in
        compile_computational_axiom_implementation ~axiom_name:name ~axiom_expr:axiom
     | Bwd.Snoc (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.MetaDataSection { compiled_impl; _ }))

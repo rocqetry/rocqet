@@ -9,6 +9,8 @@ val inherit_element :
   (* The current linkage context *)
   LinkageElem.t option
 
+val inherit_name : name:Names.Id.t -> unit
+
 (* Inherit the dependencies of a particular field from it's
    base families into the current linkage context *)
 val inherit_dependencies : prefix:Names.Id.t -> unit

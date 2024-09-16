@@ -98,6 +98,57 @@ let inherit_elements
     linkage 
     elements
 
+let inherit_name
+     ~(name: Names.Id.t) =     
+  let context = Context.get () in
+  let base = Context.base_linkage context in
+  let linkage = Context.family_linkage context in
+  let subst (target, source) l =
+    Linkage.path_subtitution l
+      ~source:(Naming.self_version source)
+      ~target:(Naming.self_version target)
+  in  
+  let further = Context.further_bound_linkage context in
+  let further =
+    match further with
+    | [] -> None
+    | (m, x) :: xs ->
+        let f (m, further) furthers =
+          Linkage.concatenate ~derived:(subst m further) ~base:furthers
+        in
+        Some (List.fold_right f xs (subst m x))
+  in
+  let inherit_name
+        ~(name: Names.Id.t)
+        ~(base: Linkage.t)
+        ~(linkage: Linkage.t) =
+    let rec find_element = function
+      | Bwd.Emp -> None
+      | Bwd.Snoc (_, (field, element)) when Names.Id.equal name field -> Some element
+      | Bwd.Snoc (fields, _) -> find_element fields
+    in
+    let element = find_element base.fields in
+    match element with
+    | None ->
+       let info =
+         Printf.sprintf
+           "Couldn't inherit %s because it \
+            was not found the the base family"
+           (Names.Id.to_string name)
+       in
+       Errors.fail ~info
+    | Some element -> inherit_one ~name ~element ~linkage
+  in
+  match (base, further) with  
+  | Some base, _ ->
+     let linkage = inherit_name ~name ~base ~linkage in
+     Context.replace ~linkage
+  | _, Some further ->
+     let linkage = inherit_name ~name ~base:further ~linkage in
+     Context.replace ~linkage
+  | _, _ -> ()
+  
+
 let inherit_deps
       ~(field : Names.Id.t)
       ~(base : Linkage.t)

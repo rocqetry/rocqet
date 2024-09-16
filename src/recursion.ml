@@ -5,7 +5,7 @@ open Env
 module Ctx = struct
   type t = {    
     handler_types : (Names.Id.t * Constrexpr.constr_expr) list;    
-    (* The name of the handlers that were supposed to be implemented *)    
+    (* The name of the handlers that were supposed to be implemented *)
     implementing_handlers : Names.Id.t list;
     (* The handlers actually implemented or inherited *)
     defined_handlers: Names.Id.t list;
@@ -50,6 +50,7 @@ let close_recursion () =
     Ctx.get ()
   in
   Checks.check_exhaustive ~name ~inductive ~handlers:defined_handlers;
+  (* We use this becuase the handlers have to be in the right order *)
   let handlers =
     let _, constructors =
       inductive |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs
@@ -103,8 +104,23 @@ let close_recursion () =
                 { name = axiom_name; axiom; compiled_context; compiled_signature }
            in
            Context.add_field ~name:axiom_name ~elem)
+  in  
+  (* inherited_handlers = handlers - implementing_handlers *)
+  let inherited_handlers =
+    let list_difference list1 list2 =
+      List.filter (fun x -> not (List.mem x list2)) list1
+    in
+    list_difference handlers implementing_handlers
   in
-  (* TODO: Inherit the computation axioms from the other cases if any *)
+  (* Force the inheritance of computational axioms *)
+  let _ =
+    let recursor_name = name in
+    inherited_handlers    
+    |> List.iter (fun constructor_name ->
+           let name = Naming.computational_axiom_name ~constructor_name ~recursor_name in
+           Inheritance.inherit_name ~name)
+  in 
+  
   Ctx.clear ()
 
 let open_recursion

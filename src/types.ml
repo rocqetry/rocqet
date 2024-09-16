@@ -250,7 +250,7 @@ module rec LinkageElem : sig
         names : Names.Id.t list;
         motives : Constrexpr.constr_expr list;
         goal : Constrexpr.constr_expr;
-        suffix : RecKind.t;       
+        suffix : RecKind.t;
         inductive_path : Libnames.qualid;
         handlers : (Names.Id.t * Constrexpr.constr_expr) list;
         compiled_handlers : CompiledModule.t;

@@ -20,6 +20,13 @@ let handler_name ~recursor ~case =
 
 let principle_name ~inductive ~kind = Nameops.add_suffix inductive kind
 
+let computational_axiom_name ~recursor_name ~constructor_name =  
+    Names.Id.to_string recursor_name
+    ^ "_"
+    ^ Names.Id.to_string constructor_name
+    ^ "_eq"
+    |> Names.Id.of_string  
+
 let point_qualid (f : Names.Id.t) (path : Libnames.qualid) : Libnames.qualid =
   let path, base = Libnames.repr_qualid path in
   let newpath = List.append (Names.DirPath.repr path) [ f ] in

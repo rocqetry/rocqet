@@ -253,11 +253,9 @@ let generate_one_computational_axiom
   (* The final axiom is an equation *)
   let equation = closed_recursor_applied in
   let equation_name =
-    Names.Id.to_string recursor_name
-    ^ "_"
-    ^ Names.Id.to_string constructor_name
-    ^ "_eq"
-    |> Names.Id.of_string
+    Naming.computational_axiom_name
+      ~recursor_name
+      ~constructor_name    
   in
   (equation_name, equation)
 
