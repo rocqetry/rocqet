@@ -129,9 +129,9 @@ let open_theorem
   let goal = Termutils.calculate_inductive_proof_goal ~handler_types:(List.map snd handler_types) ~suffix in
   let rec_principle_prefix =
     Codegen.calculate_rec_principle_prefix ~inductive_path ~context
-  in
-  let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in
+  in  
   let goal_name = Naming.fresh_name ~prefix:"Goal" in
+  let module_name = goal_name in
   let inherited_handlers = [] in
   let ctx =
     Ctx.
@@ -194,9 +194,9 @@ let open_theorem_extension ~name =
   let goal = Termutils.calculate_inductive_proof_goal ~handler_types ~suffix in
   let rec_principle_prefix =
     Codegen.calculate_rec_principle_prefix ~inductive_path ~context
-  in
-  let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in  
-  let goal_name = Naming.fresh_name ~prefix:"Goal" in  
+  in  
+  let goal_name = Naming.fresh_name ~prefix:"Goal" in
+  let module_name = goal_name in
   let motive = List.hd motives in
   let ctx =
     Ctx.

@@ -27,8 +27,7 @@ let inherit_element ~field ~linkage ~context =
   let further_elem =
     match further_elem with
     | [] -> None
-    | (m, _first_l, first_e) :: rest ->
-        (* failwith "further" |> ignore;*)
+    | (m, _first_l, first_e) :: rest ->        
         Some
           (List.fold_right
              (fun (m, _l, e) furthers ->
@@ -98,6 +97,20 @@ let inherit_elements
     linkage 
     elements
 
+let inherit_deps
+      ~(field : Names.Id.t)
+      ~(base : Linkage.t)
+      ~(derived : Linkage.t) =
+  let rec find_dependencies fields =
+      match fields with
+      | Bwd.Emp -> []
+      | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name field ->
+           Bwd.to_list fields
+      | Bwd.Snoc (fields, _) -> find_dependencies fields
+  in
+  let deps = find_dependencies base.fields in
+  inherit_elements ~elements:deps ~linkage:derived
+
 let inherit_name
      ~(name: Names.Id.t) =     
   let context = Context.get () in
@@ -138,30 +151,18 @@ let inherit_name
        in
        Errors.fail ~info
     | Some element -> inherit_one ~name ~element ~linkage
-  in
+  in  
   match (base, further) with  
   | Some base, _ ->
-     let linkage = inherit_name ~name ~base ~linkage in
+     let linkage = inherit_deps ~field:name ~base ~derived:linkage in
+     let linkage = inherit_name ~name ~base ~linkage in     
      Context.replace ~linkage
   | _, Some further ->
+     let linkage = inherit_deps ~field:name ~base:further ~derived:linkage in
      let linkage = inherit_name ~name ~base:further ~linkage in
      Context.replace ~linkage
   | _, _ -> ()
   
-
-let inherit_deps
-      ~(field : Names.Id.t)
-      ~(base : Linkage.t)
-      ~(derived : Linkage.t) =
-  let rec find_dependencies fields =
-      match fields with
-      | Bwd.Emp -> []
-      | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name field ->
-           Bwd.to_list fields
-      | Bwd.Snoc (fields, _) -> find_dependencies fields
-  in
-  let deps = find_dependencies base.fields in
-  inherit_elements ~elements:deps ~linkage:derived
 
 (* This updates the context so you must call Context.get again after using this *)
 let inherit_dependencies ~prefix =
