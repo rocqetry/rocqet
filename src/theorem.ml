@@ -2,14 +2,10 @@
 open Env
 open Types
 
-(* TODO: This module should not know about the Backend *)
-module VB = Backend.Vernac
-
-(* We need this becuase for some reason, VB doesn't seem to work
-   if modules are not closed immediately(?) *)
+(* We use the Declare backend here because somehow the Vernac backend
+   doesn't work when we don't close the module almost immediately(?) *)
 module DB = Backend.Declare
 
-(* Private store *)
 module Ctx = struct
   type t = {
     name : Names.Id.t;    
@@ -17,7 +13,6 @@ module Ctx = struct
     inherited_handlers : (Names.Id.t * Constrexpr.constr_expr) list;
     compiled_context : CompiledModuleType.t;
     parameters : (Names.Id.t * Constrexpr.module_ast) list;    
-    motive : Constrexpr.constr_expr;
     goal : Constrexpr.constr_expr;
     goal_name : Names.Id.t;    
     module_name : Names.Id.t;
@@ -144,8 +139,7 @@ let open_theorem
         goal_name;        
         compiled_context;                
         rec_principle_prefix;
-        inductive_path;
-        motive;
+        inductive_path;        
         parameters;
         suffix;        
       }
@@ -161,17 +155,14 @@ let open_theorem_extension ~name =
   in  
   let linkage = Context.family_linkage context in
   let elem = Inheritance.inherit_element ~field:name ~linkage ~context in
-  let inductive_path, motives, inherited_handlers, suffix =
+  let inductive_path, inherited_handlers, suffix =
     match elem with
     | None -> Errors.fail ~info:"There is no such FInduction in a base family"
     | Some
         (LinkageElem.TheoremDefinition
-          { inductive_path; motives; handlers; suffix;  _ }) ->
-        (inductive_path, motives, handlers, suffix)
+          { inductive_path; handlers; suffix;  _ }) ->
+        (inductive_path, handlers, suffix)
     | _ -> Errors.fail ~info:"Expected to inherit an FInduction"
-  in
-  let motives =
-    Resolver.resolve_constrexpr_list ~context ~expressions:motives
   in  
   let _inductive, compiled_recursors, _ =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
@@ -196,8 +187,7 @@ let open_theorem_extension ~name =
     Codegen.calculate_rec_principle_prefix ~inductive_path ~context
   in  
   let goal_name = Naming.fresh_name ~prefix:"Goal" in
-  let module_name = goal_name in
-  let motive = List.hd motives in
+  let module_name = goal_name in  
   let ctx =
     Ctx.
       {
@@ -209,8 +199,7 @@ let open_theorem_extension ~name =
         goal_name;        
         compiled_context;        
         rec_principle_prefix;
-        inductive_path;
-        motive;
+        inductive_path;        
         parameters;
         suffix;        
       }
@@ -223,8 +212,7 @@ let close_theorem () =
         {
           name;
           implementing_handler_names;
-          inherited_handlers;
-          motive;          
+          inherited_handlers;          
           goal;
           goal_name;                    
           compiled_context;
@@ -278,8 +266,7 @@ let close_theorem () =
         names = [ name ];
         goal;        
         compiled_signature;
-        compiled_context;
-        motives = [ motive ];        
+        compiled_context;        
         handlers = all_handlers;
         inductive_path;
         suffix;        

@@ -245,8 +245,7 @@ module rec LinkageElem : sig
         prefix : Libnames.qualid;        
       }
     | TheoremDefinition of {
-        names : Names.Id.t list;
-        motives : Constrexpr.constr_expr list;
+        names : Names.Id.t list;        
         goal : Constrexpr.constr_expr;
         suffix : RecKind.t;
         inductive_path : Libnames.qualid;
@@ -353,12 +352,8 @@ end = struct
         FieldDefinition field
     | LinkageElem.RecursorDefinition definition ->                
         RecursorDefinition definition          
-    | LinkageElem.TheoremDefinition definition ->
-        let motives =
-          definition.motives
-          |> List.map (Naming.replace_qualid_root ~source ~target)
-        in
-        TheoremDefinition { definition with motives }    
+    | LinkageElem.TheoremDefinition definition ->        
+        TheoremDefinition definition
 
   and path_subtitution linkage ~source ~target =
     let f (name, elem) = (name, path_substitution_elem elem ~source ~target) in
