@@ -70,21 +70,23 @@ let inherit_one
           | LinkageElem.InductiveDefinition inductive -> 
               LinkageElem.InductiveDefinition { inductive with compiled_context }
           (* TODO: Update wrt late bound base family *)
-          | LinkageElem.FamilyDefinition  family ->               
-             LinkageElem.FamilyDefinition { family with compiled_context }
-          | LinkageElem.ComputationalAxiom comp ->
-            LinkageElem.ComputationalAxiom { comp with compiled_context } 
-          | LinkageElem.FieldDefinition field -> 
-              LinkageElem.FieldDefinition { field with compiled_context}
-          | LinkageElem.MetaDataSection metadata -> 
-              LinkageElem.MetaDataSection { metadata with compiled_context}
-          | LinkageElem.OpaqueFieldDefinition field -> 
-              LinkageElem.OpaqueFieldDefinition { field with compiled_context}
+          | FamilyDefinition  family ->               
+            FamilyDefinition { family with compiled_context }
+          | ComputationalAxiom comp ->
+            ComputationalAxiom { comp with compiled_context }
+          | InductiveConstr constr ->
+             InductiveConstr { constr with compiled_context }
+          | FieldDefinition field -> 
+              FieldDefinition { field with compiled_context}
+          | MetaDataSection metadata -> 
+              MetaDataSection { metadata with compiled_context}
+          | OpaqueFieldDefinition field -> 
+              OpaqueFieldDefinition { field with compiled_context}
           (* Exhaustiveness checks *)
-          | LinkageElem.RecursorDefinition recursive -> 
-              LinkageElem.RecursorDefinition { recursive with compiled_context }
-          | LinkageElem.TheoremDefinition theorem -> 
-              LinkageElem.TheoremDefinition { theorem with compiled_context }
+          | RecursorDefinition recursive -> 
+              RecursorDefinition { recursive with compiled_context }
+          | TheoremDefinition theorem -> 
+              TheoremDefinition { theorem with compiled_context }
       in 
       let fields = Bwd.Snoc (linkage.fields, (name, element)) in
       { linkage with fields }
@@ -146,7 +148,8 @@ let inherit_name
        let info =
          Printf.sprintf
            "Couldn't inherit %s because it \
-            was not found the the base family"
+            was not found the the base or/and \
+            further bound family"
            (Names.Id.to_string name)
        in
        Errors.fail ~info

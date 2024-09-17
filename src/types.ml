@@ -210,13 +210,19 @@ end
     in a family. This information includes compiled implemetations, signatures,
     contexts, expressions, etc. *)
 module rec LinkageElem : sig
-  type t =
+  type t =    
     | InductiveDefinition of {
         inductive : VernacInductive.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
         compiled_recursors : CompiledRecursors.t ref;
+      }
+    (* All names bound by an inductive definition:
+       inductive type names and constructor names *)
+    | InductiveConstr of {
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
       }
     | FamilyDefinition of {
         linkage : Linkage.t;
@@ -325,7 +331,9 @@ end = struct
   let rec path_substitution_elem elem ~source ~target =
     match elem with
     | LinkageElem.MetaDataSection metadata ->
-        LinkageElem.MetaDataSection metadata
+       LinkageElem.MetaDataSection metadata
+    | LinkageElem.InductiveConstr constr ->
+      LinkageElem.InductiveConstr constr
     | LinkageElem.OpaqueFieldDefinition definition ->
        LinkageElem.OpaqueFieldDefinition definition
     | LinkageElem.ComputationalAxiom comp ->

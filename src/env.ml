@@ -232,8 +232,9 @@ module Context = struct
       | Some _ ->
           Errors.fail
             ~info:
-              "This element has already been defined or it has been previously \
-               inherited"
+            (Printf.sprintf
+               "This element %s has already been defined or it has been previously \
+               inherited" (Names.Id.to_string name))
       | _ -> ()
     in
     match context with

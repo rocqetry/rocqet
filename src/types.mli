@@ -79,6 +79,10 @@ module rec LinkageElem : sig
         compiled_impl : CompiledModule.t;
         compiled_recursors : CompiledRecursors.t ref;
       }
+    | InductiveConstr of {
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+      }
     | FamilyDefinition of {
         linkage : Linkage.t;
         compiled_context : CompiledModuleType.t;

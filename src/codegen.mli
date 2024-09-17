@@ -17,6 +17,12 @@ val compile_inductive_signature :
   family_name:Names.Id.t ->
   CompiledModuleType.t
 
+val compile_inductive_constr :
+  name:Names.Id.t ->
+  ty:Constrexpr.constr_expr ->
+  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
+    CompiledModuleType.t
+
 val compile_inductive_implementation :
   ind_def:VernacInductive.t ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->

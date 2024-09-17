@@ -40,19 +40,21 @@ let compile_inductive_signature ~(ind_def : VernacInductive.t)
   let module_name =
     let inductive_name = ind_def |> VernacInductive.extract_inductive_name in
     Naming.module_name_of ~family_name inductive_name
-  in
-  let all_decls =
-    let type_decls, constr_decls =
-      ind_def |> VernacInductive.extract_all_names_with_type |> List.split
-    in
-    type_decls @ List.concat constr_decls
-    |> List.map (fun (name, ty) -> B.postulate_axiom ~name ~ty)
-  in
+  in  
   B.(
     run
-    @@ define_moduletype ~module_name ~parameters:ctx ~body:(fun _ ->
-           let* () = flatmap all_decls in
+    @@ define_moduletype ~module_name ~parameters:ctx ~body:(fun _ ->           
            return ()))
+
+let compile_inductive_constr
+    ~(name: Names.Id.t)
+    ~(ty: Constrexpr.constr_expr)
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) :
+      CompiledModuleType.t =  
+  let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in
+  B.run @@
+    B.define_moduletype ~module_name ~parameters:ctx ~body:(fun _ ->
+        B.postulate_axiom ~name ~ty)
 
 let compile_inductive_implementation
     ~(ind_def : VernacInductive.t)
@@ -666,37 +668,42 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
   | Bwd.Snoc
       ( _,
         ( _,
-          LinkageElem.MetaDataSection
+          MetaDataSection
             { compiled_context; compiled_impl = compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
         ( _,
-          LinkageElem.ComputationalAxiom
+          ComputationalAxiom
             { compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
         ( _,
-          LinkageElem.TheoremDefinition
+          InductiveConstr
             { compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
         ( _,
-          LinkageElem.OpaqueFieldDefinition
+          TheoremDefinition
             { compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
         ( _,
-          LinkageElem.FamilyDefinition
+          OpaqueFieldDefinition
             { compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
         ( _,
-          LinkageElem.FieldDefinition
+          FamilyDefinition
+            { compiled_context; compiled_signature; _ } ) )
+  | Bwd.Snoc
+      ( _,
+        ( _,
+          FieldDefinition
             { compiled_context; compiled_impl = compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
         ( _,
-          LinkageElem.RecursorDefinition
+          RecursorDefinition
             { compiled_context; compiled_signature; _ } ) ) ->
       let signature_name =
         B.(
@@ -730,7 +737,7 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
   | Bwd.Snoc
       ( _,
         ( _,
-          LinkageElem.InductiveDefinition
+          InductiveDefinition
             { compiled_context; compiled_signature; _ } ) )
     ->
       let signature_name =
@@ -804,6 +811,9 @@ let compile_linkage (linkage : Linkage.t) =
        let open B in
        let* _ = compile_fields fields ctx in
        compile_computational_axiom_implementation ~axiom_name:name ~axiom_expr:axiom
+    | Bwd.Snoc (fields, (_, InductiveConstr _)) ->
+       (* An implementation will be provided by the inductive *)       
+       compile_fields fields ctx
     | Bwd.Snoc (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
     | Bwd.Snoc (fields, (_, LinkageElem.MetaDataSection { compiled_impl; _ }))
     | Bwd.Snoc
@@ -871,46 +881,51 @@ let compile_linkage_signature linkage =
           run
           @@ define_moduletype ~module_name:helper
                ~parameters:(Bwd.to_list context) ~body:(fun _ctx -> return ()))
-    | Bwd.Snoc
+    | Snoc
         ( _,
           ( _,
             LinkageElem.FamilyDefinition
               { compiled_context; compiled_signature; _ } ) )
-    | Bwd.Snoc
+    | Snoc
         ( _,
           ( _,
-            LinkageElem.ComputationalAxiom
+            ComputationalAxiom
               { compiled_context; compiled_signature; _ } ) )
-    | Bwd.Snoc
+    | Snoc
         ( _,
           ( _,
-            LinkageElem.MetaDataSection
+            InductiveConstr
+              { compiled_context; compiled_signature; _ } ) )
+    | Snoc
+        ( _,
+          ( _,
+            MetaDataSection
               { compiled_context; compiled_impl = compiled_signature; _ } ) )
-    | Bwd.Snoc
+    | Snoc
         ( _,
           ( _,
-            LinkageElem.FieldDefinition
+            FieldDefinition
               { compiled_context; compiled_impl = compiled_signature; _ } ) )    
     | Bwd.Snoc
         ( _,
           ( _,
-            LinkageElem.TheoremDefinition
+            TheoremDefinition
               { compiled_context; compiled_signature; _ } ) )
     | Bwd.Snoc
         ( _,
           ( _,
-            LinkageElem.OpaqueFieldDefinition
+            OpaqueFieldDefinition
               { compiled_context; compiled_signature; _ } ) )
     | Bwd.Snoc
         ( _,
           ( _,
-            LinkageElem.InductiveDefinition
+            InductiveDefinition
               { compiled_context; compiled_signature; _ } )
         )
     | Bwd.Snoc
         ( _,
           ( _,
-            LinkageElem.RecursorDefinition
+            RecursorDefinition
               { compiled_context; compiled_signature; _ } ) ) ->
         B.(
           run
@@ -953,8 +968,8 @@ let compile_definition ~(name : Names.Id.t)
   B.(
     run
     @@ define_module ~module_name ~parameters ~body:(fun _ ->
-           let* () = define_term ~name ?ty:body_type body_expr in
-           return ()))
+         let* () = define_term ~name ?ty:body_type body_expr in
+         return ()))
 
 let compile_lemma_signature ~(name : Names.Id.t) ~(ty : Constrexpr.constr_expr)
     ~parameters =
@@ -1045,6 +1060,9 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
     match field with
     | LinkageElem.ComputationalAxiom comp ->
        let elem = LinkageElem.ComputationalAxiom comp in
+       add_field ~name ~elem linkage
+    | InductiveConstr comp ->
+       let elem = LinkageElem.InductiveConstr comp in
        add_field ~name ~elem linkage
     | LinkageElem.OpaqueFieldDefinition def ->
         let elem = LinkageElem.OpaqueFieldDefinition def in
