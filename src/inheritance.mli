@@ -14,3 +14,8 @@ val inherit_name : name:Names.Id.t -> unit
 (* Inherit the dependencies of a particular field from it's
    base families into the current linkage context *)
 val inherit_dependencies : prefix:Names.Id.t -> unit
+
+val linkage_concatenate :
+  derived:Linkage.t ->
+  base:Linkage.t ->
+  Linkage.t

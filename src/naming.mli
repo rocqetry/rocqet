@@ -28,6 +28,12 @@ val add_path_constr_expr :
   Constrexpr.constr_expr ->
   Constrexpr.constr_expr
 
+val add_prefix_path :
+  path:Libnames.qualid ->
+  names:Names.Id.Set.t ->
+  target:Constrexpr.constr_expr ->
+  Constrexpr.constr_expr
+
 val self_version : Names.Id.t -> Names.Id.t
 val un_self_version : Names.Id.t -> Names.Id.t
 val module_name_of : family_name:Names.Id.t -> Names.Id.t -> Names.Id.t

@@ -26,7 +26,7 @@ module Context : sig
   val lookup_inductive_for_recursion :
     name:Libnames.qualid ->
     LinkageCtx.t ->
-    VernacInductive.t * CompiledRecursors.t * Linkage.t
+    VernacInductive.t * Recursors.t * Linkage.t
 
   val family_name : LinkageCtx.t -> Names.Id.t
   val family_linkage : LinkageCtx.t -> Linkage.t

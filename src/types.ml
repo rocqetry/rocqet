@@ -149,7 +149,6 @@ module VernacInductive = struct
 end
 
 (* Module naming *)
-(* This should really be Names.ModPath.t *)
 module CompiledModule = struct
   type t = Libnames.qualid
 end
@@ -157,6 +156,13 @@ end
 module CompiledModuleType = struct
   type t = Libnames.qualid
 end
+
+(*
+module Path = struct
+  type t = Libnames.qualid
+end
+*)
+
 
 module RecKind = struct
   type t = Ind | IndComplete | Rec | Rect
@@ -204,6 +210,21 @@ module CompiledRecursors = struct
   }
 end
 
+module Recursor = struct
+  type t = {
+      inductive_names : Names.Id.t list;
+      recursor : Constrexpr.constr_expr;
+      handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+  }  
+end
+
+(* Contains the type of the
+   "rec" principle and the types
+   of each handler for that particular "rec" *)
+module Recursors = struct
+  type t = Recursor.t RecursorStore.t
+end
+
 (* Linkages *)
 
 (** A [LinkageElem] represents all information there is to know about afield
@@ -213,10 +234,10 @@ module rec LinkageElem : sig
   type t =    
     | InductiveDefinition of {
         inductive : VernacInductive.t;
+        recursors : Recursors.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;
-        compiled_recursors : CompiledRecursors.t ref;
+        compiled_impl : CompiledModule.t;        
       }
     (* All names bound by an inductive definition:
        inductive type names and constructor names *)
@@ -252,10 +273,9 @@ module rec LinkageElem : sig
       }
     | TheoremDefinition of {
         names : Names.Id.t list;        
-        goal : Constrexpr.constr_expr;
         suffix : RecKind.t;
         inductive_path : Libnames.qualid;
-        handlers : (Names.Id.t * Constrexpr.constr_expr) list;        
+        handlers : Names.Id.t list;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;        
       }

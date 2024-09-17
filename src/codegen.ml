@@ -256,58 +256,6 @@ let compile_recursors ~(ind_def : VernacInductive.t)
   in
   recursors |> RecursorStore.mapi compile_one_recursor
 
-let compile_principle_signature ~(ind_def : VernacInductive.t)
-    ~(recursors : (Names.Id.t list * Constrexpr.constr_expr) RecursorStore.t)
-    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name =
-  let all_names = ind_def |> VernacInductive.extract_all_names in
-  let all_type_names = all_names |> List.map fst in
-  let path_to_add = Naming.self_version family_name in
-  let compile_one_principle suffix (type_names, recursor) =
-    (* Future-proofing for mutually inductive types *)
-    let type_name = type_names |> Naming.concat_names in
-    let recursor_name =
-      Nameops.add_suffix type_name (RecKind.to_string suffix)
-    in
-    let module_name = Naming.module_name_of ~family_name recursor_name in
-    let relevant_cstrs =
-      type_names |> List.concat_map (fun n -> List.assoc n all_names)
-    in
-    let recursor =
-      let name_set = all_type_names @ relevant_cstrs |> Names.Id.Set.of_list in
-      Naming.add_path_constr_expr path_to_add name_set recursor
-    in
-    B.(
-      run
-      @@ define_moduletype ~module_name ~parameters:ctx ~body:(fun _ ->
-             let* () = postulate_axiom ~name:recursor_name ~ty:recursor in
-             return ()))
-  in
-  let principles = recursors |> RecursorStore.mapi compile_one_principle in
-  let module_name =
-    Naming.fresh_name ~prefix:(Names.Id.to_string family_name)
-  in
-  B.(
-    run
-    @@ define_moduletype ~module_name ~parameters:ctx ~body:(fun arguments ->
-           let* _ =
-             principles |> RecursorStore.to_list
-             |> List.map (fun (_, principle) ->
-                    let module_expr =
-                      Termutils.apply_module
-                        ~functor_expr:(Termutils.ident_to_module_expr principle)
-                        ~arguments
-                    in
-                    let* _ = include_module ~module_expr in
-                    return ())
-             |> flatmap
-           in
-           return ()))
-
-let compile_principle_implementation ctx =
-  let module_name = Naming.fresh_name ~prefix:"PrincipleImpl" in
-  B.run
-    (B.define_module ~module_name ~parameters:ctx ~body:(fun _ -> B.return ()))
-
 let compile_motives
     ~(names : Names.Id.t list)
     ~(motives : Constrexpr.constr_expr list)
@@ -797,33 +745,35 @@ let compile_linkage (linkage : Linkage.t) =
     | Bwd.Snoc
         ( fields,
           ( _,
-            LinkageElem.TheoremDefinition
+            TheoremDefinition
               { inductive_path; handlers; names; suffix; _ }
           ) ) ->
         let open B in
         let* _ = compile_fields fields ctx in
-        let name = List.hd names in        
-        let handler_names = List.map fst handlers in
+        let name = List.hd names in                
         let inductive_name = inductive_path |> Naming.path_to_list |> List.rev |> List.hd in
         compile_theorem_implementation ~name 
-          ~inductive_name ~inductive_path ~suffix ~handler_names
-    | Bwd.Snoc (fields, (_, LinkageElem.ComputationalAxiom { name; axiom; _ } )) ->
+          ~inductive_name
+          ~inductive_path
+          ~suffix
+          ~handler_names:handlers
+    | Bwd.Snoc (fields, (_, ComputationalAxiom { name; axiom; _ } )) ->
        let open B in
        let* _ = compile_fields fields ctx in
        compile_computational_axiom_implementation ~axiom_name:name ~axiom_expr:axiom
     | Bwd.Snoc (fields, (_, InductiveConstr _)) ->
        (* An implementation will be provided by the inductive *)       
        compile_fields fields ctx
-    | Bwd.Snoc (fields, (_, LinkageElem.FamilyDefinition { compiled_impl; _ }))
-    | Bwd.Snoc (fields, (_, LinkageElem.MetaDataSection { compiled_impl; _ }))
+    | Bwd.Snoc (fields, (_, FamilyDefinition { compiled_impl; _ }))
+    | Bwd.Snoc (fields, (_, MetaDataSection { compiled_impl; _ }))
     | Bwd.Snoc
-        (fields, (_, LinkageElem.OpaqueFieldDefinition { compiled_impl; _ }))
+        (fields, (_, OpaqueFieldDefinition { compiled_impl; _ }))
     | Bwd.Snoc
         ( fields,
           ( _,
-            LinkageElem.InductiveDefinition
+            InductiveDefinition
               { compiled_impl; _ } ) )
-    | Bwd.Snoc (fields, (_, LinkageElem.FieldDefinition { compiled_impl; _ })) ->
+    | Bwd.Snoc (fields, (_, FieldDefinition { compiled_impl; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in
         let module_expr = Termutils.ident_to_module_expr compiled_impl in
@@ -1116,8 +1066,8 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
             }
         in
         add_field ~name ~elem linkage
-    | LinkageElem.InductiveDefinition { inductive; _ } ->
-        let inductive_name = VernacInductive.extract_inductive_name inductive in
+    | LinkageElem.InductiveDefinition { inductive = _; _ } ->
+        (*let inductive_name = VernacInductive.extract_inductive_name inductive in
         let compiled_context, parameters =
           compile_linkage_context ~field_name:inductive_name linkage
         in
@@ -1150,12 +1100,15 @@ let rec recompute_linkage (initial_context : LinkageCtx.t) (linkage : Linkage.t)
           compile_linkage_context ~field_name:inductive_name linkage
         in
         let compiled_recs =
-          compile_recursors ~ind_def:inductive ~recursors ~ctx:parameters
+          compile_recursors
+            ~ind_def:inductive
+            ~recursors ~ctx:parameters
             ~family_name
         in
         (compiled_recursors :=
            CompiledRecursors.{ compiled_context; recursors = compiled_recs });
-        linkage
+        linkage*)
+          Errors.fail ~info:"Not yet implemented"
     | LinkageElem.TheoremDefinition
         { names = _; _ } ->       
         (* let name = List.hd names in

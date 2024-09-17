@@ -307,7 +307,8 @@ let handler_types_table inductive_path name (recursor : CompiledRecursor.t)
 let handler_type_for_recursion
       ~(name : Names.Id.t)
       ~(inductive_path : Libnames.qualid)
-      ~(recursor : CompiledRecursor.t) : (Names.Id.t * Constrexpr.constr_expr) list =
+      ~(recursor : Recursor.t)
+    : (Names.Id.t * Constrexpr.constr_expr) list =
   let motive_term =
     let motive = Naming.motive_of name in
     let self = Naming.self_version (Env.Context.family_name (Env.Context.get ())) in
@@ -322,7 +323,16 @@ let handler_type_for_recursion
         | [_] -> None
         | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
       in
+      
       let handler = Naming.replace_self_qualification ~target handler in
+      let handler =
+        match target with
+        | None -> handler
+        | Some path ->
+           let inductive_name = inductive_path |> Naming.path_to_list |> List.rev |> List.hd in
+           let names = [inductive_name; case_name]  |> Names.Id.Set.of_list in
+           Naming.add_prefix_path ~path ~names ~target:handler
+      in      
       let handler = Resolver.resolve_constrexpr ~context:(Env.Context.get ()) ~expression:handler in
       let handler_type =
            Constrexpr_ops.mkAppC (handler, [ motive_term ])
@@ -400,3 +410,63 @@ let rec lambda_to_prod (trm : Constrexpr.constr_expr) =
   | Constrexpr.CLambdaN (binder, body) ->
       Constrexpr_ops.mkProdCN binder (lambda_to_prod body)
   | _ -> trm
+
+
+let extract_handler_types_from_principle
+    ~(inductive : VernacInductive.t)
+    ~(principles : (Names.Id.t list * Constrexpr.constr_expr) RecursorStore.t)
+    : Recursors.t =
+  let all_names = inductive |> VernacInductive.extract_all_names in  
+  let compile_one_recursor _suffix (inductive_names, recursor) =
+    (* Future-proofing for mutually inductive types *)    
+    let relevant_cstrs =
+      inductive_names |> List.concat_map (fun n -> List.assoc n all_names)
+    in
+    let handlers =
+      (* Copied from FPOP almost verbatim: *)
+      let from_recursor_type_to_subcase_handlers_constructor
+          (cstname : Names.Id.t list) (recursor : Constrexpr.constr_expr) :
+          (Names.Id.t * Constrexpr.constr_expr) list =
+        let open Constrexpr in
+        let open Constrexpr_ops in
+        let isArrow { CAst.v = t; _ } =
+          match t with CNotation (_, (_, "_ -> _"), _) -> true | _ -> false
+        in
+        let destDepProd { CAst.v = t; _ } =
+          match t with
+          | CProdN (al, b) -> (al, b)
+          | _ -> Errors.fail ~info:"unexpected"
+        in
+        let destArrow { CAst.v = t; _ } =
+          match t with
+          | CNotation (_, (_, "_ -> _"), ([ domain; codomain ], _, _, _)) ->
+              (domain, codomain)
+          | _ -> Errors.fail ~info:"unreachable"
+        in
+        let _inputP, _body = destDepProd recursor in
+        let rec collect_handler cstname f =
+          match (cstname, f) with
+          | _ :: t, f when isArrow f ->
+              let currentT, remained_f = destArrow f in
+              let ret, otherparts = collect_handler t remained_f in
+              (ret, currentT :: otherparts)
+          | [], f -> (f, [])
+          | _, _ -> Errors.fail ~info:"unexpected"
+        in
+        let _, all_recursor_handlers = collect_handler cstname _body in
+        let cst_name_corresponding_recursor_handlers_sig =
+          List.combine cstname
+            (* decorate each ai case with a _inputP *)
+            (List.map
+               (fun body -> mkLambdaCN _inputP body)
+               all_recursor_handlers)
+        in
+        cst_name_corresponding_recursor_handlers_sig
+      in
+      from_recursor_type_to_subcase_handlers_constructor relevant_cstrs recursor
+    in    
+    Recursor.
+      { inductive_names; recursor; handlers;  }
+  in
+  principles
+  |> RecursorStore.mapi compile_one_recursor

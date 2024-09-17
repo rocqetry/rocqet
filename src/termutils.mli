@@ -71,7 +71,7 @@ val handler_types_table :
 val handler_type_for_recursion:
     name:Names.Id.t ->
     inductive_path: Libnames.qualid ->
-    recursor:CompiledRecursor.t ->
+    recursor:Recursor.t ->
     (Names.Id.t * Constrexpr.constr_expr) list
 
 val extract_handlers_from_inductive_proof :
@@ -95,3 +95,8 @@ val mk_lambda_with_type :
 
 (* fun (x : ...) -> forall (x : ...) *)
 val lambda_to_prod : Constrexpr.constr_expr -> Constrexpr.constr_expr
+
+val extract_handler_types_from_principle : 
+    inductive:VernacInductive.t -> 
+    principles:(Names.Id.t list * Constrexpr.constr_expr) RecursorStore.t ->
+    Recursors.t

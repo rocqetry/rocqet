@@ -199,6 +199,31 @@ let add_path_constr_expr path l r =
   in
   go l r
 
+(** Add [path] as a prefix for every [name] in [names] which
+    can be found in [target] *)
+let add_prefix_path
+      ~(path : Libnames.qualid)
+      ~(names : Names.Id.Set.t)
+      ~(target : Constrexpr.constr_expr) =
+  let open Constrexpr_ops in
+  let open Constrexpr in
+  let open Libnames in
+  let rec go names target =
+    match target with
+    | { CAst.loc; v = CRef (qid, us) } as x when qualid_is_ident qid ->
+        (* Always assuming it's a basename we want! *)
+        let id = qualid_basename qid in
+        if Names.Id.Set.mem id names then
+          let path =
+            qualid_point (Some path) id
+          in
+          CAst.make ?loc
+          @@ CRef (path, us)
+        else x
+    | cn -> map_constr_expr_with_binders Names.Id.Set.remove go names cn
+  in
+  go names target
+
 let self_version = Nameops.add_prefix "self__"
 
 (* Strip self__ from the prefix of a name *)

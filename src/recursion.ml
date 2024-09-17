@@ -131,10 +131,10 @@ let open_recursion
   Inheritance.inherit_dependencies ~prefix:name;
   let context = Context.get () in    
   let motive_expr = Resolver.resolve_constrexpr ~context ~expression:motive in  
-  let inductive, compiled_recursors, _provenance =
+  let inductive, recursors, _provenance =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
-  let recursor = RecursorStore.find suffix compiled_recursors.recursors in
+  let recursor = RecursorStore.find suffix recursors in
   (* Make the motive a field in the family:  *)
   let motive_name = Naming.motive_of name in
   let () = Definition.add_definition ~name:motive_name motive_expr in
@@ -176,10 +176,10 @@ let open_recursion_extension ~name =
         (inductive_path, handlers, suffix, arguments)
     | _ -> Errors.fail ~info:"Expected to inherit an FRecrusion"
   in    
-  let inductive, compiled_recursors, _provenance =
+  let inductive, recursors, _provenance =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
-  let recursor = RecursorStore.find suffix compiled_recursors.recursors in  
+  let recursor = RecursorStore.find suffix recursors in  
   let handler_types =
     Termutils.handler_type_for_recursion ~name ~inductive_path ~recursor     
   in

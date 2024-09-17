@@ -196,9 +196,9 @@ module Context = struct
   let lookup_inductive_for_recursion ~name context =
     match lookup_linkage_elem context name with
     | Some
-        ( LinkageElem.InductiveDefinition { inductive; compiled_recursors; _ },
+        ( LinkageElem.InductiveDefinition { inductive; recursors; _ },
           linkage ) ->
-        (inductive, !compiled_recursors, linkage)
+        (inductive, recursors, linkage)
     | Some _ -> Errors.fail ~info:"Expected an inductive type"
     | None ->
         let info =

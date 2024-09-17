@@ -88,7 +88,7 @@ let inherit_one
           | TheoremDefinition theorem -> 
               TheoremDefinition { theorem with compiled_context }
       in 
-      let fields = Bwd.Snoc (linkage.fields, (name, element)) in
+      let fields = Snoc (linkage.fields, (name, element)) in
       { linkage with fields }
 
 let inherit_elements
@@ -106,9 +106,9 @@ let inherit_deps
   let rec find_dependencies fields =
       match fields with
       | Bwd.Emp -> []
-      | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name field ->
+      | Snoc (fields, (found_name, _)) when Names.Id.equal found_name field ->
            Bwd.to_list fields
-      | Bwd.Snoc (fields, _) -> find_dependencies fields
+      | Snoc (fields, _) -> find_dependencies fields
   in
   let deps = find_dependencies base.fields in
   inherit_elements ~elements:deps ~linkage:derived
@@ -235,19 +235,111 @@ let inherit_dependencies ~prefix =
         Codegen.compute_linkage None linkage
   in
   Context.replace ~linkage
-  
-(* 
-let inherit_one_element ~element ~linkage =
-  failwith ""
 
-let inherit_elements ~elements ~linkage =
-   failwith ""
 
-let path_substitution ~source ~target = 
+let rec find_and_remove name fields =
+  match fields with
+  | Bwd.Emp -> None, fields
+  | Bwd.Snoc (fields, (field, elem))  ->
+     if Names.Id.equal field name then
+       Some (elem, fields), Bwd.Emp
+     else
+       let result, rest = find_and_remove name fields in
+       result, Bwd.Snoc (rest, (field, elem))
 
-(* derived has the preference over base *)
-let linkage_concatenate ~base ~derived =
-  failwith ""
- *)
+let ensure_matching_parameters ~(derived: Linkage.t) ~(base: Linkage.t) =
+  let derived_len = Bwd.length derived.context in
+  let base_len = Bwd.length base.context in
+  let compare_result = compare derived_len base_len in
+  if compare_result = 0 then base
+  else if compare_result < 0 then
+     (* The base context has more params.
+        We need to reparameterize via adding dummy args *)
+    Errors.fail ~info:"TODO: reparam more"
+  else (* if compare_result > 0 *)
+    (* The base context has less params.
+        We just add extra unused params from the
+        derived to it *)
+    Errors.fail ~info:"TODO: reparam less"    
+
+let rec linkage_concatenate ~(derived: Linkage.t) ~(base: Linkage.t) =  
+  let base = ensure_matching_parameters ~derived ~base in
+  let rec loop linkage derived_fields base_fields =
+    match derived_fields with
+    | [] -> inherit_elements ~elements:(Bwd.to_list base_fields) ~linkage
+    | (name, element) :: derived_fields ->
+       match find_and_remove name base_fields with
+       | None, base_fields ->
+          let linkage = inherit_one ~name ~element ~linkage in
+          loop linkage derived_fields base_fields
+       | Some (base_element, dependencies), base_fields ->
+          let linkage = inherit_elements ~elements:(Bwd.to_list dependencies) ~linkage in
+          let element = linkage_elem_concatenate ~derived:element ~base:base_element ~linkage in
+          let linkage = inherit_one ~name ~element ~linkage in
+          loop linkage derived_fields base_fields
+  in    
+  let linkage = { derived with fields = Bwd.Emp } in
+  let derived_fields = Bwd.to_list derived.fields in
+  let base_fields = base.fields in
+  loop linkage derived_fields base_fields 
+
+(* General inheritance rule:
+   hanlders from the base
+   family come before the derived family's handlers
+*)
+and linkage_elem_concatenate
+  ~(derived: LinkageElem.t)
+  ~(base: LinkageElem.t)
+  ~(linkage: Linkage.t) =
+  let remove_duplicates lst =
+      let rec aux seen = function
+        | [] -> []
+        | hd :: tl ->
+            if List.mem hd seen then aux seen tl else hd :: aux (hd :: seen) tl
+      in
+      aux [] lst
+  in
+  match derived, base with
+  | LinkageElem.ComputationalAxiom derived, LinkageElem.ComputationalAxiom _ ->
+     LinkageElem.ComputationalAxiom derived
+  | InductiveDefinition derived, InductiveDefinition base ->
+     let inductive =
+       VernacInductive.concatenate
+         ~derived:derived.inductive
+         ~base:base.inductive
+     in
+     let context = LinkageCtx.Toplevel linkage in
+     let field_name = inductive |> VernacInductive.extract_inductive_name in
+     let compiled_context, params = Codegen.compile_linkage_context ~field_name context in
+     let compiled_impl, principles =
+       Codegen.compile_inductive_implementation
+         ~ind_def:inductive
+         ~ctx:params
+         ~family_name:linkage.name
+     in
+     let recursors = Termutils.extract_handler_types_from_principle ~inductive ~principles in  
+     InductiveDefinition { derived with compiled_context; compiled_impl; recursors; }
+  | InductiveConstr derived, InductiveConstr _ ->
+    InductiveConstr derived 
+  | FamilyDefinition derived, FamilyDefinition base ->
+     let linkage = linkage_concatenate ~derived:derived.linkage ~base:base.linkage in
+     let compiled_signature = Codegen.compile_linkage_signature linkage in
+     let compiled_impl = Codegen.compile_nested_linkage linkage in
+     FamilyDefinition { derived with linkage; compiled_impl; compiled_signature }
+  | FieldDefinition derived, FieldDefinition _ ->
+    FieldDefinition derived 
+  | OpaqueFieldDefinition derived, OpaqueFieldDefinition _ ->
+    OpaqueFieldDefinition derived
+  | RecursorDefinition derived, RecursorDefinition base ->
+     let names = remove_duplicates (base.names @ derived.names) in
+     let handlers = remove_duplicates (base.handlers @ derived.handlers) in
+     RecursorDefinition { derived with names; handlers; }
+  | TheoremDefinition derived, TheoremDefinition base ->
+     let names = remove_duplicates (base.names @ derived.names) in
+     let handlers = remove_duplicates (base.handlers @ derived.handlers) in
+     TheoremDefinition { derived with names; handlers; }
+  | MetaDataSection derived, MetaDataSection _ ->
+     MetaDataSection derived     
+  | _, _ -> Errors.fail ~info:"Can't concatenate different kinds of linkage element"
 
 

@@ -62,6 +62,18 @@ module CompiledRecursors : sig
   }
 end
 
+module Recursor : sig
+  type t = {
+      inductive_names : Names.Id.t list;
+      recursor : Constrexpr.constr_expr;
+      handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+  }  
+end
+
+module Recursors : sig
+  type t = Recursor.t RecursorStore.t
+end
+
 module PluginCmd : sig
   type t = Family | Recursion | Induction | MetaData | Lemma
 end
@@ -74,10 +86,10 @@ module rec LinkageElem : sig
   type t =
     | InductiveDefinition of {
         inductive : VernacInductive.t;
+        recursors : Recursors.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;
-        compiled_recursors : CompiledRecursors.t ref;
+        compiled_impl : CompiledModule.t;        
       }
     | InductiveConstr of {
         compiled_context : CompiledModuleType.t;
@@ -110,10 +122,9 @@ module rec LinkageElem : sig
       }    
     | TheoremDefinition of {
         names : Names.Id.t list;        
-        goal : Constrexpr.constr_expr;
         suffix : RecKind.t;        
         inductive_path : Libnames.qualid;
-        handlers : (Names.Id.t * Constrexpr.constr_expr) list;        
+        handlers : Names.Id.t list;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;        
       }

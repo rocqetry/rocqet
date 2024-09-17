@@ -37,16 +37,6 @@ val compile_recursors :
   family_name:Names.Id.t ->
   CompiledRecursor.t RecursorStore.t
 
-val compile_principle_signature :
-  ind_def:VernacInductive.t ->
-  recursors:(Names.Id.t list * Constrexpr.constr_expr) RecursorStore.t ->
-  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-  family_name:Names.Id.t ->
-  CompiledModuleType.t
-
-val compile_principle_implementation :
-  (Names.Id.t * Constrexpr.module_ast) list -> CompiledModule.t
-
 (* Compiling recursive definitions *)
 val compile_motives :
   names:Names.Id.t list ->

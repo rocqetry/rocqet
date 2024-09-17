@@ -10,7 +10,7 @@ module Ctx = struct
   type t = {
     name : Names.Id.t;    
     implementing_handler_names : Names.Id.t list;
-    inherited_handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+    inherited_handlers : Names.Id.t list;
     compiled_context : CompiledModuleType.t;
     parameters : (Names.Id.t * Constrexpr.module_ast) list;    
     goal : Constrexpr.constr_expr;
@@ -105,11 +105,11 @@ let open_theorem
   let inductive_path = inductive in
   let context = Context.get () in  
   let motive = Resolver.resolve_constrexpr ~context ~expression:motive in  
-  let _inductive, compiled_recursors, _ =
+  let _inductive, recursors, _ =
     Context.lookup_inductive_for_recursion ~name:inductive context
   in  
   let suffix = RecKind.IndComplete in
-  let recursor = RecursorStore.find suffix compiled_recursors.recursors in
+  let recursor = RecursorStore.find suffix recursors in
   let motive_name = Naming.motive_of name in
   let () = Definition.add_definition ~name:motive_name motive in
   let context = Context.get () in
@@ -119,7 +119,7 @@ let open_theorem
   let handler_types =
     Termutils.handler_type_for_recursion ~name ~inductive_path ~recursor      
   in  
-  let handler_names = recursor.compiled_handlers |> List.map fst in
+  let handler_names = recursor.handlers |> List.map fst in
   let implementing_handler_names = handler_names in  
   let goal = Termutils.calculate_inductive_proof_goal ~handler_types:(List.map snd handler_types) ~suffix in
   let rec_principle_prefix =
@@ -164,16 +164,15 @@ let open_theorem_extension ~name =
         (inductive_path, handlers, suffix)
     | _ -> Errors.fail ~info:"Expected to inherit an FInduction"
   in  
-  let _inductive, compiled_recursors, _ =
+  let _inductive, recursors, _ =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
-  let recursor = RecursorStore.find suffix compiled_recursors.recursors in  
+  let recursor = RecursorStore.find suffix recursors in  
   let handler_names =
-    recursor.compiled_handlers |> List.map fst    
+    recursor.handlers |> List.map fst    
   in
   let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
-  let implementing_handler_names =
-    let inherited_handlers = List.map fst inherited_handlers in
+  let implementing_handler_names =    
     handler_names |> List.filter (fun x -> not (inside x inherited_handlers))
   in  
   let handler_types =    
@@ -212,8 +211,7 @@ let close_theorem () =
         {
           name;
           implementing_handler_names;
-          inherited_handlers;          
-          goal;
+          inherited_handlers;                    
           goal_name;                    
           compiled_context;
           suffix;
@@ -239,7 +237,7 @@ let close_theorem () =
     Termutils.extract_handlers_from_inductive_proof implementing_handler_names
       (mkIdentC goal_name) suffix
   in
-  let all_handlers = inherited_handlers @ implemented_handlers in  
+  let all_handlers = inherited_handlers @ List.map fst implemented_handlers in  
   let implemented_handlers =
     List.map (fun (name, expr) -> (name, expr)) implemented_handlers
   in
@@ -263,8 +261,7 @@ let close_theorem () =
   let elem =
     LinkageElem.TheoremDefinition
       {
-        names = [ name ];
-        goal;        
+        names = [ name ];        
         compiled_signature;
         compiled_context;        
         handlers = all_handlers;

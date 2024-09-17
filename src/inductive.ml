@@ -50,13 +50,11 @@ let add_new_inductive_definition ~inductive ~inductive_name =
     Codegen.compile_inductive_signature ~ind_def:inductive ~ctx:parameters
       ~family_name
   in
-  let compiled_impl, recursors =
+  let compiled_impl, principles =
     Codegen.compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
       ~family_name
   in  
-  let compiled_recursors =
-    ref CompiledRecursors.{ compiled_context; recursors = RecursorStore.empty }
-  in
+  let recursors = Termutils.extract_handler_types_from_principle ~inductive ~principles in  
   let elem =
     LinkageElem.InductiveDefinition
       {
@@ -64,7 +62,7 @@ let add_new_inductive_definition ~inductive ~inductive_name =
         compiled_context;
         compiled_impl;
         compiled_signature;
-        compiled_recursors;
+        recursors;
       }
   in
   Context.add_field ~name:inductive_name ~elem;
@@ -79,20 +77,7 @@ let add_new_inductive_definition ~inductive ~inductive_name =
     |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
   in  
   
-  (* TODO: Don't compile recursors, just
-     keep track of the expr *)
-  let context = Context.get () in
-  let compiled_context, parameters =
-    Codegen.compile_linkage_context ~field_name:inductive_name context
-  in
-  let compiled_recs =
-    Codegen.compile_recursors ~ind_def:inductive ~recursors ~ctx:parameters
-      ~family_name
-  in
-  let inductive_name = VernacInductive.extract_inductive_name inductive in
-  Inheritance.inherit_dependencies ~prefix:inductive_name;
-  (compiled_recursors :=
-     CompiledRecursors.{ compiled_context; recursors = compiled_recs })  
+  ()  
 
 let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name =
   let inductive = 
@@ -110,13 +95,11 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name 
     Codegen.compile_inductive_signature ~ind_def:inductive ~ctx:parameters
       ~family_name
   in
-  let compiled_impl, recursors =
+  let compiled_impl, principles =
     Codegen.compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
       ~family_name
-  in  
-  let compiled_recursors =
-    ref CompiledRecursors.{ compiled_context; recursors = RecursorStore.empty }
-  in
+  in        
+  let recursors = Termutils.extract_handler_types_from_principle ~inductive ~principles in  
   let elem =
     LinkageElem.InductiveDefinition
       {
@@ -124,7 +107,7 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name 
         compiled_context;
         compiled_impl;
         compiled_signature;
-        compiled_recursors;
+        recursors;
       }
   in
   Context.add_field ~name:inductive_name ~elem;
@@ -168,18 +151,8 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name 
     new_constructors
     |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
   in  
+  ()
   
-  let context = Context.get () in
-  let compiled_context, parameters =
-    Codegen.compile_linkage_context ~field_name:inductive_name context
-  in
-  let compiled_recs =
-    Codegen.compile_recursors ~ind_def:inductive ~recursors ~ctx:parameters
-      ~family_name
-  in
-  (compiled_recursors :=
-     CompiledRecursors.{ compiled_context; recursors = compiled_recs })  
-
 let add_inductive_definition inductive =
   let inductive_name = VernacInductive.extract_inductive_name inductive in
   let context = Context.get () in
