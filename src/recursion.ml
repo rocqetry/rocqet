@@ -164,9 +164,8 @@ let open_recursion
 
 let open_recursion_extension ~name =
   Inheritance.inherit_dependencies ~prefix:name;
-  let context = Context.get () in
-  let linkage = Context.family_linkage context in
-  let elem = Inheritance.inherit_element ~field:name ~linkage ~context in
+  let context = Context.get () in  
+  let elem = Inheritance.lookup_field_in_base ~field:name ~context in
   let inductive_path, inherited_handlers, suffix, arguments =
     match elem with
     | None -> Errors.fail ~info:"There is no such FRecursion in a base family"

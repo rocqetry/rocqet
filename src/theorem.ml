@@ -153,8 +153,7 @@ let open_theorem_extension ~name =
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:name context
   in  
-  let linkage = Context.family_linkage context in
-  let elem = Inheritance.inherit_element ~field:name ~linkage ~context in
+  let elem = Inheritance.lookup_field_in_base ~field:name ~context in
   let inductive_path, inherited_handlers, suffix =
     match elem with
     | None -> Errors.fail ~info:"There is no such FInduction in a base family"

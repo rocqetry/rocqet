@@ -155,10 +155,9 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name 
   
 let add_inductive_definition inductive =
   let inductive_name = VernacInductive.extract_inductive_name inductive in
-  let context = Context.get () in
-  let linkage = Context.family_linkage context in
+  let context = Context.get () in  
   let elem =
-    Inheritance.inherit_element ~linkage ~context ~field:inductive_name
+    Inheritance.lookup_field_in_base ~context ~field:inductive_name
   in  
   match elem with
   | None -> add_new_inductive_definition ~inductive ~inductive_name
