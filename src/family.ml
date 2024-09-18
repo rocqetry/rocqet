@@ -44,6 +44,7 @@ let open_family name =
             Some
               (List.fold_right f xs (subst m x))
       in
+      (* Check further binding structure? *)
       let linkage = { linkage with base; } in
       Context.destructive_update (Some (LinkageCtx.Nested (context, linkage)))
   | None ->

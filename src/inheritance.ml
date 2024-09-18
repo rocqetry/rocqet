@@ -31,20 +31,22 @@ let inherit_one
      let element = 
           match element with
           | LinkageElem.InductiveDefinition inductive -> 
-              LinkageElem.InductiveDefinition { inductive with compiled_context }
+             LinkageElem.InductiveDefinition { inductive with compiled_context }
+
           (* TODO: Update wrt late bound base family *)
-          | FamilyDefinition  family ->               
-            FamilyDefinition { family with compiled_context }
+          | FamilyDefinition family -> FamilyDefinition { family with compiled_context }
+
           | ComputationalAxiom comp ->
             ComputationalAxiom { comp with compiled_context }
           | InductiveConstr constr ->
              InductiveConstr { constr with compiled_context }
           | FieldDefinition field -> 
-              FieldDefinition { field with compiled_context}
+              FieldDefinition { field with compiled_context }
           | MetaDataSection metadata -> 
-              MetaDataSection { metadata with compiled_context}
+              MetaDataSection { metadata with compiled_context }
           | OpaqueFieldDefinition field -> 
-              OpaqueFieldDefinition { field with compiled_context}
+             OpaqueFieldDefinition { field with compiled_context }
+
           (* Exhaustiveness checks *)
           | RecursorDefinition recursive -> 
               RecursorDefinition { recursive with compiled_context }
@@ -80,22 +82,7 @@ let inherit_name
      ~(name: Names.Id.t) =     
   let context = Context.get () in
   let base = Context.base_linkage context in
-  let linkage = Context.family_linkage context in
-  let subst (target, source) l =
-    Linkage.path_subtitution l
-      ~source:(Naming.self_version source)
-      ~target:(Naming.self_version target)
-  in  
-  let further = Context.further_bound_linkage context in
-  let further =
-    match further with
-    | [] -> None
-    | (m, x) :: xs ->
-        let f (m, further) furthers =
-          Linkage.concatenate ~derived:(subst m further) ~base:furthers
-        in
-        Some (List.fold_right f xs (subst m x))
-  in
+  let linkage = Context.family_linkage context in  
   let inherit_name
         ~(name: Names.Id.t)
         ~(base: Linkage.t)
@@ -118,16 +105,12 @@ let inherit_name
        Errors.fail ~info
     | Some element -> inherit_one ~name ~element ~linkage
   in  
-  match (base, further) with  
-  | Some base, _ ->
+  match base with  
+  | Some base ->
      let linkage = inherit_deps ~field:name ~base ~derived:linkage in
      let linkage = inherit_name ~name ~base ~linkage in     
      Context.replace ~linkage
-  | _, Some further ->
-     let linkage = inherit_deps ~field:name ~base:further ~derived:linkage in
-     let linkage = inherit_name ~name ~base:further ~linkage in
-     Context.replace ~linkage
-  | _, _ -> ()
+  | _ -> Errors.fail ~info:"There is not base to inherit from"
   
 
 (** This updates the context so you must call Context.get again after using this *)
@@ -153,7 +136,9 @@ let rec find_and_remove name fields =
        result, Bwd.Snoc (rest, (field, elem))
 
 (** Performs reparameterization of base wrt derived *)
-let ensure_matching_parameters ~(derived: Linkage.t) ~(base: Linkage.t) =
+let ensure_matching_parameters
+      ~(derived: Linkage.t)
+      ~(base: Linkage.t) =
   let derived_len = Bwd.length derived.context in
   let base_len = Bwd.length base.context in
   let compare_result = compare derived_len base_len in

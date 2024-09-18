@@ -1,5 +1,4 @@
 open Bwd
-open Bwd.Infix
 
 (* A parsed vernacular inductive type *)
 module VernacInductive = struct
@@ -308,21 +307,6 @@ and Linkage : sig
 
   val path_substitution_elem :
     LinkageElem.t -> source:Names.Id.t -> target:Names.Id.t -> LinkageElem.t
-
-  val concatenate_elem : LinkageElem.t -> LinkageElem.t -> LinkageElem.t
-  val concatenate_recursive : derived:t -> base:t -> t
-
-  (* Linkage concatenation *)
-  val concatenate : derived:t -> base:t -> t
-
-  (* Concatenate the fields before `prefix` *)
-  val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
-
-  val concatenate_recursive_prefix :
-    prefix:Names.Id.t -> derived:t -> base:t -> t
-
-  val pointwise_concatenate_recursive_prefix :
-    prefix:Names.Id.t -> derived:t -> base:t -> t
 end = struct
   type t = {
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
@@ -386,137 +370,7 @@ end = struct
   and path_subtitution linkage ~source ~target =
     let f (name, elem) = (name, path_substitution_elem elem ~source ~target) in
     let fields = linkage.fields |> Bwd.map f in
-    { linkage with fields }
-
-  let rec concatenate_elem elem1 elem0  =
-    let remove_duplicates lst =
-      let rec aux seen = function
-        | [] -> []
-        | hd :: tl ->
-            if List.mem hd seen then aux seen tl else hd :: aux (hd :: seen) tl
-      in
-      aux [] lst
-    in
-    match (elem0, elem1) with
-    | LinkageElem.RecursorDefinition e0, LinkageElem.RecursorDefinition e1 ->
-       let handlers = e0.handlers @ e1.handlers in
-       LinkageElem.RecursorDefinition  { e0 with handlers }
-    | LinkageElem.TheoremDefinition e0, LinkageElem.TheoremDefinition e1 ->
-        let handler_cases = e0.handlers @ e1.handlers in
-        let handlers = remove_duplicates handler_cases in
-        LinkageElem.TheoremDefinition { e0 with handlers }
-    | LinkageElem.InductiveDefinition e0, LinkageElem.InductiveDefinition e1 ->
-        LinkageElem.InductiveDefinition
-          {
-            e0 with
-            inductive =
-              VernacInductive.concatenate ~base:e0.inductive
-                ~derived:e1.inductive;
-          }
-    | LinkageElem.FamilyDefinition e0, LinkageElem.FamilyDefinition e1 ->
-        let linkage =
-          concatenate_recursive ~base:e0.linkage ~derived:e1.linkage
-        in
-        LinkageElem.FamilyDefinition { e0 with linkage }
-    | FieldDefinition _, FieldDefinition e1 ->
-        FieldDefinition e1 (* Override a field? *)    
-    | MetaDataSection _, MetaDataSection m -> MetaDataSection m
-    | _, _ -> Errors.fail ~info:"Invalid concatnenation arguments"
-
-  (* Deep concatenation *)
-  (* If the base is empty we loose some items *)
-  and concatenate_recursive ~derived ~base =
-    (* Using pick here reorders the fields in a family, which is wrong *)
-    let rec pick x lst =
-      match lst with
-      | [] -> (None, [])
-      | (hd, elem) :: tl ->
-          if Names.Id.equal hd x then (Some (hd, elem), tl)
-          else
-            let result, rest = pick x tl in
-            (result, (hd, elem) :: rest)
-    in
-    let rec go base derived =
-      match base with
-      | [] -> derived
-      | (name, elem) :: base -> (
-          match pick name derived with
-          | None, _ -> (name, elem) :: go base derived
-          | Some (_, delem), derived ->
-              (name, concatenate_elem elem delem) :: go base derived)
-    in
-    let fields = go (Bwd.to_list base.fields) (Bwd.to_list derived.fields) in
-    Linkage.{ derived with fields = Bwd.of_list fields }
-
-  (* Naive concatenation *)
-  let concatenate ~derived ~base =
-    let rec compute_difference ~base
-        ~(derived : (Names.Id.t * LinkageElem.t) list) =
-      match (base, derived) with
-      | [], [] -> []
-      | (bname, belem) :: rest_base, (dname, _) :: rest_derived ->
-          if Names.Id.equal bname dname then
-            compute_difference ~base:rest_base ~derived:rest_derived
-          else
-            (* Check if the name has already been inherited:
-               in a later position *)
-            let inherited_later =
-              rest_derived |> List.map fst |> List.exists (Names.Id.equal bname)
-            in
-            if not inherited_later then
-              (bname, belem) :: compute_difference ~base:rest_base ~derived
-            else compute_difference ~base:rest_base ~derived
-      | _ :: _, [] -> base
-      | [], _ :: _ -> []
-    in
-    let base_fields = base.Linkage.fields |> Bwd.to_list in
-    let derived_fields = derived.Linkage.fields |> Bwd.to_list in
-    let inherited_fields =
-      compute_difference ~base:base_fields ~derived:derived_fields
-    in
-    let fields = derived.fields <@ inherited_fields in
-    Linkage.{ derived with fields }
-
-  (* Naive concatenation of the linkage before a particular field *)
-  let concatenate_prefix
-        ~prefix
-        ~(derived : Linkage.t)
-        ~(base : Linkage.t) =
-    let rec calculate_dependencies fields =
-      match fields with
-      | Bwd.Emp -> concatenate ~derived ~base
-      | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
-        ->
-          concatenate ~base:{ base with fields } ~derived
-      | Bwd.Snoc (fields, _) -> calculate_dependencies fields
-    in
-    calculate_dependencies base.fields
-
-  let pointwise_concatenate_recursive_prefix ~prefix ~(derived : Linkage.t)
-      ~(base : Linkage.t) =
-    let rec extract_prefix fields =
-      match fields with
-      | Bwd.Emp -> fields
-      | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
-        ->
-          fields
-      | Bwd.Snoc (fields, _) -> extract_prefix fields
-    in
-    let derived = { derived with fields = extract_prefix derived.fields } in
-    let base = { base with fields = extract_prefix base.fields } in
-    concatenate_recursive ~derived ~base
-
-  let concatenate_recursive_prefix ~prefix ~(derived : Linkage.t)
-      ~(base : Linkage.t) =
-    let rec calculate_dependencies fields =
-      match fields with
-      | Bwd.Emp -> concatenate_recursive ~base ~derived
-      | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
-        ->
-          concatenate_recursive ~base:{ base with fields } ~derived
-      | Bwd.Snoc (fields, _) -> calculate_dependencies fields
-    in
-    calculate_dependencies base.fields
+    { linkage with fields }  
 end
 
 (* A linkage we are currently constructing *)

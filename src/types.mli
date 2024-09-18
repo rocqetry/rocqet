@@ -155,18 +155,7 @@ and Linkage : sig
 
   val path_substitution_elem :
     LinkageElem.t -> source:Names.Id.t -> target:Names.Id.t -> LinkageElem.t
-
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
-  val concatenate_elem : LinkageElem.t -> LinkageElem.t -> LinkageElem.t
-  val concatenate_recursive : derived:t -> base:t -> t
-  val concatenate : derived:t -> base:t -> t
-  val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
-
-  val concatenate_recursive_prefix :
-    prefix:Names.Id.t -> derived:t -> base:t -> t
-
-  val pointwise_concatenate_recursive_prefix :
-    prefix:Names.Id.t -> derived:t -> base:t -> t
 end
 
 and LinkageCtx : sig
