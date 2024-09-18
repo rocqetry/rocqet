@@ -234,9 +234,10 @@ module rec LinkageElem : sig
     | InductiveDefinition of {
         inductive : VernacInductive.t;
         recursors : Recursors.t;
-        compiled_context : CompiledModuleType.t;
+        compiled_context : CompiledModuleType.t;        
         compiled_signature : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;        
+        compiled_impl : CompiledModule.t;
+        (* default_ctx_params : CompiledModule.t list;*)
       }
     (* All names bound by an inductive definition:
        inductive type names and constructor names *)

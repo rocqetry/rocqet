@@ -1030,6 +1030,13 @@ let reparameterize_less
    *)
   Errors.fail ~info:"TODO: reparam less"
 
+  Module Type ty_dummy回10
+       (self__A: BCtx回1)
+       (self__B: CCtx回2 self__A)
+       (self__C: DCtx回3 self__A self__B)
+       (self__D: ty_dummyCtx回9 self__A self__B self__C).
+
+  
 let reparameterize
       ~(derived: Linkage.t)
       ~(base: Linkage.t) =
@@ -1047,3 +1054,44 @@ let reparameterize
         derived to it *)
     Errors.fail ~info:"TODO: reparam less"    
 *)
+
+let compile_default_params
+      ~(context: (Names.Id.t * Constrexpr.module_ast) list)
+    : CompiledModule.t list =
+  let compile ~(names: CompiledModule.t list) =    
+    let module_name = Naming.fresh_name ~prefix:"Reparam" in
+    let f = List.hd names in
+    let arguments = List.tl names in
+    B.run @@ 
+      B.define_module ~module_name
+        ~parameters:[]
+        ~body:(fun _ctx ->
+          let module_expr =
+            Termutils.apply_module
+              ~functor_expr:(Termutils.ident_to_module_expr f)
+              ~arguments
+          in
+          B.include_module ~module_expr)
+  in 
+  let rec extract_idents (expr : Constrexpr.module_ast) =
+    match expr.v with
+    | Constrexpr.CMident name -> [name]
+    | Constrexpr.CMapply (rest, name) -> name :: extract_idents rest
+    | Constrexpr.CMwith (_, _) -> Errors.fail ~info:"extract_idents: too complex to extract ident"
+  in
+  let find (map : (Libnames.qualid * CompiledModule.t) Bwd.t) (name : Libnames.qualid) =
+    map
+    |> Bwd.to_list
+    |> List.assoc name
+  in 
+  let mapping : (Libnames.qualid * CompiledModule.t) Bwd.t = Bwd.Emp in  
+  List.fold_left
+    (fun map (name, expr) ->
+      let name = Libnames.qualid_of_ident name in
+      let names = List.map (find map) (extract_idents expr) in
+      let compiled = compile ~names in      
+      Bwd.Snoc (map, (name, compiled)))
+    mapping
+    context  
+  |> Bwd.map snd
+  |> Bwd.to_list
