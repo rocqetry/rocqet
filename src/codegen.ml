@@ -723,7 +723,7 @@ let compile_linkage (linkage : Linkage.t) =
   let rec compile_fields fields (ctx : CompiledModule.t list) =
     match fields with
     | Bwd.Emp -> B.return ()
-    | Bwd.Snoc
+    | Snoc
         ( fields,
           ( _,
             LinkageElem.RecursorDefinition
@@ -742,7 +742,7 @@ let compile_linkage (linkage : Linkage.t) =
           ~inductive_name ~recursor_name
           ~handlers ~inductive_path
           ~suffix
-    | Bwd.Snoc
+    | Snoc
         ( fields,
           ( _,
             TheoremDefinition
@@ -757,23 +757,24 @@ let compile_linkage (linkage : Linkage.t) =
           ~inductive_path
           ~suffix
           ~handler_names:handlers
-    | Bwd.Snoc (fields, (_, ComputationalAxiom { name; axiom; _ } )) ->
+    | Snoc (fields, (_, ComputationalAxiom { name; axiom; _ } )) ->
        let open B in
        let* _ = compile_fields fields ctx in
        compile_computational_axiom_implementation ~axiom_name:name ~axiom_expr:axiom
-    | Bwd.Snoc (fields, (_, InductiveConstr _)) ->
-       (* An implementation will be provided by the inductive *)       
-       compile_fields fields ctx
-    | Bwd.Snoc (fields, (_, FamilyDefinition { compiled_impl; _ }))
-    | Bwd.Snoc (fields, (_, MetaDataSection { compiled_impl; _ }))
-    | Bwd.Snoc
+    
+    (* An implementation will be provided by the inductive *)       
+    | Snoc (fields, (_, InductiveConstr _)) -> compile_fields fields ctx
+
+    | Snoc (fields, (_, FamilyDefinition { compiled_impl; _ }))
+    | Snoc (fields, (_, MetaDataSection { compiled_impl; _ }))
+    | Snoc
         (fields, (_, OpaqueFieldDefinition { compiled_impl; _ }))
-    | Bwd.Snoc
+    | Snoc
         ( fields,
           ( _,
             InductiveDefinition
               { compiled_impl; _ } ) )
-    | Bwd.Snoc (fields, (_, FieldDefinition { compiled_impl; _ })) ->
+    | Snoc (fields, (_, FieldDefinition { compiled_impl; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in
         let module_expr = Termutils.ident_to_module_expr compiled_impl in
@@ -783,7 +784,7 @@ let compile_linkage (linkage : Linkage.t) =
             ~arguments:(Linkage.context_parameters linkage)
         in
         let* _ = include_module ~module_expr in
-        return ()    
+        return ()
   in
   B.run
   @@ B.define_module
@@ -994,3 +995,55 @@ let compile_handler_cases
          in
          return ())
 
+(*
+let reparameterize_less
+      ~(derived: Linkage.t)
+      ~(base: Linkage.t) =
+  (* Assumption: derived.context > base.context *)
+  (* 1. Get the extra parameters in base, param_diff *)  
+  (* 2. Append it to the context of base *)
+  (* 3. Reparam contexts, impl, and signatures *)
+  (*
+    
+    base.context = A_b, B_b
+    derived.context = A_d, B_d, C
+
+    --------------------------------------------
+    Q: Do we need to ensure the following hold?
+       1. A_b == A_d
+       2. B_b = B_d
+       
+    A: Actually we need the following to hold: 
+       1. A_d <: A_b 
+       2. B_d <: B_b
+    ---------------------------------------------
+       
+    module compiled_signature (A_b) (B_b) {
+      ...
+    }
+       ===>
+
+    module new_compiled_signature (A_d) (B_d) (C) {
+      compiled_signature (A_d) (B_d)
+    }
+    
+   *)
+  Errors.fail ~info:"TODO: reparam less"
+
+let reparameterize
+      ~(derived: Linkage.t)
+      ~(base: Linkage.t) =
+  let derived_len = Bwd.length derived.context in
+  let base_len = Bwd.length base.context in
+  let compare_result = compare derived_len base_len in
+  if compare_result = 0 then base
+  else if compare_result < 0 then
+     (* The base context has more params.
+        We need to reparameterize via adding dummy args *)
+    Errors.fail ~info:"TODO: reparam more"
+  else (* if compare_result > 0 *)
+    (* The base context has less params.
+        We just add extra unused params from the
+        derived to it *)
+    Errors.fail ~info:"TODO: reparam less"    
+*)

@@ -149,8 +149,7 @@ and Linkage : sig
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
-  val context_parameters : t -> Libnames.qualid list
-  val context_match : t -> t -> [ `Equal | `Less | `More ]
+  val context_parameters : t -> Libnames.qualid list  
   val top_most_self_name : t -> Names.Id.t
 
   val path_substitution_elem :

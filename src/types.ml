@@ -250,7 +250,7 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
       }
-    | FieldDefinition of {        
+    | FieldDefinition of {
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
       }
@@ -300,11 +300,9 @@ and Linkage : sig
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
-  val context_parameters : t -> Libnames.qualid list
-  val context_match : t -> t -> [ `Equal | `Less | `More ]
+  val context_parameters : t -> Libnames.qualid list  
   val top_most_self_name : t -> Names.Id.t
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
-
   val path_substitution_elem :
     LinkageElem.t -> source:Names.Id.t -> target:Names.Id.t -> LinkageElem.t
 end = struct
@@ -318,14 +316,7 @@ end = struct
   let context_parameters linkage =
     linkage.context |> Bwd.map fst
     |> Bwd.map Libnames.qualid_of_ident
-    |> Bwd.to_list
-
-  let context_match left right =
-    let left_length = Bwd.length left.context
-    and right_length = Bwd.length right.context in
-    if left_length < right_length then `Less
-    else if left_length > right_length then `More
-    else `Equal
+    |> Bwd.to_list  
 
   let top_most_self_name linkage =
     match Bwd.to_list linkage.context with

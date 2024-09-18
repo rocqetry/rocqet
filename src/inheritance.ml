@@ -2,7 +2,7 @@ open Env
 open Types
 open Bwd
 
-(* Generic inheritance operators *)
+(* Inheritance operators *)
 
 let lookup_field_in_base ~field ~context =    
   Context.base_linkage_elem context ~field
@@ -16,8 +16,8 @@ let inherit_one
       ~(linkage: Linkage.t) =
   let rec find_field = function
     | Bwd.Emp -> false
-    | Bwd.Snoc (_, (field, _)) when Names.Id.equal name field -> true
-    | Bwd.Snoc (fields, _) -> find_field fields
+    | Snoc (_, (field, _)) when Names.Id.equal name field -> true
+    | Snoc (fields, _) -> find_field fields
   in  
   match find_field linkage.fields with
   | true -> linkage (* Field has already been inherited *)
@@ -89,8 +89,8 @@ let inherit_name
         ~(linkage: Linkage.t) =
     let rec find_element = function
       | Bwd.Emp -> None
-      | Bwd.Snoc (_, (field, element)) when Names.Id.equal name field -> Some element
-      | Bwd.Snoc (fields, _) -> find_element fields
+      | Snoc (_, (field, element)) when Names.Id.equal name field -> Some element
+      | Snoc (fields, _) -> find_element fields
     in
     let element = find_element base.fields in
     match element with
@@ -110,7 +110,7 @@ let inherit_name
      let linkage = inherit_deps ~field:name ~base ~derived:linkage in
      let linkage = inherit_name ~name ~base ~linkage in     
      Context.replace ~linkage
-  | _ -> Errors.fail ~info:"There is not base to inherit from"
+  | _ -> Errors.fail ~info:"There is no base to inherit from"
   
 
 (** This updates the context so you must call Context.get again after using this *)

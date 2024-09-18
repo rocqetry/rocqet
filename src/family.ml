@@ -135,7 +135,7 @@ let open_family_with_base ~name ~base =
                    ~derived:linkage
                    ~base:base_linkage)
           in
-          let linkage = { linkage with base; } in 
+          let linkage = { linkage with base; } in
           let context = LinkageCtx.Toplevel linkage in          
           Context.destructive_update (Some context)
 

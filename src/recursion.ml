@@ -305,7 +305,9 @@ let add_handler ~name ~arguments ~handler =
             Termutils.mk_lambda arguments handler
       in
       let () = Definition.add_definition ~name:case_name ~body_type:ty handler in      
-      Ctx.add_handler name 
+      Ctx.add_handler name
+
+(* Extra utilities/functions to support a nice syntax for FRecursion *)
 
 let extract = function
   | [] -> None (* Empty list case *)
