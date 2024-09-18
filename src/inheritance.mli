@@ -18,11 +18,6 @@ val inherit_elements :
    linkage:Linkage.t ->
    Linkage.t
 
-val ensure_matching_parameters :
-  derived:Linkage.t ->
-  base:Linkage.t ->
-  Linkage.t
-
 val linkage_concatenate :
   derived:Linkage.t ->
   base:Linkage.t ->

@@ -27,12 +27,7 @@ let open_family name =
       in
       let furthers =
         (LinkageCtx.Nested (context, linkage))
-        |> Context.further_bound_linkage
-        |> List.map (fun (subst, further) ->
-               subst,
-               Inheritance.ensure_matching_parameters
-                 ~derived:linkage
-                 ~base:further)
+        |> Context.further_bound_linkage        
       in      
       let base =
         match furthers with
@@ -78,12 +73,7 @@ let open_family_with_base ~name ~base =
                 base = Some base_linkage;
                 fields = Bwd.Emp;
               }
-          in          
-          let base_linkage =
-            Inheritance.ensure_matching_parameters
-                   ~derived:linkage
-                   ~base:base_linkage
-          in
+          in                    
           let base = Some base_linkage in
           let linkage = { linkage with base; } in
           let context = LinkageCtx.Nested (context, linkage) in          
@@ -94,12 +84,7 @@ let open_family_with_base ~name ~base =
           in
           let furthers =
             context
-            |> Context.further_bound_linkage
-            |> List.map (fun (subst, further) ->
-                   subst,
-                   Inheritance.ensure_matching_parameters
-                     ~derived:linkage
-                     ~base:further)
+            |> Context.further_bound_linkage            
           in
           let further =
             match furthers with
@@ -130,11 +115,7 @@ let open_family_with_base ~name ~base =
                 fields = Bwd.Emp;
               }
           in
-          let base =
-            Some(Inheritance.ensure_matching_parameters
-                   ~derived:linkage
-                   ~base:base_linkage)
-          in
+          let base = Some base_linkage in
           let linkage = { linkage with base; } in
           let context = LinkageCtx.Toplevel linkage in          
           Context.destructive_update (Some context)

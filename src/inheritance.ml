@@ -135,26 +135,7 @@ let rec find_and_remove name fields =
        let result, rest = find_and_remove name fields in
        result, Bwd.Snoc (rest, (field, elem))
 
-(** Performs reparameterization of base wrt derived *)
-let ensure_matching_parameters
-      ~(derived: Linkage.t)
-      ~(base: Linkage.t) =
-  let derived_len = Bwd.length derived.context in
-  let base_len = Bwd.length base.context in
-  let compare_result = compare derived_len base_len in
-  if compare_result = 0 then base
-  else if compare_result < 0 then
-     (* The base context has more params.
-        We need to reparameterize via adding dummy args *)
-    Errors.fail ~info:"TODO: reparam more"
-  else (* if compare_result > 0 *)
-    (* The base context has less params.
-        We just add extra unused params from the
-        derived to it *)
-    Errors.fail ~info:"TODO: reparam less"    
-
 let rec linkage_concatenate ~(derived: Linkage.t) ~(base: Linkage.t) =  
-  let base = ensure_matching_parameters ~derived ~base in
   let rec loop linkage derived_fields base_fields =
     match derived_fields with
     | [] -> inherit_elements ~elements:(Bwd.to_list base_fields) ~linkage
