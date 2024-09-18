@@ -130,7 +130,7 @@ let inherit_name
   | _, _ -> ()
   
 
-(* This updates the context so you must call Context.get again after using this *)
+(** This updates the context so you must call Context.get again after using this *)
 let inherit_dependencies ~prefix =
   let context = Context.get () in
   let base = Context.base_linkage context in

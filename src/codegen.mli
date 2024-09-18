@@ -118,5 +118,3 @@ val compile_lemma_signature :
   parameters:(Names.Id.t * Constrexpr.module_ast) list ->
   CompiledModuleType.t
 
-(* Linkage computation *)
-val compute_linkage : LinkageCtx.t option -> Linkage.t -> Linkage.t
