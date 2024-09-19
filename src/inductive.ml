@@ -91,6 +91,7 @@ let add_new_inductive_definition ~inductive ~inductive_name =
   ()  
 
 let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name =
+  Inheritance.inherit_dependencies ~prefix:inductive_name;
   let inductive = 
       VernacInductive.concatenate
           ~base:inherited_inductive
