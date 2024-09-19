@@ -222,11 +222,18 @@ let close_theorem () =
   in
   rec_principle_prefix |> ignore;
   let compiled_impl = DB.end_module () in
+  let default_ctx_params =
+    let context = Context.get () in 
+    context
+    |> Context.family_linkage
+    |> function { default_ctx_params; _ } -> default_ctx_params
+  in
   let goal_elem =
     LinkageElem.FieldDefinition
       {
         compiled_context;
-        compiled_impl
+        compiled_impl;
+        default_ctx_params;
       }
   in
   (* Add the goal as a field *)
@@ -265,7 +272,8 @@ let close_theorem () =
         compiled_context;        
         handlers = all_handlers;
         inductive_path;
-        suffix;        
+        suffix;
+        default_ctx_params
       }
   in
   Context.add_field ~name ~elem;

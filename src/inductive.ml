@@ -6,6 +6,11 @@ let inductive_constr_name = Nameops.add_prefix "ind"
 let add_inductive_constr ~name ~ty =
   Inheritance.inherit_dependencies ~prefix:name;
   let context = Context.get () in
+  let default_ctx_params =
+    context
+    |> Context.family_linkage
+    |> function { default_ctx_params; _ } -> default_ctx_params
+  in
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:name context
   in
@@ -15,7 +20,7 @@ let add_inductive_constr ~name ~ty =
   in
   let elem =
     LinkageElem.InductiveConstr
-      {  compiled_context; compiled_signature }
+      {  compiled_context; compiled_signature; default_ctx_params }
   in
   (* Fake names becuase the inductive will already
      have the names and expose then to the resolver
@@ -41,6 +46,11 @@ let types inductive =
 let add_new_inductive_definition ~inductive ~inductive_name =  
   Inheritance.inherit_dependencies ~prefix:inductive_name;
   let context = Context.get () in
+  let default_ctx_params =
+    context
+    |> Context.family_linkage
+    |> function { default_ctx_params; _ } -> default_ctx_params
+  in
   let inductive = Resolver.resolve_inductive ~context ~inductive in
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:inductive_name context
@@ -63,6 +73,7 @@ let add_new_inductive_definition ~inductive ~inductive_name =
         compiled_impl;
         compiled_signature;
         recursors;
+        default_ctx_params;
       }
   in
   Context.add_field ~name:inductive_name ~elem;
@@ -86,6 +97,11 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name 
           ~derived:extension
   in  
   let context = Context.get () in
+  let default_ctx_params =
+    context
+    |> Context.family_linkage
+    |> function { default_ctx_params; _ } -> default_ctx_params
+  in
   let inductive = Resolver.resolve_inductive ~context ~inductive in
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:inductive_name context
@@ -108,6 +124,7 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name 
         compiled_impl;
         compiled_signature;
         recursors;
+        default_ctx_params;
       }
   in
   Context.add_field ~name:inductive_name ~elem;

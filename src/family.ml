@@ -11,6 +11,10 @@ let open_family name =
       let _, parameters =
         Codegen.compile_linkage_context ~field_name:name context
       in
+      let default_ctx_params =
+        Codegen.compile_default_params
+          ~context:parameters
+      in 
       let linkage =
         Linkage.
           {
@@ -18,6 +22,7 @@ let open_family name =
             name;
             base = None;
             fields = Bwd.Emp;
+            default_ctx_params
           }
       in
       let subst (target, source) l =
@@ -44,7 +49,7 @@ let open_family name =
       Context.destructive_update (Some (LinkageCtx.Nested (context, linkage)))
   | None ->
       let linkage =
-        Linkage.{ context = Bwd.Emp; name; base = None; fields = Bwd.Emp }
+        Linkage.{ context = Bwd.Emp; name; base = None; fields = Bwd.Emp; default_ctx_params = [] }
       in
       Context.destructive_update (Some (LinkageCtx.Toplevel linkage))
 
@@ -65,6 +70,10 @@ let open_family_with_base ~name ~base =
           let _, parameters =
             Codegen.compile_linkage_context ~field_name:name context
           in
+          let default_ctx_params =
+            Codegen.compile_default_params
+              ~context:parameters
+          in 
           let linkage =
             Linkage.
               {
@@ -72,6 +81,7 @@ let open_family_with_base ~name ~base =
                 name;
                 base = Some base_linkage;
                 fields = Bwd.Emp;
+                default_ctx_params;
               }
           in                    
           let base = Some base_linkage in
@@ -113,6 +123,7 @@ let open_family_with_base ~name ~base =
                 name;
                 base = Some base_linkage;
                 fields = Bwd.Emp;
+                default_ctx_params = [];
               }
           in
           let base = Some base_linkage in
@@ -159,12 +170,20 @@ let close_family () =
                   "We should have parameters since we're in a nested context"
           | Bwd.Snoc (_, (_, name)) -> extract_name name
         in
+        let default_ctx_params =
+          match linkage.context with
+          | Bwd.Emp -> []
+          | Bwd.Snoc (context, _) ->
+             Codegen.compile_default_params
+               ~context:(Bwd.to_list context)
+        in
         LinkageElem.FamilyDefinition
           {
             linkage;
             compiled_context;
             compiled_signature = signature;
             compiled_impl = impl;
+            default_ctx_params;
           }
       in      
       Context.destructive_update (Some upper);

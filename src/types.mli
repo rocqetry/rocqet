@@ -89,26 +89,31 @@ module rec LinkageElem : sig
         recursors : Recursors.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;        
+        compiled_impl : CompiledModule.t;
+        default_ctx_params : CompiledModule.t list;
       }
     | InductiveConstr of {
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
+        default_ctx_params : CompiledModule.t list;
       }
     | FamilyDefinition of {
         linkage : Linkage.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
+        default_ctx_params : CompiledModule.t list;
       }
     | FieldDefinition of {        
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModuleType.t;
+        default_ctx_params : CompiledModule.t list;
       }
     | OpaqueFieldDefinition of {
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
+        default_ctx_params : CompiledModule.t list;
       }
     | RecursorDefinition of {
         names : Names.Id.t list;        
@@ -118,7 +123,8 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         arguments : Names.Id.t list;
-        prefix : Libnames.qualid;        
+        prefix : Libnames.qualid;
+        default_ctx_params : CompiledModule.t list;
       }    
     | TheoremDefinition of {
         names : Names.Id.t list;        
@@ -126,27 +132,31 @@ module rec LinkageElem : sig
         inductive_path : Libnames.qualid;
         handlers : Names.Id.t list;
         compiled_context : CompiledModuleType.t;
-        compiled_signature : CompiledModuleType.t;        
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : CompiledModule.t list;
       }
     | ComputationalAxiom of {
         name : Names.Id.t;
         axiom : Constrexpr.constr_expr;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
+        default_ctx_params : CompiledModule.t list;
       }
     | MetaDataSection of {
         name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
+        default_ctx_params : CompiledModule.t list;
       }
 end
 
 and Linkage : sig
   type t = {
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
+    default_ctx_params : CompiledModule.t list;
     name : Names.Id.t;
     base : t option;
-    fields : (Names.Id.t * LinkageElem.t) Bwd.t;
+    fields : (Names.Id.t * LinkageElem.t) Bwd.t;    
   }
 
   val context_parameters : t -> Libnames.qualid list  

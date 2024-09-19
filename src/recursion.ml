@@ -58,6 +58,11 @@ let close_recursion () =
     constructors |> List.map fst
   in
   let context = Context.get () in
+  let default_ctx_params =
+    context
+    |> Context.family_linkage
+    |> function { default_ctx_params; _ } -> default_ctx_params
+  in
   let family = context |> Context.family_name |> Names.Id.to_string in
   let module_name =
     let name = Nameops.add_suffix (Nameops.add_prefix family name) "Ctx" in
@@ -83,7 +88,8 @@ let close_recursion () =
         compiled_context;
         suffix;        
         arguments;
-        prefix = rec_principle_prefix;        
+        prefix = rec_principle_prefix;
+        default_ctx_params;
       }
   in  
   Context.add_field ~name ~elem;
@@ -101,7 +107,7 @@ let close_recursion () =
            in
            let elem = 
               LinkageElem.ComputationalAxiom
-                { name = axiom_name; axiom; compiled_context; compiled_signature }
+                { name = axiom_name; axiom; compiled_context; compiled_signature; default_ctx_params }
            in
            Context.add_field ~name:axiom_name ~elem)
   in  

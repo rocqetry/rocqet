@@ -4,6 +4,11 @@ open Env
 let add_definition ~name ?body_type body_expr =
   Inheritance.inherit_dependencies ~prefix:name;
   let context = Context.get () in
+  let default_ctx_params =
+    context
+    |> Context.family_linkage
+    |> function { default_ctx_params; _ } -> default_ctx_params
+  in
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:name context
   in
@@ -18,6 +23,6 @@ let add_definition ~name ?body_type body_expr =
   in
   let elem =
     LinkageElem.FieldDefinition
-      {  compiled_context; compiled_impl }
+      { compiled_context; compiled_impl; default_ctx_params }
   in
   Context.add_field ~name ~elem

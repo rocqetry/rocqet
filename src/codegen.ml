@@ -584,7 +584,29 @@ let compile_theorem_implementation
   let* _ = define_term ~name recursor in
   return ()
 
-let compile_linkage_context ~field_name (context : LinkageCtx.t) :
+let normalize_parameters
+      ~(default_ctx_params : CompiledModule.t list)
+      ~(parameters : CompiledModule.t list) =
+  let default_params_len = List.length default_ctx_params in
+  let params_len = List.length parameters in
+  let compare_result = compare params_len default_params_len in
+  if compare_result = 0 then parameters
+  else if compare_result < 0 then
+     (* The base context has more params.
+        We need to reparameterize via adding dummy args *)
+    Errors.fail ~info:"TODO: reparam more"
+  else (* if compare_result > 0 *)
+    (* The base context has less params.
+        We just add extra unused params from the
+        derived to it *)
+    (*parameters
+    |> List.to_seq
+    |> Seq.take default_params_len
+    |> List.of_seq*)
+    Errors.fail ~info:"TODO: reparam less"
+
+let compile_linkage_context
+    ~field_name (context : LinkageCtx.t) :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
   let linkage =
     match context with
@@ -617,48 +639,54 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
       ( _,
         ( _,
           MetaDataSection
-            { compiled_context; compiled_impl = compiled_signature; _ } ) )
+            { default_ctx_params; compiled_context; compiled_impl = compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
         ( _,
           ComputationalAxiom
-            { compiled_context; compiled_signature; _ } ) )
+            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
         ( _,
           InductiveConstr
-            { compiled_context; compiled_signature; _ } ) )
+            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
         ( _,
           TheoremDefinition
-            { compiled_context; compiled_signature; _ } ) )
+            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
         ( _,
           OpaqueFieldDefinition
-            { compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          FamilyDefinition
-            { compiled_context; compiled_signature; _ } ) )
+            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
         ( _,
           FieldDefinition
-            { compiled_context; compiled_impl = compiled_signature; _ } ) )
+            { default_ctx_params; compiled_context; compiled_impl = compiled_signature; _ } ) )
+  | Bwd.Snoc
+      ( _,
+        ( _,
+          InductiveDefinition
+            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
+  | Bwd.Snoc
+      ( _,
+        ( _,
+          FamilyDefinition
+            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
         ( _,
           RecursorDefinition
-            { compiled_context; compiled_signature; _ } ) ) ->
-      let signature_name =
-        B.(
+            { default_ctx_params; compiled_context; compiled_signature; _ } ) ) ->     
+     let signature_name =       
+       B.(
           run
-          @@ define_moduletype ~module_name:module_name_ctx
+          @@ define_moduletype
+               ~module_name:module_name_ctx
                ~parameters:(Bwd.to_list linkage.context)
-               ~body:(fun _arguments ->
+               ~body:(fun _arguments ->                 
                  let ctx =
                    Termutils.apply_module
                      ~functor_expr:
@@ -666,6 +694,7 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
                      ~arguments:parameters
                  in
                  let* () = include_module ~module_expr:ctx in
+                 let parameters = normalize_parameters ~default_ctx_params ~parameters in
                  let signature =
                    Termutils.apply_module
                      ~functor_expr:
@@ -674,49 +703,14 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
                  in
                  let* () = include_module ~module_expr:signature in
                  return ()))
-      in
-      let signature =
-        Termutils.apply_module
-          ~functor_expr:(Termutils.ident_to_module_expr signature_name)
-          ~arguments:parameters
-      in
-      ( signature_name,
-        linkage.context @> [ (Naming.self_version linkage.name, signature) ] )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          InductiveDefinition
-            { compiled_context; compiled_signature; _ } ) )
-    ->
-      let signature_name =
-        B.(
-          run
-          @@ define_moduletype ~module_name:module_name_ctx
-               ~parameters:(Bwd.to_list linkage.context)
-               ~body:(fun _arguments ->
-                 let ctx =
-                   Termutils.apply_module
-                     ~functor_expr:
-                       (Termutils.ident_to_module_expr compiled_context)
-                     ~arguments:parameters
-                 in
-                 let* () = include_module ~module_expr:ctx in
-                 let signature =
-                   Termutils.apply_module
-                     ~functor_expr:
-                       (Termutils.ident_to_module_expr compiled_signature)
-                     ~arguments:parameters
-                 in
-                 let* () = include_module ~module_expr:signature in                 
-                 return ()))
-      in
-      let signature =
-        Termutils.apply_module
-          ~functor_expr:(Termutils.ident_to_module_expr signature_name)
-          ~arguments:parameters
-      in
-      ( signature_name,
-        linkage.context @> [ (Naming.self_version linkage.name, signature) ] )
+     in     
+     let signature =
+       Termutils.apply_module
+         ~functor_expr:(Termutils.ident_to_module_expr signature_name)
+         ~arguments:parameters
+     in
+     ( signature_name,
+       linkage.context @> [ (Naming.self_version linkage.name, signature) ] )   
 
 let compile_linkage (linkage : Linkage.t) =
   let Linkage.{ context; name; fields; _ } = linkage in
@@ -765,26 +759,28 @@ let compile_linkage (linkage : Linkage.t) =
     (* An implementation will be provided by the inductive *)       
     | Snoc (fields, (_, InductiveConstr _)) -> compile_fields fields ctx
 
-    | Snoc (fields, (_, FamilyDefinition { compiled_impl; _ }))
-    | Snoc (fields, (_, MetaDataSection { compiled_impl; _ }))
+    | Snoc (fields, (_, FamilyDefinition { default_ctx_params; compiled_impl; _ }))
+    | Snoc (fields, (_, MetaDataSection { default_ctx_params; compiled_impl; _ }))
     | Snoc
-        (fields, (_, OpaqueFieldDefinition { compiled_impl; _ }))
+        (fields, (_, OpaqueFieldDefinition { default_ctx_params; compiled_impl; _ }))
     | Snoc
         ( fields,
           ( _,
             InductiveDefinition
-              { compiled_impl; _ } ) )
-    | Snoc (fields, (_, FieldDefinition { compiled_impl; _ })) ->
-        let open B in
-        let* _ = compile_fields fields ctx in
-        let module_expr = Termutils.ident_to_module_expr compiled_impl in
-        let module_expr =
-          Termutils.apply_module
-            ~functor_expr:module_expr
-            ~arguments:(Linkage.context_parameters linkage)
-        in
-        let* _ = include_module ~module_expr in
-        return ()
+              { default_ctx_params; compiled_impl; _ } ) )
+    | Snoc (fields, (_, FieldDefinition { default_ctx_params; compiled_impl; _ })) ->
+       let open B in
+       let parameters = Linkage.context_parameters linkage in
+       let parameters = normalize_parameters ~default_ctx_params ~parameters in
+       let* _ = compile_fields fields ctx in
+       let module_expr = Termutils.ident_to_module_expr compiled_impl in
+       let module_expr =
+         Termutils.apply_module
+           ~functor_expr:module_expr
+           ~arguments:parameters
+       in
+       let* _ = include_module ~module_expr in
+       return ()
   in
   B.run
   @@ B.define_module
@@ -812,6 +808,11 @@ let compile_nested_linkage (linkage : Linkage.t) =
                    linkage.context |> Bwd.to_list |> List.map fst
                    |> List.map Libnames.qualid_of_ident
                  in
+                 let arguments =
+                   normalize_parameters
+                     ~default_ctx_params:linkage.default_ctx_params
+                     ~parameters:arguments
+                 in
                  let module_expr =
                    Termutils.apply_module
                      ~functor_expr:(Termutils.ident_to_module_expr body)
@@ -836,52 +837,52 @@ let compile_linkage_signature linkage =
         ( _,
           ( _,
             LinkageElem.FamilyDefinition
-              { compiled_context; compiled_signature; _ } ) )
+              { default_ctx_params; compiled_context; compiled_signature; _ } ) )
     | Snoc
         ( _,
           ( _,
             ComputationalAxiom
-              { compiled_context; compiled_signature; _ } ) )
+              { default_ctx_params; compiled_context; compiled_signature; _ } ) )
     | Snoc
         ( _,
           ( _,
             InductiveConstr
-              { compiled_context; compiled_signature; _ } ) )
+              { default_ctx_params; compiled_context; compiled_signature; _ } ) )
     | Snoc
         ( _,
           ( _,
             MetaDataSection
-              { compiled_context; compiled_impl = compiled_signature; _ } ) )
+              { default_ctx_params; compiled_context; compiled_impl = compiled_signature; _ } ) )
     | Snoc
         ( _,
           ( _,
             FieldDefinition
-              { compiled_context; compiled_impl = compiled_signature; _ } ) )    
+              { default_ctx_params; compiled_context; compiled_impl = compiled_signature; _ } ) )    
     | Bwd.Snoc
         ( _,
           ( _,
             TheoremDefinition
-              { compiled_context; compiled_signature; _ } ) )
+              { default_ctx_params; compiled_context; compiled_signature; _ } ) )
     | Bwd.Snoc
         ( _,
           ( _,
             OpaqueFieldDefinition
-              { compiled_context; compiled_signature; _ } ) )
+              { default_ctx_params; compiled_context; compiled_signature; _ } ) )
     | Bwd.Snoc
         ( _,
           ( _,
             InductiveDefinition
-              { compiled_context; compiled_signature; _ } )
+              { default_ctx_params; compiled_context; compiled_signature; _ } )
         )
     | Bwd.Snoc
         ( _,
           ( _,
             RecursorDefinition
-              { compiled_context; compiled_signature; _ } ) ) ->
+              { default_ctx_params; compiled_context; compiled_signature; _ } ) ) ->        
         B.(
           run
           @@ define_moduletype ~module_name:helper
-               ~parameters:(Bwd.to_list context) ~body:(fun ctx ->
+               ~parameters:(Bwd.to_list context) ~body:(fun ctx ->                 
                  let context_module_expr =
                    Termutils.apply_module
                      ~functor_expr:
@@ -889,6 +890,7 @@ let compile_linkage_signature linkage =
                      ~arguments:ctx
                  in
                  let* _ = include_module ~module_expr:context_module_expr in
+                 let ctx = normalize_parameters ~default_ctx_params ~parameters:ctx in
                  let signature_module_expr =
                    Termutils.apply_module
                      ~functor_expr:
@@ -1055,6 +1057,9 @@ let reparameterize
     Errors.fail ~info:"TODO: reparam less"    
 *)
 
+
+(* Note that this is the context parameter,
+   not the parameters to a field *)
 let compile_default_params
       ~(context: (Names.Id.t * Constrexpr.module_ast) list)
     : CompiledModule.t list =
@@ -1080,15 +1085,22 @@ let compile_default_params
     | Constrexpr.CMwith (_, _) -> Errors.fail ~info:"extract_idents: too complex to extract ident"
   in
   let find (map : (Libnames.qualid * CompiledModule.t) Bwd.t) (name : Libnames.qualid) =
-    map
-    |> Bwd.to_list
-    |> List.assoc name
+    match map |> Bwd.to_list |> List.assoc name with
+    | name -> name
+    | exception Not_found ->
+       let s = Printf.sprintf "%s was not found" (Pretty.pretty_qualid name) in
+       failwith s 
+    (*| None -> name
+    | Some self -> self*)
   in 
   let mapping : (Libnames.qualid * CompiledModule.t) Bwd.t = Bwd.Emp in  
   List.fold_left
     (fun map (name, expr) ->
       let name = Libnames.qualid_of_ident name in
-      let names = List.map (find map) (extract_idents expr) in
+      let names = expr |> extract_idents |> List.rev in
+      names |> List.iter (fun p -> Printf.printf "N: %s\n" (Pretty.pretty_qualid p));
+      let f, args = List.hd names, List.tl names in
+      let names = f :: List.map (find map) args in
       let compiled = compile ~names in      
       Bwd.Snoc (map, (name, compiled)))
     mapping
