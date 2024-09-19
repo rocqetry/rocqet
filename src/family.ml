@@ -85,15 +85,14 @@ let open_family_with_base ~name ~base =
               }
           in                    
           let base = Some base_linkage in
-          let linkage = { linkage with base; } in
-          let context = LinkageCtx.Nested (context, linkage) in          
+          let linkage = { linkage with base; } in          
           let subst (target, source) l =
             Linkage.path_subtitution l
               ~source:(Naming.self_version source)
               ~target:(Naming.self_version target)
           in
           let furthers =
-            context
+            LinkageCtx.Nested (context, linkage)
             |> Context.further_bound_linkage            
           in
           let further =

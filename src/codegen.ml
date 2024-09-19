@@ -599,11 +599,10 @@ let normalize_parameters
     (* The base context has less params.
         We just add extra unused params from the
         derived to it *)
-    (*parameters
+    parameters
     |> List.to_seq
     |> Seq.take default_params_len
-    |> List.of_seq*)
-    Errors.fail ~info:"TODO: reparam less"
+    |> List.of_seq    
 
 let compile_linkage_context
     ~field_name (context : LinkageCtx.t) :
