@@ -27,8 +27,8 @@ let rec linear_ctx_mapping context =
         let names =
           inductive
           |> VernacInductive.extract_all_names_with_type
-          |> List.concat_map (fun (_, constrs) ->
-                 constrs
+          |> List.concat_map (fun (head, constrs) ->
+                 (head :: constrs)
                  |> List.map (fun (name, _) ->
                         (name, Naming.self_version linkage.name)))
         in        
