@@ -92,14 +92,14 @@ let close_recursion () =
         default_ctx_params;
       }
   in  
-  Context.add_field ~name ~elem;
-  let context = Context.get () in 
-  let compiled_context, parameters =
-    Codegen.compile_linkage_context ~field_name:module_name context
-  in  
+  Context.add_field ~name ~elem;  
   let _ =    
     implementing_handlers
     |> List.iter (fun constructor_name ->
+           let context = Context.get () in 
+           let compiled_context, parameters =
+             Codegen.compile_linkage_context ~field_name:module_name context
+           in
            let axiom_name, axiom, compiled_signature =
              Codegen.compile_computational_axiom_signature
                ~ctx:parameters ~constructor_name ~inductive
