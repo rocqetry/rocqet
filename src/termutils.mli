@@ -96,6 +96,8 @@ val mk_lambda_with_type :
 (* fun (x : ...) -> forall (x : ...) *)
 val lambda_to_prod : Constrexpr.constr_expr -> Constrexpr.constr_expr
 
+val extract_functor_name : Constrexpr.module_ast -> CompiledModuleType.t
+
 val extract_handler_types_from_principle : 
     inductive:VernacInductive.t -> 
     principles:(Names.Id.t list * Constrexpr.constr_expr) RecursorStore.t ->

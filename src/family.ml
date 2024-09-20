@@ -86,7 +86,7 @@ let open_family_with_base ~name ~base =
                 default_ctx_params;
               }
           in                              
-          let context = LinkageCtx.Nested (context, linkage) in          
+          let context = LinkageCtx.Nested (context, linkage) in
           Checks.check_further_binding_structure context;
           Context.destructive_update (Some context)
       | None ->
@@ -114,7 +114,7 @@ let close_family () =
            let elements = Bwd.to_list base_linkage.fields in 
            Inheritance.inherit_elements ~elements ~linkage ~context
       in      
-      Context.destructive_update None;      
+      Context.destructive_update None;
       let _impl = Codegen.compile_linkage linkage in
       Linkages.add linkage
   | LinkageCtx.Nested (upper, linkage) ->
@@ -128,27 +128,16 @@ let close_family () =
       let signature = Codegen.compile_linkage_signature linkage in
       let impl = Codegen.compile_nested_linkage linkage in
       let elem =
-        let compiled_context =
-          let rec extract_name (name : Constrexpr.module_ast) =
-            match name.v with
-            | Constrexpr.CMident name -> name
-            | Constrexpr.CMapply (name, _) -> extract_name name
-            | Constrexpr.CMwith (name, _) -> extract_name name
-          in
+        let compiled_context =          
           match linkage.context with
           | Bwd.Emp ->
               Errors.fail
                 ~info:
-                  "We should have parameters since we're in a nested context"
-          | Bwd.Snoc (_, (_, name)) -> extract_name name
+                "close_family: Couldn't get compiled \
+                 context from parameters"
+          | Bwd.Snoc (_, (_, name)) -> Termutils.extract_functor_name name
         in
-        let default_ctx_params =
-          match linkage.context with
-          | Bwd.Emp -> []
-          | Bwd.Snoc (context, _) ->
-             Codegen.compile_default_params
-               ~context:(Bwd.to_list context)
-        in
+        let default_ctx_params = upper |> Context.family_linkage |> function l -> l.default_ctx_params in          
         LinkageElem.FamilyDefinition
           {
             linkage;
