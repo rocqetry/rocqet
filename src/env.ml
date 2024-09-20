@@ -97,7 +97,8 @@ module Context = struct
                         (Bwd.Snoc (path, linkage.name), derived, base)))
         in
         let current =
-          linkage.base |> Option.map (fun base -> (Bwd.Emp, linkage, base))
+          linkage.base
+          |> Option.map (fun base -> (Bwd.Emp, linkage, base))
         in
         current :: result
 
@@ -256,7 +257,8 @@ module Context = struct
     match context with
     | LinkageCtx.Toplevel _ -> []
     | LinkageCtx.Nested (_, l) -> (
-        context |> walk_up_linkage_context
+        context
+        |> walk_up_linkage_context
         |> List.filter_map (function
              | None -> None
              | Some (path, (derived : Linkage.t), (parent : Linkage.t)) ->
@@ -265,7 +267,7 @@ module Context = struct
                         ((derived.name, parent.name), further_bound)))
         |> function
         | [] -> []
-        | x :: xs -> (
+        | x :: xs -> (          
             (* We don't want to include the current family's base,
                as that is not a further bound linkage *)
             match l.base with None -> x :: xs | Some _ -> xs))

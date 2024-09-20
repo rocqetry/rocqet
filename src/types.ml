@@ -304,7 +304,7 @@ end =
 and Linkage : sig
   type t = {
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
-    default_ctx_params : CompiledModule.t list;  
+    default_ctx_params : CompiledModule.t list;
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;

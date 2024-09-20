@@ -182,6 +182,25 @@ and linkage_elem_concatenate
      in
      let context = LinkageCtx.Toplevel linkage in
      let field_name = inductive |> VernacInductive.extract_inductive_name in
+     
+     (*let _ =
+       Feedback.msg_warning Pp.(str "Concatenating " ++ str (Names.Id.to_string field_name));
+       derived.inductive
+       |> VernacInductive.extract_all_names
+       |> List.concat_map snd
+       |> List.iter (fun n -> Feedback.msg_warning Pp.(str "derived ctr: " ++ str (Names.Id.to_string n)););
+
+       base.inductive
+       |> VernacInductive.extract_all_names
+       |> List.concat_map snd
+       |> List.iter (fun n -> Feedback.msg_warning Pp.(str "base ctr: " ++ str (Names.Id.to_string n)););
+
+       inductive
+       |> VernacInductive.extract_all_names
+       |> List.concat_map snd
+       |> List.iter (fun n -> Feedback.msg_warning Pp.(str "result ctr: " ++ str (Names.Id.to_string n));)
+     in *)
+     
      let compiled_context, params = Codegen.compile_linkage_context ~field_name context in
      let compiled_impl, principles =
        Codegen.compile_inductive_implementation

@@ -14,38 +14,25 @@ let open_family name =
       let default_ctx_params =
         Codegen.compile_default_params
           ~context:parameters
+      in
+      let elem = Inheritance.lookup_field_in_base ~field:name ~context in
+      let base =
+        match elem with
+        | Some (LinkageElem.FamilyDefinition { linkage = further; _ }) -> Some further
+        | Some _ -> Errors.fail ~info:"Expected a family linkage element"
+        | None -> None
       in 
       let linkage =
         Linkage.
           {
             context = parameters |> Bwd.of_list;
             name;
-            base = None;
+            base;
             fields = Bwd.Emp;
             default_ctx_params
           }
-      in
-      let subst (target, source) l =
-            Linkage.path_subtitution l
-              ~source:(Naming.self_version source)
-              ~target:(Naming.self_version target)
-      in
-      let furthers =
-        (LinkageCtx.Nested (context, linkage))
-        |> Context.further_bound_linkage        
-      in      
-      let base =
-        match furthers with
-        | [] -> None
-        | (m, x) :: xs ->
-            let f (m, further) furthers =
-              Inheritance.linkage_concatenate ~derived:(subst m further) ~base:furthers
-            in
-            Some
-              (List.fold_right f xs (subst m x))
-      in
-      (* Check further binding structure? *)
-      let linkage = { linkage with base; } in
+      in            
+      (* Check further binding structure? *)      
       Context.destructive_update (Some (LinkageCtx.Nested (context, linkage)))
   | None ->
       let linkage =
@@ -73,44 +60,25 @@ let open_family_with_base ~name ~base =
           let default_ctx_params =
             Codegen.compile_default_params
               ~context:parameters
+          in
+          let elem = Inheritance.lookup_field_in_base ~field:name ~context in
+          let base =
+            match elem with
+            | Some (LinkageElem.FamilyDefinition { linkage = further; _ }) ->
+               Some (Inheritance.linkage_concatenate ~derived:further ~base:base_linkage)
+            | Some _ -> Errors.fail ~info:"Expected a family linkage element"
+            | None -> None
           in 
           let linkage =
             Linkage.
               {
                 context = parameters |> Bwd.of_list;
                 name;
-                base = Some base_linkage;
+                base;
                 fields = Bwd.Emp;
                 default_ctx_params;
               }
-          in                    
-          let base = Some base_linkage in
-          let linkage = { linkage with base; } in          
-          let subst (target, source) l =
-            Linkage.path_subtitution l
-              ~source:(Naming.self_version source)
-              ~target:(Naming.self_version target)
-          in
-          let furthers =
-            LinkageCtx.Nested (context, linkage)
-            |> Context.further_bound_linkage            
-          in
-          let further =
-            match furthers with
-            | [] -> None
-            | (m, x) :: xs ->
-                let f (m, further) furthers =
-                  Inheritance.linkage_concatenate ~derived:(subst m further) ~base:furthers
-                in
-                Some
-                  (List.fold_right f xs (subst m x))
-          in
-          let base =
-            match further with 
-            | None -> base
-            | Some further -> Some (Inheritance.linkage_concatenate ~derived:further ~base:base_linkage)
-          in
-          let linkage = { linkage with base; } in
+          in                              
           let context = LinkageCtx.Nested (context, linkage) in          
           Checks.check_further_binding_structure context;
           Context.destructive_update (Some context)
