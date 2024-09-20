@@ -135,9 +135,13 @@ let close_family () =
                 ~info:
                 "close_family: Couldn't get compiled \
                  context from parameters"
-          | Bwd.Snoc (_, (_, name)) -> Termutils.extract_functor_name name
+          | Bwd.Snoc (_, (_, mapply)) -> Termutils.extract_functor_name mapply
         in
-        let default_ctx_params = upper |> Context.family_linkage |> function l -> l.default_ctx_params in          
+        let default_ctx_params =
+          upper
+          |> Context.family_linkage
+          |> function { default_ctx_params; _ } -> default_ctx_params
+        in
         LinkageElem.FamilyDefinition
           {
             linkage;
@@ -146,6 +150,6 @@ let close_family () =
             compiled_impl = impl;
             default_ctx_params;
           }
-      in      
+      in
       Context.destructive_update (Some upper);
       Context.add_field ~name:linkage.name ~elem

@@ -600,6 +600,7 @@ let normalize_parameters
        Take only the required arguments. *)
     (* Not sure of the order of the arguments *)
     (* Maybe we should just keep track of argument names *)
+    (* Too messy! What are we really trying to do here? *)
     parameters
     |> List.rev
     |> List.to_seq    
@@ -947,13 +948,13 @@ let calculate_containing_family ~(inductive_path : Libnames.qualid)
   let resolved_path = Resolver.resolve_qualid ~context ~qualid:inductive_path in
   resolved_path |> Naming.path_to_list |> List.hd
 
-let rec remove_last lst =
-  match lst with
-  | [] -> failwith "Empty list"
-  | [ _ ] -> []
-  | x :: xs -> x :: remove_last xs
-
 let calculate_rec_principle_prefix ~inductive_path ~context =
+  let rec remove_last lst =
+     match lst with
+     | [] -> failwith "Empty list"
+     | [ _ ] -> []
+     | x :: xs -> x :: remove_last xs
+  in
   let containing_family =
     calculate_containing_family ~context ~inductive_path
   in
@@ -1091,17 +1092,20 @@ let compile_default_params
     match map |> Bwd.to_list |> List.assoc name with
     | name -> name
     | exception Not_found ->
-       let s = Printf.sprintf "%s was not found" (Pretty.pretty_qualid name) in
-       failwith s 
-    (*| None -> name
-    | Some self -> self*)
+       let info =
+         Printf.sprintf
+           "compile_default_params: \
+            %s was not found"
+           (Pretty.pretty_qualid name)
+       in
+       Errors.fail ~info
   in 
-  let mapping : (Libnames.qualid * CompiledModule.t) Bwd.t = Bwd.Emp in  
+  let mapping : (Libnames.qualid * CompiledModule.t) Bwd.t = Bwd.Emp in
+  (* This is too messy! TODO: make it *beautiful* *)
   List.fold_left
     (fun map (name, expr) ->
       let name = Libnames.qualid_of_ident name in
-      let names = expr |> extract_idents |> List.rev in
-      names |> List.iter (fun p -> Printf.printf "N: %s\n" (Pretty.pretty_qualid p));
+      let names = expr |> extract_idents |> List.rev in      
       let f, args = List.hd names, List.tl names in
       let names = f :: List.map (find map) args in
       let compiled = compile ~names in      

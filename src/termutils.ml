@@ -411,7 +411,7 @@ let rec lambda_to_prod (trm : Constrexpr.constr_expr) =
       Constrexpr_ops.mkProdCN binder (lambda_to_prod body)
   | _ -> trm
 
-(** Give a module application F A B C return F *)
+(** Given a module application [F (A) (B) (C)] return [F] *)
 let rec extract_functor_name (name : Constrexpr.module_ast) =
   match name.v with
   | Constrexpr.CMident name -> name

@@ -133,10 +133,7 @@ module Context = struct
                  | LinkageElem.FamilyDefinition { linkage; _ }
                    when Names.Id.equal name field_name ->
                      Some linkage
-                 | _ -> None)
-          |> function
-          | None -> Linkages.lookup name
-          | linkage -> linkage)
+                 | _ -> None))
       | LinkageCtx.Nested (context, linkage) -> (
           linkage.fields
           |> Bwd.find_map (fun (field_name, elem) ->

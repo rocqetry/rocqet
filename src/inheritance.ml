@@ -151,18 +151,27 @@ and inherit_one
                      family name. *)
                   let path = Libnames.qualid_of_ident base.name in
                   match Context.local_lookup context path with
-                  | None | Some _ ->
+                  | None ->
                      Feedback.msg_warning Pp.(str "Inheriting (No base): " ++ str (Names.Id.to_string family.linkage.name));
                      FamilyDefinition { family with compiled_context }
-                  (*| Some new_base ->
-                     Feedback.msg_warning Pp.(str "Inheriting (Base found): " ++ str (Names.Id.to_string family.linkage.name));
-                     (*if base <> new_base then *)
+                  | Some new_base ->
+                     Feedback.msg_warning
+                       Pp.(str "Inheriting (Base found): "
+                           ++ str (Names.Id.to_string family.linkage.name)
+                           ++ str " Base Name: " ++ str (Names.Id.to_string new_base.name)
+                     );
+                     if base <> new_base then
+                        let new_base =
+                            Linkage.path_subtitution new_base
+                              ~source:(Naming.self_version new_base.name)
+                              ~target:(Naming.self_version family.linkage.name)
+                        in
                         let linkage = linkage_concatenate ~context ~derived:family.linkage ~base:new_base in
                         let linkage = { linkage with base = Some new_base } in
                         let compiled_signature = Codegen.compile_linkage_signature linkage in
                         let compiled_impl = Codegen.compile_nested_linkage linkage in
-                        FamilyDefinition { family with linkage; compiled_signature; compiled_impl }*)
-                     (*else FamilyDefinition { family with compiled_context }*)
+                        FamilyDefinition { family with linkage; compiled_signature; compiled_impl }
+                     else FamilyDefinition { family with compiled_context }
              end 
 
           | ComputationalAxiom comp -> ComputationalAxiom { comp with compiled_context }
