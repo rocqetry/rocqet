@@ -34,7 +34,7 @@ let rec linkage_concatenate ~context ~(derived: Linkage.t) ~(base: Linkage.t) =
               ~context:(LinkageCtx.Toplevel linkage)
               ~derived:element ~base:base_element
               ~linkage
-          in
+          in          
           let linkage = inherit_one ~name ~element ~linkage ~context in
           loop linkage derived_fields base_fields
   in    
@@ -79,7 +79,7 @@ and linkage_elem_concatenate
          ~family_name:linkage.name
      in
      let recursors = Termutils.extract_handler_types_from_principle ~inductive ~principles in  
-     InductiveDefinition { derived with compiled_context; compiled_impl; recursors; }
+     InductiveDefinition { derived with inductive; compiled_context; compiled_impl; recursors; }
   | InductiveConstr derived, InductiveConstr _ ->
     InductiveConstr derived 
   | FamilyDefinition derived, FamilyDefinition base ->
@@ -151,17 +151,17 @@ and inherit_one
                      family name. *)
                   let path = Libnames.qualid_of_ident base.name in
                   match Context.local_lookup context path with
-                  | None ->
+                  | None | Some _ ->
                      Feedback.msg_warning Pp.(str "Inheriting (No base): " ++ str (Names.Id.to_string family.linkage.name));
                      FamilyDefinition { family with compiled_context }
-                  | Some new_base ->
+                  (*| Some new_base ->
                      Feedback.msg_warning Pp.(str "Inheriting (Base found): " ++ str (Names.Id.to_string family.linkage.name));
                      (*if base <> new_base then *)
                         let linkage = linkage_concatenate ~context ~derived:family.linkage ~base:new_base in
                         let linkage = { linkage with base = Some new_base } in
                         let compiled_signature = Codegen.compile_linkage_signature linkage in
                         let compiled_impl = Codegen.compile_nested_linkage linkage in
-                        FamilyDefinition { family with linkage; compiled_signature; compiled_impl }
+                        FamilyDefinition { family with linkage; compiled_signature; compiled_impl }*)
                      (*else FamilyDefinition { family with compiled_context }*)
              end 
 
@@ -172,6 +172,9 @@ and inherit_one
           | OpaqueFieldDefinition field -> OpaqueFieldDefinition { field with compiled_context }
 
           (* Exhaustiveness checks *)
+          (* We don't want to do exhaustiveness
+             checks when this function is called
+             from linkage concatenation *)
           | RecursorDefinition recursive -> RecursorDefinition { recursive with compiled_context }
           | TheoremDefinition theorem -> TheoremDefinition { theorem with compiled_context }
       in 
