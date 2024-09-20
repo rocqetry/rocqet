@@ -69,12 +69,12 @@ let open_family_with_base ~name ~base =
               ~context:parameters
           in
           let elem = Inheritance.lookup_field_in_base ~field:name ~context in
-          let base =
+          let base =            
             match elem with
-            | Some (LinkageElem.FamilyDefinition { linkage = further; _ }) ->
+            | Some (LinkageElem.FamilyDefinition { linkage = further; _ }) ->               
                Some (Inheritance.linkage_concatenate ~derived:further ~base:base_linkage)
             | Some _ -> Errors.fail ~info:"Expected a family linkage element"
-            | None -> None
+            | None -> Some base_linkage
           in
           let linkage =
             Linkage.
@@ -99,9 +99,7 @@ let open_family_with_base ~name ~base =
                 fields = Bwd.Emp;
                 default_ctx_params = [];
               }
-          in
-          let base = Some base_linkage in
-          let linkage = { linkage with base; } in
+          in          
           let context = LinkageCtx.Toplevel linkage in          
           Context.destructive_update (Some context)
 
@@ -124,7 +122,7 @@ let close_family () =
         match linkage.base with
         | None -> linkage
         | Some base_linkage ->
-           let elements = Bwd.to_list base_linkage.fields in 
+           let elements = Bwd.to_list base_linkage.fields in           
            Inheritance.inherit_elements ~elements ~linkage ~context
       in      
       let signature = Codegen.compile_linkage_signature linkage in
