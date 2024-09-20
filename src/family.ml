@@ -25,7 +25,7 @@ let open_family name =
       let linkage =
         Linkage.
           {
-            context = parameters |> Bwd.of_list;
+            context = Bwd.of_list parameters;
             name;
             base;
             fields = Bwd.Emp;
@@ -36,7 +36,14 @@ let open_family name =
       Context.destructive_update (Some (LinkageCtx.Nested (context, linkage)))
   | None ->
       let linkage =
-        Linkage.{ context = Bwd.Emp; name; base = None; fields = Bwd.Emp; default_ctx_params = [] }
+        Linkage.
+          {
+            context = Bwd.Emp;
+            name;
+            base = None;
+            fields = Bwd.Emp;
+            default_ctx_params = []
+          }
       in
       Context.destructive_update (Some (LinkageCtx.Toplevel linkage))
 
@@ -68,11 +75,11 @@ let open_family_with_base ~name ~base =
                Some (Inheritance.linkage_concatenate ~derived:further ~base:base_linkage)
             | Some _ -> Errors.fail ~info:"Expected a family linkage element"
             | None -> None
-          in 
+          in
           let linkage =
             Linkage.
               {
-                context = parameters |> Bwd.of_list;
+                context = Bwd.of_list parameters;
                 name;
                 base;
                 fields = Bwd.Emp;
