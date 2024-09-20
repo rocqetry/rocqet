@@ -121,6 +121,41 @@ module Context = struct
     | None -> Errors.fail ~info:"There is no current context"
     | Some context -> context
 
+  let local_lookup (context: LinkageCtx.t) (path : Libnames.qualid) =
+    let path = Naming.path_to_list path in
+    let name = List.hd path in
+    let rec walk context =
+      match context with
+      | LinkageCtx.Toplevel linkage -> (
+          linkage.fields
+          |> Bwd.find_map (fun (field_name, elem) ->
+                 match elem with
+                 | LinkageElem.FamilyDefinition { linkage; _ }
+                   when Names.Id.equal name field_name ->
+                     Some linkage
+                 | _ -> None)
+          |> function
+          | None -> Linkages.lookup name
+          | linkage -> linkage)
+      | LinkageCtx.Nested (context, linkage) -> (
+          linkage.fields
+          |> Bwd.find_map (fun (field_name, elem) ->
+                 match elem with
+                 | LinkageElem.FamilyDefinition { linkage; _ }
+                   when Names.Id.equal name field_name ->
+                     Some linkage
+                 | _ -> None)
+          |> function
+          | None -> walk context
+          | linkage -> linkage)
+    in
+    let rest = List.tl path in
+    let linkage = walk context in
+    match rest with
+    | [] -> linkage
+    | path ->
+        Option.bind linkage (fun linkage -> walk_down_linkage linkage path)
+
   let lookup context (path : Libnames.qualid) =
     let path = Naming.path_to_list path in
     let name = List.hd path in
