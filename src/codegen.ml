@@ -597,12 +597,15 @@ let normalize_parameters
     Errors.fail ~info:"TODO: reparam more"
   else (* if compare_result > 0 *)
     (* The base context has less params.
-        We just add extra unused params from the
-        derived to it *)
+       Take only the required arguments. *)
+    (* Not sure of the order of the arguments *)
+    (* Maybe we should just keep track of argument names *)
     parameters
-    |> List.to_seq
+    |> List.rev
+    |> List.to_seq    
     |> Seq.take default_params_len
-    |> List.of_seq    
+    |> List.of_seq
+    |> List.rev 
 
 let compile_linkage_context
     ~field_name (context : LinkageCtx.t) :
@@ -807,6 +810,7 @@ let compile_nested_linkage (linkage : Linkage.t) =
                    linkage.context |> Bwd.to_list |> List.map fst
                    |> List.map Libnames.qualid_of_ident
                  in
+                 (* Do we need this here? *)
                  let arguments =
                    normalize_parameters
                      ~default_ctx_params:linkage.default_ctx_params
