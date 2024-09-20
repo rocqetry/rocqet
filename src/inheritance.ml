@@ -10,10 +10,17 @@ let lookup_field_in_base ~field ~context =
 
 (* We want to inherit element from a base family into 
    a derived family in interactive mode *)
+(** [context] is the current linkage context we're building
+    [linkage] in.
+    E.g: 
+    Nested ([context], [linkage])
+    Toplevel ([linkage])
+ *)
 let inherit_one
       ~(name: Names.Id.t)
       ~(element: LinkageElem.t)
-      ~(linkage: Linkage.t) =
+      ~(linkage: Linkage.t)
+      ~(context: LinkageCtx.t) =
   let rec find_field = function
     | Bwd.Emp -> false
     | Snoc (_, (field, _)) when Names.Id.equal name field -> true
@@ -24,9 +31,13 @@ let inherit_one
   | false ->
      (* Various checks to ensure correctness *)
      (* We need to update the context of the inherited fields *)
-     (* Just a hack as compile_linkage_context accepts a ctx, but unwraps 
-       it and looks at the parameters anyway. *)
-     let context = LinkageCtx.Toplevel linkage in
+
+     (* Update the context with the updated linkage *)
+     let context =
+       match context with
+       | LinkageCtx.Toplevel _ -> LinkageCtx.Toplevel linkage
+       | Nested (context, _) -> Nested (context, linkage)
+     in
      let compiled_context, _ = Codegen.compile_linkage_context ~field_name:name context in
      let element = 
           match element with
@@ -34,40 +45,44 @@ let inherit_one
              LinkageElem.InductiveDefinition { inductive with compiled_context }
 
           (* TODO: Update wrt late bound base family *)
-          | FamilyDefinition family -> FamilyDefinition { family with compiled_context }
+          | FamilyDefinition family ->
+             begin
+               match family.linkage.base with
+               | None -> FamilyDefinition { family with compiled_context }
+               | Some _base ->
+                  (* We want to perform a local lookup
+                     so we don't update a family with a non-late bound
+                     family name. *)
+                  FamilyDefinition { family with compiled_context }
+             end 
 
-          | ComputationalAxiom comp ->
-            ComputationalAxiom { comp with compiled_context }
-          | InductiveConstr constr ->
-             InductiveConstr { constr with compiled_context }
-          | FieldDefinition field -> 
-              FieldDefinition { field with compiled_context }
-          | MetaDataSection metadata -> 
-              MetaDataSection { metadata with compiled_context }
-          | OpaqueFieldDefinition field -> 
-             OpaqueFieldDefinition { field with compiled_context }
+          | ComputationalAxiom comp -> ComputationalAxiom { comp with compiled_context }
+          | InductiveConstr constr -> InductiveConstr { constr with compiled_context }
+          | FieldDefinition field -> FieldDefinition { field with compiled_context }
+          | MetaDataSection metadata -> MetaDataSection { metadata with compiled_context }
+          | OpaqueFieldDefinition field -> OpaqueFieldDefinition { field with compiled_context }
 
           (* Exhaustiveness checks *)
-          | RecursorDefinition recursive -> 
-              RecursorDefinition { recursive with compiled_context }
-          | TheoremDefinition theorem -> 
-              TheoremDefinition { theorem with compiled_context }
+          | RecursorDefinition recursive -> RecursorDefinition { recursive with compiled_context }
+          | TheoremDefinition theorem -> TheoremDefinition { theorem with compiled_context }
       in 
       let fields = Snoc (linkage.fields, (name, element)) in
       { linkage with fields }
 
 let inherit_elements
-      ~(elements: (Names.Id.t * LinkageElem.t) list)
-      ~(linkage : Linkage.t) =
+      ~(elements: (Names.Id.t * LinkageElem.t) list)      
+      ~(linkage : Linkage.t)
+      ~(context: LinkageCtx.t) =
   List.fold_left 
-    (fun linkage (name, element) -> inherit_one ~name ~element ~linkage) 
+    (fun linkage (name, element) -> inherit_one ~name ~element ~linkage ~context) 
     linkage 
     elements
 
 let inherit_deps
       ~(field : Names.Id.t)
       ~(base : Linkage.t)
-      ~(derived : Linkage.t) =
+      ~(derived : Linkage.t)
+      ~(context : LinkageCtx.t) =
   let rec find_dependencies fields =
       match fields with
       | Bwd.Emp -> []
@@ -76,7 +91,7 @@ let inherit_deps
       | Snoc (fields, _) -> find_dependencies fields
   in
   let deps = find_dependencies base.fields in
-  inherit_elements ~elements:deps ~linkage:derived
+  inherit_elements ~elements:deps ~linkage:derived ~context
 
 let inherit_name
      ~(name: Names.Id.t) =     
@@ -103,11 +118,11 @@ let inherit_name
            (Names.Id.to_string name)
        in
        Errors.fail ~info
-    | Some element -> inherit_one ~name ~element ~linkage
+    | Some element -> inherit_one ~name ~element ~linkage ~context
   in  
   match base with  
   | Some base ->
-     let linkage = inherit_deps ~field:name ~base ~derived:linkage in
+     let linkage = inherit_deps ~field:name ~base ~derived:linkage ~context in
      let linkage = inherit_name ~name ~base ~linkage in     
      Context.replace ~linkage
   | _ -> Errors.fail ~info:"There is no base to inherit from"
@@ -121,7 +136,7 @@ let inherit_dependencies ~prefix =
   let linkage =
     match base with
     | None -> linkage
-    | Some base -> inherit_deps ~field:prefix ~base ~derived:linkage
+    | Some base -> inherit_deps ~field:prefix ~base ~derived:linkage ~context
   in   
   Context.replace ~linkage
 
@@ -135,19 +150,24 @@ let rec find_and_remove name fields =
        let result, rest = find_and_remove name fields in
        result, Bwd.Snoc (rest, (field, elem))
 
-let rec linkage_concatenate ~(derived: Linkage.t) ~(base: Linkage.t) =  
+let rec linkage_concatenate ~context ~(derived: Linkage.t) ~(base: Linkage.t) =  
   let rec loop linkage derived_fields base_fields =
     match derived_fields with
-    | [] -> inherit_elements ~elements:(Bwd.to_list base_fields) ~linkage
+    | [] -> inherit_elements ~elements:(Bwd.to_list base_fields) ~linkage ~context
     | (name, element) :: derived_fields ->
        match find_and_remove name base_fields with
-       | None, base_fields ->
-          let linkage = inherit_one ~name ~element ~linkage in
+       | None, base_fields ->          
+          let linkage = inherit_one ~name ~element ~linkage ~context in
           loop linkage derived_fields base_fields
        | Some (base_element, dependencies), base_fields ->
-          let linkage = inherit_elements ~elements:(Bwd.to_list dependencies) ~linkage in
-          let element = linkage_elem_concatenate ~derived:element ~base:base_element ~linkage in
-          let linkage = inherit_one ~name ~element ~linkage in
+          let linkage = inherit_elements ~elements:(Bwd.to_list dependencies) ~linkage ~context in
+          let element =
+            linkage_elem_concatenate
+              ~context:(LinkageCtx.Toplevel linkage)
+              ~derived:element ~base:base_element
+              ~linkage
+          in
+          let linkage = inherit_one ~name ~element ~linkage ~context in
           loop linkage derived_fields base_fields
   in    
   let linkage = { derived with fields = Bwd.Emp } in
@@ -160,6 +180,7 @@ let rec linkage_concatenate ~(derived: Linkage.t) ~(base: Linkage.t) =
    family come before the derived family's handlers
 *)
 and linkage_elem_concatenate
+  ~context
   ~(derived: LinkageElem.t)
   ~(base: LinkageElem.t)
   ~(linkage: Linkage.t) =
@@ -194,7 +215,8 @@ and linkage_elem_concatenate
   | InductiveConstr derived, InductiveConstr _ ->
     InductiveConstr derived 
   | FamilyDefinition derived, FamilyDefinition base ->
-     let linkage = linkage_concatenate ~derived:derived.linkage ~base:base.linkage in
+     let context = LinkageCtx.Nested (context, linkage) in 
+     let linkage = linkage_concatenate ~context ~derived:derived.linkage ~base:base.linkage in
      let compiled_signature = Codegen.compile_linkage_signature linkage in
      let compiled_impl = Codegen.compile_nested_linkage linkage in
      FamilyDefinition { derived with linkage; compiled_impl; compiled_signature }
@@ -215,3 +237,6 @@ and linkage_elem_concatenate
   | _, _ -> Errors.fail ~info:"Can't concatenate different kinds of linkage element"
 
 
+let linkage_concatenate ~(derived: Linkage.t) ~(base: Linkage.t) =
+  let context = LinkageCtx.Toplevel derived in
+  linkage_concatenate ~context ~derived ~base

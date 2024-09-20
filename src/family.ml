@@ -114,7 +114,7 @@ let close_family () =
         | None -> linkage
         | Some base_linkage ->
            let elements = Bwd.to_list base_linkage.fields in 
-           Inheritance.inherit_elements ~elements ~linkage
+           Inheritance.inherit_elements ~elements ~linkage ~context
       in      
       Context.destructive_update None;      
       let _impl = Codegen.compile_linkage linkage in
@@ -125,7 +125,7 @@ let close_family () =
         | None -> linkage
         | Some base_linkage ->
            let elements = Bwd.to_list base_linkage.fields in 
-           Inheritance.inherit_elements ~elements ~linkage
+           Inheritance.inherit_elements ~elements ~linkage ~context
       in      
       let signature = Codegen.compile_linkage_signature linkage in
       let impl = Codegen.compile_nested_linkage linkage in
