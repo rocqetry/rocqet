@@ -82,8 +82,8 @@ and linkage_elem_concatenate
      InductiveDefinition { derived with inductive; compiled_context; compiled_impl; recursors; }
   | InductiveConstr derived, InductiveConstr _ ->
     InductiveConstr derived 
-  | FamilyDefinition derived, FamilyDefinition base ->
-     let context = LinkageCtx.Nested (context, linkage) in 
+  | FamilyDefinition derived, FamilyDefinition base ->      
+     let context = LinkageCtx.Nested (context, linkage) in
      let linkage = linkage_concatenate ~context ~derived:derived.linkage ~base:base.linkage in
      let compiled_signature = Codegen.compile_linkage_signature linkage in
      let compiled_impl = Codegen.compile_nested_linkage linkage in
@@ -133,8 +133,16 @@ and inherit_one
        match context with
        | LinkageCtx.Toplevel _ -> LinkageCtx.Toplevel linkage
        | Nested (context, _) -> Nested (context, linkage)
-     in
-     let compiled_context, _ = Codegen.compile_linkage_context ~field_name:name context in
+     in     
+     let compiled_context, parameters = Codegen.compile_linkage_context ~field_name:name context in
+     (*let _ =       
+       List.iter (fun (name, e) ->
+           let name = Names.Id.to_string name in
+           let e = e |> Termutils.extract_functor_name |> Pretty.pretty_qualid in
+           Feedback.msg_warning Pp.(str "Params " ++ str name ++ str " : " ++ str e))
+         parameters
+     in *)
+     (*Feedback.msg_warning Pp.(str "Context: " ++ str (Pretty.pretty_qualid compiled_context));*)
      let element = 
           match element with
           | LinkageElem.InductiveDefinition inductive -> 
@@ -142,6 +150,7 @@ and inherit_one
 
           (* TODO: Update wrt late bound base family *)
           | FamilyDefinition family ->
+             
              begin
                match family.linkage.base with
                | None -> FamilyDefinition { family with compiled_context }
@@ -151,26 +160,22 @@ and inherit_one
                      family name. *)
                   let path = Libnames.qualid_of_ident base.name in
                   match Context.local_lookup context path with
-                  | None ->
-                     Feedback.msg_warning Pp.(str "Inheriting (No base): " ++ str (Names.Id.to_string family.linkage.name));
-                     FamilyDefinition { family with compiled_context }
-                  | Some new_base ->
-                     Feedback.msg_warning
-                       Pp.(str "Inheriting (Base found): "
-                           ++ str (Names.Id.to_string family.linkage.name)
-                           ++ str " Base Name: " ++ str (Names.Id.to_string new_base.name)
-                     );
+                  | None -> FamilyDefinition { family with compiled_context }
+                  | Some new_base ->                     
                      if base <> new_base then
                         let new_base =
                             Linkage.path_subtitution new_base
                               ~source:(Naming.self_version new_base.name)
                               ~target:(Naming.self_version family.linkage.name)
                         in
-                        let linkage = linkage_concatenate ~context ~derived:family.linkage ~base:new_base in
+                        let family_linkage = (* family.linkage *)
+                          { family.linkage with context = Bwd.of_list parameters }
+                        in 
+                        let linkage = linkage_concatenate ~context ~derived:family_linkage ~base:new_base in
                         let linkage = { linkage with base = Some new_base } in
                         let compiled_signature = Codegen.compile_linkage_signature linkage in
                         let compiled_impl = Codegen.compile_nested_linkage linkage in
-                        FamilyDefinition { family with linkage; compiled_signature; compiled_impl }
+                        FamilyDefinition { family with linkage; compiled_context; compiled_signature; compiled_impl }
                      else FamilyDefinition { family with compiled_context }
              end 
 
@@ -263,5 +268,6 @@ let inherit_dependencies ~prefix =
 
 
 let linkage_concatenate ~(derived: Linkage.t) ~(base: Linkage.t) =
+  (* Is this the right thing to do? *)
   let context = LinkageCtx.Toplevel derived in
   linkage_concatenate ~context ~derived ~base

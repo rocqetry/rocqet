@@ -71,8 +71,9 @@ let open_family_with_base ~name ~base =
           let elem = Inheritance.lookup_field_in_base ~field:name ~context in
           let base =            
             match elem with
-            | Some (LinkageElem.FamilyDefinition { linkage = further; _ }) ->               
-               Some (Inheritance.linkage_concatenate ~derived:further ~base:base_linkage)
+            | Some (LinkageElem.FamilyDefinition { linkage = further; _ }) ->
+               let derived = { further with context = Bwd.of_list parameters } in
+               Some (Inheritance.linkage_concatenate ~derived ~base:base_linkage)
             | Some _ -> Errors.fail ~info:"Expected a family linkage element"
             | None -> Some base_linkage
           in
