@@ -8,34 +8,58 @@ let lookup_field_in_base ~field ~context =
   Context.base_linkage_elem context ~field
   |> Option.map snd
 
-let rec find_and_remove name fields =
-  match fields with
-  | Bwd.Emp -> None, fields
-  | Bwd.Snoc (fields, (field, elem))  ->
-     if Names.Id.equal field name then
-       Some (elem, fields), Bwd.Emp
-     else
-       let result, rest = find_and_remove name fields in
-       result, Bwd.Snoc (rest, (field, elem))
-
-let rec linkage_concatenate ~context ~(derived: Linkage.t) ~(base: Linkage.t) =  
+let rec linkage_concatenate ~(derived: Linkage.t) ~(base: Linkage.t) =
+  let rec find_and_remove name fields =
+      match fields with
+      | Bwd.Emp -> None, fields
+      | Bwd.Snoc (fields, (field, elem))  ->
+         if Names.Id.equal field name then
+           Some (elem, fields), Bwd.Emp
+         else
+           let result, rest = find_and_remove name fields in
+           result, Bwd.Snoc (rest, (field, elem))
+  in 
+  let inherit_one
+        ~(name: Names.Id.t)
+        ~(element: LinkageElem.t)
+        ~(linkage: Linkage.t) =     
+    let rec find_field = function
+      | Bwd.Emp -> false
+      | Snoc (_, (field, _)) when Names.Id.equal name field -> true
+      | Snoc (fields, _) -> find_field fields
+    in  
+    match find_field linkage.fields with
+    | true -> linkage (* Field has already been inherited *)
+    | false ->
+       (* Note that we're not doing anything with late binding *)
+       let fields = Snoc (linkage.fields, (name, element)) in
+       { linkage with fields }
+  in 
+  let inherit_elements
+        ~(elements: (Names.Id.t * LinkageElem.t) list)      
+        ~(linkage : Linkage.t) =       
+    List.fold_left 
+      (fun linkage (name, element) -> inherit_one ~name ~element ~linkage) 
+      linkage 
+      elements
+  in
+  
+  (* Helpers above *)
   let rec loop linkage derived_fields base_fields =
     match derived_fields with
-    | [] -> inherit_elements ~elements:(Bwd.to_list base_fields) ~linkage ~context
+    | [] -> inherit_elements ~elements:(Bwd.to_list base_fields) ~linkage
     | (name, element) :: derived_fields ->
        match find_and_remove name base_fields with
        | None, base_fields ->          
-          let linkage = inherit_one ~name ~element ~linkage ~context in
+          let linkage = inherit_one ~name ~element ~linkage in
           loop linkage derived_fields base_fields
        | Some (base_element, dependencies), base_fields ->
-          let linkage = inherit_elements ~elements:(Bwd.to_list dependencies) ~linkage ~context in
+          let linkage = inherit_elements ~elements:(Bwd.to_list dependencies) ~linkage in
           let element =
-            linkage_elem_concatenate
-              ~context:(LinkageCtx.Toplevel linkage)
-              ~derived:element ~base:base_element
-              ~linkage
+            linkage_elem_concatenate              
+              ~derived:element ~base:base_element              
           in          
-          let linkage = inherit_one ~name ~element ~linkage ~context in
+          let linkage = inherit_one ~name ~element ~linkage in
           loop linkage derived_fields base_fields
   in    
   let linkage = { derived with fields = Bwd.Emp } in
@@ -47,11 +71,9 @@ let rec linkage_concatenate ~context ~(derived: Linkage.t) ~(base: Linkage.t) =
    hanlders from the base
    family come before the derived family's handlers
 *)
-and linkage_elem_concatenate
-  ~context
+and linkage_elem_concatenate  
   ~(derived: LinkageElem.t)
-  ~(base: LinkageElem.t)
-  ~(linkage: Linkage.t) =
+  ~(base: LinkageElem.t) : LinkageElem.t =   
   let remove_duplicates lst =
       let rec aux seen = function
         | [] -> []
@@ -68,26 +90,13 @@ and linkage_elem_concatenate
        VernacInductive.concatenate
          ~derived:derived.inductive
          ~base:base.inductive
-     in
-     let context = LinkageCtx.Toplevel linkage in
-     let field_name = inductive |> VernacInductive.extract_inductive_name in     
-     let compiled_context, params = Codegen.compile_linkage_context ~field_name context in
-     let compiled_impl, principles =
-       Codegen.compile_inductive_implementation
-         ~ind_def:inductive
-         ~ctx:params
-         ~family_name:linkage.name
-     in
-     let recursors = Termutils.extract_handler_types_from_principle ~inductive ~principles in  
-     InductiveDefinition { derived with inductive; compiled_context; compiled_impl; recursors; }
+     in     
+     InductiveDefinition { derived with inductive; }
   | InductiveConstr derived, InductiveConstr _ ->
     InductiveConstr derived 
-  | FamilyDefinition derived, FamilyDefinition base ->      
-     let context = LinkageCtx.Nested (context, linkage) in
-     let linkage = linkage_concatenate ~context ~derived:derived.linkage ~base:base.linkage in
-     let compiled_signature = Codegen.compile_linkage_signature linkage in
-     let compiled_impl = Codegen.compile_nested_linkage linkage in
-     FamilyDefinition { derived with linkage; compiled_impl; compiled_signature }
+  | FamilyDefinition derived, FamilyDefinition base ->          
+     let linkage = linkage_concatenate ~derived:derived.linkage ~base:base.linkage in     
+     FamilyDefinition { derived with linkage; }
   | FieldDefinition derived, FieldDefinition _ ->
     FieldDefinition derived 
   | OpaqueFieldDefinition derived, OpaqueFieldDefinition _ ->
@@ -112,7 +121,7 @@ and linkage_elem_concatenate
     Nested ([context], [linkage])
     Toplevel ([linkage])
  *)
-and inherit_one
+let inherit_one
       ~(name: Names.Id.t)
       ~(element: LinkageElem.t)
       ~(linkage: Linkage.t)
@@ -145,12 +154,24 @@ and inherit_one
      (*Feedback.msg_warning Pp.(str "Context: " ++ str (Pretty.pretty_qualid compiled_context));*)
      let element = 
           match element with
-          | LinkageElem.InductiveDefinition inductive -> 
-             LinkageElem.InductiveDefinition { inductive with compiled_context }
+          | LinkageElem.InductiveDefinition inductive ->
+             (* Should compile impl again *)
+             let compiled_impl, principles =
+               Codegen.compile_inductive_implementation
+                 ~ind_def:inductive.inductive
+                 ~ctx:parameters
+                 ~family_name:name
+             in
+             let recursors =
+               Termutils.extract_handler_types_from_principle
+                 ~inductive:inductive.inductive
+                 ~principles
+             in  
+             LinkageElem.InductiveDefinition { inductive with compiled_context; compiled_impl; recursors }
 
           (* TODO: Update wrt late bound base family *)
           | FamilyDefinition family ->
-             
+             (* We need to compile the context again *)
              begin
                match family.linkage.base with
                | None -> FamilyDefinition { family with compiled_context }
@@ -170,14 +191,17 @@ and inherit_one
                         in
                         let family_linkage = (* family.linkage *)
                           { family.linkage with context = Bwd.of_list parameters }
-                        in 
-                        let linkage = linkage_concatenate ~context ~derived:family_linkage ~base:new_base in
+                        in
+                        let _context =
+                          LinkageCtx.Nested (context, family_linkage)
+                        in
+                        let linkage = linkage_concatenate ~derived:family_linkage ~base:new_base in
                         let linkage = { linkage with base = Some new_base } in
                         let compiled_signature = Codegen.compile_linkage_signature linkage in
                         let compiled_impl = Codegen.compile_nested_linkage linkage in
                         FamilyDefinition { family with linkage; compiled_context; compiled_signature; compiled_impl }
                      else FamilyDefinition { family with compiled_context }
-             end 
+             end
 
           | ComputationalAxiom comp -> ComputationalAxiom { comp with compiled_context }
           | InductiveConstr constr -> InductiveConstr { constr with compiled_context }
@@ -195,7 +219,7 @@ and inherit_one
       let fields = Snoc (linkage.fields, (name, element)) in
       { linkage with fields }
 
-and inherit_elements
+let inherit_elements
       ~(elements: (Names.Id.t * LinkageElem.t) list)      
       ~(linkage : Linkage.t)
       ~(context: LinkageCtx.t) =
@@ -265,9 +289,3 @@ let inherit_dependencies ~prefix =
     | Some base -> inherit_deps ~field:prefix ~base ~derived:linkage ~context
   in   
   Context.replace ~linkage
-
-
-let linkage_concatenate ~(derived: Linkage.t) ~(base: Linkage.t) =
-  (* Is this the right thing to do? *)
-  let context = LinkageCtx.Toplevel derived in
-  linkage_concatenate ~context ~derived ~base
