@@ -121,7 +121,7 @@ and linkage_elem_concatenate
     Nested ([context], [linkage])
     Toplevel ([linkage])
  *)
-let inherit_one
+let rec inherit_one
       ~(name: Names.Id.t)
       ~(element: LinkageElem.t)
       ~(linkage: Linkage.t)
@@ -142,8 +142,8 @@ let inherit_one
        match context with
        | LinkageCtx.Toplevel _ -> LinkageCtx.Toplevel linkage
        | Nested (context, _) -> Nested (context, linkage)
-     in     
-     let compiled_context, parameters = Codegen.compile_linkage_context ~field_name:name context in
+     in
+     let compiled_context, parameters = Codegen.compile_linkage_context ~field_name:name context in     
      (*let _ =       
        List.iter (fun (name, e) ->
            let name = Names.Id.to_string name in
@@ -154,20 +154,38 @@ let inherit_one
      (*Feedback.msg_warning Pp.(str "Context: " ++ str (Pretty.pretty_qualid compiled_context));*)
      let element = 
           match element with
-          | LinkageElem.InductiveDefinition inductive ->
-             (* Should compile impl again *)
+          | LinkageElem.InductiveDefinition inductive ->             
              let compiled_impl, principles =
                Codegen.compile_inductive_implementation
                  ~ind_def:inductive.inductive
                  ~ctx:parameters
                  ~family_name:name
              in
+             let compiled_signature =
+               Codegen.compile_inductive_signature
+                 ~ind_def:inductive.inductive
+                 ~ctx:parameters
+                 ~family_name:name
+             in 
              let recursors =
                Termutils.extract_handler_types_from_principle
                  ~inductive:inductive.inductive
                  ~principles
-             in  
-             LinkageElem.InductiveDefinition { inductive with compiled_context; compiled_impl; recursors }
+             in
+             let default_ctx_params =
+               context
+               |> Context.family_linkage
+               |> function { default_ctx_params; _ } -> default_ctx_params
+             in
+             (* TODO: Use the right default_ctx_params *)
+             LinkageElem.InductiveDefinition
+               { inductive with
+                 compiled_context;
+                 compiled_impl;
+                 compiled_signature;
+                 recursors;
+                 default_ctx_params;                 
+               }
 
           (* TODO: Update wrt late bound base family *)
           | FamilyDefinition family ->
@@ -182,25 +200,34 @@ let inherit_one
                   let path = Libnames.qualid_of_ident base.name in
                   match Context.local_lookup context path with
                   | None -> FamilyDefinition { family with compiled_context }
-                  | Some new_base ->                     
-                     if base <> new_base then
-                        let new_base =
-                            Linkage.path_subtitution new_base
-                              ~source:(Naming.self_version new_base.name)
-                              ~target:(Naming.self_version family.linkage.name)
-                        in
-                        let family_linkage = (* family.linkage *)
-                          { family.linkage with context = Bwd.of_list parameters }
-                        in
-                        let _context =
-                          LinkageCtx.Nested (context, family_linkage)
-                        in
-                        let linkage = linkage_concatenate ~derived:family_linkage ~base:new_base in
-                        let linkage = { linkage with base = Some new_base } in
-                        let compiled_signature = Codegen.compile_linkage_signature linkage in
-                        let compiled_impl = Codegen.compile_nested_linkage linkage in
-                        FamilyDefinition { family with linkage; compiled_context; compiled_signature; compiled_impl }
-                     else FamilyDefinition { family with compiled_context }
+                  | Some new_base ->                                          
+                     let new_base =
+                         Linkage.path_subtitution new_base
+                           ~source:(Naming.self_version new_base.name)
+                           ~target:(Naming.self_version family.linkage.name)
+                     in
+                     let family_linkage = (* family.linkage *)
+                       { family.linkage with context = Bwd.of_list parameters }
+                     in
+                     let _context =
+                       LinkageCtx.Nested (context, family_linkage)
+                     in
+                     let linkage = linkage_concatenate ~derived:family_linkage ~base:new_base in
+                     let linkage =
+                       let empty_linkage = { linkage with fields = Bwd.Emp } in
+                       inherit_elements
+                         ~elements:(Bwd.to_list linkage.fields)
+                         ~linkage:empty_linkage
+                         ~context:(LinkageCtx.Nested (context, empty_linkage))
+                     in
+                     let default_ctx_params =
+                        Codegen.compile_default_params
+                          ~context:parameters
+                     in
+                     let linkage = Linkage.{ linkage with base = Some new_base; default_ctx_params } in
+                     let compiled_signature = Codegen.compile_linkage_signature linkage in
+                     let compiled_impl = Codegen.compile_nested_linkage linkage in
+                     FamilyDefinition { family with linkage; compiled_context; compiled_signature; compiled_impl }                     
              end
 
           | ComputationalAxiom comp -> ComputationalAxiom { comp with compiled_context }
@@ -219,7 +246,7 @@ let inherit_one
       let fields = Snoc (linkage.fields, (name, element)) in
       { linkage with fields }
 
-let inherit_elements
+and inherit_elements
       ~(elements: (Names.Id.t * LinkageElem.t) list)      
       ~(linkage : Linkage.t)
       ~(context: LinkageCtx.t) =
