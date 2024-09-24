@@ -7,6 +7,10 @@ Family Xe.
       | expr_bool : bool -> expr.
    FDefinition d := 10.
    Family Language.
+       FInductive fexpr : Type :=
+          | fexpr_unit : fexpr
+          | fexpr_nat : nat -> fexpr
+          | fexpr_bool : bool -> fexpr.
        Family Expr.
            FDefinition x0 := 13.
            
@@ -38,7 +42,7 @@ Family Xe.
                      | val_bool : bool -> val.
                    
                    FDefinition v0 := val.
-               FEnd Value.               
+               FEnd Value. 
                FDefinition i0  := ty_unit.
            FEnd Ty.                      
            FDefinition h0 := Ty.g0.
@@ -46,6 +50,9 @@ Family Xe.
        FDefinition v1 := expr_unit.
    FEnd Language.      
    FDefinition v0 := Language.Expr.y0.
+
+   Family Ld extends Language.
+   FEnd Ld.
 FEnd Xe.
 
 Family Xa extends Xe.
@@ -53,6 +60,8 @@ Family Xa extends Xe.
     FInductive expr : Type :=                          
        | expr_lam : ident -> expr.
     Family Language. 
+        FInductive fexpr : Type :=                          
+           | fexpr_lam : ident -> fexpr.
         Family Expr.
             (*FDefinition ident := nat.
             FInductive expr : Type :=                          
@@ -68,10 +77,8 @@ Family Xa extends Xe.
                 FEnd Value.
             FEnd Ty.
         FEnd Expr.
-    FEnd Language.
+    FEnd Language.       
 FEnd Xa.
-
-Print Xa.Language.Expr.
 
 Family Xo extends Xe.
     FDefinition ident := nat.
@@ -95,6 +102,12 @@ Family Xo extends Xe.
         FEnd Expr.
     FEnd Language.
 FEnd Xo.
+
+Family m extends Xe using Xa, Xo.
+FEnd m.
+
+Print m.Language.Expr.Ty.
+
 
 Family Tl.
    Family Source extends Xe.
@@ -122,12 +135,12 @@ Family Tlo extends Tla.
    Family Source extends Xo.
    FEnd Source.
     
-    Family Target extends Xo.
-    FEnd Target.
+   Family Target extends Xo.
+   FEnd Target.
 FEnd Tlo.
 
-Print Tlo.Target.Language.Expr.
+Print Tlo.Target.Language.Expr.Ty.
 
 
-Family X extends A using B, C, D.
-FEnd X.
+(*Family X extends A using B, C, D.
+FEnd X.*)
