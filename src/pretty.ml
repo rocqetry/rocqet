@@ -21,3 +21,20 @@ let rec print_linkage_fields (linkage : Linkage.t) =
             print_linkage_fields linkage
          | _ -> ())
 *)
+
+(* 
+
+let rec print_linkage_fields (linkage : Linkage.t) =
+  linkage.fields
+  |> Bwd.iter (fun (name, element) ->
+         Printf.printf "%s\n" (Names.Id.to_string name);
+         match element with
+         | LinkageElem.InductiveDefinition { inductive; _ } ->
+            Printf.printf "Inductive:\n";
+            let constructors = inductive |> VernacInductive.extract_all_names |> List.concat_map snd in
+            constructors |> List.iter (fun name -> Printf.printf "%s\n" (Names.Id.to_string name))
+         | LinkageElem.FamilyDefinition { linkage; _ } ->
+            print_endline "Inner:";
+            print_linkage_fields linkage
+         | _ -> ())
+*)
