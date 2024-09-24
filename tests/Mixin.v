@@ -10,20 +10,18 @@ Family STLCBase.
   FRecursion subst about Ty motive (fun (_ : Ty) => nat) by _rec.
      Case TUnit := 1.
      Case TArr := (fun _ n _ m => 1).
-  FEnd subst.
-
+  FEnd subst.  
+  
   FInduction easy_theorem
        about Ty
-       motive (fun (t : Ty) => self__STLCBase.subst t = 1).
-     FProof.  
-        unfold HandlerTypes回31.__handler_type_TUnit_ind_comp.       
-        unfold HandlerTypes回31.__handler_type_TArr_ind_comp.
-        unfold  __motiveTeasy_theorem.
-       split.
-       + rewrite self__STLCBase.subst_TUnit_eq. unfold self__STLCBase.substTUnit. reflexivity.
-       + split.
-          - intros.  rewrite self__STLCBase.subst_TArr_eq. unfold self__STLCBase.substTArr. reflexivity.
-          - apply I.
+       motive (fun (t : Ty) => subst t = 1).
+     FProof.          
+     + unfold self__STLCBase.__motiveTeasy_theorem.
+       rewrite self__STLCBase.subst_TUnit_eq.
+       unfold self__STLCBase.substTUnit. reflexivity.     
+     + intros. unfold self__STLCBase.__motiveTeasy_theorem.
+       rewrite self__STLCBase.subst_TArr_eq.
+       unfold self__STLCBase.substTArr. reflexivity.
      Qed.
   FEnd easy_theorem.
 
@@ -31,18 +29,15 @@ Family STLCBase.
        about Ty
        motive (fun (t : Ty) => self__STLCBase.subst t = 1).
     FProof.
-       unfold HandlerTypes回40.__handler_type_TUnit_ind_comp.
-       unfold HandlerTypes回40.__handler_type_TArr_ind_comp.
-       unfold  __motiveTsubst_theorem.
-       split.
-       + unfold self__STLCBase.substTUnit. 
-         rewrite self__STLCBase.subst_TUnit_eq.         
-         reflexivity.
-       + split.
-         - intros.
-           rewrite -> self__STLCBase.subst_TArr_eq.
-           reflexivity.
-         - apply I.
+      + unfold  self__STLCBase.__motiveTsubst_theorem.        
+        rewrite self__STLCBase.subst_TUnit_eq.
+        unfold self__STLCBase.substTUnit. 
+        reflexivity.
+      + intros.
+          unfold self__STLCBase.__motiveTsubst_theorem.
+          rewrite -> self__STLCBase.subst_TArr_eq.
+          unfold self__STLCBase.substTArr.
+          reflexivity.
     Qed.
   FEnd subst_theorem.  
   
@@ -60,9 +55,27 @@ Family IfExt.
        FInductive Ty : Set := TBool : Ty.
 
        FRecursion subst.
-            Case TBool := 2.
+            Case TBool := 1.
        FEnd subst.    
-       
+
+       FInduction easy_theorem.
+       FProof.
+        + unfold self__Base.__motiveTeasy_theorem. 
+          rewrite self__Base.subst_TBool_eq.
+          unfold self__Base.substTBool.
+          reflexivity.
+       Qed.
+       FEnd easy_theorem.
+
+       FInduction subst_theorem.
+       FProof.
+        + unfold self__Base.__motiveTsubst_theorem. 
+          rewrite self__Base.subst_TBool_eq.
+          unfold self__Base.substTBool.
+          reflexivity.
+       Qed.
+       FEnd subst_theorem.
+
        FInductive Exp : Set :=
          | EIf : Exp -> Exp -> Exp -> Exp
        with Val : Set :=
@@ -125,3 +138,4 @@ FEnd ArithExtBuild.
 
 Family STLCArithIf extends ArithExtBuild.Derived.
 FEnd STLCArithIf.
+

@@ -48,7 +48,7 @@ Family BaseComp.
 FEnd BaseComp.
 
 Family IfExt extends BaseComp.
-   Family STLC extends STLCIf.
+   Family STLC extends STLCIf.      
    FEnd STLC.
 
    Family IL.
