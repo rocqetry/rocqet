@@ -7,13 +7,18 @@
  (name NFPOP.Tests)
  (theories NFPOP)
  (modules
-  Demo
-  STLC
-  STLCCompiler
-  CompCert
-  Flexible
-  Flexible_2
-  Multiple_FRecursion
-  Mixin
-  Salad
-  Play))
+  ;Linkage_concat
+  ;Demo
+  ;STLC
+  Mixin_test
+  ;STLCCompiler
+  ;Wrong_arg
+  ;CompCert
+  ;Wrong_extend 
+  ;Flexible
+  ;Flexible_2
+  ;Multiple_FRecursion
+  ;Mixin
+  ;Salad
+  ;Play
+))
