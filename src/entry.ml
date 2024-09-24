@@ -10,9 +10,9 @@ let finductive inductive_definitions =
 let fend scope_name =
   match PluginScopes.pop scope_name with
   | None -> Errors.fail ~info:"There is no open scope"
-  | Some scope ->      
-      let PluginCmdScope.{ close; _ } = scope in      
-      close ()      
+  | Some scope ->
+      let PluginCmdScope.{ close; _ } = scope in
+      close ()
 
 let family name =
   Family.open_family name;
@@ -29,6 +29,13 @@ let family_extends ~derived ~base =
         command = PluginCmd.Family;
         close = Family.close_family;
       }
+
+let family_compose ~derived ~base ~bases =
+  let name = derived in
+  Family.open_family_mixin ~name ~base ~bases;
+  PluginScopes.push
+    PluginCmdScope.
+      { name; command = PluginCmd.Family; close = Family.close_family }
 
 let metadata name =
   Metadata.open_metadata name;
@@ -69,22 +76,18 @@ let finduction ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
       { name; command = PluginCmd.Induction; close = Theorem.close_theorem }
 
 let finduction_extension ~(name : Names.Id.t) =
-  Theorem.open_theorem_extension ~name
+  Theorem.open_theorem_extension ~name;
+  PluginScopes.push
+    PluginCmdScope.
+      { name; command = PluginCmd.Induction; close = Theorem.close_theorem }
 
 (* FProof *)
 let fproof () = Theorem.start_proving ()
-
 let fproof_lemma = Lemma.prepare_proving
+let flemma name t = Lemma.open_flemma name t
+(* PluginScopes.push
+   PluginCmdScope.
+     { name; command = PluginCmd.Lemma; close = Lemma.close_flemma }*)
 
-(* FQed *)
-let fqed () = Theorem.end_proving ()
-
-let flemma name t =
-  Lemma.open_flemma name t
-  (* PluginScopes.push
-    PluginCmdScope.
-      { name; command = PluginCmd.Lemma; close = Lemma.close_flemma }*)
-
-let close_flemma = Lemma.close_flemma 
-  
+let close_flemma = Lemma.close_flemma
 let display_plugin_scope = PluginScopes.display

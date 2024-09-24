@@ -18,6 +18,7 @@ end
 module Context : sig
   val get : unit -> LinkageCtx.t
   val get_store : unit -> LinkageCtx.t option
+  val local_lookup : LinkageCtx.t -> Libnames.qualid -> Linkage.t option
   val lookup : LinkageCtx.t option -> Libnames.qualid -> Linkage.t option
 
   val lookup_linkage_elem :
@@ -26,7 +27,7 @@ module Context : sig
   val lookup_inductive_for_recursion :
     name:Libnames.qualid ->
     LinkageCtx.t ->
-    VernacInductive.t * CompiledRecursors.t * Linkage.t
+    VernacInductive.t * Recursors.t * Linkage.t
 
   val family_name : LinkageCtx.t -> Names.Id.t
   val family_linkage : LinkageCtx.t -> Linkage.t

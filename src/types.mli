@@ -62,6 +62,18 @@ module CompiledRecursors : sig
   }
 end
 
+module Recursor : sig
+  type t = {
+    inductive_names : Names.Id.t list;
+    recursor : Constrexpr.constr_expr;
+    handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+  }
+end
+
+module Recursors : sig
+  type t = Recursor.t RecursorStore.t
+end
+
 module PluginCmd : sig
   type t = Family | Recursion | Induction | MetaData | Lemma
 end
@@ -74,95 +86,86 @@ module rec LinkageElem : sig
   type t =
     | InductiveDefinition of {
         inductive : VernacInductive.t;
+        recursors : Recursors.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
-        compiled_recursors : CompiledRecursors.t ref;
+        default_ctx_params : CompiledModule.t list;
+      }
+    | InductiveConstr of {
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : CompiledModule.t list;
       }
     | FamilyDefinition of {
         linkage : Linkage.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
+        default_ctx_params : CompiledModule.t list;
       }
     | FieldDefinition of {
-        body_expr : Constrexpr.constr_expr;
-        body_type : Constrexpr.constr_expr option;
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModuleType.t;
+        default_ctx_params : CompiledModule.t list;
       }
     | OpaqueFieldDefinition of {
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
+        default_ctx_params : CompiledModule.t list;
       }
     | RecursorDefinition of {
         names : Names.Id.t list;
-        motives : Constrexpr.constr_expr list;
-        handler_types : (Names.Id.t * Constrexpr.constr_expr) list;
-        handler_cases : (Names.Id.t * Constrexpr.constr_expr) list;
-        inductive : VernacInductive.t;
+        handlers : Names.Id.t list;
         inductive_path : Libnames.qualid;
-        recursor_module : Libnames.qualid;
-        motive_module : CompiledModule.t;
         suffix : RecKind.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;
         arguments : Names.Id.t list;
-      }
-    | PrincipleDefinition of {
-        compiled_context : CompiledModuleType.t;
-        inductive : VernacInductive.t;
-        compiled_impl : CompiledModule.t;
-        compiled_signature : CompiledModuleType.t;
+        prefix : Libnames.qualid;
+        default_ctx_params : CompiledModule.t list;
       }
     | TheoremDefinition of {
         names : Names.Id.t list;
-        motives : Constrexpr.constr_expr list;
-        goal : Constrexpr.constr_expr;
         suffix : RecKind.t;
-        inductive : VernacInductive.t;
         inductive_path : Libnames.qualid;
-        handlers : (Names.Id.t * Constrexpr.constr_expr) list;
-        compiled_handlers : CompiledModule.t;
+        handlers : Names.Id.t list;
         compiled_context : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
+        default_ctx_params : CompiledModule.t list;
+      }
+    | ComputationalAxiom of {
+        name : Names.Id.t;
+        axiom : Constrexpr.constr_expr;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : CompiledModule.t list;
       }
     | MetaDataSection of {
         name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
+        default_ctx_params : CompiledModule.t list;
       }
 end
 
 and Linkage : sig
   type t = {
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
+    default_ctx_params : CompiledModule.t list;
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
   val context_parameters : t -> Libnames.qualid list
-  val context_match : t -> t -> [ `Equal | `Less | `More ]
   val top_most_self_name : t -> Names.Id.t
 
   val path_substitution_elem :
     LinkageElem.t -> source:Names.Id.t -> target:Names.Id.t -> LinkageElem.t
 
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
-  val concatenate_elem : LinkageElem.t -> LinkageElem.t -> LinkageElem.t
-  val concatenate_recursive : derived:t -> base:t -> t
-  val concatenate : derived:t -> base:t -> t
-  val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
-
-  val concatenate_recursive_prefix :
-    prefix:Names.Id.t -> derived:t -> base:t -> t
-
-  val pointwise_concatenate_recursive_prefix :
-    prefix:Names.Id.t -> derived:t -> base:t -> t
 end
 
 and LinkageCtx : sig

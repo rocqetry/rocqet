@@ -11,10 +11,25 @@ let recursor_type ~inductive suffix =
 let handler_type name ~suffix =
   Nameops.add_suffix (Nameops.add_prefix "__handler_type_" name) suffix
 
+let recursion_handler_type ~function_name ~case_name =
+  let name =
+    Printf.sprintf "%s_%s_type"
+      (Names.Id.to_string function_name)
+      (Names.Id.to_string case_name)
+  in
+  Names.Id.of_string name
+
 let handler_name ~recursor ~case =
   Names.Id.to_string recursor ^ Names.Id.to_string case |> Names.Id.of_string
 
 let principle_name ~inductive ~kind = Nameops.add_suffix inductive kind
+
+let computational_axiom_name ~recursor_name ~constructor_name =
+  Names.Id.to_string recursor_name
+  ^ "_"
+  ^ Names.Id.to_string constructor_name
+  ^ "_eq"
+  |> Names.Id.of_string
 
 let point_qualid (f : Names.Id.t) (path : Libnames.qualid) : Libnames.qualid =
   let path, base = Libnames.repr_qualid path in
@@ -80,10 +95,10 @@ let make_module_path head path =
     (fun module_path x -> qualid_point (Some module_path) x)
     head path
 
-let list_to_path (names : Names.Id.t list) : Libnames.qualid = 
-  match names with 
+let list_to_path (names : Names.Id.t list) : Libnames.qualid =
+  match names with
   | [] -> Errors.fail ~info:"list_to_path: expected a non empty list"
-  | head :: path -> make_module_path head path 
+  | head :: path -> make_module_path head path
 
 (* extract a path into (name "." path) *)
 let to_name_qualid (path : Libnames.qualid) : Names.Id.t * Libnames.qualid =
@@ -133,6 +148,36 @@ let replace_qualid_root ~source ~target =
   in
   replace_qualid_path ()
 
+let replace_self_qualification ~(target : Libnames.qualid option) =
+  let open Constrexpr_ops in
+  let open Constrexpr in
+  let open Libnames in
+  let take_root_of_path (t : qualid) : Names.Id.t = fst (to_name_qualid t) in
+  let replace_root_of_path (t : qualid) : qualid =
+    let _, tail = to_name_qualid t in
+    let tail = path_to_list tail in
+    match target with
+    | None -> list_to_path tail
+    | Some target ->
+        let target = path_to_list target in
+        list_to_path (target @ tail)
+  in
+  let rec replace_qualid_path _ r =
+    match r with
+    | { CAst.loc = _; v = CRef (qid, us) } as x when not (qualid_is_ident qid)
+      -> (
+        (* rename the  *)
+        let source = Names.Id.to_string (take_root_of_path qid) in
+        match String.starts_with ~prefix:"self__" source with
+        | true ->
+            let qid = replace_root_of_path qid in
+            CAst.make (CRef (qid, us))
+        | false -> x)
+    | cn ->
+        map_constr_expr_with_binders (fun _ _ -> ()) replace_qualid_path () cn
+  in
+  replace_qualid_path ()
+
 let rename_ind_constructors (constructors : Vernacexpr.constructor_expr list)
     ~base_name ~derived_name : Vernacexpr.constructor_expr list =
   let rename_one_ind_constructor (constructor : Vernacexpr.constructor_expr) =
@@ -157,6 +202,26 @@ let add_path_constr_expr path l r =
     | cn -> map_constr_expr_with_binders Names.Id.Set.remove go l cn
   in
   go l r
+
+(** Add [path] as a prefix for every [name] in [names] which
+    can be found in [target] *)
+let add_prefix_path ~(path : Libnames.qualid) ~(names : Names.Id.Set.t)
+    ~(target : Constrexpr.constr_expr) =
+  let open Constrexpr_ops in
+  let open Constrexpr in
+  let open Libnames in
+  let rec go names target =
+    match target with
+    | { CAst.loc; v = CRef (qid, us) } as x when qualid_is_ident qid ->
+        (* Always assuming it's a basename we want! *)
+        let id = qualid_basename qid in
+        if Names.Id.Set.mem id names then
+          let path = qualid_point (Some path) id in
+          CAst.make ?loc @@ CRef (path, us)
+        else x
+    | cn -> map_constr_expr_with_binders Names.Id.Set.remove go names cn
+  in
+  go names target
 
 let self_version = Nameops.add_prefix "self__"
 

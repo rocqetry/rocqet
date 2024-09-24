@@ -62,10 +62,13 @@ FEnd Translation.
 
 Family ConstFold extends Translation.
     Family Source extends RTL.
-        Family Semantics. 
+        FInductive expr : Type := expr_unit : expr.
+        Family Semantics.           
            FInductive step : state -> state -> Type :=
                 | step_load : step State State.           
-        FEnd Semantics.                
+        FEnd Semantics.
+
+        FDefinition y := self__Source.Semantics.step_store.
     FEnd Source.
 FEnd ConstFold.
 
@@ -82,6 +85,12 @@ Family IfExt.
    FEnd Derived.
 FEnd IfExt.
 
+Print IfExt.Derived.
+
+Check IfExt.Derived.value.
+Check IfExt.Derived.tt.
+Check IfExt.Derived.ff.
+
 Family Random. 
 FEnd Random. 
 
@@ -96,9 +105,10 @@ Family Try extends IfExt.
    FEnd Derived.*)
 FEnd Try.
 
+(*Print Try.Derived.*)
+
 Check Try.Derived.nothing.
 Check Try.Derived.usevalue.
-
 
 
 Family A.
@@ -150,13 +160,13 @@ Family B10 extends A10.
    
    Family A1.
      FInductive basic : Set := extraBasic : B -> basic.
-     Family A2. 
+     Family A2.
      FEnd A2.
    FEnd A1.   
 FEnd B10.
 
 Check B10.A1.A2.A3.eval_expr.
-Check B10.extraN. 
+Check B10.extraN.
     
 Family Semantics.   
    FInductive basic : Set := car : basic.

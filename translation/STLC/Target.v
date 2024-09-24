@@ -1,6 +1,77 @@
 (* Compiling with paramenterized self hierarchies *)
 (* https://stackoverflow.com/questions/48837996/import-module-vs-include-module-in-coq-module-system/49717951 *)
 
+Module Type X.
+    Axiom data : nat.
+End X.
+
+Module Type Y.
+   Axiom datacell : nat.
+End Y.
+
+Module In (y : Y).
+  (* Definition data := y.datacell.*)
+End In.
+
+Module YFake.
+  Include Y.
+End YFake.
+
+Module Inc := In YFake.
+
+(*Print Assumptions Inc.data*)
+
+
+Module Type Z.
+   Axiom atomicdata : nat.
+End Z.
+
+Module Type G.
+    Declare Module T : Z.
+End G.
+
+Module Ix (g : G).
+End Ix.  
+
+Module I.
+  Module T.
+    Definition atomicdata := 10.
+    Definition data := 10.
+  End T.
+
+  Include Ix.
+End I.
+
+Module E (x : X) (y : Y) (z : Z).
+   Definition x := 10.
+End E.
+
+Module B.  
+  Definition data := 10.  
+  
+  Module Inner.
+    Definition datacell := 10.
+    Module Ctx.
+        Definition data := B.data.
+    End Ctx.
+
+    Module InnerInner.
+      Module Ctx.
+        Definition datacell := Inner.datacell.
+      End Ctx.
+
+      Module Zi.
+        (* Definition atomicdata := 10.**)
+        Include Z.
+      End Zi.
+
+      Include E Inner.Ctx InnerInner.Ctx Zi.
+    End InnerInner.    
+  End Inner. 
+End B.
+
+Print B.
+
 Definition ident := nat.
 
 Module Type STLCBase_Ty_Ctx.
@@ -262,6 +333,14 @@ End BaseComp_ILK_Ctx.
 Module Type BaseComp_ILK_Ty_Ctx
   (self__BaseComp : BaseComp_ILK_Ctx).
 End BaseComp_ILK_Ty_Ctx.
+
+Module A.
+  Include BaseComp_ILK_Ctx.
+End A.  
+
+Module A0.
+  Include BaseComp_ILK_Ty_Ctx A.
+End A0.  
 
 Module Type BaseComp_ILK_Ty 
   (self__BaseComp : BaseComp_ILK_Ctx)

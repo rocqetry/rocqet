@@ -11,8 +11,11 @@ module PluginScopes = struct
     match peek () with
     | None
     | Some
-        { command = PluginCmd.(Family | Recursion | Induction | MetaData | Lemma); _ }
-      ->
+        {
+          command =
+            PluginCmd.(Family | Recursion | Induction | MetaData | Lemma);
+          _;
+        } ->
         scopes := scope :: !scopes
 
   (* Basically, the caller wants to close the scope with
@@ -25,36 +28,35 @@ module PluginScopes = struct
       when name = scope_name ->
         scopes := scopes_rest;
         Some scope
-    | { PluginCmdScope.name; command; _ }  :: rest ->
-       let command =
-         match command with
-         | Lemma -> "FLemma"
-         | Family -> "Family"
-         | Induction -> "FInduction"
-         | Recursion -> "FRecursion"
-         | MetaData -> "MetaData"
-       in
-       let rest =
-         rest
-         |> List.map (fun (scope: PluginCmdScope.t) -> scope.name)
-         |> List.map Names.Id.to_string
-         |> String.concat ", "
-       in
-       let info =
-         Printf.sprintf
-           "Closing wrong scope: expected to \
-            close a scope which was opened by \"%s %s.\" \
-            Commands waiting to be closed: %s."
-           command (Names.Id.to_string name) rest
-       in
-       Errors.fail ~info
+    | { PluginCmdScope.name; command; _ } :: rest ->
+        let command =
+          match command with
+          | Lemma -> "FLemma"
+          | Family -> "Family"
+          | Induction -> "FInduction"
+          | Recursion -> "FRecursion"
+          | MetaData -> "MetaData"
+        in
+        let rest =
+          rest
+          |> List.map (fun (scope : PluginCmdScope.t) -> scope.name)
+          |> List.map Names.Id.to_string
+          |> String.concat ", "
+        in
+        let info =
+          Printf.sprintf
+            "Closing wrong scope: expected to close a scope which was opened \
+             by \"%s %s.\" Commands waiting to be closed: %s."
+            command (Names.Id.to_string name) rest
+        in
+        Errors.fail ~info
 
   let display () =
     let rest =
-       !scopes
-       |> List.map (fun (scope: PluginCmdScope.t) -> scope.name)
-       |> List.map Names.Id.to_string
-       |> String.concat ", "
+      !scopes
+      |> List.map (fun (scope : PluginCmdScope.t) -> scope.name)
+      |> List.map Names.Id.to_string
+      |> String.concat ", "
     in
     Feedback.msg_info (Pp.str rest)
 
@@ -117,6 +119,38 @@ module Context = struct
     match !store with
     | None -> Errors.fail ~info:"There is no current context"
     | Some context -> context
+
+  let local_lookup (context : LinkageCtx.t) (path : Libnames.qualid) =
+    let path = Naming.path_to_list path in
+    let name = List.hd path in
+    let rec walk context =
+      match context with
+      | LinkageCtx.Toplevel linkage ->
+          linkage.fields
+          |> Bwd.find_map (fun (field_name, elem) ->
+                 match elem with
+                 | LinkageElem.FamilyDefinition { linkage; _ }
+                   when Names.Id.equal name field_name ->
+                     Some linkage
+                 | _ -> None)
+      | LinkageCtx.Nested (context, linkage) -> (
+          linkage.fields
+          |> Bwd.find_map (fun (field_name, elem) ->
+                 match elem with
+                 | LinkageElem.FamilyDefinition { linkage; _ }
+                   when Names.Id.equal name field_name ->
+                     Some linkage
+                 | _ -> None)
+          |> function
+          | None -> walk context
+          | linkage -> linkage)
+    in
+    let rest = List.tl path in
+    let linkage = walk context in
+    match rest with
+    | [] -> linkage
+    | path ->
+        Option.bind linkage (fun linkage -> walk_down_linkage linkage path)
 
   let lookup context (path : Libnames.qualid) =
     let path = Naming.path_to_list path in
@@ -193,10 +227,9 @@ module Context = struct
 
   let lookup_inductive_for_recursion ~name context =
     match lookup_linkage_elem context name with
-    | Some
-        ( LinkageElem.InductiveDefinition { inductive; compiled_recursors; _ },
-          linkage ) ->
-        (inductive, !compiled_recursors, linkage)
+    | Some (LinkageElem.InductiveDefinition { inductive; recursors; _ }, linkage)
+      ->
+        (inductive, recursors, linkage)
     | Some _ -> Errors.fail ~info:"Expected an inductive type"
     | None ->
         let info =
@@ -230,8 +263,10 @@ module Context = struct
       | Some _ ->
           Errors.fail
             ~info:
-              "This element has already been defined or it has been previously \
-               inherited"
+              (Printf.sprintf
+                 "This element %s has already been defined or it has been \
+                  previously inherited"
+                 (Names.Id.to_string name))
       | _ -> ()
     in
     match context with

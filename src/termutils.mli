@@ -31,15 +31,48 @@ val apply_module :
   arguments:Libnames.qualid list ->
   Constrexpr.module_ast
 
+val flatten_inductive_constructor_type :
+  inductive:VernacInductive.t ->
+  constructor:Names.Id.t ->
+  Libnames.qualid_r option list
+(** Given a constructor name [n] in an inductive type [i], 
+   [flatten_inductive_constructor_type i n] returns a list 
+   of optional names. This list correspoinds to the types of 
+   argument of [i]. If the type of an argument is a 
+   simple name [name] and [name] is the same as [i], then
+   it would be [Some name] otherwise it will be none.
+   We are effectively tracking the recursive location in 
+   the constructor where the inductived type appears 
+   recursively. *)
+
+val generate_one_computational_axiom :
+  inductive:VernacInductive.t ->
+  recursor_name:Names.Id.t ->
+  recursor_path:Libnames.qualid ->
+  constructor_name:Names.Id.t ->
+  constructor_path:Libnames.qualid ->
+  context:LinkageCtx.t option ->
+  Names.Id.t * Constrexpr.constr_expr
+
 val generate_computational_axioms :
-  provenance:Names.Id.t ->
-  constructors:Names.Id.t list ->
+  inductive:VernacInductive.t ->
   recursor:Names.Id.t ->
+  context:LinkageCtx.t option ->
   prefix:Libnames.qualid option ->
   (Names.Id.t * Constrexpr.constr_expr) list
 
 val handler_types_table :
-  Libnames.qualid -> Names.Id.t -> CompiledRecursor.t -> RecKind.t -> (Names.Id.t * Constrexpr.constr_expr) list
+  Libnames.qualid ->
+  Names.Id.t ->
+  CompiledRecursor.t ->
+  RecKind.t ->
+  (Names.Id.t * Constrexpr.constr_expr) list
+
+val handler_type_for_recursion :
+  name:Names.Id.t ->
+  inductive_path:Libnames.qualid ->
+  recursor:Recursor.t ->
+  (Names.Id.t * Constrexpr.constr_expr) list
 
 val extract_handlers_from_inductive_proof :
   Names.Id.t list ->
@@ -48,7 +81,7 @@ val extract_handlers_from_inductive_proof :
   (Names.Id.t * Constrexpr.constr_expr) list
 
 val calculate_inductive_proof_goal :
-  handler_types:Constrexpr.constr_expr list ->    
+  handler_types:Constrexpr.constr_expr list ->
   suffix:RecKind.t ->
   Constrexpr.constr_expr
 
@@ -62,3 +95,9 @@ val mk_lambda_with_type :
 
 (* fun (x : ...) -> forall (x : ...) *)
 val lambda_to_prod : Constrexpr.constr_expr -> Constrexpr.constr_expr
+val extract_functor_name : Constrexpr.module_ast -> CompiledModuleType.t
+
+val extract_handler_types_from_principle :
+  inductive:VernacInductive.t ->
+  principles:(Names.Id.t list * Constrexpr.constr_expr) RecursorStore.t ->
+  Recursors.t

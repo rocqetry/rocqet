@@ -6,6 +6,13 @@ val family : Names.Id.t -> unit
 (* Handle a `Family ... extends ...` command *)
 val family_extends : derived:Names.Id.t -> base:Libnames.qualid -> unit
 
+(* Hanle a `Family ... extends ... using ...`  *)
+val family_compose :
+  derived:Names.Id.t ->
+  base:Libnames.qualid ->
+  bases:Libnames.qualid list ->
+  unit
+
 (* Handle a `Metadata ...` section *)
 val metadata : Names.Id.t -> unit
 
@@ -61,12 +68,9 @@ val finduction :
 (* Handle a `FInduction ...` extension *)
 val finduction_extension : name:Names.Id.t -> unit
 val fproof : unit -> Declare.Proof.t
-val fqed : unit -> unit
-
 val fproof_lemma : unit -> Declare.Proof.t
 
 (* Handle an `FLemma ... : ...` *)
 val flemma : Names.Id.t -> Constrexpr.constr_expr -> unit
 val close_flemma : unit -> unit
-
 val display_plugin_scope : unit -> unit

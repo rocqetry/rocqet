@@ -17,6 +17,12 @@ val compile_inductive_signature :
   family_name:Names.Id.t ->
   CompiledModuleType.t
 
+val compile_inductive_constr :
+  name:Names.Id.t ->
+  ty:Constrexpr.constr_expr ->
+  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
+  CompiledModuleType.t
+
 val compile_inductive_implementation :
   ind_def:VernacInductive.t ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
@@ -31,16 +37,6 @@ val compile_recursors :
   family_name:Names.Id.t ->
   CompiledRecursor.t RecursorStore.t
 
-val compile_principle_signature :
-  ind_def:VernacInductive.t ->
-  recursors:(Names.Id.t list * Constrexpr.constr_expr) RecursorStore.t ->
-  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-  family_name:Names.Id.t ->
-  CompiledModuleType.t
-
-val compile_principle_implementation :
-  (Names.Id.t * Constrexpr.module_ast) list -> CompiledModule.t
-
 (* Compiling recursive definitions *)
 val compile_motives :
   names:Names.Id.t list ->
@@ -49,31 +45,43 @@ val compile_motives :
   family_name:Names.Id.t ->
   CompiledModule.t
 
-val compile_recursive_definition_signature :
+val compile_handler_types :
   names:Names.Id.t list ->
-  motive_module:CompiledModule.t ->
-  handler_cases:CompiledModule.t ->
+  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
+  recursor:CompiledRecursor.t ->
+  inductive_path:Libnames.qualid ->
+  cases:Names.Id.t list ->
+  CompiledModule.t
+
+val compile_handler_case :
+  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
+  name:Names.Id.t ->
+  body:Constrexpr.constr_expr ->
+  ty:Constrexpr.constr_expr ->
+  CompiledModule.t
+
+val compile_theorem_definition_signature :
+  names:Names.Id.t list ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
   family_name:Names.Id.t ->
-  computational_behaviour:[ `Exposed | `Hidden ] ->
-  computational_axioms:(Names.Id.t * Constrexpr.constr_expr) list ->
   CompiledModuleType.t
 
-val compile_recursive_definition_implementation :
-  inductive:VernacInductive.t ->
-  provenance:Linkage.t ->
-  recursor_name:Names.Id.t ->
-  handlers:Names.Id.t list ->
-  rec_principle_prefix:Libnames.qualid option ->
-  suffix:RecKind.t ->
+val compile_computational_axiom_signature :
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-  handler_cases:CompiledModule.t ->
-  CompiledModule.t * (Names.Id.t * Constrexpr.constr_expr) list
+  constructor_name:Names.Id.t ->
+  inductive:VernacInductive.t ->
+  recursor_name:Names.Id.t ->
+  prefix:Libnames.qualid option ->
+  Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t
+
+val compile_recursive_definition_signature :
+  names:Names.Id.t list ->
+  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
+  family_name:Names.Id.t ->
+  CompiledModuleType.t
 
 val calculate_rec_principle_prefix :
-  inductive_path:Libnames.qualid ->
-  context:LinkageCtx.t ->  
-  Libnames.qualid
+  inductive_path:Libnames.qualid -> context:LinkageCtx.t -> Libnames.qualid
 
 val compile_handler_cases :
   name:Names.Id.t ->
@@ -81,19 +89,7 @@ val compile_handler_cases :
   parameters:(Names.Id.t * Constrexpr.module_ast) list ->
   motive:CompiledModule.t ->
   handler_cases:(Names.Id.t * Constrexpr.constr_expr) list ->
-  handler_types:(Names.Id.t * Constrexpr.constr_expr) list ->  
-  CompiledModule.t
-
-(* FInduction *)
-val compile_theorem_implementation :
-  name:Names.Id.t ->
-  parameters:(Names.Id.t * Constrexpr.module_ast) list ->
-  compiled_handlers:CompiledModule.t ->  
-  inductive_name:Names.Id.t ->
-  suffix:RecKind.t ->
-  goal:Constrexpr.constr_expr ->  
-  handler_names:Names.Id.t list ->
-  rec_principle_prefix:Libnames.qualid ->
+  handler_types:(Names.Id.t * Constrexpr.constr_expr) list ->
   CompiledModule.t
 
 (* Compiling Linkage Contexts *)
@@ -116,11 +112,11 @@ val compile_definition :
   CompiledModule.t
 
 (* Compiling FLemma signatures *)
-val compile_lemma_signature : 
-    name:Names.Id.t ->
-    ty:Constrexpr.constr_expr ->
-    parameters:(Names.Id.t * Constrexpr.module_ast) list ->
-    CompiledModuleType.t
+val compile_lemma_signature :
+  name:Names.Id.t ->
+  ty:Constrexpr.constr_expr ->
+  parameters:(Names.Id.t * Constrexpr.module_ast) list ->
+  CompiledModuleType.t
 
-(* Linkage computation *)
-val compute_linkage : LinkageCtx.t option -> Linkage.t -> Linkage.t
+val compile_default_params :
+  context:(Names.Id.t * Constrexpr.module_ast) list -> CompiledModule.t list

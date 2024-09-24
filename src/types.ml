@@ -1,5 +1,4 @@
 open Bwd
-open Bwd.Infix
 
 (* A parsed vernacular inductive type *)
 module VernacInductive = struct
@@ -149,7 +148,6 @@ module VernacInductive = struct
 end
 
 (* Module naming *)
-(* This should really be Names.ModPath.t *)
 module CompiledModule = struct
   type t = Libnames.qualid
 end
@@ -157,6 +155,12 @@ end
 module CompiledModuleType = struct
   type t = Libnames.qualid
 end
+
+(*
+module Path = struct
+  type t = Libnames.qualid
+end
+*)
 
 module RecKind = struct
   type t = Ind | IndComplete | Rec | Rect
@@ -204,6 +208,21 @@ module CompiledRecursors = struct
   }
 end
 
+module Recursor = struct
+  type t = {
+    inductive_names : Names.Id.t list;
+    recursor : Constrexpr.constr_expr;
+    handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+  }
+end
+
+(* Contains the type of the
+   "rec" principle and the types
+   of each handler for that particular "rec" *)
+module Recursors = struct
+  type t = Recursor.t RecursorStore.t
+end
+
 (* Linkages *)
 
 (** A [LinkageElem] represents all information there is to know about afield
@@ -213,67 +232,70 @@ module rec LinkageElem : sig
   type t =
     | InductiveDefinition of {
         inductive : VernacInductive.t;
+        recursors : Recursors.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
-        compiled_recursors : CompiledRecursors.t ref;
+        default_ctx_params : CompiledModule.t list;
+      }
+    (* All names bound by an inductive definition:
+       inductive type names and constructor names *)
+    | InductiveConstr of {
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : CompiledModule.t list;
       }
     | FamilyDefinition of {
         linkage : Linkage.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
+        default_ctx_params : CompiledModule.t list;
       }
     | FieldDefinition of {
-        body_expr : Constrexpr.constr_expr;
-        body_type : Constrexpr.constr_expr option;
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
+        default_ctx_params : CompiledModule.t list;
       }
     (* Opaque definitions are overridable *)
     | OpaqueFieldDefinition of {
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
+        default_ctx_params : CompiledModule.t list;
       }
     | RecursorDefinition of {
         names : Names.Id.t list;
-        motives : Constrexpr.constr_expr list;
-        handler_types : (Names.Id.t * Constrexpr.constr_expr) list;
-        handler_cases : (Names.Id.t * Constrexpr.constr_expr) list;
-        inductive : VernacInductive.t;
+        handlers : Names.Id.t list;
         inductive_path : Libnames.qualid;
-        recursor_module : Libnames.qualid;
-        motive_module : CompiledModule.t;
         suffix : RecKind.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;
         arguments : Names.Id.t list;
-      }
-    | PrincipleDefinition of {
-        compiled_context : CompiledModuleType.t;
-        inductive : VernacInductive.t;
-        compiled_impl : CompiledModule.t;
-        compiled_signature : CompiledModuleType.t;
+        prefix : Libnames.qualid;
+        default_ctx_params : CompiledModule.t list;
       }
     | TheoremDefinition of {
         names : Names.Id.t list;
-        motives : Constrexpr.constr_expr list;
-        goal : Constrexpr.constr_expr;
         suffix : RecKind.t;
-        inductive : VernacInductive.t;
         inductive_path : Libnames.qualid;
-        handlers : (Names.Id.t * Constrexpr.constr_expr) list;
-        compiled_handlers : CompiledModule.t;
+        handlers : Names.Id.t list;
         compiled_context : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
+        default_ctx_params : CompiledModule.t list;
+      }
+    | ComputationalAxiom of {
+        name : Names.Id.t;
+        axiom : Constrexpr.constr_expr;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : CompiledModule.t list;
       }
     | MetaDataSection of {
         name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
+        default_ctx_params : CompiledModule.t list;
       }
 end =
   LinkageElem
@@ -281,36 +303,22 @@ end =
 and Linkage : sig
   type t = {
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
+    default_ctx_params : CompiledModule.t list;
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
   val context_parameters : t -> Libnames.qualid list
-  val context_match : t -> t -> [ `Equal | `Less | `More ]
   val top_most_self_name : t -> Names.Id.t
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
 
   val path_substitution_elem :
     LinkageElem.t -> source:Names.Id.t -> target:Names.Id.t -> LinkageElem.t
-
-  val concatenate_elem : LinkageElem.t -> LinkageElem.t -> LinkageElem.t
-  val concatenate_recursive : derived:t -> base:t -> t
-
-  (* Linkage concatenation *)
-  val concatenate : derived:t -> base:t -> t
-
-  (* Concatenate the fields before `prefix` *)
-  val concatenate_prefix : prefix:Names.Id.t -> derived:t -> base:t -> t
-
-  val concatenate_recursive_prefix :
-    prefix:Names.Id.t -> derived:t -> base:t -> t
-
-  val pointwise_concatenate_recursive_prefix :
-    prefix:Names.Id.t -> derived:t -> base:t -> t
 end = struct
   type t = {
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
+    default_ctx_params : CompiledModule.t list;
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
@@ -321,13 +329,6 @@ end = struct
     |> Bwd.map Libnames.qualid_of_ident
     |> Bwd.to_list
 
-  let context_match left right =
-    let left_length = Bwd.length left.context
-    and right_length = Bwd.length right.context in
-    if left_length < right_length then `Less
-    else if left_length > right_length then `More
-    else `Equal
-
   let top_most_self_name linkage =
     match Bwd.to_list linkage.context with
     | [] -> Naming.self_version linkage.name
@@ -336,9 +337,13 @@ end = struct
   let rec path_substitution_elem elem ~source ~target =
     match elem with
     | LinkageElem.MetaDataSection metadata ->
-       LinkageElem.MetaDataSection metadata
+        LinkageElem.MetaDataSection metadata
+    | LinkageElem.InductiveConstr constr -> LinkageElem.InductiveConstr constr
     | LinkageElem.OpaqueFieldDefinition definition ->
-       LinkageElem.OpaqueFieldDefinition definition
+        LinkageElem.OpaqueFieldDefinition definition
+    | LinkageElem.ComputationalAxiom comp ->
+        let axiom = Naming.replace_qualid_root ~source ~target comp.axiom in
+        LinkageElem.ComputationalAxiom { comp with axiom }
     | LinkageElem.FamilyDefinition family ->
         let g (name, expr) =
           if Names.Id.equal source name then (target, expr) else (name, expr)
@@ -356,173 +361,14 @@ end = struct
               VernacInductive.path_subtitution definition.inductive ~source
                 ~target;
           }
-    | LinkageElem.FieldDefinition field ->
-        let body_expr =
-          Naming.replace_qualid_root ~source ~target field.body_expr
-        in
-        let body_type =
-          field.body_type
-          |> Option.map (Naming.replace_qualid_root ~source ~target)
-        in
-        FieldDefinition { field with body_expr; body_type }
-    | LinkageElem.RecursorDefinition definition ->
-        let motives =
-          definition.motives
-          |> List.map (Naming.replace_qualid_root ~source ~target)
-        in
-        let handler_types = 
-          definition.handler_types
-          |> List.map (fun (name, e) -> name, Naming.replace_qualid_root ~source ~target e)
-        in
-        let handler_cases = 
-          definition.handler_cases
-          |> List.map (fun (name, e) -> name, Naming.replace_qualid_root ~source ~target e)
-        in 
-        RecursorDefinition { definition with motives; handler_types; handler_cases; }
-    | LinkageElem.TheoremDefinition definition ->
-        let motives =
-          definition.motives
-          |> List.map (Naming.replace_qualid_root ~source ~target)
-        in
-        TheoremDefinition { definition with motives }
-    | LinkageElem.PrincipleDefinition principle ->
-        LinkageElem.PrincipleDefinition principle
+    | LinkageElem.FieldDefinition field -> FieldDefinition field
+    | LinkageElem.RecursorDefinition definition -> RecursorDefinition definition
+    | LinkageElem.TheoremDefinition definition -> TheoremDefinition definition
 
   and path_subtitution linkage ~source ~target =
     let f (name, elem) = (name, path_substitution_elem elem ~source ~target) in
     let fields = linkage.fields |> Bwd.map f in
     { linkage with fields }
-
-  let rec concatenate_elem elem0 elem1 =
-    let remove_duplicates lst =
-      let rec aux seen = function
-        | [] -> []
-        | hd :: tl ->
-            if List.mem hd seen then aux seen tl else hd :: aux (hd :: seen) tl
-      in
-      aux [] lst
-    in
-    match (elem0, elem1) with
-    | LinkageElem.RecursorDefinition e0, LinkageElem.RecursorDefinition e1 ->
-        let handler_cases = e0.handler_cases @ e1.handler_cases in
-        let handler_cases = remove_duplicates handler_cases in
-        let handler_types = e0.handler_types @ e1.handler_types in
-        let handler_types = remove_duplicates handler_types in
-        LinkageElem.RecursorDefinition { e1 with handler_cases; handler_types }
-    | LinkageElem.TheoremDefinition e0, LinkageElem.TheoremDefinition e1 ->
-        let handler_cases = e0.handlers @ e1.handlers in
-        let handlers = remove_duplicates handler_cases in
-        LinkageElem.TheoremDefinition { e0 with handlers }
-    | LinkageElem.InductiveDefinition e0, LinkageElem.InductiveDefinition e1 ->
-        LinkageElem.InductiveDefinition
-          {
-            e0 with
-            inductive =
-              VernacInductive.concatenate ~base:e0.inductive
-                ~derived:e1.inductive;
-          }
-    | LinkageElem.FamilyDefinition e0, LinkageElem.FamilyDefinition e1 ->
-        let linkage =
-          concatenate_recursive ~base:e0.linkage ~derived:e1.linkage
-        in
-        LinkageElem.FamilyDefinition { e0 with linkage }
-    | FieldDefinition _, FieldDefinition e1 ->
-        FieldDefinition e1 (* Override a field? *)
-    | PrincipleDefinition _, PrincipleDefinition e1 -> PrincipleDefinition e1
-    | MetaDataSection _, MetaDataSection m -> MetaDataSection m
-    | _, _ -> Errors.fail ~info:"Invalid concatnenation arguments"
-
-  (* Deep concatenation *)
-  (* If the base is empty we loose some items *)
-  and concatenate_recursive ~derived ~base =
-    (* Using pick here reorders the fields in a family, which is wrong *)
-    let rec pick x lst =
-      match lst with
-      | [] -> (None, [])
-      | (hd, elem) :: tl ->
-          if Names.Id.equal hd x then (Some (hd, elem), tl)
-          else
-            let result, rest = pick x tl in
-            (result, (hd, elem) :: rest)
-    in
-    let rec go base derived =
-      match base with
-      | [] -> derived
-      | (name, elem) :: base -> (
-          match pick name derived with
-          | None, _ -> (name, elem) :: go base derived
-          | Some (_, delem), derived ->
-              (name, concatenate_elem elem delem) :: go base derived)
-    in
-    let fields = go (Bwd.to_list base.fields) (Bwd.to_list derived.fields) in
-    Linkage.{ derived with fields = Bwd.of_list fields }
-
-  (* Naive concatenation *)
-  let concatenate ~derived ~base =
-    let rec compute_difference ~base
-        ~(derived : (Names.Id.t * LinkageElem.t) list) =
-      match (base, derived) with
-      | [], [] -> []
-      | (bname, belem) :: rest_base, (dname, _) :: rest_derived ->
-          if Names.Id.equal bname dname then
-            compute_difference ~base:rest_base ~derived:rest_derived
-          else
-            (* Check if the name has already been inherited:
-               in a later position *)
-            let inherited_later =
-              rest_derived |> List.map fst |> List.exists (Names.Id.equal bname)
-            in
-            if not inherited_later then
-              (bname, belem) :: compute_difference ~base:rest_base ~derived
-            else compute_difference ~base:rest_base ~derived
-      | _ :: _, [] -> base
-      | [], _ :: _ -> []
-    in
-    let base_fields = base.Linkage.fields |> Bwd.to_list in
-    let derived_fields = derived.Linkage.fields |> Bwd.to_list in
-    let inherited_fields =
-      compute_difference ~base:base_fields ~derived:derived_fields
-    in
-    let fields = derived.fields <@ inherited_fields in
-    Linkage.{ derived with fields }
-
-  (* Naive concatenation of the linkage before a particular field *)
-  let concatenate_prefix ~prefix ~(derived : Linkage.t) ~(base : Linkage.t) =
-    let rec calculate_dependencies fields =
-      match fields with
-      | Bwd.Emp -> concatenate ~derived ~base
-      | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
-        ->
-          concatenate ~base:{ base with fields } ~derived
-      | Bwd.Snoc (fields, _) -> calculate_dependencies fields
-    in
-    calculate_dependencies base.fields
-
-  let pointwise_concatenate_recursive_prefix ~prefix ~(derived : Linkage.t)
-      ~(base : Linkage.t) =
-    let rec extract_prefix fields =
-      match fields with
-      | Bwd.Emp -> fields
-      | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
-        ->
-          fields
-      | Bwd.Snoc (fields, _) -> extract_prefix fields
-    in
-    let derived = { derived with fields = extract_prefix derived.fields } in
-    let base = { base with fields = extract_prefix base.fields } in
-    concatenate_recursive ~derived ~base
-
-  let concatenate_recursive_prefix ~prefix ~(derived : Linkage.t)
-      ~(base : Linkage.t) =
-    let rec calculate_dependencies fields =
-      match fields with
-      | Bwd.Emp -> concatenate_recursive ~base ~derived
-      | Bwd.Snoc (fields, (found_name, _)) when Names.Id.equal found_name prefix
-        ->
-          concatenate_recursive ~base:{ base with fields } ~derived
-      | Bwd.Snoc (fields, _) -> calculate_dependencies fields
-    in
-    calculate_dependencies base.fields
 end
 
 (* A linkage we are currently constructing *)

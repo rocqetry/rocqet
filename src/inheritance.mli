@@ -1,14 +1,16 @@
 open Types
 
-val inherit_element :
-  field:Names.Id.t ->
-  (* The field name *)
-  linkage:Linkage.t ->
-  (* The current linkage *)
-  context:LinkageCtx.t ->
-  (* The current linkage context *)
-  LinkageElem.t option
+val lookup_field_in_base :
+  field:Names.Id.t -> context:LinkageCtx.t -> LinkageElem.t option
 
-(* Inherit the dependencies of a particular field from it's
-   base families into the current linkage context *)
+val inherit_name : name:Names.Id.t -> unit
 val inherit_dependencies : prefix:Names.Id.t -> unit
+
+val inherit_elements :
+  elements:(Names.Id.t * LinkageElem.t) list ->
+  linkage:Linkage.t ->
+  context:LinkageCtx.t ->
+  Linkage.t
+
+val linkage_concatenate : derived:Linkage.t -> base:Linkage.t -> Linkage.t
+val linkages_concatenate : Linkage.t list -> Linkage.t

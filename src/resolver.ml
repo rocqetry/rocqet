@@ -15,45 +15,22 @@ open Bwd
 let rec linear_ctx_mapping context =
   let f (linkage : Linkage.t) (name, elem) =
     match elem with
-    | LinkageElem.RecursorDefinition { names; handler_cases; _ } ->
+    | LinkageElem.RecursorDefinition { names; handlers; _ } ->
         let recursor = names |> List.hd in
         let names =
-          handler_cases |> List.map fst
+          handlers
           |> List.map (fun case -> Naming.handler_name ~recursor ~case)
           |> List.map (fun name -> (name, Naming.self_version linkage.name))
         in
         (recursor, Naming.self_version linkage.name) :: names
-    | LinkageElem.InductiveDefinition { compiled_recursors; inductive; _ } ->
-       let recursor_types = 
-         let name = inductive |> VernacInductive.extract_inductive_name in
-         let ctrs = 
-           inductive 
-           |> List.hd 
-           |> fst 
-           |> VernacInductive.extract_type_and_cstrs 
-           |> snd 
-           |> List.map fst
-         in 
-         (!compiled_recursors).recursors         
-         |> RecursorStore.mapi (fun suffix _ ->
-              let suffix = RecKind.to_string suffix in 
-              let recursor_type = Naming.recursor_type ~inductive:name suffix in 
-              let handler_types = 
-                ctrs |> List.map (Naming.handler_type ~suffix)
-              in 
-              recursor_type :: handler_types)
-         |> RecursorStore.to_list 
-         |> List.concat_map snd 
-         |> List.map (fun name -> (name, Naming.self_version linkage.name))
-       in
-       let names =
+    | LinkageElem.InductiveDefinition { inductive; _ } ->
+        let names =
           inductive |> VernacInductive.extract_all_names_with_type
-          |> List.concat_map (fun (_, constrs) ->
-                 constrs
+          |> List.concat_map (fun (head, constrs) ->
+                 head :: constrs
                  |> List.map (fun (name, _) ->
                         (name, Naming.self_version linkage.name)))
-       in
-       let names = names @ recursor_types in 
+        in
         (name, Naming.self_version linkage.name) :: names
     | _ -> [ (name, Naming.self_version linkage.name) ]
   in
