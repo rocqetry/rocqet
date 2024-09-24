@@ -22,15 +22,132 @@ family Base {
 	family C extends Cfrontend { } 
 	family Clight extends Cfrontend { }
 	
-	family Cminorvariant { } 	
-	family Csharpminor extends Cminorvariant { } 
-	family Cminor extends Cminorvariant { }
-	family CminorSel extends Cminorvariant { }	
+	family Cminorvariant {
+		Abstract function : Type.
+		
+		family Sem { 						
+			Abstract function_env : Type.			
+			Abstract empty_function_env : env.
+			
+			Inductive state: Type :=
+               | State:(* Execution within a function *)
+                   forall (f: function)(* currently executing function *)
+                          (s: stmt)(* statement under consideration *)
+                          (k: cont)(* its continuation -- what to do next *)
+                          (sp: function_env)(* current stack pointer *)
+                          (e: env)(* current local environment *)
+                          (m: mem),(* current memory state *)
+                   state
+			
+			(* Free stack space *)
+			Abstract free_function_env : mem -> function_env -> function -> option mem.
+			(* Called after free *)
+			Abstract update_env : function_env -> function_env.
+			
+			FInductive step: state -> trace -> state -> Prop :=
+				| step_skip_call: forall f k sp e m m',
+                    is_call_cont k ->
+					free_function_env m sp f = Some m' ->
+                    step (State f Sskip k  e m)
+                      E0 (Returnstate Vundef k m')
+	            | step_return_0: forall f k sp e m m',
+                  free_function_env m sp f = Some m' ->
+                  step (State f (Sreturn None) k (update_env sp) e m)
+                    E0 (Returnstate Vundef (call_cont k) m')
+                | step_return_1: forall f a k sp e m v m',
+                    eval_expr (update_env sp) e m a v ->
+                    free_function_env m sp f = Some m' ->
+                    step (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m)
+                      E0 (Returnstate v (call_cont k) m')
+		}
+	}
+	family CminorTransl { 
+		family Source extends Cminorvariant { } 
+		family Target extends Cminiorvariant { }
+		
+		family Sim { 
+			(* This will need some abstract things *)
+			Indutive match_states : Source.state -> Target.state := ...
+		}
+	}
+	
+	family Csharpminor extends Cminorvariant {
+	  FOverride Record function : Type := mkfunction {
+          fn_sig: signature;
+          fn_params: list ident;
+          fn_vars: list (ident * Z);
+          fn_temps: list ident;
+          fn_body: stmt
+      }.
+		
+		family Sem { 
+			FOverride Definition function_env := PTree.t (block * Z).
+		    FOverride Definition empty_env := PTree.empty (block * Z).
+			
+			FOverride Definition free_function_env (m : mem) (sp : function_env) (f : function) := 
+			   Mem.free_list m (blocks_of_env e)
+		    FOverride update_env e := e 
+		}
+	}
+	family Cminor extends Cminorvariant { 
+		FOverride Record function : Type := mkfunction {
+         fn_sig: signature;
+         fn_params: list ident;
+         fn_vars: list ident;
+         fn_stackspace: Z;
+         fn_body: stmt
+       }.
+
+	   family Sem { 
+           FOverride Definition function_env := val. (* stack pointer *)
+		   FOverride Definition empty_env := Z.
+		   
+		   FOverride Definition free_function_env (m : mem) (sp : function_env) (f : function) := 
+		     Mem.free m sp 0 f.(fn_stackspace).
+		   FOverride update_env sp := (Vptr sp Ptrofs.zero).
+	   }
+	}
+	family CminorSel extends Cminorvariant { 
+		FOverride Record function : Type := mkfunction {
+          fn_sig: signature;
+          fn_params: list ident;
+          fn_vars: list (ident * Z);
+          fn_temps: list ident;
+          fn_body: stmt
+      }.
+		
+		family Sem { 
+			FOverride Definition function_env := PTree.t (block * Z).
+		    FOverride Definition empty_env := PTree.empty (block * Z).
+			
+			FOverride Definition free_function_env (m : mem) (sp : function_env) (f : function) := 
+			   Mem.free_list m (blocks_of_env e)
+		    FOverride update_env e := e 
+		}
+	}
+	(* Csharpminor -> Cminor *)
+	family Cminorgen extends CminorTransl { }
+	family StackAllocate extends CminorTransl { }
+	family SimplSwitch extends CminorTransl { }
+	family ShiftExit extends CminorTransl { }
+	
+	(* Cminor -> CminorSel *)
+	family Selection extends CminorTransl { }
+	family SelSwitch extends CminorTransl { } 
+	family SelBuiltin extends CminorTransl { }
+	family SelBinary extends CminorTransl { }
+	family SelUnary extends CminorTransl { }
+	family SelLong extends CminorTransl { }
+	family SplitLong extends CminorTransl { }
+	family SelDiv extends CminorTransl { }
+	
 	
 	family RTL { }
 	family LTL { }
 	
-	family LinearLike { }
+	family LinearLike {
+	     
+	}
 	family Linear extends LinearLike { } 
 	family Mach extends LinearLike { }
 	
