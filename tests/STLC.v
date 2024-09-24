@@ -94,5 +94,5 @@ Family STLC_nat.
   FEnd X.  
 FEnd STLC_nat.
 
-Family all extends STLC using STLC_bool, STLC_prod.
+Family all extends STLC using STLC_bool, (*STLC_nat,*) STLC_prod.
 FEnd all.

@@ -193,8 +193,7 @@ let rec inherit_one
                  recursors;
                  default_ctx_params;                 
                }
-
-          (* TODO: Update wrt late bound base family *)
+          
           | FamilyDefinition family ->
              
              begin
@@ -217,9 +216,7 @@ let rec inherit_one
                   in
                   FamilyDefinition { default_ctx_params; compiled_context; compiled_impl; compiled_signature; linkage; }
                | Some base ->
-                  (* We want to perform a local lookup
-                     so we don't update a family with a non-late bound
-                     family name. *)
+                  (* TODO: store an actual path in the base *)
                   let path = Libnames.qualid_of_ident base.name in
                   match Context.local_lookup context path with
                   | None ->
@@ -279,12 +276,21 @@ let rec inherit_one
           | MetaDataSection metadata -> MetaDataSection { metadata with compiled_context }
           | OpaqueFieldDefinition field -> OpaqueFieldDefinition { field with compiled_context }
 
-          (* Exhaustiveness checks *)
-          (* We don't want to do exhaustiveness
-             checks when this function is called
-             from linkage concatenation *)
-          | RecursorDefinition recursive -> RecursorDefinition { recursive with compiled_context }
-          | TheoremDefinition theorem -> TheoremDefinition { theorem with compiled_context }
+          (* Exhaustiveness checks *)          
+          | RecursorDefinition recursive ->
+             let inductive, _, _ = 
+               Context.lookup_inductive_for_recursion ~name:recursive.inductive_path context
+             in
+             let name = List.hd recursive.names in 
+             Checks.check_exhaustive ~name ~inductive ~handlers:recursive.handlers;
+             RecursorDefinition { recursive with compiled_context }
+          | TheoremDefinition theorem ->
+             let inductive, _, _ = 
+               Context.lookup_inductive_for_recursion ~name:theorem.inductive_path context
+             in
+             let name = List.hd theorem.names in 
+             Checks.check_exhaustive ~name ~inductive ~handlers:theorem.handlers;             
+             TheoremDefinition { theorem with compiled_context }
       in 
       let fields = Snoc (linkage.fields, (name, element)) in
       { linkage with fields }

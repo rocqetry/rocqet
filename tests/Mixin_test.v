@@ -35,8 +35,6 @@ FEnd STLC_prod.
 Family Al extends STLC using STLC_unit, STLC_bool, STLC_prod.    
 FEnd Al.
 
-Print Al.X.
-
 Check Al.X.ty_arrow.
 Check Al.X.ty_unit.
 Check Al.X.ty_bool.
