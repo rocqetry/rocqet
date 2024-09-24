@@ -23,15 +23,14 @@ let rec linear_ctx_mapping context =
           |> List.map (fun name -> (name, Naming.self_version linkage.name))
         in
         (recursor, Naming.self_version linkage.name) :: names
-    | LinkageElem.InductiveDefinition { inductive; _ } ->        
+    | LinkageElem.InductiveDefinition { inductive; _ } ->
         let names =
-          inductive
-          |> VernacInductive.extract_all_names_with_type
+          inductive |> VernacInductive.extract_all_names_with_type
           |> List.concat_map (fun (head, constrs) ->
-                 (head :: constrs)
+                 head :: constrs
                  |> List.map (fun (name, _) ->
                         (name, Naming.self_version linkage.name)))
-        in        
+        in
         (name, Naming.self_version linkage.name) :: names
     | _ -> [ (name, Naming.self_version linkage.name) ]
   in

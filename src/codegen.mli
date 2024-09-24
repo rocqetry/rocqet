@@ -21,7 +21,7 @@ val compile_inductive_constr :
   name:Names.Id.t ->
   ty:Constrexpr.constr_expr ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-    CompiledModuleType.t
+  CompiledModuleType.t
 
 val compile_inductive_implementation :
   ind_def:VernacInductive.t ->
@@ -42,42 +42,42 @@ val compile_motives :
   names:Names.Id.t list ->
   motives:Constrexpr.constr_expr list ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-  family_name:Names.Id.t ->  
+  family_name:Names.Id.t ->
   CompiledModule.t
 
-val compile_handler_types:
-    names:Names.Id.t list ->
-    ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-    recursor:CompiledRecursor.t ->
-    inductive_path:Libnames.qualid ->
-    cases:Names.Id.t list ->
-    CompiledModule.t
+val compile_handler_types :
+  names:Names.Id.t list ->
+  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
+  recursor:CompiledRecursor.t ->
+  inductive_path:Libnames.qualid ->
+  cases:Names.Id.t list ->
+  CompiledModule.t
 
-val compile_handler_case : 
-   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-   name:Names.Id.t ->
-   body:Constrexpr.constr_expr ->
-   ty:Constrexpr.constr_expr ->
-   CompiledModule.t
+val compile_handler_case :
+  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
+  name:Names.Id.t ->
+  body:Constrexpr.constr_expr ->
+  ty:Constrexpr.constr_expr ->
+  CompiledModule.t
 
-val compile_theorem_definition_signature : 
-    names:Names.Id.t list ->    
-    ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-    family_name:Names.Id.t ->     
-    CompiledModuleType.t
+val compile_theorem_definition_signature :
+  names:Names.Id.t list ->
+  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
+  family_name:Names.Id.t ->
+  CompiledModuleType.t
 
 val compile_computational_axiom_signature :
-    ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-    constructor_name:Names.Id.t ->
-    inductive:VernacInductive.t ->
-    recursor_name:Names.Id.t ->
-    prefix:Libnames.qualid option ->
-      (Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t)
+  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
+  constructor_name:Names.Id.t ->
+  inductive:VernacInductive.t ->
+  recursor_name:Names.Id.t ->
+  prefix:Libnames.qualid option ->
+  Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t
 
 val compile_recursive_definition_signature :
-  names:Names.Id.t list ->    
+  names:Names.Id.t list ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-  family_name:Names.Id.t ->   
+  family_name:Names.Id.t ->
   CompiledModuleType.t
 
 val calculate_rec_principle_prefix :
@@ -118,6 +118,5 @@ val compile_lemma_signature :
   parameters:(Names.Id.t * Constrexpr.module_ast) list ->
   CompiledModuleType.t
 
-val compile_default_params : 
-   context:(Names.Id.t * Constrexpr.module_ast) list ->
-   CompiledModule.t list
+val compile_default_params :
+  context:(Names.Id.t * Constrexpr.module_ast) list -> CompiledModule.t list

@@ -7,10 +7,10 @@ val family : Names.Id.t -> unit
 val family_extends : derived:Names.Id.t -> base:Libnames.qualid -> unit
 
 (* Hanle a `Family ... extends ... using ...`  *)
-val family_compose : 
-  derived:Names.Id.t -> 
-  base:Libnames.qualid -> 
-  bases:Libnames.qualid list -> 
+val family_compose :
+  derived:Names.Id.t ->
+  base:Libnames.qualid ->
+  bases:Libnames.qualid list ->
   unit
 
 (* Handle a `Metadata ...` section *)

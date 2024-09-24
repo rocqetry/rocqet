@@ -3,19 +3,19 @@ open Env
 
 (* Private store *)
 module Ctx = struct
-  type t = {    
-    handler_types : (Names.Id.t * Constrexpr.constr_expr) list;    
+  type t = {
+    handler_types : (Names.Id.t * Constrexpr.constr_expr) list;
     (* The name of the handlers that were supposed to be implemented *)
     implementing_handlers : Names.Id.t list;
     (* The handlers actually implemented or inherited *)
-    defined_handlers: Names.Id.t list;
+    defined_handlers : Names.Id.t list;
     name : Names.Id.t;
-    inductive : VernacInductive.t;    
+    inductive : VernacInductive.t;
     suffix : RecKind.t;
     (* the name of the arguments to this FRecursion *)
     arguments : Names.Id.t list;
     inductive_path : Libnames.qualid;
-    rec_principle_prefix : Libnames.qualid;    
+    rec_principle_prefix : Libnames.qualid;
   }
 
   let store = Summary.ref ~name:"RecursionCtx" (None : t option)
@@ -28,19 +28,19 @@ module Ctx = struct
   let clear () = store := None
   let update recursion_data = store := Some recursion_data
 
-  let add_handler name  =
+  let add_handler name =
     let ctx = get () in
     let ctx = { ctx with defined_handlers = name :: ctx.defined_handlers } in
-    update ctx  
+    update ctx
 end
 
 let close_recursion () =
   let Ctx.
-        {          
+        {
           name;
           inductive;
-          suffix;          
-          defined_handlers;          
+          suffix;
+          defined_handlers;
           arguments;
           inductive_path;
           rec_principle_prefix;
@@ -59,9 +59,8 @@ let close_recursion () =
   in
   let context = Context.get () in
   let default_ctx_params =
-    context
-    |> Context.family_linkage
-    |> function { default_ctx_params; _ } -> default_ctx_params
+    context |> Context.family_linkage |> function
+    | { default_ctx_params; _ } -> default_ctx_params
   in
   let family = context |> Context.family_name |> Names.Id.to_string in
   let module_name =
@@ -73,44 +72,48 @@ let close_recursion () =
     Codegen.compile_linkage_context ~field_name:module_name context
   in
   let compiled_signature =
-    Codegen.compile_recursive_definition_signature
-      ~names:[ name ]
-      ~ctx:parameters
-      ~family_name:name      
+    Codegen.compile_recursive_definition_signature ~names:[ name ]
+      ~ctx:parameters ~family_name:name
   in
   let elem =
     LinkageElem.RecursorDefinition
       {
         handlers;
-        names = [ name ];        
-        inductive_path;                
+        names = [ name ];
+        inductive_path;
         compiled_signature;
         compiled_context;
-        suffix;        
+        suffix;
         arguments;
         prefix = rec_principle_prefix;
         default_ctx_params;
       }
-  in  
-  Context.add_field ~name ~elem;  
-  let _ =    
+  in
+  Context.add_field ~name ~elem;
+  let _ =
     implementing_handlers
     |> List.iter (fun constructor_name ->
-           let context = Context.get () in 
+           let context = Context.get () in
            let compiled_context, parameters =
              Codegen.compile_linkage_context ~field_name:module_name context
            in
            let axiom_name, axiom, compiled_signature =
-             Codegen.compile_computational_axiom_signature
-               ~ctx:parameters ~constructor_name ~inductive
-               ~recursor_name:name ~prefix:(Some rec_principle_prefix)
+             Codegen.compile_computational_axiom_signature ~ctx:parameters
+               ~constructor_name ~inductive ~recursor_name:name
+               ~prefix:(Some rec_principle_prefix)
            in
-           let elem = 
-              LinkageElem.ComputationalAxiom
-                { name = axiom_name; axiom; compiled_context; compiled_signature; default_ctx_params }
+           let elem =
+             LinkageElem.ComputationalAxiom
+               {
+                 name = axiom_name;
+                 axiom;
+                 compiled_context;
+                 compiled_signature;
+                 default_ctx_params;
+               }
            in
            Context.add_field ~name:axiom_name ~elem)
-  in  
+  in
   (* inherited_handlers = handlers - implementing_handlers *)
   let inherited_handlers =
     let list_difference list1 list2 =
@@ -121,22 +124,22 @@ let close_recursion () =
   (* Force the inheritance of computational axioms *)
   let _ =
     let recursor_name = name in
-    inherited_handlers    
+    inherited_handlers
     |> List.iter (fun constructor_name ->
-           let name = Naming.computational_axiom_name ~constructor_name ~recursor_name in
+           let name =
+             Naming.computational_axiom_name ~constructor_name ~recursor_name
+           in
            Inheritance.inherit_name ~name)
-  in 
-  
+  in
+
   Ctx.clear ()
 
-let open_recursion
-    ~(name : Names.Id.t)
-    ~(inductive_path : Libnames.qualid)
+let open_recursion ~(name : Names.Id.t) ~(inductive_path : Libnames.qualid)
     ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t)
     ~(arguments : Names.Id.t list) =
   Inheritance.inherit_dependencies ~prefix:name;
-  let context = Context.get () in    
-  let motive_expr = Resolver.resolve_constrexpr ~context ~expression:motive in  
+  let context = Context.get () in
+  let motive_expr = Resolver.resolve_constrexpr ~context ~expression:motive in
   let inductive, recursors, _provenance =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
@@ -144,75 +147,76 @@ let open_recursion
   (* Make the motive a field in the family:  *)
   let motive_name = Naming.motive_of name in
   let () = Definition.add_definition ~name:motive_name motive_expr in
-  let context = Context.get () in  
+  let context = Context.get () in
   let handler_types =
-    Termutils.handler_type_for_recursion ~name ~inductive_path ~recursor     
-  in  
+    Termutils.handler_type_for_recursion ~name ~inductive_path ~recursor
+  in
   let rec_principle_prefix =
     Codegen.calculate_rec_principle_prefix ~inductive_path ~context
   in
   let implementing_handlers = List.map fst handler_types in
   let recursion_ctx =
     Ctx.
-      {        
+      {
         defined_handlers = [];
         implementing_handlers;
         suffix;
         inductive_path;
-        handler_types;        
-        name;        
+        handler_types;
+        name;
         inductive;
         arguments;
-        rec_principle_prefix;        
+        rec_principle_prefix;
       }
   in
   Ctx.update recursion_ctx
 
 let open_recursion_extension ~name =
   Inheritance.inherit_dependencies ~prefix:name;
-  let context = Context.get () in  
+  let context = Context.get () in
   let elem = Inheritance.lookup_field_in_base ~field:name ~context in
   let inductive_path, inherited_handlers, suffix, arguments =
     match elem with
     | None -> Errors.fail ~info:"There is no such FRecursion in a base family"
     | Some
-        (RecursorDefinition
-          { inductive_path; suffix; handlers; arguments; _ }) ->
+        (RecursorDefinition { inductive_path; suffix; handlers; arguments; _ })
+      ->
         (inductive_path, handlers, suffix, arguments)
     | _ -> Errors.fail ~info:"Expected to inherit an FRecrusion"
-  in    
+  in
   let inductive, recursors, _provenance =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
-  let recursor = RecursorStore.find suffix recursors in  
+  let recursor = RecursorStore.find suffix recursors in
   let handler_types =
-    Termutils.handler_type_for_recursion ~name ~inductive_path ~recursor     
+    Termutils.handler_type_for_recursion ~name ~inductive_path ~recursor
   in
   let implementing_handlers =
-    let inside x l = List.exists (fun k -> Names.Id.equal k x) l in    
-    handler_types |> List.filter_map (fun (x, _) -> if not (inside x inherited_handlers) then Some x else None)
+    let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
+    handler_types
+    |> List.filter_map (fun (x, _) ->
+           if not (inside x inherited_handlers) then Some x else None)
   in
   let rec_principle_prefix =
     Codegen.calculate_rec_principle_prefix ~inductive_path ~context
   in
   let recursion_ctx =
     Ctx.
-    {
+      {
         defined_handlers = inherited_handlers;
         implementing_handlers;
         suffix;
-        handler_types;        
-        name;        
+        handler_types;
+        name;
         inductive;
         inductive_path;
-        arguments;        
+        arguments;
         rec_principle_prefix;
       }
   in
   Ctx.update recursion_ctx
 
-let extend_argumets_with_inductive_case
-    ~(recursor : Names.Id.t)
+let extend_argumets_with_inductive_case ~(recursor : Names.Id.t)
     ~(constructor : Names.Id.t) ~(arguments : Names.Id.t list)
     ~(inductive : VernacInductive.t) =
   let types =
@@ -310,7 +314,9 @@ let add_handler ~name ~arguments ~handler =
             let handler = Termutils.mk_lambda recursion_ctx.arguments handler in
             Termutils.mk_lambda arguments handler
       in
-      let () = Definition.add_definition ~name:case_name ~body_type:ty handler in      
+      let () =
+        Definition.add_definition ~name:case_name ~body_type:ty handler
+      in
       Ctx.add_handler name
 
 (* Extra utilities/functions to support a nice syntax for FRecursion *)

@@ -7,20 +7,19 @@ let add_inductive_constr ~name ~ty =
   Inheritance.inherit_dependencies ~prefix:name;
   let context = Context.get () in
   let default_ctx_params =
-    context
-    |> Context.family_linkage
-    |> function { default_ctx_params; _ } -> default_ctx_params
+    context |> Context.family_linkage |> function
+    | { default_ctx_params; _ } -> default_ctx_params
   in
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:name context
   in
-  let ty = Resolver.resolve_constrexpr ~context ~expression:ty in  
+  let ty = Resolver.resolve_constrexpr ~context ~expression:ty in
   let compiled_signature =
     Codegen.compile_inductive_constr ~name ~ty ~ctx:parameters
   in
   let elem =
     LinkageElem.InductiveConstr
-      {  compiled_context; compiled_signature; default_ctx_params }
+      { compiled_context; compiled_signature; default_ctx_params }
   in
   (* Fake names becuase the inductive will already
      have the names and expose then to the resolver
@@ -29,27 +28,20 @@ let add_inductive_constr ~name ~ty =
   Context.add_field ~name ~elem
 
 (* Extract the constructors *)
-let constructors inductive =    
-    inductive
-    |> VernacInductive.extract_all_names_with_type
-    |> List.split
-    |> snd
-    |> List.concat
+let constructors inductive =
+  inductive |> VernacInductive.extract_all_names_with_type |> List.split |> snd
+  |> List.concat
 
 (* Extract the inductive types *)
-let types inductive =    
-    inductive
-    |> VernacInductive.extract_all_names_with_type
-    |> List.split
-    |> fst    
+let types inductive =
+  inductive |> VernacInductive.extract_all_names_with_type |> List.split |> fst
 
-let add_new_inductive_definition ~inductive ~inductive_name =  
+let add_new_inductive_definition ~inductive ~inductive_name =
   Inheritance.inherit_dependencies ~prefix:inductive_name;
   let context = Context.get () in
   let default_ctx_params =
-    context
-    |> Context.family_linkage
-    |> function { default_ctx_params; _ } -> default_ctx_params
+    context |> Context.family_linkage |> function
+    | { default_ctx_params; _ } -> default_ctx_params
   in
   let inductive = Resolver.resolve_inductive ~context ~inductive in
   let compiled_context, parameters =
@@ -63,8 +55,10 @@ let add_new_inductive_definition ~inductive ~inductive_name =
   let compiled_impl, principles =
     Codegen.compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
       ~family_name
-  in  
-  let recursors = Termutils.extract_handler_types_from_principle ~inductive ~principles in  
+  in
+  let recursors =
+    Termutils.extract_handler_types_from_principle ~inductive ~principles
+  in
   let elem =
     LinkageElem.InductiveDefinition
       {
@@ -82,26 +76,24 @@ let add_new_inductive_definition ~inductive ~inductive_name =
     types inductive
     |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
   in
-  
+
   let _ =
     constructors inductive
     |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
-  in  
-  
-  ()  
+  in
 
-let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name =
+  ()
+
+let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
+    =
   Inheritance.inherit_dependencies ~prefix:inductive_name;
-  let inductive = 
-      VernacInductive.concatenate
-          ~base:inherited_inductive
-          ~derived:extension
-  in  
+  let inductive =
+    VernacInductive.concatenate ~base:inherited_inductive ~derived:extension
+  in
   let context = Context.get () in
   let default_ctx_params =
-    context
-    |> Context.family_linkage
-    |> function { default_ctx_params; _ } -> default_ctx_params
+    context |> Context.family_linkage |> function
+    | { default_ctx_params; _ } -> default_ctx_params
   in
   let inductive = Resolver.resolve_inductive ~context ~inductive in
   let compiled_context, parameters =
@@ -115,8 +107,10 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name 
   let compiled_impl, principles =
     Codegen.compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
       ~family_name
-  in        
-  let recursors = Termutils.extract_handler_types_from_principle ~inductive ~principles in  
+  in
+  let recursors =
+    Termutils.extract_handler_types_from_principle ~inductive ~principles
+  in
   let elem =
     LinkageElem.InductiveDefinition
       {
@@ -135,55 +129,54 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name 
     List.filter_map
       (fun (name, ty) ->
         match List.assoc_opt name list2 with
-        | None ->  Some(name, ty)
+        | None -> Some (name, ty)
         | Some _ -> None)
       list1
   in
 
   (* Type names *)
   let _ =
-    let inherited_types = types inherited_inductive in    
-    let new_types = list_difference (types inductive) inherited_types in    
+    let inherited_types = types inherited_inductive in
+    let new_types = list_difference (types inductive) inherited_types in
 
     (* Force inherit old types *)
     let _ =
       inherited_types
-      |> List.map (fun (name, _) -> Inheritance.inherit_name ~name:(inductive_constr_name name))
+      |> List.map (fun (name, _) ->
+             Inheritance.inherit_name ~name:(inductive_constr_name name))
     in
 
-    new_types
-    |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
+    new_types |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
   in
 
   (* Constructors *)
   let _ =
-    let inherited_constructors = constructors inherited_inductive in    
-    let new_constructors = list_difference (constructors inductive) inherited_constructors in
+    let inherited_constructors = constructors inherited_inductive in
+    let new_constructors =
+      list_difference (constructors inductive) inherited_constructors
+    in
 
     (* Force inherit old constructors *)
     let _ =
       inherited_constructors
-      |> List.map (fun (name, _) -> Inheritance.inherit_name ~name:(inductive_constr_name name))
+      |> List.map (fun (name, _) ->
+             Inheritance.inherit_name ~name:(inductive_constr_name name))
     in
 
     new_constructors
     |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
-  in  
+  in
   ()
-  
+
 let add_inductive_definition inductive =
   let inductive_name = VernacInductive.extract_inductive_name inductive in
-  let context = Context.get () in  
-  let elem =
-    Inheritance.lookup_field_in_base ~context ~field:inductive_name
-  in  
+  let context = Context.get () in
+  let elem = Inheritance.lookup_field_in_base ~context ~field:inductive_name in
   match elem with
   | None -> add_new_inductive_definition ~inductive ~inductive_name
   | Some (InductiveDefinition { inductive = inherited_inductive; _ }) ->
-     extend_inductive_definition ~inherited_inductive ~extension:inductive ~inductive_name
+      extend_inductive_definition ~inherited_inductive ~extension:inductive
+        ~inductive_name
   | Some _ ->
       Errors.fail
-        ~info:
-        "An inductive type can only be \
-         extended by another inductive type"  
-  
+        ~info:"An inductive type can only be extended by another inductive type"

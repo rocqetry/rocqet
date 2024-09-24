@@ -97,8 +97,7 @@ module Context = struct
                         (Bwd.Snoc (path, linkage.name), derived, base)))
         in
         let current =
-          linkage.base
-          |> Option.map (fun base -> (Bwd.Emp, linkage, base))
+          linkage.base |> Option.map (fun base -> (Bwd.Emp, linkage, base))
         in
         current :: result
 
@@ -121,19 +120,19 @@ module Context = struct
     | None -> Errors.fail ~info:"There is no current context"
     | Some context -> context
 
-  let local_lookup (context: LinkageCtx.t) (path : Libnames.qualid) =
+  let local_lookup (context : LinkageCtx.t) (path : Libnames.qualid) =
     let path = Naming.path_to_list path in
     let name = List.hd path in
     let rec walk context =
       match context with
-      | LinkageCtx.Toplevel linkage -> (
+      | LinkageCtx.Toplevel linkage ->
           linkage.fields
           |> Bwd.find_map (fun (field_name, elem) ->
                  match elem with
                  | LinkageElem.FamilyDefinition { linkage; _ }
                    when Names.Id.equal name field_name ->
                      Some linkage
-                 | _ -> None))
+                 | _ -> None)
       | LinkageCtx.Nested (context, linkage) -> (
           linkage.fields
           |> Bwd.find_map (fun (field_name, elem) ->
@@ -228,9 +227,8 @@ module Context = struct
 
   let lookup_inductive_for_recursion ~name context =
     match lookup_linkage_elem context name with
-    | Some
-        ( LinkageElem.InductiveDefinition { inductive; recursors; _ },
-          linkage ) ->
+    | Some (LinkageElem.InductiveDefinition { inductive; recursors; _ }, linkage)
+      ->
         (inductive, recursors, linkage)
     | Some _ -> Errors.fail ~info:"Expected an inductive type"
     | None ->
@@ -265,9 +263,10 @@ module Context = struct
       | Some _ ->
           Errors.fail
             ~info:
-            (Printf.sprintf
-               "This element %s has already been defined or it has been previously \
-               inherited" (Names.Id.to_string name))
+              (Printf.sprintf
+                 "This element %s has already been defined or it has been \
+                  previously inherited"
+                 (Names.Id.to_string name))
       | _ -> ()
     in
     match context with
@@ -289,8 +288,7 @@ module Context = struct
     match context with
     | LinkageCtx.Toplevel _ -> []
     | LinkageCtx.Nested (_, l) -> (
-        context
-        |> walk_up_linkage_context
+        context |> walk_up_linkage_context
         |> List.filter_map (function
              | None -> None
              | Some (path, (derived : Linkage.t), (parent : Linkage.t)) ->
@@ -299,7 +297,7 @@ module Context = struct
                         ((derived.name, parent.name), further_bound)))
         |> function
         | [] -> []
-        | x :: xs -> (          
+        | x :: xs -> (
             (* We don't want to include the current family's base,
                as that is not a further bound linkage *)
             match l.base with None -> x :: xs | Some _ -> xs))

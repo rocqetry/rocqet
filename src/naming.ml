@@ -12,7 +12,11 @@ let handler_type name ~suffix =
   Nameops.add_suffix (Nameops.add_prefix "__handler_type_" name) suffix
 
 let recursion_handler_type ~function_name ~case_name =
-  let name = Printf.sprintf "%s_%s_type" (Names.Id.to_string function_name) (Names.Id.to_string case_name) in
+  let name =
+    Printf.sprintf "%s_%s_type"
+      (Names.Id.to_string function_name)
+      (Names.Id.to_string case_name)
+  in
   Names.Id.of_string name
 
 let handler_name ~recursor ~case =
@@ -20,12 +24,12 @@ let handler_name ~recursor ~case =
 
 let principle_name ~inductive ~kind = Nameops.add_suffix inductive kind
 
-let computational_axiom_name ~recursor_name ~constructor_name =  
-    Names.Id.to_string recursor_name
-    ^ "_"
-    ^ Names.Id.to_string constructor_name
-    ^ "_eq"
-    |> Names.Id.of_string  
+let computational_axiom_name ~recursor_name ~constructor_name =
+  Names.Id.to_string recursor_name
+  ^ "_"
+  ^ Names.Id.to_string constructor_name
+  ^ "_eq"
+  |> Names.Id.of_string
 
 let point_qualid (f : Names.Id.t) (path : Libnames.qualid) : Libnames.qualid =
   let path, base = Libnames.repr_qualid path in
@@ -155,8 +159,8 @@ let replace_self_qualification ~(target : Libnames.qualid option) =
     match target with
     | None -> list_to_path tail
     | Some target ->
-       let target = path_to_list target in
-       list_to_path (target @ tail)
+        let target = path_to_list target in
+        list_to_path (target @ tail)
   in
   let rec replace_qualid_path _ r =
     match r with
@@ -201,10 +205,8 @@ let add_path_constr_expr path l r =
 
 (** Add [path] as a prefix for every [name] in [names] which
     can be found in [target] *)
-let add_prefix_path
-      ~(path : Libnames.qualid)
-      ~(names : Names.Id.Set.t)
-      ~(target : Constrexpr.constr_expr) =
+let add_prefix_path ~(path : Libnames.qualid) ~(names : Names.Id.Set.t)
+    ~(target : Constrexpr.constr_expr) =
   let open Constrexpr_ops in
   let open Constrexpr in
   let open Libnames in
@@ -214,11 +216,8 @@ let add_prefix_path
         (* Always assuming it's a basename we want! *)
         let id = qualid_basename qid in
         if Names.Id.Set.mem id names then
-          let path =
-            qualid_point (Some path) id
-          in
-          CAst.make ?loc
-          @@ CRef (path, us)
+          let path = qualid_point (Some path) id in
+          CAst.make ?loc @@ CRef (path, us)
         else x
     | cn -> map_constr_expr_with_binders Names.Id.Set.remove go names cn
   in

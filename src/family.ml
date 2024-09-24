@@ -12,16 +12,16 @@ let open_family name =
         Codegen.compile_linkage_context ~field_name:name context
       in
       let default_ctx_params =
-        Codegen.compile_default_params
-          ~context:parameters
+        Codegen.compile_default_params ~context:parameters
       in
       let elem = Inheritance.lookup_field_in_base ~field:name ~context in
       let base =
         match elem with
-        | Some (LinkageElem.FamilyDefinition { linkage = further; _ }) -> Some further
+        | Some (LinkageElem.FamilyDefinition { linkage = further; _ }) ->
+            Some further
         | Some _ -> Errors.fail ~info:"Expected a family linkage element"
         | None -> None
-      in 
+      in
       let linkage =
         Linkage.
           {
@@ -29,10 +29,10 @@ let open_family name =
             name;
             base;
             fields = Bwd.Emp;
-            default_ctx_params
+            default_ctx_params;
           }
-      in            
-      (* Check further binding structure? *)      
+      in
+      (* Check further binding structure? *)
       Context.destructive_update (Some (LinkageCtx.Nested (context, linkage)))
   | None ->
       let linkage =
@@ -42,7 +42,7 @@ let open_family name =
             name;
             base = None;
             fields = Bwd.Emp;
-            default_ctx_params = []
+            default_ctx_params = [];
           }
       in
       Context.destructive_update (Some (LinkageCtx.Toplevel linkage))
@@ -51,29 +51,31 @@ let open_family_with_base ~name ~base =
   let context = Context.get_store () in
   match Context.lookup context base with
   | None -> Errors.fail ~info:"Unbound Family Name"
-  | Some base_linkage -> 
+  | Some base_linkage -> (
       let base_linkage =
-          Linkage.path_subtitution base_linkage
-            ~source:(Naming.self_version base_linkage.name)
-            ~target:(Naming.self_version name)
+        Linkage.path_subtitution base_linkage
+          ~source:(Naming.self_version base_linkage.name)
+          ~target:(Naming.self_version name)
       in
       match Context.get_store () with
       | Some _context ->
-          Inheritance.inherit_dependencies ~prefix:name;                    
+          Inheritance.inherit_dependencies ~prefix:name;
           let context = Context.get () in
           let _, parameters =
             Codegen.compile_linkage_context ~field_name:name context
           in
           let default_ctx_params =
-            Codegen.compile_default_params
-              ~context:parameters
+            Codegen.compile_default_params ~context:parameters
           in
           let elem = Inheritance.lookup_field_in_base ~field:name ~context in
-          let base =            
+          let base =
             match elem with
             | Some (LinkageElem.FamilyDefinition { linkage = further; _ }) ->
-               let derived = { further with context = Bwd.of_list parameters } in
-               Some (Inheritance.linkage_concatenate ~derived ~base:base_linkage)
+                let derived =
+                  { further with context = Bwd.of_list parameters }
+                in
+                Some
+                  (Inheritance.linkage_concatenate ~derived ~base:base_linkage)
             | Some _ -> Errors.fail ~info:"Expected a family linkage element"
             | None -> Some base_linkage
           in
@@ -86,7 +88,7 @@ let open_family_with_base ~name ~base =
                 fields = Bwd.Emp;
                 default_ctx_params;
               }
-          in                              
+          in
           let context = LinkageCtx.Nested (context, linkage) in
           Checks.check_further_binding_structure context;
           Context.destructive_update (Some context)
@@ -100,41 +102,40 @@ let open_family_with_base ~name ~base =
                 fields = Bwd.Emp;
                 default_ctx_params = [];
               }
-          in          
-          let context = LinkageCtx.Toplevel linkage in          
-          Context.destructive_update (Some context)
+          in
+          let context = LinkageCtx.Toplevel linkage in
+          Context.destructive_update (Some context))
 
 let open_family_mixin ~name ~base ~bases =
   let context = Context.get_store () in
-  let base_linkage = 
-    (base :: bases)
-    |> List.map (fun base -> 
-           match Context.lookup context base with 
+  let base_linkage =
+    base :: bases
+    |> List.map (fun base ->
+           match Context.lookup context base with
            | None -> Errors.fail ~info:"Unbound Family Name"
            | Some base -> base)
-    |> List.map (fun base -> 
-         Linkage.path_subtitution base 
-              ~source:(Naming.self_version base.name)
-              ~target:(Naming.self_version name))   
-    |> Inheritance.linkages_concatenate 
+    |> List.map (fun base ->
+           Linkage.path_subtitution base
+             ~source:(Naming.self_version base.name)
+             ~target:(Naming.self_version name))
+    |> Inheritance.linkages_concatenate
   in
   match Context.get_store () with
   | Some _context ->
-      Inheritance.inherit_dependencies ~prefix:name;                    
+      Inheritance.inherit_dependencies ~prefix:name;
       let context = Context.get () in
       let _, parameters =
         Codegen.compile_linkage_context ~field_name:name context
       in
       let default_ctx_params =
-        Codegen.compile_default_params
-          ~context:parameters
+        Codegen.compile_default_params ~context:parameters
       in
       let elem = Inheritance.lookup_field_in_base ~field:name ~context in
-      let base =            
+      let base =
         match elem with
         | Some (LinkageElem.FamilyDefinition { linkage = further; _ }) ->
-           let derived = { further with context = Bwd.of_list parameters } in
-           Some (Inheritance.linkage_concatenate ~derived ~base:base_linkage)
+            let derived = { further with context = Bwd.of_list parameters } in
+            Some (Inheritance.linkage_concatenate ~derived ~base:base_linkage)
         | Some _ -> Errors.fail ~info:"Expected a family linkage element"
         | None -> Some base_linkage
       in
@@ -147,7 +148,7 @@ let open_family_mixin ~name ~base ~bases =
             fields = Bwd.Emp;
             default_ctx_params;
           }
-      in                              
+      in
       let context = LinkageCtx.Nested (context, linkage) in
       Checks.check_further_binding_structure context;
       Context.destructive_update (Some context)
@@ -161,8 +162,8 @@ let open_family_mixin ~name ~base ~bases =
             fields = Bwd.Emp;
             default_ctx_params = [];
           }
-      in          
-      let context = LinkageCtx.Toplevel linkage in          
+      in
+      let context = LinkageCtx.Toplevel linkage in
       Context.destructive_update (Some context)
 
 let close_family () =
@@ -173,9 +174,9 @@ let close_family () =
         match linkage.base with
         | None -> linkage
         | Some base_linkage ->
-           let elements = Bwd.to_list base_linkage.fields in 
-           Inheritance.inherit_elements ~elements ~linkage ~context
-      in      
+            let elements = Bwd.to_list base_linkage.fields in
+            Inheritance.inherit_elements ~elements ~linkage ~context
+      in
       Context.destructive_update None;
       let _impl = Codegen.compile_linkage linkage in
       Linkages.add linkage
@@ -184,25 +185,23 @@ let close_family () =
         match linkage.base with
         | None -> linkage
         | Some base_linkage ->
-           let elements = Bwd.to_list base_linkage.fields in           
-           Inheritance.inherit_elements ~elements ~linkage ~context
-      in      
+            let elements = Bwd.to_list base_linkage.fields in
+            Inheritance.inherit_elements ~elements ~linkage ~context
+      in
       let signature = Codegen.compile_linkage_signature linkage in
       let impl = Codegen.compile_nested_linkage linkage in
       let elem =
-        let compiled_context =          
+        let compiled_context =
           match linkage.context with
           | Bwd.Emp ->
               Errors.fail
                 ~info:
-                "close_family: Couldn't get compiled \
-                 context from parameters"
+                  "close_family: Couldn't get compiled context from parameters"
           | Bwd.Snoc (_, (_, mapply)) -> Termutils.extract_functor_name mapply
         in
         let default_ctx_params =
-          upper
-          |> Context.family_linkage
-          |> function { default_ctx_params; _ } -> default_ctx_params
+          upper |> Context.family_linkage |> function
+          | { default_ctx_params; _ } -> default_ctx_params
         in
         LinkageElem.FamilyDefinition
           {

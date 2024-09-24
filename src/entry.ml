@@ -30,13 +30,12 @@ let family_extends ~derived ~base =
         close = Family.close_family;
       }
 
-let family_compose ~derived ~base ~bases =   
+let family_compose ~derived ~base ~bases =
   let name = derived in
-  Family.open_family_mixin ~name ~base ~bases; 
+  Family.open_family_mixin ~name ~base ~bases;
   PluginScopes.push
     PluginCmdScope.
       { name; command = PluginCmd.Family; close = Family.close_family }
-
 
 let metadata name =
   Metadata.open_metadata name;
@@ -85,7 +84,6 @@ let finduction_extension ~(name : Names.Id.t) =
 (* FProof *)
 let fproof () = Theorem.start_proving ()
 let fproof_lemma = Lemma.prepare_proving
-
 let flemma name t = Lemma.open_flemma name t
 (* PluginScopes.push
    PluginCmdScope.

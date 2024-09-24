@@ -37,14 +37,14 @@ let open_metadata name =
 let close_metadata () =
   let Ctx.{ name; compiled_impl; compiled_context } = Ctx.get () in
   let default_ctx_params =
-    let context = Context.get () in 
-    context
-    |> Context.family_linkage
-    |> function { default_ctx_params; _ } -> default_ctx_params
+    let context = Context.get () in
+    context |> Context.family_linkage |> function
+    | { default_ctx_params; _ } -> default_ctx_params
   in
   let _ = DB.end_module () in
   let elem =
-    LinkageElem.MetaDataSection { name; compiled_impl; compiled_context; default_ctx_params }
+    LinkageElem.MetaDataSection
+      { name; compiled_impl; compiled_context; default_ctx_params }
   in
   Context.add_field ~name ~elem;
   Ctx.clear ()

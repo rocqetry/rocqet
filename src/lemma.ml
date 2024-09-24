@@ -47,12 +47,11 @@ let open_flemma name t =
   Ctx.update ctx
 
 let close_flemma () =
-  let Ctx.{ parameters; goal; name; compiled_context; _ } = Ctx.get () in  
+  let Ctx.{ parameters; goal; name; compiled_context; _ } = Ctx.get () in
   let default_ctx_params =
     let context = Context.get () in
-    context
-    |> Context.family_linkage
-    |> function { default_ctx_params; _ } -> default_ctx_params
+    context |> Context.family_linkage |> function
+    | { default_ctx_params; _ } -> default_ctx_params
   in
   let compiled_impl = DB.end_module () in
   let compiled_signature =
@@ -60,7 +59,12 @@ let close_flemma () =
   in
   let elem =
     LinkageElem.OpaqueFieldDefinition
-      { compiled_context; compiled_impl; compiled_signature; default_ctx_params }
+      {
+        compiled_context;
+        compiled_impl;
+        compiled_signature;
+        default_ctx_params;
+      }
   in
   Context.add_field ~name ~elem;
   Ctx.clear ()

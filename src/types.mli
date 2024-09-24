@@ -64,10 +64,10 @@ end
 
 module Recursor : sig
   type t = {
-      inductive_names : Names.Id.t list;
-      recursor : Constrexpr.constr_expr;
-      handlers : (Names.Id.t * Constrexpr.constr_expr) list;
-  }  
+    inductive_names : Names.Id.t list;
+    recursor : Constrexpr.constr_expr;
+    handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+  }
 end
 
 module Recursors : sig
@@ -104,7 +104,7 @@ module rec LinkageElem : sig
         compiled_impl : CompiledModule.t;
         default_ctx_params : CompiledModule.t list;
       }
-    | FieldDefinition of {        
+    | FieldDefinition of {
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModuleType.t;
         default_ctx_params : CompiledModule.t list;
@@ -116,19 +116,19 @@ module rec LinkageElem : sig
         default_ctx_params : CompiledModule.t list;
       }
     | RecursorDefinition of {
-        names : Names.Id.t list;        
+        names : Names.Id.t list;
         handlers : Names.Id.t list;
-        inductive_path : Libnames.qualid;        
+        inductive_path : Libnames.qualid;
         suffix : RecKind.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         arguments : Names.Id.t list;
         prefix : Libnames.qualid;
         default_ctx_params : CompiledModule.t list;
-      }    
+      }
     | TheoremDefinition of {
-        names : Names.Id.t list;        
-        suffix : RecKind.t;        
+        names : Names.Id.t list;
+        suffix : RecKind.t;
         inductive_path : Libnames.qualid;
         handlers : Names.Id.t list;
         compiled_context : CompiledModuleType.t;
@@ -156,14 +156,15 @@ and Linkage : sig
     default_ctx_params : CompiledModule.t list;
     name : Names.Id.t;
     base : t option;
-    fields : (Names.Id.t * LinkageElem.t) Bwd.t;    
+    fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
-  val context_parameters : t -> Libnames.qualid list  
+  val context_parameters : t -> Libnames.qualid list
   val top_most_self_name : t -> Names.Id.t
 
   val path_substitution_elem :
     LinkageElem.t -> source:Names.Id.t -> target:Names.Id.t -> LinkageElem.t
+
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
 end
 

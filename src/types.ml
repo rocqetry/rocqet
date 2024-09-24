@@ -162,7 +162,6 @@ module Path = struct
 end
 *)
 
-
 module RecKind = struct
   type t = Ind | IndComplete | Rec | Rect
 
@@ -211,10 +210,10 @@ end
 
 module Recursor = struct
   type t = {
-      inductive_names : Names.Id.t list;
-      recursor : Constrexpr.constr_expr;
-      handlers : (Names.Id.t * Constrexpr.constr_expr) list;
-  }  
+    inductive_names : Names.Id.t list;
+    recursor : Constrexpr.constr_expr;
+    handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+  }
 end
 
 (* Contains the type of the
@@ -230,11 +229,11 @@ end
     in a family. This information includes compiled implemetations, signatures,
     contexts, expressions, etc. *)
 module rec LinkageElem : sig
-  type t =    
+  type t =
     | InductiveDefinition of {
         inductive : VernacInductive.t;
         recursors : Recursors.t;
-        compiled_context : CompiledModuleType.t;        
+        compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
         default_ctx_params : CompiledModule.t list;
@@ -277,7 +276,7 @@ module rec LinkageElem : sig
         default_ctx_params : CompiledModule.t list;
       }
     | TheoremDefinition of {
-        names : Names.Id.t list;        
+        names : Names.Id.t list;
         suffix : RecKind.t;
         inductive_path : Libnames.qualid;
         handlers : Names.Id.t list;
@@ -291,7 +290,7 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : CompiledModule.t list;
-     }
+      }
     | MetaDataSection of {
         name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
@@ -310,15 +309,16 @@ and Linkage : sig
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
-  val context_parameters : t -> Libnames.qualid list  
+  val context_parameters : t -> Libnames.qualid list
   val top_most_self_name : t -> Names.Id.t
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
+
   val path_substitution_elem :
     LinkageElem.t -> source:Names.Id.t -> target:Names.Id.t -> LinkageElem.t
 end = struct
   type t = {
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
-    default_ctx_params : CompiledModule.t list;  
+    default_ctx_params : CompiledModule.t list;
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
@@ -327,7 +327,7 @@ end = struct
   let context_parameters linkage =
     linkage.context |> Bwd.map fst
     |> Bwd.map Libnames.qualid_of_ident
-    |> Bwd.to_list  
+    |> Bwd.to_list
 
   let top_most_self_name linkage =
     match Bwd.to_list linkage.context with
@@ -337,14 +337,13 @@ end = struct
   let rec path_substitution_elem elem ~source ~target =
     match elem with
     | LinkageElem.MetaDataSection metadata ->
-       LinkageElem.MetaDataSection metadata
-    | LinkageElem.InductiveConstr constr ->
-      LinkageElem.InductiveConstr constr
+        LinkageElem.MetaDataSection metadata
+    | LinkageElem.InductiveConstr constr -> LinkageElem.InductiveConstr constr
     | LinkageElem.OpaqueFieldDefinition definition ->
-       LinkageElem.OpaqueFieldDefinition definition
+        LinkageElem.OpaqueFieldDefinition definition
     | LinkageElem.ComputationalAxiom comp ->
-       let axiom = Naming.replace_qualid_root ~source ~target comp.axiom in
-       LinkageElem.ComputationalAxiom { comp with axiom } 
+        let axiom = Naming.replace_qualid_root ~source ~target comp.axiom in
+        LinkageElem.ComputationalAxiom { comp with axiom }
     | LinkageElem.FamilyDefinition family ->
         let g (name, expr) =
           if Names.Id.equal source name then (target, expr) else (name, expr)
@@ -362,17 +361,14 @@ end = struct
               VernacInductive.path_subtitution definition.inductive ~source
                 ~target;
           }
-    | LinkageElem.FieldDefinition field ->        
-        FieldDefinition field
-    | LinkageElem.RecursorDefinition definition ->                
-        RecursorDefinition definition          
-    | LinkageElem.TheoremDefinition definition ->        
-        TheoremDefinition definition
+    | LinkageElem.FieldDefinition field -> FieldDefinition field
+    | LinkageElem.RecursorDefinition definition -> RecursorDefinition definition
+    | LinkageElem.TheoremDefinition definition -> TheoremDefinition definition
 
   and path_subtitution linkage ~source ~target =
     let f (name, elem) = (name, path_substitution_elem elem ~source ~target) in
     let fields = linkage.fields |> Bwd.map f in
-    { linkage with fields }  
+    { linkage with fields }
 end
 
 (* A linkage we are currently constructing *)
