@@ -30,6 +30,14 @@ let family_extends ~derived ~base =
         close = Family.close_family;
       }
 
+let family_compose ~derived ~base ~bases =   
+  let name = derived in
+  Family.open_family_mixin ~name ~base ~bases; 
+  PluginScopes.push
+    PluginCmdScope.
+      { name; command = PluginCmd.Family; close = Family.close_family }
+
+
 let metadata name =
   Metadata.open_metadata name;
   PluginScopes.push

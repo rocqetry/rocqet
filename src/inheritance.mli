@@ -19,3 +19,5 @@ val linkage_concatenate :
   derived:Linkage.t ->
   base:Linkage.t ->
   Linkage.t
+
+val linkages_concatenate : Linkage.t list -> Linkage.t

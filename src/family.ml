@@ -104,6 +104,67 @@ let open_family_with_base ~name ~base =
           let context = LinkageCtx.Toplevel linkage in          
           Context.destructive_update (Some context)
 
+let open_family_mixin ~name ~base ~bases =
+  let context = Context.get_store () in
+  let base_linkage = 
+    (base :: bases)
+    |> List.map (fun base -> 
+           match Context.lookup context base with 
+           | None -> Errors.fail ~info:"Unbound Family Name"
+           | Some base -> base)
+    |> List.map (fun base -> 
+         Linkage.path_subtitution base 
+              ~source:(Naming.self_version base.name)
+              ~target:(Naming.self_version name))   
+    |> Inheritance.linkages_concatenate 
+  in
+  match Context.get_store () with
+  | Some _context ->
+      Inheritance.inherit_dependencies ~prefix:name;                    
+      let context = Context.get () in
+      let _, parameters =
+        Codegen.compile_linkage_context ~field_name:name context
+      in
+      let default_ctx_params =
+        Codegen.compile_default_params
+          ~context:parameters
+      in
+      let elem = Inheritance.lookup_field_in_base ~field:name ~context in
+      let base =            
+        match elem with
+        | Some (LinkageElem.FamilyDefinition { linkage = further; _ }) ->
+           let derived = { further with context = Bwd.of_list parameters } in
+           Some (Inheritance.linkage_concatenate ~derived ~base:base_linkage)
+        | Some _ -> Errors.fail ~info:"Expected a family linkage element"
+        | None -> Some base_linkage
+      in
+      let linkage =
+        Linkage.
+          {
+            context = Bwd.of_list parameters;
+            name;
+            base;
+            fields = Bwd.Emp;
+            default_ctx_params;
+          }
+      in                              
+      let context = LinkageCtx.Nested (context, linkage) in
+      Checks.check_further_binding_structure context;
+      Context.destructive_update (Some context)
+  | None ->
+      let linkage =
+        Linkage.
+          {
+            context = Bwd.Emp;
+            name;
+            base = Some base_linkage;
+            fields = Bwd.Emp;
+            default_ctx_params = [];
+          }
+      in          
+      let context = LinkageCtx.Toplevel linkage in          
+      Context.destructive_update (Some context)
+
 let close_family () =
   let context = Context.get () in
   match context with
