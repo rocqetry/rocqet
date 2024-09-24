@@ -29,7 +29,10 @@ let rec linkage_concatenate ~(derived: Linkage.t) ~(base: Linkage.t) =
       | Snoc (fields, _) -> find_field fields
     in  
     match find_field linkage.fields with
-    | true -> linkage (* Field has already been inherited *)
+    | true -> 
+        (* The field should not be present, since we're 
+           building the linkage  *)
+        assert false 
     | false ->
        (* Note that we're not doing anything with late binding *)
        let fields = Snoc (linkage.fields, (name, element)) in
@@ -51,14 +54,18 @@ let rec linkage_concatenate ~(derived: Linkage.t) ~(base: Linkage.t) =
     | (name, element) :: derived_fields ->
        match find_and_remove name base_fields with
        | None, base_fields ->          
-          let linkage = inherit_one ~name ~element ~linkage in
+          let pred = Bwd.mem name (Bwd.map fst linkage.fields) in 
+          assert (not pred);
+          let linkage = inherit_one ~name ~element ~linkage in          
           loop linkage derived_fields base_fields
        | Some (base_element, dependencies), base_fields ->
           let linkage = inherit_elements ~elements:(Bwd.to_list dependencies) ~linkage in
           let element =
             linkage_elem_concatenate              
               ~derived:element ~base:base_element              
-          in          
+          in
+          let pred = Bwd.mem name (Bwd.map fst linkage.fields) in 
+          assert (not pred);
           let linkage = inherit_one ~name ~element ~linkage in
           loop linkage derived_fields base_fields
   in    
@@ -94,7 +101,7 @@ and linkage_elem_concatenate
      InductiveDefinition { derived with inductive; }
   | InductiveConstr derived, InductiveConstr _ ->
     InductiveConstr derived 
-  | FamilyDefinition derived, FamilyDefinition base ->          
+  | FamilyDefinition derived, FamilyDefinition base ->       
      let linkage = linkage_concatenate ~derived:derived.linkage ~base:base.linkage in     
      FamilyDefinition { derived with linkage; }
   | FieldDefinition derived, FieldDefinition _ ->
@@ -112,6 +119,15 @@ and linkage_elem_concatenate
   | MetaDataSection derived, MetaDataSection _ ->
      MetaDataSection derived     
   | _, _ -> Errors.fail ~info:"Can't concatenate different kinds of linkage element"
+
+let linkages_concatenate linkages = 
+  match linkages with 
+  | [] -> Errors.fail ~info:"concatenate_linkages: empty list"
+  | linkage :: linkages -> 
+     List.fold_left 
+       (fun result_linkage linkage -> linkage_concatenate ~derived:result_linkage ~base:linkage)
+       linkage 
+       linkages
 
 (* We want to inherit element from a base family into 
    a derived family in interactive mode *)
@@ -136,7 +152,7 @@ let rec inherit_one
   | false ->
      (* Various checks to ensure correctness *)
      (* We need to update the context of the inherited fields *)
-
+     
      (* Update the context with the updated linkage *)
      let context =
        match context with
@@ -144,14 +160,6 @@ let rec inherit_one
        | Nested (context, _) -> Nested (context, linkage)
      in
      let compiled_context, parameters = Codegen.compile_linkage_context ~field_name:name context in     
-     (*let _ =       
-       List.iter (fun (name, e) ->
-           let name = Names.Id.to_string name in
-           let e = e |> Termutils.extract_functor_name |> Pretty.pretty_qualid in
-           Feedback.msg_warning Pp.(str "Params " ++ str name ++ str " : " ++ str e))
-         parameters
-     in *)
-     (*Feedback.msg_warning Pp.(str "Context: " ++ str (Pretty.pretty_qualid compiled_context));*)
      let element = 
           match element with
           | LinkageElem.InductiveDefinition inductive ->             
@@ -176,8 +184,7 @@ let rec inherit_one
                context
                |> Context.family_linkage
                |> function { default_ctx_params; _ } -> default_ctx_params
-             in
-             (* TODO: Use the right default_ctx_params *)
+             in             
              LinkageElem.InductiveDefinition
                { inductive with
                  compiled_context;
@@ -189,18 +196,50 @@ let rec inherit_one
 
           (* TODO: Update wrt late bound base family *)
           | FamilyDefinition family ->
-             (* We need to compile the context again *)
+             
              begin
                match family.linkage.base with
-               | None -> FamilyDefinition { family with compiled_context }
+               | None -> 
+                  let linkage =
+                       let default_ctx_params = Codegen.compile_default_params ~context:parameters in
+                       let empty_linkage = { family.linkage with fields = Bwd.Emp; default_ctx_params; context = Bwd.of_list parameters } in
+                       inherit_elements
+                         ~elements:(Bwd.to_list family.linkage.fields)
+                         ~linkage:empty_linkage
+                         ~context:(LinkageCtx.Nested (context, empty_linkage))
+                     in    
+                  let compiled_signature = Codegen.compile_linkage_signature linkage in
+                  let compiled_impl = Codegen.compile_nested_linkage linkage in
+                  let default_ctx_params =
+                       context
+                       |> Context.family_linkage
+                       |> function { default_ctx_params; _ } -> default_ctx_params
+                  in
+                  FamilyDefinition { default_ctx_params; compiled_context; compiled_impl; compiled_signature; linkage; }
                | Some base ->
                   (* We want to perform a local lookup
                      so we don't update a family with a non-late bound
                      family name. *)
                   let path = Libnames.qualid_of_ident base.name in
                   match Context.local_lookup context path with
-                  | None -> FamilyDefinition { family with compiled_context }
-                  | Some new_base ->                                          
+                  | None ->
+                     let linkage =
+                       let default_ctx_params = Codegen.compile_default_params ~context:parameters in
+                       let empty_linkage = { family.linkage with fields = Bwd.Emp; default_ctx_params; context = Bwd.of_list parameters } in
+                       inherit_elements
+                         ~elements:(Bwd.to_list family.linkage.fields)
+                         ~linkage:empty_linkage
+                         ~context:(LinkageCtx.Nested (context, empty_linkage))
+                     in
+                     let compiled_signature = Codegen.compile_linkage_signature linkage in
+                     let compiled_impl = Codegen.compile_nested_linkage linkage in
+                     let default_ctx_params =
+                       context
+                       |> Context.family_linkage
+                       |> function { default_ctx_params; _ } -> default_ctx_params
+                     in
+                     FamilyDefinition { default_ctx_params; compiled_impl; compiled_signature; compiled_context; linkage; }
+                  | Some new_base ->
                      let new_base =
                          Linkage.path_subtitution new_base
                            ~source:(Naming.self_version new_base.name)
@@ -209,25 +248,29 @@ let rec inherit_one
                      let family_linkage = (* family.linkage *)
                        { family.linkage with context = Bwd.of_list parameters }
                      in
+                     (* Update the context too? *)                     
                      let _context =
                        LinkageCtx.Nested (context, family_linkage)
                      in
                      let linkage = linkage_concatenate ~derived:family_linkage ~base:new_base in
                      let linkage =
-                       let empty_linkage = { linkage with fields = Bwd.Emp } in
+                       let default_ctx_params = Codegen.compile_default_params ~context:parameters in                       
+                       let empty_linkage = { linkage with fields = Bwd.Emp; context = Bwd.of_list parameters; default_ctx_params } in
                        inherit_elements
                          ~elements:(Bwd.to_list linkage.fields)
                          ~linkage:empty_linkage
                          ~context:(LinkageCtx.Nested (context, empty_linkage))
-                     in
-                     let default_ctx_params =
-                        Codegen.compile_default_params
-                          ~context:parameters
-                     in
-                     let linkage = Linkage.{ linkage with base = Some new_base; default_ctx_params } in
+                     in                 
+                     (* Should the linkage context parameters not be updated? *)
+                     let linkage = Linkage.{ linkage with base = Some new_base; } in
                      let compiled_signature = Codegen.compile_linkage_signature linkage in
                      let compiled_impl = Codegen.compile_nested_linkage linkage in
-                     FamilyDefinition { family with linkage; compiled_context; compiled_signature; compiled_impl }                     
+                     let default_ctx_params =
+                       context
+                       |> Context.family_linkage
+                       |> function { default_ctx_params; _ } -> default_ctx_params
+                     in
+                     FamilyDefinition { default_ctx_params; linkage; compiled_context; compiled_signature; compiled_impl; }
              end
 
           | ComputationalAxiom comp -> ComputationalAxiom { comp with compiled_context }
@@ -251,7 +294,7 @@ and inherit_elements
       ~(linkage : Linkage.t)
       ~(context: LinkageCtx.t) =
   List.fold_left 
-    (fun linkage (name, element) -> inherit_one ~name ~element ~linkage ~context) 
+    (fun linkage (name, element) -> inherit_one ~name ~element ~linkage ~context)
     linkage 
     elements
 
