@@ -743,7 +743,15 @@ let synthesize_context
             FamilyDefinition _ ) ) -> 
        let open B in
        let* _ = compile_fields fields  in
-       B.define_term ~name (qualify name)           
+       let* _ = 
+         B.define_module 
+           ~module_name:name 
+           ~parameters:[] 
+           ~body:(fun _ -> 
+             let module_qualid = [module_name; name] |> Naming.list_to_path in 
+             B.include_module ~module_expr:(Termutils.ident_to_module_expr module_qualid)) 
+       in
+       return ()
     | Snoc
         ( fields,
           ( name,
@@ -766,13 +774,23 @@ let synthesize_context
              | MetaDataSection { compiled_impl; default_ctx_params; _ }))) ->
        let open B in
        let* _ = compile_fields fields  in       
+       let qualify name = 
+          [name; Names.Id.of_string "Ctx"] |> Naming.list_to_path
+       in 
        let parameters = 
-          context 
-          |> Bwd.to_list
-          |> List.map (fun (parameter, _) -> 
+         match context |> Bwd.to_list |> List.map fst with
+         | [] -> [] 
+         | l -> 
+            let l = List.tl l in 
+            let current = module_name |> Naming.self_version in
+            l @ [ current ]
+       in 
+       let parameters = 
+          parameters
+          |> List.map (fun parameter ->
                parameter               
                |> Naming.un_self_version
-               |> Libnames.qualid_of_ident)
+               |> qualify)
        in
        let parameters = normalize_parameters ~default_ctx_params ~parameters in       
        let module_expr = Termutils.ident_to_module_expr compiled_impl in
@@ -783,11 +801,17 @@ let synthesize_context
   in 
   let ctx = Names.Id.of_string "Ctx" in
   B.run @@ B.define_module ~module_name:ctx ~parameters:[] ~body:(fun _ -> compile_fields fields)
-  
 
-let rec compile_linkage (linkage : Linkage.t) =
+
+type synth_ctx = { 
+  context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
+  module_name: Names.Id.t;
+  fields: (Names.Id.t * LinkageElem.t) Bwd.t;
+}
+  
+let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
   let Linkage.{ context; name; fields; _ } = linkage in
-  let rec compile_fields fields (ctx : CompiledModule.t list) =
+  let rec compile_fields fields (ctx : CompiledModule.t list) =    
     match fields with
     | Bwd.Emp -> B.return ()
     | Snoc
@@ -825,9 +849,9 @@ let rec compile_linkage (linkage : Linkage.t) =
         (fields, (_, FamilyDefinition { linkage = nested_linkage; _ })) -> 
       let open B in      
       let* _ = compile_fields fields ctx in      
-      thunk (fun () -> 
-          let _ = synthesize_context ~context:linkage.context ~module_name:linkage.name ~fields in
-          let _ = compile_linkage nested_linkage in 
+      thunk (fun () ->          
+          let synth_ctx = { context = linkage.context; module_name = linkage.name; fields } in
+          let _ = compile_linkage (Some synth_ctx) nested_linkage in 
           return ())
 
     (* An implementation will be provided by the inductive *)
@@ -846,10 +870,17 @@ let rec compile_linkage (linkage : Linkage.t) =
         let open B in
         let qualify name = 
           [name; Names.Id.of_string "Ctx"] |> Naming.list_to_path
+        in
+        let parameters = 
+          match Linkage.context_parameters linkage with 
+          | [] -> [] 
+          | l -> 
+             let l = List.tl l in 
+             let current = name |> Naming.self_version |> Libnames.qualid_of_ident in
+             l @ [ current ]
         in 
         let parameters = 
-          linkage 
-          |> Linkage.context_parameters 
+          parameters 
           |> List.map (fun parameter -> 
                parameter
                |> Naming.path_to_list 
@@ -866,10 +897,22 @@ let rec compile_linkage (linkage : Linkage.t) =
         let* _ = include_module ~module_expr in
         return ()
   in
-  context |> ignore;
+  context |> ignore;  
   B.run
   @@ B.define_module ~module_name:name ~parameters:[](* :(Bwd.to_list context)*)
-       ~body:(compile_fields fields)
+       ~body:(fun ctx -> 
+         let open B in
+         let* _ = 
+           B.thunk (fun () -> 
+             match synth_ctx with 
+             | None -> B.return ()
+             | Some { context; module_name; fields } -> 
+                let _ = synthesize_context ~context ~module_name ~fields in
+                B.return ())
+         in
+         compile_fields fields ctx)
+
+let compile_linkage = compile_linkage None
 
 let compile_nested_linkage (linkage : Linkage.t) =
   let prefix = Names.Id.to_string (Nameops.add_suffix linkage.name "Impl") in
