@@ -87,7 +87,7 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
               For instance, if the type is Prop, _rec and _rect are impossible to derive. *)
            let potential_recursor =
              Nameops.add_suffix internal_name (RecKind.to_string suffix)
-           in
+           in           
            if Constrintern.is_global potential_recursor then
              let recursor_name =
                potential_recursor |> Constrexpr_ops.mkIdentC
@@ -726,14 +726,18 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
     | Snoc (fields, (name, FamilyDefinition _)) ->
         let open B in
         let* _ = compile_fields fields in
-        let* _ =
+        let module_qualid =
+           [ module_name; name ] |> Naming.list_to_path
+        in
+        let* _ = B.define_module_inline ~name ~value:(Termutils.ident_to_module_expr module_qualid) in
+        (*let* _ =
           B.define_module ~module_name:name ~parameters:[] ~body:(fun _ ->
               let module_qualid =
                 [ module_name; name ] |> Naming.list_to_path
               in
               B.include_module
                 ~module_expr:(Termutils.ident_to_module_expr module_qualid))
-        in
+        in*)
         return ()
     | Snoc (fields, (name, OpaqueFieldDefinition _)) ->
         let open B in
