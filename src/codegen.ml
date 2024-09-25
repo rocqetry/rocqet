@@ -699,7 +699,8 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
       ( signature_name,
         linkage.context @> [ (Naming.self_version linkage.name, signature) ] )
 
-let synthesize_context_impl 
+let synthesize_context 
+      ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
       ~(module_name: Names.Id.t)
       ~(fields: (Names.Id.t * LinkageElem.t) Bwd.t) =
   let qualify name = 
@@ -761,10 +762,24 @@ let synthesize_context_impl
     | Snoc
         ( fields,
           ( _,
-            (InductiveDefinition { compiled_impl; _ } | MetaDataSection { compiled_impl; _ }))) -> 
-       compiled_impl |> ignore; 
-       fields |> ignore; 
-       Errors.fail ~info:"TODO: synthesize ctx"    
+            (InductiveDefinition { compiled_impl; default_ctx_params; _ } 
+             | MetaDataSection { compiled_impl; default_ctx_params; _ }))) ->
+       let open B in
+       let* _ = compile_fields fields  in       
+       let parameters = 
+          context 
+          |> Bwd.to_list
+          |> List.map (fun (parameter, _) -> 
+               parameter               
+               |> Naming.un_self_version
+               |> Libnames.qualid_of_ident)
+       in
+       let parameters = normalize_parameters ~default_ctx_params ~parameters in       
+       let module_expr = Termutils.ident_to_module_expr compiled_impl in
+       let module_expr =
+         Termutils.apply_module ~functor_expr:module_expr ~arguments:parameters
+       in
+       include_module ~module_expr       
   in 
   let ctx = Names.Id.of_string "Ctx" in
   B.run @@ B.define_module ~module_name:ctx ~parameters:[] ~body:(fun _ -> compile_fields fields)
@@ -811,7 +826,7 @@ let rec compile_linkage (linkage : Linkage.t) =
       let open B in      
       let* _ = compile_fields fields ctx in      
       thunk (fun () -> 
-          let _ = synthesize_context_impl ~module_name:linkage.name ~fields in
+          let _ = synthesize_context ~context:linkage.context ~module_name:linkage.name ~fields in
           let _ = compile_linkage nested_linkage in 
           return ())
 
@@ -838,7 +853,7 @@ let rec compile_linkage (linkage : Linkage.t) =
           |> List.map (fun parameter -> 
                parameter
                |> Naming.path_to_list 
-               |> List.hd 
+               |> List.hd
                |> Naming.un_self_version
                |> qualify)
         in
