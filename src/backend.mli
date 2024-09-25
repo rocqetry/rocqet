@@ -34,6 +34,10 @@ module Vernac : sig
     parameters:(Names.Id.t * Constrexpr.module_ast) list ->
     body:(CompiledModule.t list -> unit t) ->
     CompiledModule.t t
+  
+  val define_module_inline : 
+    name:Names.Id.t ->
+    value:Constrexpr.module_ast -> unit t
 
   val declare_module : module_name:Names.Id.t -> Constrexpr.module_ast -> unit t
 
