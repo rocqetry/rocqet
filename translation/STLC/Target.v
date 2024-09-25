@@ -47,23 +47,22 @@ Module E (x : X) (y : Y) (z : Z).
 End E.
 
 Module B.  
-  Definition data := 10.  
+  Definition data := 10.      
   
-  Module Ctx.
-     Definition data := B.data.
-  End Ctx.
-  
-  Module Inner.
-    Definition datacell := 10.    
-
+  Module Inner.    
     Module Ctx.
-        Definition datacell := Inner.datacell.
+      Definition data := B.data.
     End Ctx.
+    
+    Definition datacell := 10.        
 
     Module InnerInner.      
+      Module Ctx.
+        Definition datacell := Inner.datacell.
+      End Ctx.
 
       Include Z.
-      Include E B.Ctx Inner.Ctx.
+      Include E Inner.Ctx InnerInner.Ctx.
 
     End InnerInner.    
   End Inner. 
