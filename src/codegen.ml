@@ -764,19 +764,33 @@ let synthesize_context
           ( name,
             FieldDefinition _) ) -> 
        let open B in
-       let* _ = compile_fields fields  in
+       let* _ = compile_fields fields in
        B.define_term ~name (qualify name)
-    | Snoc (fields, ( _, InductiveConstr _)) -> compile_fields fields       
+    | Snoc (fields, ( _, InductiveConstr _)) -> compile_fields fields
+    | Snoc (fields, ( _, InductiveDefinition { inductive; _ } )) -> 
+       let open B in
+       let* _ = compile_fields fields in
+       let recs i = 
+         let suffixes = List.map RecKind.to_string RecKind.[ Ind; IndComplete; Rec; Rect ] in 
+         suffixes |> List.map (fun suffix -> Nameops.add_suffix i suffix)         
+       in
+       let names = 
+         inductive
+         |> VernacInductive.extract_all_names
+         |> List.concat_map (fun (ind, ctrs) ->  recs ind @ ind :: ctrs)
+       in 
+       names 
+       |> List.map (fun name -> B.define_term ~name (qualify name))
+       |> flatmap       
     | Snoc
         ( fields,
           ( _,
-            (InductiveDefinition { compiled_impl; default_ctx_params; _ } 
-             | MetaDataSection { compiled_impl; default_ctx_params; _ }))) ->
+            (MetaDataSection { compiled_impl; default_ctx_params; _ }))) ->
        let open B in
        let* _ = compile_fields fields  in       
        let qualify name = 
           [name; Names.Id.of_string "Ctx"] |> Naming.list_to_path
-       in 
+       in
        let parameters = 
          match context |> Bwd.to_list |> List.map fst with
          | [] -> [] 
