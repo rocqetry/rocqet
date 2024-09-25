@@ -188,7 +188,7 @@ let close_family () =
             let elements = Bwd.to_list base_linkage.fields in
             Inheritance.inherit_elements ~elements ~linkage ~context
       in
-      let signature = Codegen.compile_linkage_signature linkage in      
+      let signature = Codegen.compile_linkage_signature linkage in
       let elem =
         let compiled_context =
           match linkage.context with
@@ -206,7 +206,7 @@ let close_family () =
           {
             linkage;
             compiled_context;
-            compiled_signature = signature;            
+            compiled_signature = signature;
             default_ctx_params;
           }
       in
