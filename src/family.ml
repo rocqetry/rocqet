@@ -189,7 +189,6 @@ let close_family () =
             Inheritance.inherit_elements ~elements ~linkage ~context
       in
       let signature = Codegen.compile_linkage_signature linkage in
-      let impl = Codegen.compile_nested_linkage linkage in
       let elem =
         let compiled_context =
           match linkage.context with
@@ -208,7 +207,6 @@ let close_family () =
             linkage;
             compiled_context;
             compiled_signature = signature;
-            compiled_impl = impl;
             default_ctx_params;
           }
       in

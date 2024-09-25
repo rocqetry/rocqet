@@ -100,7 +100,6 @@ val compile_linkage_context :
 
 (* Compiling Linkages *)
 val compile_linkage : Linkage.t -> CompiledModule.t
-val compile_nested_linkage : Linkage.t -> CompiledModule.t
 val compile_linkage_signature : Linkage.t -> CompiledModuleType.t
 
 (* Compiling a field definition *)

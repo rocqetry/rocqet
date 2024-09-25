@@ -249,7 +249,6 @@ module rec LinkageElem : sig
         linkage : Linkage.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;
         default_ctx_params : CompiledModule.t list;
       }
     | FieldDefinition of {

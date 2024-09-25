@@ -204,7 +204,6 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                 let compiled_signature =
                   Codegen.compile_linkage_signature linkage
                 in
-                let compiled_impl = Codegen.compile_nested_linkage linkage in
                 let default_ctx_params =
                   context |> Context.family_linkage |> function
                   | { default_ctx_params; _ } -> default_ctx_params
@@ -213,7 +212,6 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                   {
                     default_ctx_params;
                     compiled_context;
-                    compiled_impl;
                     compiled_signature;
                     linkage;
                   }
@@ -242,9 +240,6 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                     let compiled_signature =
                       Codegen.compile_linkage_signature linkage
                     in
-                    let compiled_impl =
-                      Codegen.compile_nested_linkage linkage
-                    in
                     let default_ctx_params =
                       context |> Context.family_linkage |> function
                       | { default_ctx_params; _ } -> default_ctx_params
@@ -252,7 +247,6 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                     FamilyDefinition
                       {
                         default_ctx_params;
-                        compiled_impl;
                         compiled_signature;
                         compiled_context;
                         linkage;
@@ -298,9 +292,6 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                     let compiled_signature =
                       Codegen.compile_linkage_signature linkage
                     in
-                    let compiled_impl =
-                      Codegen.compile_nested_linkage linkage
-                    in
                     let default_ctx_params =
                       context |> Context.family_linkage |> function
                       | { default_ctx_params; _ } -> default_ctx_params
@@ -311,7 +302,6 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                         linkage;
                         compiled_context;
                         compiled_signature;
-                        compiled_impl;
                       }))
         | ComputationalAxiom comp ->
             ComputationalAxiom { comp with compiled_context }
