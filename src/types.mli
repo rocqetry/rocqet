@@ -100,8 +100,7 @@ module rec LinkageElem : sig
     | FamilyDefinition of {
         linkage : Linkage.t;
         compiled_context : CompiledModuleType.t;
-        compiled_signature : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;
+        compiled_signature : CompiledModuleType.t;        
         default_ctx_params : CompiledModule.t list;
       }
     | FieldDefinition of {

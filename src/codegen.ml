@@ -699,7 +699,78 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
       ( signature_name,
         linkage.context @> [ (Naming.self_version linkage.name, signature) ] )
 
-let compile_linkage (linkage : Linkage.t) =
+let synthesize_context_impl 
+      ~(module_name: Names.Id.t)
+      ~(fields: (Names.Id.t * LinkageElem.t) Bwd.t) =
+  let qualify name = 
+    [module_name; name] |> Naming.list_to_path |> Constrexpr_ops.mkRefC
+  in 
+  let rec compile_fields (fields: (Names.Id.t * LinkageElem.t) Bwd.t) = 
+    match fields with 
+    | Bwd.Emp -> B.return ()
+    | Snoc
+        ( fields,
+          ( _,
+            LinkageElem.RecursorDefinition
+              { names; _ } ) ) -> 
+       let open B in
+       let* _ = compile_fields fields  in
+       names 
+       |> List.map (fun name -> B.define_term ~name (qualify name))
+       |> flatmap
+    | Snoc
+        ( fields,
+          ( _,
+            TheoremDefinition
+              { names; _ } ) ) -> 
+       let open B in
+       let* _ = compile_fields fields  in
+       names 
+       |> List.map (fun name -> B.define_term ~name (qualify name))
+       |> flatmap       
+    | Snoc
+        ( fields,
+          ( _,
+            ComputationalAxiom
+              { name; _ } ) ) -> 
+       let open B in
+       let* _ = compile_fields fields  in
+       B.define_term ~name (qualify name)       
+    | Snoc
+        ( fields,
+          ( name,
+            FamilyDefinition _ ) ) -> 
+       let open B in
+       let* _ = compile_fields fields  in
+       B.define_term ~name (qualify name)           
+    | Snoc
+        ( fields,
+          ( name,
+            OpaqueFieldDefinition _ ) ) -> 
+       let open B in
+       let* _ = compile_fields fields  in
+       B.define_term ~name (qualify name)       
+    | Snoc
+        ( fields,
+          ( name,
+            FieldDefinition _) ) -> 
+       let open B in
+       let* _ = compile_fields fields  in
+       B.define_term ~name (qualify name)
+    | Snoc (fields, ( _, InductiveConstr _)) -> compile_fields fields       
+    | Snoc
+        ( fields,
+          ( _,
+            (InductiveDefinition { compiled_impl; _ } | MetaDataSection { compiled_impl; _ }))) -> 
+       compiled_impl |> ignore; 
+       fields |> ignore; 
+       Errors.fail ~info:"TODO: synthesize ctx"    
+  in 
+  let ctx = Names.Id.of_string "Ctx" in
+  B.run @@ B.define_module ~module_name:ctx ~parameters:[] ~body:(fun _ -> compile_fields fields)
+  
+
+let rec compile_linkage (linkage : Linkage.t) =
   let Linkage.{ context; name; fields; _ } = linkage in
   let rec compile_fields fields (ctx : CompiledModule.t list) =
     match fields with
@@ -734,10 +805,18 @@ let compile_linkage (linkage : Linkage.t) =
         let* _ = compile_fields fields ctx in
         compile_computational_axiom_implementation ~axiom_name:name
           ~axiom_expr:axiom
+    
+   | Snoc
+        (fields, (_, FamilyDefinition { linkage = nested_linkage; _ })) -> 
+      let open B in      
+      let* _ = compile_fields fields ctx in      
+      thunk (fun () -> 
+          let _ = synthesize_context_impl ~module_name:linkage.name ~fields in
+          let _ = compile_linkage nested_linkage in 
+          return ())
+
     (* An implementation will be provided by the inductive *)
-    | Snoc (fields, (_, InductiveConstr _)) -> compile_fields fields ctx
-    | Snoc
-        (fields, (_, FamilyDefinition { default_ctx_params; compiled_impl; _ }))
+    | Snoc (fields, (_, InductiveConstr _)) -> compile_fields fields ctx    
     | Snoc
         (fields, (_, MetaDataSection { default_ctx_params; compiled_impl; _ }))
     | Snoc
@@ -750,7 +829,19 @@ let compile_linkage (linkage : Linkage.t) =
         (fields, (_, FieldDefinition { default_ctx_params; compiled_impl; _ }))
       ->
         let open B in
-        let parameters = Linkage.context_parameters linkage in
+        let qualify name = 
+          [name; Names.Id.of_string "Ctx"] |> Naming.list_to_path
+        in 
+        let parameters = 
+          linkage 
+          |> Linkage.context_parameters 
+          |> List.map (fun parameter -> 
+               parameter
+               |> Naming.path_to_list 
+               |> List.hd 
+               |> Naming.un_self_version
+               |> qualify)
+        in
         let parameters = normalize_parameters ~default_ctx_params ~parameters in
         let* _ = compile_fields fields ctx in
         let module_expr = Termutils.ident_to_module_expr compiled_impl in
@@ -760,8 +851,9 @@ let compile_linkage (linkage : Linkage.t) =
         let* _ = include_module ~module_expr in
         return ()
   in
+  context |> ignore;
   B.run
-  @@ B.define_module ~module_name:name ~parameters:(Bwd.to_list context)
+  @@ B.define_module ~module_name:name ~parameters:[](* :(Bwd.to_list context)*)
        ~body:(compile_fields fields)
 
 let compile_nested_linkage (linkage : Linkage.t) =

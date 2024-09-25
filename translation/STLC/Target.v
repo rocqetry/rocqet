@@ -49,23 +49,22 @@ End E.
 Module B.  
   Definition data := 10.  
   
+  Module Ctx.
+     Definition data := B.data.
+  End Ctx.
+  
   Module Inner.
-    Definition datacell := 10.
+    Definition datacell := 10.    
+
     Module Ctx.
-        Definition data := B.data.
+        Definition datacell := Inner.datacell.
     End Ctx.
 
-    Module InnerInner.
-      Module Ctx.
-        Definition datacell := Inner.datacell.
-      End Ctx.
+    Module InnerInner.      
 
-      Module Zi.
-        (* Definition atomicdata := 10.**)
-        Include Z.
-      End Zi.
+      Include Z.
+      Include E B.Ctx Inner.Ctx.
 
-      Include E Inner.Ctx InnerInner.Ctx Zi.
     End InnerInner.    
   End Inner. 
 End B.
