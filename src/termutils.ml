@@ -317,9 +317,9 @@ let handler_type_for_recursion ~(name : Names.Id.t)
          let target =
            match inductive_path |> Naming.path_to_list |> List.rev with
            | [] | [ _ ] -> None
+            (* Remove the inductive name, leave the family *)
            | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
-         in
-
+         in         
          let handler = Naming.replace_self_qualification ~target handler in
          let handler =
            match target with
@@ -330,13 +330,16 @@ let handler_type_for_recursion ~(name : Names.Id.t)
                in
                let names =
                  [ inductive_name; case_name ] |> Names.Id.Set.of_list
-               in
+               in               
                Naming.add_prefix_path ~path ~names ~target:handler
          in
+         let sigma, env = global_env () in
+         let s = Pp.string_of_ppcmds @@ Ppconstr.pr_constr_expr env sigma handler in 
+         Printf.printf "Handler before resolving: %s\n" s;
          let handler =
            Resolver.resolve_constrexpr ~context:(Env.Context.get ())
              ~expression:handler
-         in
+         in         
          let handler_type = Constrexpr_ops.mkAppC (handler, [ motive_term ]) in
          (case_name, handler_type))
 

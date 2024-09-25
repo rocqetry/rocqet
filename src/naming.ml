@@ -148,18 +148,47 @@ let replace_qualid_root ~source ~target =
   in
   replace_qualid_path ()
 
+let self_version = Nameops.add_prefix "self__"
+
+(* Strip self__ from the prefix of a name *)
+let un_self_version name =
+  let s = Names.Id.to_string name in
+  if String.starts_with ~prefix:"self__" s then
+    let newbeginning =
+      String.sub s (String.length "self__")
+        (String.length s - String.length "self__")
+    in
+    Names.Id.of_string newbeginning
+  else name
+
+let replace_self (path: Names.Id.t list) (name : Names.Id.t) = 
+  let find_path lst target =
+     let rec aux acc = function
+       | [] -> None
+       | hd :: tl ->
+           if Names.Id.equal hd target then Some (List.rev (hd :: acc))
+           else aux (hd :: acc) tl
+     in
+     aux [] lst
+  in 
+  let target = un_self_version name in   
+  match find_path path target with 
+  | None -> [name]
+  | Some prefix -> prefix
+
 let replace_self_qualification ~(target : Libnames.qualid option) =
   let open Constrexpr_ops in
   let open Constrexpr in
   let open Libnames in
   let take_root_of_path (t : qualid) : Names.Id.t = fst (to_name_qualid t) in
   let replace_root_of_path (t : qualid) : qualid =
-    let _, tail = to_name_qualid t in
+    let name, tail = to_name_qualid t in
     let tail = path_to_list tail in
     match target with
     | None -> list_to_path tail
     | Some target ->
         let target = path_to_list target in
+        let target = replace_self target name in 
         list_to_path (target @ tail)
   in
   let rec replace_qualid_path _ r =
@@ -170,7 +199,7 @@ let replace_self_qualification ~(target : Libnames.qualid option) =
         let source = Names.Id.to_string (take_root_of_path qid) in
         match String.starts_with ~prefix:"self__" source with
         | true ->
-            let qid = replace_root_of_path qid in
+            let qid = replace_root_of_path qid in            
             CAst.make (CRef (qid, us))
         | false -> x)
     | cn ->
@@ -223,18 +252,7 @@ let add_prefix_path ~(path : Libnames.qualid) ~(names : Names.Id.Set.t)
   in
   go names target
 
-let self_version = Nameops.add_prefix "self__"
 
-(* Strip self__ from the prefix of a name *)
-let un_self_version name =
-  let s = Names.Id.to_string name in
-  if String.starts_with ~prefix:"self__" s then
-    let newbeginning =
-      String.sub s (String.length "self__")
-        (String.length s - String.length "self__")
-    in
-    Names.Id.of_string newbeginning
-  else name
 
 let unique_id =
   let counter = Summary.ref ~name:"FreshCounter" 0 in
