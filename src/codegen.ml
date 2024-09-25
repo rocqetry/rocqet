@@ -574,9 +574,9 @@ let normalize_parameters ~(default_ctx_params : CompiledModule.t list)
     (* if compare_result > 0 *)
     (* The base context has less params.
        Take only the required arguments. *)
-    (* Not sure of the order of the arguments *)
-    (* Maybe we should just keep track of argument names *)
-    (* Too messy! What are we really trying to do here? *)
+    (* We are tyring to take the last n params from the 
+       derived context to apply to the base. Here n is the 
+       number of params that base takes. *)
     parameters |> List.rev |> List.to_seq
     |> Seq.take default_params_len
     |> List.of_seq |> List.rev
