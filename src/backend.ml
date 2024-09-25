@@ -156,6 +156,21 @@ module Vernac = struct
     let* _ = vernac_ (VernacSynterp (VernacEndSegment modname_)) in
     return @@ Libnames.qualid_of_ident module_name
 
+  (** Module Z := A. *)
+  let define_module_inline ~(name : Names.Id.t) ~(value: Constrexpr.module_ast) : unit t =
+    let open Vernacexpr in
+    let modname_ = CAst.make name in
+    let parameters_ =
+      []
+    in    
+    let* _ =
+      vernac_
+        (VernacSynterp
+           (VernacDefineModule
+              (None, modname_, parameters_, Declaremods.Check [], [(value, Declaremods.DefaultInline)])))
+    in        
+    return ()
+
   let declare_module ~(module_name : Names.Id.t) (ty : Constrexpr.module_ast) :
       unit t =
     let name = CAst.make module_name in
