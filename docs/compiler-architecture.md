@@ -19,7 +19,7 @@ C -> Clight -> Csharpminor -> Cminor -> CminorSel -> RTL -> LTL -> Linear -> Mac
 ```
 family Base { 
 	family Cfrontend { }	
-	family C extends Cfrontend { } 
+	family C extends Cfrontend { }
 	family Clight extends Cfrontend { }
 	
 	family Cminorvariant {
@@ -217,15 +217,68 @@ family Base {
 ### Vector extension
 ```
 family SIMD extends Base { 	
+	FInductive value += 
+	  | VVector : nat -> value.
+
+	FInductive array_op := 
+	 | Add | Mul | Sub | Div
+     | Max | Min.	
+  
+	family Cfrontend { 		
+		FInductive expr += 
+		  | Tensor : list (list nat) -> expr
+		  | Iota : nat -> expr
+		  | Map : array_op -> expr -> expr 
+		  | Reduce : array_op -> expr -> expr 
+          | ZipWith : array_op -> expr -> expr -> expr
+          | Reshape : expr -> expr -> expr.
+	}
+	
+	family SelMap extends CminorTransl { } 
+	family SelReduce extends CminorTransl { } 
+	family SelZipWith extends CminorTransl { } 
+	family SelReshape extends CminorTransl { }
+	
+	
 	family RISCV { 
 		family Ext { 
 			(* Standard Extension for Vector Operations *)
-			family V { }
+			family V {
+				FInductive operation += ... 
+				
+				(* Vector registers *)
+				Inductive vreg : Type := V0 | V1 | V2 | V3 | V4 | V5 | V6 | V7 | V8 | V9.
+				
+				(* Vector Arithmetic and Logic Operations *)
+				FInductive instruction += 					  
+                    | Vadd : vreg -> vreg -> vreg -> instruction           (**r vector addition *)
+                    | Vsub : vreg -> vreg -> vreg -> instruction           (**r vector subtraction *)
+                    | Vmul : vreg -> vreg -> vreg -> instruction           (**r vector multiplication *)
+                    | Vdiv : vreg -> vreg -> vreg -> instruction           (**r vector division *)
+                    | Vmax : vreg -> vreg -> vreg -> instruction           (**r vector max *)
+                    | Vmin : vreg -> vreg -> vreg -> instruction           (**r vector min *)
+                  
+                    (* Vector Reduction Operations *)
+                    | Vredsum : vreg -> vreg -> instruction                (**r vector reduction sum *)
+                    | Vredand : vreg -> vreg -> instruction                (**r vector reduction AND *)
+                    | Vredor : vreg -> vreg -> instruction                 (**r vector reduction OR *)
+                  
+                    (* Vector Index and Miscellaneous *)
+                    | Vid : vreg -> instruction                            (**r vector index *)
+                    | Vsetvli : nat -> vreg -> instruction                 (**r set vector length *)
+                    | Vrgather : vreg -> vreg -> vreg -> instruction       (**r vector gather *)
+                    | Vslideup : vreg -> vreg -> nat -> instruction        (**r vector slide up *)
+                    | Vslidedown : vreg -> vreg -> nat -> instruction      (**r vector slide down *). 
+			}
 		}
 		
 		family Asm extends Ext.V { }
 	}
 }
+```
+
+### Pattern extension 
+```
 ```
 
 
