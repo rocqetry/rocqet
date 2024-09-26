@@ -146,7 +146,45 @@ family Base {
 	family LTL { }
 	
 	family LinearLike {
-	     
+	   Opaque FDefinition stackslot := ...
+	   
+       FInductive instruction: Type :=
+         | Lgetstack: stackslot -> typ -> mreg -> instruction
+         | Lsetstack: stackslot -> typ -> instruction
+		 
+	 
+	   Family Sem { 
+		   Opaque FDefinition locset := ...
+		   
+		   Inductive state: Type :=  
+              | Callstate:
+                  forall (stack: list stackframe)(* call stack *)
+                         (f: block)(* pointer to function to call *)
+                         (rs: locset) (* register state *)
+                         (m: mem), (* memory state *)
+                  state
+		   
+		   Inductive step: state -> trace -> state -> Prop :=
+               | exec_Mgetstack:
+                   forall s f sp ofs ty dst c rs m v,
+                   load_stack m sp ty ofs = Some v ->
+                   step (State s f sp (Mgetstack ofs ty dst :: c) rs m)
+                     E0 (State s f sp c (rs#dst <- v) m)
+               | exec_Msetstack:
+                   forall s f sp src ofs ty c rs m m' rs',
+                   store_stack m sp ty ofs (rs src) = Some m' ->
+                   rs' = undef_regs (destroyed_by_setstack ty) rs ->
+                   step (State s f sp (Msetstack src ofs ty :: c) rs m)
+                     E0 (State s f sp c rs' m')
+               | exec_Mgetparam:
+                   forall s fb f sp ofs ty dst c rs m v rs',
+                   Genv.find_funct_ptr ge fb = Some (Internal f) ->
+                   load_stack m sp Tptr f.(fn_link_ofs) = Some (parent_sp s) ->
+                   load_stack m (parent_sp s) ty ofs = Some v ->
+                   rs' = (rs # temp_for_parent_frame <- Vundef # dst <- v) ->
+                   step (State s fb sp (Mgetparam ofs ty dst :: c) rs m)
+                     E0 (State s fb sp c rs' m)
+	   }
 	}
 	family Linear extends LinearLike { } 
 	family Mach extends LinearLike { }
