@@ -39,7 +39,7 @@ family Base {
 	
 	
 	
-	family Cminorvariant extends Cfrontend {		
+	family Cminorvariant extends Cfrontend {
 		Opaque FDefinition function := ...
 		
 		family Sem { 						

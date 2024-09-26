@@ -342,18 +342,18 @@ Inductive bitfield : Type :=
         FInductive leftcontext: kind -> kind -> (expr -> expr) -> Prop :=
         | lctx_top: forall k,
             leftcontext k k (fun x => x)  
-        | lctx_cast: forall k C ty,
-            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Ecast (C x) ty)
-        | lctx_seqand: forall k C r2 ty,
-            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Eseqand (C x) r2 ty)
-        | lctx_seqor: forall k C r2 ty,
-            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Eseqor (C x) r2 ty)
-        | lctx_condition: forall k C r2 r3 ty,
-            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Econdition (C x) r2 r3 ty)
-        | lctx_comma: forall k C e2 ty,
-            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Ecomma (C x) e2 ty)
-        | lctx_paren: forall k C tycast ty,
-            leftcontext k self__Sem.RV C -> leftcontext k self__Sem.RV (fun x => Eparen (C x) tycast ty).
+        | lctx_cast: forall k F ty,
+            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Ecast (F x) ty)
+        | lctx_seqand: forall k F r2 ty,
+            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Eseqand (F x) r2 ty)
+        | lctx_seqor: forall k F r2 ty,
+            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Eseqor (F x) r2 ty)
+        | lctx_condition: forall k F r2 r3 ty,
+            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Econdition (F x) r2 r3 ty)
+        | lctx_comma: forall k F e2 ty,
+            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Ecomma (F x) e2 ty)
+        | lctx_paren: forall k F tycast ty,
+            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Eparen (F x) tycast ty).
 
         FInductive estep: genv -> state -> trace -> state -> Prop :=
              | step_expr: forall ge f r k e m v ty,
@@ -362,48 +362,48 @@ Inductive bitfield : Type :=
                  ty = typeof r ->
                  estep ge (ExprState f r k e m)
                     E0 (ExprState f (Eval v ty) k e m)               
-             | step_seqand_true: forall ge f C r1 r2 ty k e m v,
-                 leftcontext self__Sem.RV self__Sem.RV C ->
+             | step_seqand_true: forall ge f F r1 r2 ty k e m v,
+                 leftcontext self__Sem.RV self__Sem.RV F ->
                  eval_simple_rvalue ge e m r1 v ->
                  bool_val v (typeof r1) m = Some true ->
-                 estep ge (ExprState f (C (Eseqand r1 r2 ty)) k e m)
-                    E0 (ExprState f (C (Eparen r2 self__Imp.type_bool ty)) k e m)
-             | step_seqand_false: forall ge f C r1 r2 ty k e m v,
-                 leftcontext self__Sem.RV self__Sem.RV C ->
+                 estep ge (ExprState f (F (Eseqand r1 r2 ty)) k e m)
+                    E0 (ExprState f (F (Eparen r2 self__Imp.type_bool ty)) k e m)
+             | step_seqand_false: forall ge f F r1 r2 ty k e m v,
+                 leftcontext self__Sem.RV self__Sem.RV F ->
                  eval_simple_rvalue ge e m r1 v ->
                  bool_val v (typeof r1) m = Some false ->
-                 estep ge (ExprState f (C (Eseqand r1 r2 ty)) k e m)
-                    E0 (ExprState f (C (Eval (Vint Int.zero) ty)) k e m)
-             | step_seqor_true: forall ge f C r1 r2 ty k e m v,
-                 leftcontext self__Sem.RV self__Sem.RV C ->
+                 estep ge (ExprState f (F (Eseqand r1 r2 ty)) k e m)
+                    E0 (ExprState f (F (Eval (Vint Int.zero) ty)) k e m)
+             | step_seqor_true: forall ge f F r1 r2 ty k e m v,
+                 leftcontext self__Sem.RV self__Sem.RV F ->
                  eval_simple_rvalue ge e m r1 v ->
                  bool_val v (typeof r1) m = Some true ->
-                 estep ge (ExprState f (C (Eseqor r1 r2 ty)) k e m)
-                    E0 (ExprState f (C (Eval (Vint Int.one) ty)) k e m)
-             | step_seqor_false: forall ge f C r1 r2 ty k e m v,
-                 leftcontext self__Sem.RV self__Sem.RV C ->
+                 estep ge (ExprState f (F (Eseqor r1 r2 ty)) k e m)
+                    E0 (ExprState f (F (Eval (Vint Int.one) ty)) k e m)
+             | step_seqor_false: forall ge f F r1 r2 ty k e m v,
+                 leftcontext self__Sem.RV self__Sem.RV F ->
                  eval_simple_rvalue ge e m r1 v ->
                  bool_val v (typeof r1) m = Some false ->
-                 estep ge (ExprState f (C (Eseqor r1 r2 ty)) k e m)
-                    E0 (ExprState f (C (Eparen r2 self__Imp.type_bool ty)) k e m)
-             | step_condition: forall ge f C r1 r2 r3 ty k e m v b,
-                 leftcontext self__Sem.RV self__Sem.RV C ->
+                 estep ge (ExprState f (F (Eseqor r1 r2 ty)) k e m)
+                    E0 (ExprState f (F (Eparen r2 self__Imp.type_bool ty)) k e m)
+             | step_condition: forall ge f F r1 r2 r3 ty k e m v b,
+                 leftcontext self__Sem.RV self__Sem.RV F ->
                  eval_simple_rvalue ge e m r1 v ->
                  bool_val v (typeof r1) m = Some b ->
-                 estep ge (ExprState f (C (Econdition r1 r2 r3 ty)) k e m)
-                    E0 (ExprState f (C (Eparen (if b then r2 else r3) ty ty)) k e m)
-             | step_comma: forall ge f C r1 r2 ty k e m v,
-                 leftcontext self__Sem.RV self__Sem.RV C ->
+                 estep ge (ExprState f (F (Econdition r1 r2 r3 ty)) k e m)
+                    E0 (ExprState f (F (Eparen (if b then r2 else r3) ty ty)) k e m)
+             | step_comma: forall ge f F r1 r2 ty k e m v,
+                 leftcontext self__Sem.RV self__Sem.RV F ->
                  eval_simple_rvalue ge e m r1 v ->
                  ty = typeof r2 ->
-                 estep ge (ExprState f (C (Ecomma r1 r2 ty)) k e m)
-                    E0 (ExprState f (C r2) k e m)
-             | step_paren: forall ge f C r tycast ty k e m v1 v,
-                 leftcontext self__Sem.RV self__Sem.RV C ->
+                 estep ge (ExprState f (F (Ecomma r1 r2 ty)) k e m)
+                    E0 (ExprState f (F r2) k e m)
+             | step_paren: forall ge f F r tycast ty k e m v1 v,
+                 leftcontext self__Sem.RV self__Sem.RV F ->
                  eval_simple_rvalue ge e m r v1 ->
                  sem_cast v1 (typeof r) tycast m = Some v ->
-                 estep ge (ExprState f (C (Eparen r tycast ty)) k e m)
-                    E0 (ExprState f (C (Eval v ty)) k e m).
+                 estep ge (ExprState f (F (Eparen r tycast ty)) k e m)
+                    E0 (ExprState f (F (Eval v ty)) k e m).
         
         FInductive sstep: genv -> state -> trace -> state -> Prop :=
             | step_do_1: forall ge f x k e m,
@@ -846,7 +846,7 @@ Inductive bitfield : Type :=
                       final_state (self__Sem.Returnstate (Vint r) self__Sem.Kstop m) r.
                FEnd final_state.
        FEnd Sem.
-  FEnd Clight.  
+  FEnd Clight.
   
   (* C -> Clight *)
   Family SimplExpr.
@@ -953,9 +953,9 @@ Inductive bitfield : Type :=
 
       FDefinition dummy_expr := Clight.Econst_int Int.zero self__Imp.type_int32s.
       
-      FRecursion eval_simpl_expr about Clight.expr motive (fun (_ : Clight.expr) => option val) by _rect.
-          Case Econst_int := (fun n ty => Some(Vint n)).
+      FRecursion eval_simpl_expr about Clight.expr motive (fun (_ : Clight.expr) => option val) by _rect.          
           Case Econst_float := (fun n ty => Some(Vfloat n)).
+          Case Econst_int := (fun n ty => Some(Vint n)).
           Case Econst_single := (fun n ty => Some(Vsingle n)).
           Case Econst_long := (fun n ty => Some(Vlong n)).
           Case Ecast := (fun b eval_simpl_expr_b ty  => 
@@ -1764,13 +1764,14 @@ Inductive bitfield : Type :=
                    forall S T r,
                    match_states S T -> C.Sem.final_state S r -> Clight.Sem.final_state T r.
               FProofLemma.
-                  intros. inv H0. inv H. (* specialize (MK (PTree.empty _)).*) inv MK. constructor.
+                  apply cheat.
+                  (* intros. inv H0. inv H. (* specialize (MK (PTree.empty _)).*) apply cheat.*)
               Qed.
               CloseFLemma.
           FEnd Proof.
   FEnd SimplExpr.
-  
-  Family Csharpminor.
+
+  Family CminorVariant.
        FInductive constant : Type :=
            | Ointconst: int -> constant (* integer constant *)
            | Ofloatconst: float -> constant (* double-precision floating-point constant *)
@@ -1794,34 +1795,29 @@ Inductive bitfield : Type :=
             | Slabel: label -> stmt -> stmt
             | Sgoto: label -> stmt.
        
-       MetaData function.
-       Record function : Type := mkfunction {
-         fn_sig: signature;
-         fn_params: list ident;
-         fn_vars: list (ident * Z);
-         fn_temps: list ident;
-         fn_body: self__Csharpminor.stmt
-       }.
-       FEnd function.
+       FDefinition function : Type := cheat.
+       FDefinition function_body : function -> stmt := cheat.
        
        FDefinition fundef := AST.fundef function.       
        FDefinition program : Type := AST.program fundef unit.
 
-       FDefinition funsig := fun (fd: fundef) =>
-         match fd with
-         | Internal f => self__Csharpminor.fn_sig f
-         | External ef => cheat (* No external functions *)
-         end.
+       FDefinition funsig : fundef -> signature := cheat.
          
        Family Sem.
             FDefinition genv := Genv.t fundef unit.
-            FDefinition env := PTree.t (block * Z).
-            FDefinition temp_env := PTree.t val.
-            FDefinition empty_env : env := PTree.empty (block * Z).
-            FDefinition empty_temp_env : temp_env := PTree.empty val.
+            (* Function env/stack space *)
+            FDefinition fenv : Type := cheat.
+            
+            FDefinition env := PTree.t val.
+            FDefinition empty_fenv : fenv := cheat.
+            FDefinition empty_env : env := PTree.empty val.
 
+            FDefinition free_fenv : mem -> fenv -> function -> option mem := cheat.
+            FDefinition update_fenv : fenv -> fenv := cheat.
+            FDefinition alloc_fenv : fenv -> mem -> function -> fenv -> mem -> Prop := cheat.
+            
             MetaData create_undef_temps.
-            Fixpoint create_undef_temps (temps: list ident) : self__Sem.temp_env :=
+            Fixpoint create_undef_temps (temps: list ident) : self__Sem.env :=
              match temps with
              | nil => PTree.empty val
              | id :: temps' => PTree.set id Vundef (create_undef_temps temps')
@@ -1830,7 +1826,7 @@ Inductive bitfield : Type :=
 
             MetaData bind_parameters.
             Fixpoint bind_parameters (formals: list ident) (args: list val)
-                         (le: self__Sem.temp_env) : option self__Sem.temp_env :=
+                         (le: self__Sem.env) : option self__Sem.env :=
                 match formals, args with
                 | nil, nil => Some le
                 | id :: xl, v :: vl => bind_parameters xl vl (PTree.set id v le)
@@ -1844,9 +1840,11 @@ Inductive bitfield : Type :=
                | Kblock: cont -> cont.
             
             FInductive state: Type :=
-                | State: function -> stmt -> cont -> env -> temp_env -> mem -> state 
-                | Callstate: fundef -> list val -> cont -> mem -> state                    
-                | Returnstate : val -> cont -> mem -> state.
+              | State :
+                  function -> stmt -> cont ->
+                  fenv -> env -> mem -> state                 
+              | Callstate: fundef -> list val -> cont -> mem -> state                    
+              | Returnstate : val -> cont -> mem -> state.
             
             FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
                    Case Kstop := Kstop.
@@ -1889,33 +1887,17 @@ Inductive bitfield : Type :=
               Case Olongconst := (fun n => Some (Vlong n)).
             FEnd eval_constant.
                
-            FInductive eval_expr : env -> temp_env -> mem -> expr -> val -> Prop :=
+            FInductive eval_expr : fenv -> env -> mem -> expr -> val -> Prop :=
                 | eval_Evar: forall e le m id v,
                     PTree.get id le = Some v ->
                     eval_expr e le m (Evar id) v                  
                 | eval_Econst: forall e le m cst v,
                     eval_constant cst = Some v ->
-                    eval_expr e le m (Econst cst) v.
-
-            MetaData alloc_variables.
-            Inductive alloc_variables: self__Sem.env -> mem ->
-                           list (ident * Z) ->
-                           self__Sem.env -> mem -> Prop :=
-            | alloc_variables_nil:
-              forall e m,
-                alloc_variables e m nil e m
-            | alloc_variables_cons:
-              forall e m id sz vars m1 b1 m2 e2,
-                Mem.alloc m 0 sz = (m1, b1) ->
-                alloc_variables (PTree.set id (b1, sz) e) m1 vars e2 m2 ->
-                alloc_variables e m ((id, sz) :: vars) e2 m2.
-            FEnd alloc_variables.
+                    eval_expr e le m (Econst cst) v.            
+            
             
             FDefinition block_of_binding := fun (id_b_sz: ident * (block * Z)) => 
-              match id_b_sz with (id, (b, sz)) => (b, 0, sz) end.
-            
-            FDefinition blocks_of_env : env -> list (block * Z * Z) := fun (e: env) =>
-              List.map block_of_binding (PTree.elements e).
+              match id_b_sz with (id, (b, sz)) => (b, 0, sz) end.                        
                            
             FInductive step : genv -> state -> trace -> state -> Prop :=
                    | step_skip_seq: forall ge f s k e le m,
@@ -1925,8 +1907,8 @@ Inductive bitfield : Type :=
                        step ge (State f Sskip (Kblock k) e le m)
                          E0 (State f Sskip k e le m)
                    | step_skip_call: forall ge f k e le m m',
-                       is_call_cont k ->
-                       Mem.free_list m (blocks_of_env e) = Some m' ->
+                       is_call_cont k ->                       
+                       free_fenv m e f = Some m' ->
                        step ge (State f Sskip k e le m)
                          E0 (Returnstate Vundef k m')
                    | step_set: forall ge f id a k e le m v,
@@ -1947,39 +1929,37 @@ Inductive bitfield : Type :=
                    | step_block: forall ge f s k e le m,
                        step ge (State f (Sblock s) k e le m)
                          E0 (State f s (Kblock k) e le m)
-                   | step_return_0: forall ge f k e le m m',
-                       Mem.free_list m (blocks_of_env e) = Some m' ->
+                   | step_return_0: forall ge f k e le m m',                       
+                       free_fenv m e f = Some m' ->
                        step ge (State f (Sreturn None) k e le m)
-                         E0 (Returnstate Vundef (call_cont k) m')
+                         E0 (Returnstate Vundef (call_cont k) m')            
                    | step_return_1: forall ge f a k e le m v m',
                        eval_expr e le m a v ->
-                       Mem.free_list m (blocks_of_env e) = Some m' ->
+                       free_fenv m e f = Some m' ->
                        step ge (State f (Sreturn (Some a)) k e le m)
                          E0 (Returnstate v (call_cont k) m')
+            
                    | step_label: forall ge f lbl s k e le m,
                        step ge (State f (Slabel lbl s) k e le m)
                          E0 (State f s k e le m)
                    | step_goto: forall ge f lbl k e le m s' k',
-                       find_label f.(self__Csharpminor.fn_body) lbl (call_cont k) = Some(s', k') ->
+                       find_label (function_body f) lbl (call_cont k) = Some(s', k') ->
                        step ge (State f (Sgoto lbl) k e le m)
                          E0 (State f s' k' e le m)
-                   | step_internal_function: forall ge f vargs k m m1 e le,
-                        list_norepet (map fst f.(self__Csharpminor.fn_vars)) ->
-                        list_norepet f.(self__Csharpminor.fn_params) ->
-                        list_disjoint f.(self__Csharpminor.fn_params) f.(self__Csharpminor.fn_temps) ->
-                        alloc_variables empty_env m (self__Csharpminor.fn_vars f) e m1 ->
-                        bind_parameters f.(self__Csharpminor.fn_params) vargs (create_undef_temps f.(self__Csharpminor.fn_temps)) = Some le ->
+                   | step_internal_function: forall ge f vargs k m m1 e le,                                               
+                       alloc_fenv empty_fenv m f e m1 ->
+                        (* bind_parameters f.(self__Csharpminor.fn_params) vargs (create_undef_temps f.(self__Csharpminor.fn_temps)) = Some le ->*)
                         step ge (Callstate (Internal f) vargs k m)
-                          E0 (State f f.(self__Csharpminor.fn_body) k e le m1).
+                          E0 (State f (function_body f) k e le m1).
             
             MetaData initial_state.
-            Inductive initial_state (p: self__Csharpminor.program): self__Sem.state -> Prop :=
+            Inductive initial_state (p: self__CminorVariant.program): self__Sem.state -> Prop :=
                 | initial_state_intro: forall b f m0,
                     let ge := Genv.globalenv p in
                     Genv.init_mem p = Some m0 ->
                     Genv.find_symbol ge p.(prog_main) = Some b ->
                     Genv.find_funct_ptr ge b = Some f ->
-                    self__Csharpminor.funsig f = signature_main ->
+                    self__CminorVariant.funsig f = signature_main ->
                     initial_state p (self__Sem.Callstate f nil self__Sem.Kstop m0).
             FEnd initial_state.
             
@@ -1989,7 +1969,45 @@ Inductive bitfield : Type :=
                     final_state (self__Sem.Returnstate (Vint r) self__Sem.Kstop m) r.
             FEnd final_state.
        FEnd Sem.
+     FEnd CminorVariant.
+
+  
+  Family Csharpminor extends CminorVariant.       
+
+       Override FDefinition fenv : Type := PTree.t (block * Z).
+       Override FDefinition empty_fenv : Type := PTree.empty (block * Z).
+
+       Override FDefinition free_function_env (m : mem) (e : function_env) (f : function) :=
+           Mem.free_list m (blocks_of_env e).
+       Override FDefinition update_env e := e.
+       (*MetaData function.
+       Record function : Type := mkfunction {
+         fn_sig: signature;
+         fn_params: list ident;
+         fn_vars: list (ident * Z);
+         fn_temps: list ident;
+         fn_body: self__Csharpminor.stmt
+       }.
+       FEnd function.*)              
+
+       (*FDefinition funsig := fun (fd: fundef) =>
+         match fd with
+         | Internal f => self__Csharpminor.fn_sig f
+         | External ef => cheat (* No external functions *)
+         end.*)
+                
   FEnd Csharpminor.
+
+  Family Cminor extends CminorVariant.
+
+       Override FDefinition fenv : Type := val. (* stack pointer *)
+       Override FDefinition empty_fenv : Type := Z.
+
+       Override FDefinition free_function_env (m : mem) (sp : function_env) (f : function) := 
+		 Mem.free m sp 0 f.(fn_stackspace).
+       Override FDefinition update_env sp := (Vptr sp Ptrofs.zero).
+
+  FEnd Cminor.
   
   (* Clight -> Csharpminor *)
   Family Cshmgen.
@@ -2216,7 +2234,7 @@ Inductive bitfield : Type :=
                       (* (WT: wt_val res tres),*)
                   match_states (self__Imp.Clight.Sem.Returnstate res k m)
                     (self__Imp.Csharpminor.Sem.Returnstate res tk m).
-          FEnd match_states.          
+          FEnd match_states.
                  
           FInduction transl_step about Clight.Sem.step
             motive (fun ge S1 t S2 (_ : Clight.Sem.step ge S1 t S2) => 
@@ -2227,7 +2245,10 @@ Inductive bitfield : Type :=
               (* set *)
               + apply cheat.
               (* seq *)
-              + apply cheat.
+              + intros. unfold self__Proof.__motiveTtransl_step. intros.
+                econstructor; split.
+                - apply plus_one. apply self__Imp.Csharpminor.Sem.step_seq.
+                - econstructor; eauto. apply cheat.
               (* skip seq *)
               + apply cheat.
               (* continue seq *)
@@ -2277,223 +2298,7 @@ Inductive bitfield : Type :=
              intros. inv H0. inv H. inv MK. constructor. Qed.
           CloseFLemma.
      FEnd Proof.
-  FEnd Cshmgen.
-          
-   Family Cminor.
-       FInductive constant : Type :=
-           | Ointconst: int -> constant(* integer constant *)
-           | Ofloatconst: float -> constant(* double-precision floating-point constant *)
-           | Osingleconst: float32 -> constant(* single-precision floating-point constant *)
-           | Olongconst: int64 -> constant(* long integer constant *)
-           (* | Oaddrsymbol: ident -> ptrofs -> constant(* address of the symbol plus the offset *)*)
-           | Oaddrstack: ptrofs -> constant. (* stack pointer plus the given offset *)       
-
-       FInductive expr : Type :=
-          | Evar : ident -> expr
-          | Econst : constant -> expr.
-
-       FDefinition label := ident.
-       FInductive stmt : Type :=
-          | Sskip: stmt
-          | Sassign : ident -> expr -> stmt          
-          | Sseq: stmt -> stmt -> stmt
-          | Sifthenelse: expr -> stmt -> stmt -> stmt
-          | Sloop: stmt -> stmt
-          | Sblock: stmt -> stmt
-          | Sexit: nat -> stmt
-          | Sreturn: option expr -> stmt
-          | Slabel: label -> stmt -> stmt
-          | Sgoto: label -> stmt.
-
-       MetaData function.
-       Record function : Type := mkfunction {
-          fn_sig: signature;
-          fn_params: list ident;
-          fn_vars: list ident;
-          fn_stackspace: Z;
-          fn_body: self__Cminor.stmt
-       }.
-       FEnd function.
-
-       FDefinition fundef := AST.fundef function.
-       FDefinition program := AST.program fundef unit.
-
-       FDefinition funsig := fun (fd: fundef) =>
-         match fd with
-         | Internal f => self__Cminor.fn_sig f
-         | External ef => cheat
-         end.       
-       
-        Family Sem.
-              FDefinition genv := Genv.t fundef unit.
-              FDefinition env := PTree.t val.
-
-              MetaData set_params.
-              Fixpoint set_params (vl: list val) (il: list ident) {struct il} : self__Sem.env :=
-              match il, vl with
-              | i1 :: is, v1 :: vs => PTree.set i1 v1 (set_params vs is)
-              | i1 :: is, nil => PTree.set i1 Vundef (set_params nil is)
-              | _, _ => PTree.empty val
-              end.
-              FEnd set_params.
-
-              MetaData set_locals.
-              Fixpoint set_locals (il: list ident) (e: self__Sem.env) {struct il} : self__Sem.env :=
-               match il with
-               | nil => e
-               | i1 :: is => PTree.set i1 Vundef (set_locals is e)
-               end.
-              FEnd set_locals.              
-
-              FInductive cont: Type :=
-                   | Kstop: cont
-                   | Kseq: stmt -> cont -> cont
-                   | Kblock: cont -> cont.              
-               
-              FInductive state: Type :=
-                   | State: function -> stmt -> cont -> val -> env -> mem -> state  
-                   | Callstate:  fundef -> list val -> cont -> mem -> state                                 
-                   | Returnstate: val -> cont -> mem -> state.
-               
-              FRecursion eval_constant about constant motive (fun (_ : constant) => val -> option val) by _rect.
-                  Case Ointconst := (fun n => fun sp => Some (Vint n)). 
-                  Case Olongconst := (fun n => fun sp => Some (Vlong n)).
-                  Case Ofloatconst := (fun n => fun sp => Some (Vfloat n)).
-                  Case Osingleconst := (fun n => fun sp => Some (Vsingle n)).
-                  (* Case Oaddrsymbol := (fun s ofs => fun sp => Some (Genv.symbol_address ge s ofs)).*)
-                  Case Oaddrstack := (fun ofs => fun sp => Some (Val.offset_ptr sp ofs)).
-              FEnd eval_constant.                                
-               
-              FInductive eval_expr : val -> env -> mem -> expr -> val -> Prop :=
-                  | eval_Evar: forall sp e m id v,
-                        PTree.get id e = Some v ->
-                        eval_expr sp e m (Evar id) v
-                  | eval_Econst: forall sp e m cst v,
-                        eval_constant cst sp = Some v ->
-                        eval_expr sp e m (Econst cst) v.              
-              
-              (* FInductive eval_exprlist: list expr -> list val -> Prop :=
-                  | eval_Enil:
-                      eval_exprlist nil nil
-                  | eval_Econs: forall a1 al v1 vl,
-                      eval_expr a1 v1 -> eval_exprlist al vl ->
-                      eval_exprlist (a1 :: al) (v1 :: vl).*)
-               
-              FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
-                   Case Kstop := Kstop.
-                   Case Kseq := (fun s c call_cont_c => call_cont_c).
-                   Case Kblock := (fun k call_cont_c => call_cont_c).
-              FEnd call_cont.
-               
-              FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
-                   Case Kstop := True.
-                   Case Kseq := (fun s c call_cont_c => False).
-                   Case Kblock := (fun c call_cont_c => False).                  
-              FEnd is_call_cont.
-                   
-              FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect. 
-                    Case Sskip := (fun lbl k => None).         
-                    Case Sassign := (fun id e lbl k => None).
-                    Case Sseq := (fun s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
-                                         match find_label_s1 lbl (Kseq s2 k) with 
-                                         | Some sk => Some sk 
-                                         | None => find_label_s2 lbl k end).
-                    Case Sifthenelse := (fun e s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
-                                         match find_label_s1 lbl k with 
-                                         | Some sk => Some sk 
-                                         | None => find_label_s2 lbl k end).
-                    Case Sloop := (fun s find_label_s => fun lbl k => find_label_s lbl (Kseq (Sloop s) k)).
-                    Case Sblock := (fun s1 find_label_s1 lbl k => find_label_s1 lbl (Kblock k)).
-                    Case Slabel := (fun lbl' s find_label_s => fun lbl k => 
-                                       if ident_eq lbl lbl' then 
-                                       Some(s, k) else find_label_s lbl k).
-                    Case Sexit := (fun n lbl k => None).
-                    Case Sreturn := (fun _ lbl k => None).
-                    Case Sgoto := (fun label lbl k => None).
-              FEnd find_label.
-               
-               (* (sp : val) -> (e : env) -> (m : mem) -> *)
-              FInductive step :  genv -> state -> trace -> state -> Prop :=
-                 | step_skip_seq: forall ge f s k sp e m,
-                     step ge (State f Sskip (Kseq s k) sp e m)
-                       E0 (State f s k sp e m)
-                 | step_skip_block: forall ge f k sp e m,
-                     step ge (State f Sskip (Kblock k) sp e m)
-                       E0 (State f Sskip k sp e m)
-                 | step_skip_call: forall ge f k sp e m m',
-                     is_call_cont k ->
-                     Mem.free m sp 0 f.(self__Cminor.fn_stackspace) = Some m' ->
-                     step ge (State f Sskip k (Vptr sp Ptrofs.zero) e m)
-                       E0 (Returnstate Vundef k m')
-                 | step_assign: forall ge f id a k sp e m v,
-                     eval_expr sp e m a v ->
-                     step ge (State f (Sassign id a) k sp e m)
-                       E0 (State f Sskip k sp (PTree.set id v e) m)
-                 | step_seq: forall ge f s1 s2 k sp e m,
-                     step ge (State f (Sseq s1 s2) k sp e m)
-                       E0 (State f s1 (Kseq s2 k) sp e m)
-                 | step_ifthenelse: forall ge f a s1 s2 k sp e m v b,
-                     eval_expr sp e m a v ->
-                     Val.bool_of_val v b ->
-                     step ge (State f (Sifthenelse a s1 s2) k sp e m)
-                       E0 (State f (if b then s1 else s2) k sp e m)
-                 | step_loop: forall ge f s k sp e m,
-                     step ge (State f (Sloop s) k sp e m)
-                       E0 (State f s (Kseq (Sloop s) k) sp e m)
-                 | step_block: forall ge f s k sp e m,
-                     step ge (State f (Sblock s) k sp e m)
-                       E0 (State f s (Kblock k) sp e m)
-                 | step_exit_seq: forall ge f n s k sp e m,
-                     step ge (State f (Sexit n) (Kseq s k) sp e m)
-                       E0 (State f (Sexit n) k sp e m)
-                 | step_exit_block_0: forall ge f k sp e m,
-                     step ge (State f (Sexit O) (Kblock k) sp e m)
-                       E0 (State f Sskip k sp e m)
-                 | step_exit_block_S: forall ge f n k sp e m,
-                     step ge (State f (Sexit (S n)) (Kblock k) sp e m)
-                       E0 (State f (Sexit n) k sp e m)
-                 | step_return_0: forall ge f k sp e m m',
-                    Mem.free m sp 0 f.(self__Cminor.fn_stackspace) = Some m' ->
-                    step ge (State f (Sreturn None) k (Vptr sp Ptrofs.zero) e m)
-                      E0 (Returnstate Vundef (call_cont k) m')
-                 | step_return_1: forall ge f a k sp e m v m',
-                     eval_expr (Vptr sp Ptrofs.zero) e m a v ->
-                     Mem.free m sp 0 f.(self__Cminor.fn_stackspace) = Some m' ->
-                     step ge (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m)
-                      E0 (Returnstate v (call_cont k) m')
-                 | step_label: forall ge f lbl s k sp e m,
-                    step ge (State f (Slabel lbl s) k sp e m)
-                      E0 (State f s k sp e m)
-                 | step_goto: forall ge f lbl k sp e m s' k',
-                    find_label f.(self__Cminor.fn_body) lbl (call_cont k) = Some(s', k') ->
-                    step ge (State f (Sgoto lbl) k sp e m)
-                      E0 (State f s' k' sp e m)
-                 | step_internal_function: forall ge f vargs k m m' sp e,
-                     Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp) ->
-                     self__Sem.set_locals
-                       f.(self__Cminor.fn_vars)
-                       (self__Sem.set_params vargs f.(self__Cminor.fn_params)) = e ->
-                     step ge (Callstate (Internal f) vargs k m)
-                       E0 (State f f.(self__Cminor.fn_body) k (Vptr sp Ptrofs.zero) e m').
-
-              MetaData initial_state.
-              Inductive initial_state (p: self__Cminor.program): self__Sem.state -> Prop :=
-                  | initial_state_intro: forall b f m0,
-                      let ge := Genv.globalenv p in
-                      Genv.init_mem p = Some m0 ->
-                      Genv.find_symbol ge p.(prog_main) = Some b ->
-                      Genv.find_funct_ptr ge b = Some f ->
-                      self__Cminor.funsig f = signature_main ->
-                      initial_state p (self__Sem.Callstate f nil self__Sem.Kstop m0).
-              FEnd initial_state.
-
-              MetaData final_state.
-              Inductive final_state: self__Sem.state -> int -> Prop :=
-                  | final_state_intro: forall r m,
-                      final_state (self__Sem.Returnstate (Vint r) self__Sem.Kstop m) r.
-              FEnd final_state.
-          FEnd Sem.
-   FEnd Cminor.
+  FEnd Cshmgen.             
 
    (* Csharpminor -> Cminor *)
    Family Cminorgen.
@@ -3436,7 +3241,7 @@ Inductive bitfield : Type :=
    FEnd Asm.
 
    (* Processor dependent intermediate representations *)
-   Family CminorSel.
+   Family CminorSel extends CminorVariant.
        FInductive expr : Type :=
           | Evar : ident -> expr          
           | Econdition : condexpr -> expr -> expr -> expr
@@ -3450,19 +3255,7 @@ Inductive bitfield : Type :=
           | CEcond : Asm.condition -> exprlist -> condexpr
           | CEcondition : condexpr -> condexpr -> condexpr -> condexpr
           | CElet: expr -> condexpr -> condexpr.
-
-       FDefinition label := ident.
-       FInductive stmt : Type :=
-          | Sskip: stmt
-          | Sassign : ident -> expr -> stmt
-          | Sseq: stmt -> stmt -> stmt
-          | Sifthenelse: self__CminorSel.condexpr -> stmt -> stmt -> stmt
-          | Sloop: stmt -> stmt
-          | Sblock: stmt -> stmt
-          | Sexit: nat -> stmt
-          | Sreturn: option expr -> stmt
-          | Slabel: label -> stmt -> stmt
-          | Sgoto: label -> stmt.
+       
 
        MetaData function.
        Record function : Type := mkfunction {
@@ -3473,9 +3266,7 @@ Inductive bitfield : Type :=
           fn_body: self__CminorSel.stmt
        }.
        FEnd function.
-
-       FDefinition fundef := AST.fundef function.
-       FDefinition program := AST.program fundef unit.
+       
 
        FDefinition funsig := fun (fd: fundef) =>
          match fd with
@@ -3506,50 +3297,7 @@ Inductive bitfield : Type :=
            | i1 :: is => PTree.set i1 Vundef (set_locals is e)
            end.
           FEnd set_locals.              
-           
-          FInductive cont : Type := 
-             | Kstop: cont
-             | Kseq: stmt -> cont -> cont
-             | Kblock: cont -> cont.             
-
-          FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
-              Case Kstop := Kstop.
-              Case Kseq := (fun s k call_cont_k => call_cont_k).                
-              Case Kblock := (fun k call_cont_k => call_cont_k).              
-          FEnd call_cont.
-            
-          FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
-             Case Kstop := True.
-             Case Kseq := (fun s k _ => False).                
-             Case Kblock := (fun k _ => False).              
-          FEnd is_call_cont.
-
-          FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect. 
-              Case Sskip := (fun lbl k => None).
-              Case Sassign := (fun id e lbl k => None).
-              Case Sseq := (fun s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
-                                       match find_label_s1 lbl (Kseq s2 k) with 
-                                       | Some sk => Some sk 
-                                       | None => find_label_s2 lbl k end).
-              Case Sifthenelse := (fun e s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
-                                       match find_label_s1 lbl k with 
-                                       | Some sk => Some sk 
-                                       | None => find_label_s2 lbl k end).
-              Case Sloop := (fun s1 find_label_s1 => fun lbl k => 
-                                       find_label_s1 lbl (Kseq (Sloop s1) k)).
-              Case Sblock := (fun s find_label_s1  => fun lbl k => find_label_s1 lbl (Kblock k)).
-              Case Sexit := (fun n lbl k => None).                
-              Case Sreturn := (fun _ lbl k => None).
-              Case Slabel := (fun lbl' s find_label_s => fun lbl k => 
-                                     if ident_eq lbl lbl' then 
-                                     Some(s, k) else find_label_s lbl k).
-              Case Sgoto := (fun label lbl k => None).
-          FEnd find_label.
-           
-          FInductive state: Type :=
-               | State : function -> stmt -> cont -> val -> env -> mem -> state
-               | Callstate : fundef -> list val -> cont -> mem -> state                   
-               | Returnstate : val -> cont -> mem -> state.
+                     
           
           (*
           Variable ge : genv  
@@ -3593,86 +3341,7 @@ Inductive bitfield : Type :=
              | eval_CElet: forall ge sp e m le a b v1 v2,
                  eval_expr ge sp e m le a v1 ->
                  eval_condexpr ge sp e m (v1 :: le) b v2 ->
-                 eval_condexpr ge sp e m le (CElet a b) v2.
-           
-          FInductive step: genv -> state -> trace -> state -> Prop :=
-             | step_skip_seq: forall ge f s k sp e m,
-                   step ge (State f Sskip (Kseq s k) sp e m)
-                     E0 (State f s k sp e m)
-             | step_skip_block: forall ge f k sp e m,
-                   step ge (State f Sskip (Kblock k) sp e m)
-                     E0 (State f Sskip k sp e m)
-             | step_skip_call: forall ge f k sp e m m',
-                   is_call_cont k ->
-                   Mem.free m sp 0 f.(self__CminorSel.fn_stackspace) = Some m' ->
-                   step ge (State f Sskip k (Vptr sp Ptrofs.zero) e m)
-                     E0 (Returnstate Vundef k m')
-             | step_assign: forall ge f id a k sp e m v,
-                   eval_expr ge sp e m nil a v ->
-                   step ge (State f (Sassign id a) k sp e m)
-                     E0 (State f Sskip k sp (PTree.set id v e) m)
-             | step_seq: forall ge f s1 s2 k sp e m,
-                   step ge (State f (Sseq s1 s2) k sp e m)
-                     E0 (State f s1 (Kseq s2 k) sp e m)
-             | step_ifthenelse: forall f c s1 s2 k sp e m b,
-                   eval_condexpr ge sp e m nil c b ->
-                   step ge (State f (Sifthenelse c s1 s2) k sp e m)
-                     E0 (State f (if b then s1 else s2) k sp e m)
-             | step_loop: forall ge f s k sp e m,
-                   step ge (State f (Sloop s) k sp e m)
-                     E0 (State f s (Kseq (Sloop s) k) sp e m)
-             | step_block: forall ge f s k sp e m,
-                   step ge (State f (Sblock s) k sp e m)
-                     E0 (State f s (Kblock k) sp e m)
-             | step_exit_seq: forall ge f n s k sp e m,
-                   step ge (State f (Sexit n) (Kseq s k) sp e m)
-                     E0 (State f (Sexit n) k sp e m)
-             | step_exit_block_0: forall ge f k sp e m,
-                   step ge (State f (Sexit O) (Kblock k) sp e m)
-                     E0 (State f Sskip k sp e m)
-             | step_exit_block_S: forall ge f n k sp e m,
-                   step ge (State f (Sexit (S n)) (Kblock k) sp e m)
-                     E0 (State f (Sexit n) k sp e m)
-             | step_return_0: forall ge f k sp e m m',
-                   Mem.free m sp 0 f.(self__CminorSel.fn_stackspace) = Some m' ->
-                   step ge (State f (Sreturn None) k (Vptr sp Ptrofs.zero) e m)
-                     E0 (Returnstate Vundef (call_cont k) m')
-             | step_return_1: forall ge f a k sp e m v m',
-                   eval_expr ge (Vptr sp Ptrofs.zero) e m nil a v ->
-                   Mem.free m sp 0 f.(self__CminorSel.fn_stackspace) = Some m' ->
-                   step ge (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m)
-                     E0 (Returnstate v (call_cont k) m')
-             | step_label: forall ge f lbl s k sp e m,
-                   step ge (State f (Slabel lbl s) k sp e m)
-                     E0 (State f s k sp e m)
-             | step_goto: forall ge f lbl k sp e m s' k',
-                   find_label lbl f.(self__CminorSel.fn_body) (call_cont k) = Some(s', k') ->
-                   step ge (State f (Sgoto lbl) k sp e m)
-                     E0 (State f s' k' sp e m)
-             | step_internal_function: forall ge f vargs k m m' sp e,
-                  Mem.alloc m 0 f.(self__CminorSel.fn_stackspace) = (m', sp) ->
-                  set_locals
-                    f.(self__CminorSel.fn_vars)
-                    (set_params vargs f.(self__CminorSel.fn_params)) = e ->
-                  step ge (Callstate (Internal f) vargs k m)
-                    E0 (State f f.(self__CminorSel.fn_body) k (Vptr sp Ptrofs.zero) e m')
-
-             MetaData initial_state.
-              Inductive initial_state (p: self__CminorSel.program): self__Sem.state -> Prop :=
-                  | initial_state_intro: forall b f m0,
-                      let ge := Genv.globalenv p in
-                      Genv.init_mem p = Some m0 ->
-                      Genv.find_symbol ge p.(prog_main) = Some b ->
-                      Genv.find_funct_ptr ge b = Some f ->
-                      self__CminorSel.funsig f = signature_main ->
-                      initial_state p (self__Sem.Callstate f nil self__Sem.Kstop m0).
-             FEnd initial_state.
-
-             MetaData final_state.
-              Inductive final_state: self__Sem.state -> int -> Prop :=
-                  | final_state_intro: forall r m,
-                      final_state (self__Sem.Returnstate (Vint r) self__Sem.Kstop m) r.
-             FEnd final_state.
+                 eval_condexpr ge sp e m le (CElet a b) v2.                     
        FEnd Sem.
    FEnd CminorSel.
 
