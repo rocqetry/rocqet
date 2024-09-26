@@ -17,17 +17,34 @@ C -> Clight -> Csharpminor -> Cminor -> CminorSel -> RTL -> LTL -> Linear -> Mac
 
 ### Base compiler
 ```
-family Base { 
-	family Cfrontend { }	
-	family C extends Cfrontend { }
-	family Clight extends Cfrontend { }
+family Base { 	
+	(* Has common expressions and statements *)
+	family Cfrontend { }
+	family CfrontendTransl { }
 	
-	family Cminorvariant {
-		Abstract function : Type.
+	family CLike extends Cfrontend { }
+	family C extends CLike { }
+	family Clight extends CLike { }
+	
+	family CLikeTransl extends CfrontendTransl { }
+    (* Simpl Expr in a nanopass style *)	
+	family SimplExpr extends CLikeTransl { }
+	family SimplEseqand extends CLikeTransl { }
+	family SimplEseqor extends CLikeTransl { }
+	family SimplEcond extends CLikeTransl { }
+	family SimplEcond extends CLikeTransl { }	
+	family SimplEassign extends CLikeTransl { }
+	family SimplEassignop extends CLikeTransl { }
+	family SimplEpostincr extends CLikeTransl { }
+	
+	
+	
+	family Cminorvariant extends Cfrontend {		
+		Opaque FDefinition function := ...
 		
 		family Sem { 						
-			Abstract function_env : Type.			
-			Abstract empty_function_env : env.
+			Opaque FDefinition function_env : Type := ...	
+			Opaque FDefinition empty_function_env : env := ...
 			
 			Inductive state: Type :=
                | State:(* Execution within a function *)
@@ -40,9 +57,9 @@ family Base {
                    state
 			
 			(* Free stack space *)
-			Abstract free_function_env : mem -> function_env -> function -> option mem.
+		    Opaque FDefinition free_function_env : mem -> function_env -> function -> option mem := ...
 			(* Called after free *)
-			Abstract update_env : function_env -> function_env.
+			Opaque FDefinition update_env : function_env -> function_env := ...
 			
 			FInductive step: state -> trace -> state -> Prop :=
 				| step_skip_call: forall f k sp e m m',
@@ -61,6 +78,7 @@ family Base {
                       E0 (Returnstate v (call_cont k) m')
 		}
 	}
+	
 	family CminorTransl { 
 		family Source extends Cminorvariant { } 
 		family Target extends Cminiorvariant { }
@@ -143,7 +161,16 @@ family Base {
 	
 	
 	family RTL { }
+	
+	(* CminorSel -> RTL *)
+	family RTLgen { }
+	
+	
 	family LTL { }
+	
+	(* Resiter Allocation: RTL -> LTL *)
+	family Allocation { }
+	
 	
 	family LinearLike {
 	   Opaque FDefinition stackslot := ...
@@ -186,8 +213,18 @@ family Base {
                      E0 (State s fb sp c rs' m)
 	   }
 	}
-	family Linear extends LinearLike { } 
+	family Linear extends LinearLike { }
 	family Mach extends LinearLike { }
+	
+	family LinearTransl { 
+		family Source extends LinearLike { } 
+		family Target extends LinearLike { }
+	}
+	
+	family Stacking extends LinearTransl { }
+	family Getstack->GetParam extends LinearTransl { }
+	family ShiftOps extends LinearTransl { }
+	family ShiftAddr extends LinearTransl { }
 	
 	(* RISC-V *)
 	family RISCV { 
@@ -234,9 +271,12 @@ family SIMD extends Base {
           | Reshape : expr -> expr -> expr.
 	}
 	
-	family SelMap extends CminorTransl { } 
-	family SelReduce extends CminorTransl { } 
-	family SelZipWith extends CminorTransl { } 
+	(* Transform array expressions to RISC-V extnesions 
+	   in the selection pass
+	*)
+	family SelMap extends CminorTransl { }
+	family SelReduce extends CminorTransl { }
+	family SelZipWith extends CminorTransl { }
 	family SelReshape extends CminorTransl { }
 	
 	
