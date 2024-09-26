@@ -1640,10 +1640,9 @@ Inductive bitfield : Type :=
                        (plus Clight.Sem.step tge T1 t T2 \/
                          (star Clight.Sem.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
                     /\ match_states S2 T2).
-              FProof.                 
-                 finduction.                 
+              FProof.                                  
                  (* expr *)
-                 + apply cheat.                 
+                 + intros. apply cheat.                 
                  (* seqand true *)                  
                  + intros. apply cheat.
                  (* seqand false *)                 
@@ -1669,8 +1668,7 @@ Inductive bitfield : Type :=
                        (plus Clight.Sem.step tge T1 t T2 \/
                          (star Clight.Sem.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
                     /\ match_states S2 T2).
-              FProof.
-                  finduction.
+              FProof.                  
                   (* do 1 *)
                   + apply cheat.
                   (* do 2 *)
@@ -1678,7 +1676,7 @@ Inductive bitfield : Type :=
                   (* seq *)
                   + intros. apply cheat.
                   (* skip seq *)
-                  + apply cheat.
+                  + intros. apply cheat.
                   (* continue seq *)
                   + apply cheat.
                   (* break seq *)
@@ -1726,7 +1724,7 @@ Inductive bitfield : Type :=
                   (* return some 1 *)
                   + apply cheat.
                   (* return some 2 *)
-                  + apply cheat.
+                  + intros. apply cheat.
                   (* skip return *)
                   + apply cheat.
                   (* label *)
@@ -2225,8 +2223,7 @@ Inductive bitfield : Type :=
              forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
             forall T1, self__Proof.match_states S1 T1 -> 
             exists T2, plus Csharpminor.Sem.step tge T1 t T2 /\ match_states S2 T2).            
-          FProof.
-              finduction.
+          FProof.              
               (* set *)
               + apply cheat.
               (* seq *)
@@ -2382,19 +2379,19 @@ Inductive bitfield : Type :=
                       eval_expr a1 v1 -> eval_exprlist al vl ->
                       eval_exprlist (a1 :: al) (v1 :: vl).*)
                
-               FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
+              FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
                    Case Kstop := Kstop.
                    Case Kseq := (fun s c call_cont_c => call_cont_c).
                    Case Kblock := (fun k call_cont_c => call_cont_c).
-               FEnd call_cont.
+              FEnd call_cont.
                
-               FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
+              FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
                    Case Kstop := True.
                    Case Kseq := (fun s c call_cont_c => False).
                    Case Kblock := (fun c call_cont_c => False).                  
-               FEnd is_call_cont.
+              FEnd is_call_cont.
                    
-               FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect. 
+              FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect. 
                     Case Sskip := (fun lbl k => None).         
                     Case Sassign := (fun id e lbl k => None).
                     Case Sseq := (fun s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
@@ -2413,7 +2410,7 @@ Inductive bitfield : Type :=
                     Case Sexit := (fun n lbl k => None).
                     Case Sreturn := (fun _ lbl k => None).
                     Case Sgoto := (fun label lbl k => None).
-               FEnd find_label.
+              FEnd find_label.
                
                (* (sp : val) -> (e : env) -> (m : mem) -> *)
               FInductive step :  genv -> state -> trace -> state -> Prop :=
@@ -2860,97 +2857,171 @@ Inductive bitfield : Type :=
   Family Asm.
       (* Operations *)
       FInductive condition : Type :=
-        | Ccomp : comparison -> condition.       (**r signed integer comparison *)
+        | Ccompuimm : comparison -> int -> condition. (**r unsigned integer comparison with a constant *)
 
 (** Arithmetic and logical operations.  In the descriptions, [rd] is the
   result of the operation and [r1], [r2], etc, are the arguments. *)
 
      FInductive operation : Type :=
-        | Omove                    (**r [rd = r1] *)
-        | Ointconst (n: int)       (**r [rd] is set to the given integer constant *)
-        | Olongconst (n: int64)    (**r [rd] is set to the given integer constant *)
-        | Oaddrsymbol (id: ident) (ofs: ptrofs)  (**r [rd] is set to the address of the symbol plus the given offset *)
-        | Oaddrstack (ofs: ptrofs) (**r [rd] is set to the stack pointer plus the given offset *)
-      (*c 32-bit integer arithmetic: *)
-        | Ocast8signed             (**r [rd] is 8-bit sign extension of [r1] *)
-        | Ocast16signed            (**r [rd] is 16-bit sign extension of [r1] *)
-        | Oadd                     (**r [rd = r1 + r2] *)
-        | Oaddimm (n: int)         (**r [rd = r1 + n] *)
-        | Oneg                     (**r [rd = - r1]   *)                     
-        | Osub                     (**r [rd = r1 - r2] *)
-        | Omul                     (**r [rd = r1 * r2] *)
-        | Odiv                     (**r [rd = r1 / r2] (signed) *)
-      (*c Boolean tests: *)
-        | Ocmp (cond: condition).  (**r [rd = 1] if condition holds, [rd = 0] otherwise. *) 
-
+        | Omove : operation                    (**r [rd = r1] *)
+        | Ointconst : int -> operation       (**r [rd] is set to the given integer constant *)
+        | Olongconst : int64 -> operation    (**r [rd] is set to the given integer constant *)
+        | Ofloatconst : float -> operation   (**r [rd] is set to the given float constant *)
+        | Osingleconst : float32 -> operation (**r [rd] is set to the given float constant *)
+        (* | Oaddrsymbol : ident -> ptrofs -> operation*)  (**r [rd] is set to the address of the symbol plus the given offset *)
+        | Oaddrstack : ptrofs -> operation (**r [rd] is set to the stack pointer plus the given offset *)        
+          
+        (*c 32-bit integer arithmetic: *)
+        | Ocast8signed : operation             (**r [rd] is 8-bit sign extension of [r1] *)
+        | Ocast16signed : operation            (**r [rd] is 16-bit sign extension of [r1] *)                             
+                            
+        | Osingleoffloat : operation           (**r [rd] is [r1] truncated to single-precision float *)
+        | Ofloatofsingle : operation           (**r [rd] is [r1] extended to double-precision float *)
+            
+        (*c Conversions between int and float: *)
+        | Ointoffloat : operation              (**r [rd = signed_int_of_float64(r1)] *)
+        | Ointuoffloat : operation             (**r [rd = unsigned_int_of_float64(r1)] *)
+        | Ofloatofint : operation              (**r [rd = float64_of_signed_int(r1)] *)
+        | Ofloatofintu : operation             (**r [rd = float64_of_unsigned_int(r1)] *)
+        | Ointofsingle : operation             (**r [rd = signed_int_of_float32(r1)] *)
+        | Ointuofsingle : operation            (**r [rd = unsigned_int_of_float32(r1)] *)
+        | Osingleofint : operation             (**r [rd = float32_of_signed_int(r1)] *)
+        | Osingleofintu : operation            (**r [rd = float32_of_unsigned_int(r1)] *)
+        | Olongoffloat : operation             (**r [rd = signed_long_of_float64(r1)] *)
+        | Olonguoffloat : operation            (**r [rd = unsigned_long_of_float64(r1)] *)
+        | Ofloatoflong : operation             (**r [rd = float64_of_signed_long(r1)] *)
+        | Ofloatoflongu : operation            (**r [rd = float64_of_unsigned_long(r1)] *)
+        | Olongofsingle : operation            (**r [rd = signed_long_of_float32(r1)] *)
+        | Olonguofsingle : operation           (**r [rd = unsigned_long_of_float32(r1)] *)
+        | Osingleoflong : operation            (**r [rd = float32_of_signed_long(r1)] *)
+        | Osingleoflongu : operation           (**r [rd = float32_of_unsigned_int(r1)] *)
+            
+        (*c Boolean tests: *)
+        | Ocmp : condition -> operation.  (**r [rd = 1] if condition holds, [rd = 0] otherwise. *)
       
-     FRecursion eval_operation about operation motive (fun (_ : operation) => condition -> list val -> mem -> option val) by _rect.
-          Case Ccomp := (fun c => fun ge sp vl m => 
-                        match vl with 
-                        | v1 :: v2 :: nil => Val.cmp_bool c v1 v2
-                        | _ => None end).
-     FEnd eval_operation.
+     FRecursion eval_condition about condition motive (fun (_ : condition) => list val -> mem -> option bool) by _rect.
+        Case Ccompuimm := (fun c n => fun vl m =>
+                           match vl with 
+                           | v1 :: nil => Val.cmpu_bool (Mem.valid_pointer m) c v1 (Vint n)
+                           | _ => None end).
+     FEnd eval_condition.
 
-     FRecursion eval_operation about operation motive (fun (_ : operation) => Genv.t -> val -> list val -> mem -> option val) by _rect.
-        Case Omove := (fun ge sp vl m => 
+     FRecursion eval_operation about operation motive (fun (_ : operation) => forall F V, Genv.t F V -> val -> list val -> mem -> option val) by _rect.
+        Case Omove := (fun F V ge sp vl m => 
                     match vl with 
                     | v1 :: nil => Some v1 
                     | _ => None end).
-        Case Ointconst := (fun n => fun ge sp vl m =>  
+        Case Ointconst := (fun n => fun F V ge sp vl m =>  
                            match vl with 
-                           | nil => (Some (Vint n)
+                           | nil => Some (Vint n)
                            | _ => None end).
-        Case Olongconst := (fun n => fun ge sp vl m =>  
+        Case Olongconst := (fun n => fun F V ge sp vl m =>  
                            match vl with 
-                           | nil => (Some (Vlong n)
+                           | nil => Some (Vlong n)
                            | _ => None end).
-        Case Oaddrsymbol := (fun s ofs => fun ge sp vl m =>
+        Case Ofloatconst := (fun n => fun F V ge sp vl m =>  
+                           match vl with 
+                           | nil => Some (Vfloat n)
+                           | _ => None end).
+        Case Osingleconst := (fun n => fun F V ge sp vl m =>  
+                           match vl with 
+                           | nil => Some (Vsingle n)
+                           | _ => None end).                
+        (* Case Oaddrsymbol := (fun s ofs => fun F V ge sp vl m =>
                            match vl with 
                            | nil => Some (Genv.symbol_address genv s ofs)
-                           | _ => None end).
-        Case Oaddrstack := (fun ofs => fun ge sp vl m =>
+                           | _ => None end).*)
+        Case Oaddrstack := (fun ofs => fun F V ge sp vl m =>
                            match vl with 
                            | nil => Some (Val.offset_ptr sp ofs)
-                           | _ => None end)
-        Case Ocast8signed := (fun ge sp vl m =>
+                           | _ => None end).
+        Case Ocast8signed := (fun F V ge sp vl m =>
                            match vl with 
                            | v1 :: nil => Some (Val.sign_ext 8 v1)
                            | _ => None end).
-        Case Ocast16signed := (fun ge sp vl m =>
+        Case Ocast16signed := (fun F V ge sp vl m =>
                            match vl with 
                            | v1 :: nil => Some (Val.sign_ext 16 v1)
-                           | _ => None end)
-        Case Oadd := (fun ge sp vl m =>
+                           | _ => None end).        
+        Case Osingleoffloat := (fun F V ge sp vl m =>
+                           match vl with 
+                           | v1 :: nil => Some (Val.singleoffloat v1)
+                           | _ => None end).        
+        Case Ofloatofsingle := (fun F V ge sp vl m =>
+                           match vl with 
+                           | v1 :: nil => Some (Val.floatofsingle v1)
+                           | _ => None end).
+        Case Ointoffloat := (fun F V ge sp vl m => 
+                           match vl with 
+                           | v1 :: nil => (Val.intoffloat v1)
+                           | _ => None end).
+        Case Ointuoffloat := (fun F V ge sp vl m => 
+                           match vl with 
+                           | v1 :: nil => (Val.intuoffloat v1)
+                           | _ => None end).
+        Case Ofloatofint := (fun F V ge sp vl m => 
+                           match vl with 
+                           | v1 :: nil => (Val.floatofint v1)
+                           | _ => None end).        
+        Case Ofloatofintu := (fun F V ge sp vl m => 
+                           match vl with 
+                           | v1 :: nil => (Val.floatofintu v1)
+                           | _ => None end).
+        Case Ointofsingle := (fun F V ge sp vl m => 
+                           match vl with 
+                           | v1 :: nil => (Val.intofsingle v1)
+                           | _ => None end).
+        Case Ointuofsingle := (fun F V ge sp vl m => 
+                           match vl with 
+                           | v1 :: nil => (Val.intuofsingle v1)
+                           | _ => None end).
+        Case Osingleofint := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => (Val.singleofint v1)
+                            | _ => None end).
+        Case Osingleofintu := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => (Val.singleofintu v1)
+                            | _ => None end).
+        Case Olongoffloat := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => (Val.longoffloat v1)
+                            | _ => None end).
+        Case Olonguoffloat := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => (Val.longuoffloat v1)
+                            | _ => None end).
+        Case Ofloatoflong := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => (Val.floatoflong v1)
+                            | _ => None end).
+        Case Ofloatoflongu := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => (Val.floatoflongu v1)
+                            | _ => None end).
+        Case Olongofsingle := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => (Val.longofsingle v1)
+                            | _ => None end).
+        Case Olonguofsingle := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => (Val.longuofsingle v1)
+                            | _ => None end).
+        Case Osingleoflong := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => (Val.singleoflong v1)
+                            | _ => None end).
+        Case Osingleoflongu := (fun F V ge sp vl m => 
+                            match vl with 
+                            | v1 :: nil => (Val.singleoflongu v1)
+                            | _ => None end).
+        Case Ocmp := (fun c => fun F V ge sp vl m =>
                   match vl with 
-                  | v1 :: v2 :: nil => Some(Val.add v1 v2)
-                  | _ => None end).
-        Case Oaddimm := (fun n => fun ge sp vl m =>
-                  match vl with 
-                  | v1 :: nil => Some(Val.add v1 (Vint n))
-                  | _ => None end).
-        Case Oneg := (fun ge sp vl m =>
-                  match vl with 
-                  | v1 :: nil => Some(Val.neg v1)
-                  | _ => None end).
-        Case Osub := (fun ge sp vl m =>
-                  match vl with 
-                  | v1 :: v2 :: nil => Some(Val.sub v1 v2)
-                  | _ => None end).
-        Case Omul := (fun ge sp vl m =>
-                  match vl with 
-                  | v1 :: v2 :: nil => Some(Val.mul v1 v2)
-                  | _ => None end).
-        Case Odiv := (fun ge sp vl m =>
-                  match vl with 
-                  | v1 :: v2 :: nil => Some(Val.divs v1 v2)
-                  | _ => None end).
-        Case Ocmp := (fun c => fun ge sp vl m =>
-                  match vl with 
-                  | v1 :: v2 :: nil =>  Some (Val.of_optbool (eval_condition c vl m))
+                  | v1 :: v2 :: nil => Some (Val.of_optbool (eval_condition c vl m))
                   | _ => None end).
      FEnd eval_operation.
 
-    FRecursion shift_stack_operation about operation motive (fun (_ : operation) => Z -> operation) by _rect.
+    (* FRecursion shift_stack_operation about operation motive (fun (_ : operation) => Z -> operation) by _rect.
         Case Omove := (fun delta => Omove).
         Case Ointconst := (fun delta n => Ointconst n).
         Case Olongconst := (fun delta n => Olongconst n).
@@ -2965,9 +3036,10 @@ Inductive bitfield : Type :=
         Case Omul := (fun delta => Omul).
         Case Odiv := (fun delta => Odiv).
         Case Ocmp := (fun delta c => Ocmp c).
-    FEnd shift_stack_operation.
-      
-     Inductive ireg: Type :=
+    FEnd shift_stack_operation.*)
+    
+    MetaData ireg.
+    Inductive ireg: Type :=
          | X1:  ireg | X2:  ireg | X3:  ireg | X4:  ireg | X5:  ireg
          | X6:  ireg | X7:  ireg | X8:  ireg | X9:  ireg | X10: ireg
          | X11: ireg | X12: ireg | X13: ireg | X14: ireg | X15: ireg
@@ -2975,263 +3047,392 @@ Inductive bitfield : Type :=
          | X21: ireg | X22: ireg | X23: ireg | X24: ireg | X25: ireg
          | X26: ireg | X27: ireg | X28: ireg | X29: ireg | X30: ireg
          | X31: ireg.
+    FEnd ireg.
 
-     Inductive ireg0: Type :=
-        | X0: ireg0 | X: ireg -> ireg0.
+    MetaData ireg0.
+    Inductive ireg0: Type :=
+        | X0: ireg0 | X: self__Asm.ireg -> ireg0.
+    FEnd ireg0.
+    
+    MetaData freg.
+    Inductive freg: Type :=
+       | F0: freg  | F1: freg  | F2: freg  | F3: freg
+       | F4: freg  | F5: freg  | F6: freg  | F7: freg
+       | F8: freg  | F9: freg  | F10: freg | F11: freg
+       | F12: freg | F13: freg | F14: freg | F15: freg
+       | F16: freg | F17: freg | F18: freg | F19: freg
+       | F20: freg | F21: freg | F22: freg | F23: freg
+       | F24: freg | F25: freg | F26: freg | F27: freg
+       | F28: freg | F29: freg | F30: freg | F31: freg.
+    FEnd freg.
       
-      (* Non-extensible inductive *)
-     Inductive preg: Type :=
-         | IR: ireg -> preg                    (**r integer registers *)
-         | FR: freg -> preg                    (**r double-precision float registers *)
+    (** We model the following registers of the RISC-V architecture. *)
+    MetaData preg. 
+    Inductive preg: Type :=
+         | IR: self__Asm.ireg -> preg          (**r integer registers *)
+         | FR: self__Asm.freg -> preg          (**r double-precision float registers *)
          | PC: preg.                           (**r program counter *)
+
+    
+    Lemma ireg_eq: forall (x y: self__Asm.ireg), {x=y} + {x<>y}.
+    Proof. decide equality. Defined.
+
+    Lemma ireg0_eq: forall (x y: self__Asm.ireg0), {x=y} + {x<>y}.
+    Proof. decide equality. apply ireg_eq. Defined.
+    
+    Lemma freg_eq: forall (x y: self__Asm.freg), {x=y} + {x<>y}.
+    Proof. decide equality. Defined.
+    
+    Lemma preg_eq: forall (x y: preg), {x=y} + {x<>y}.
+    Proof. decide equality. apply ireg_eq. apply freg_eq. Defined.
+    FEnd preg.
+    
+    (** Conventional names for stack pointer ([SP]) and return address ([RA]). *)
+    (* Notation "'SP'" := X2 (only parsing) : asm.
+     Notation "'RA'" := X1 (only parsing) : asm.*)
       
-     Notation "'SP'" := X2 (only parsing) : asm.
-     Notation "'RA'" := X1 (only parsing) : asm.
-      
-      (* Non-extensible inductive *)
-     Inductive offset : Type :=
+    MetaData offset.
+    Inductive offset : Type :=
         | Ofsimm (ofs: ptrofs)
         | Ofslow (id: ident) (ofs: ptrofs).
+    FEnd offset.    
 
-     Definition label := positive.
+    FDefinition label := positive.
+    
+    FInductive instruction : Type :=
+      | Pmv : ireg -> ireg -> instruction                    (**r integer move *)
+                  
+      (* Loads and stores *)
+      | Plb : ireg -> ireg -> offset -> instruction          (**r load signed int8 *)
+      | Plbu : ireg -> ireg -> offset -> instruction         (**r load unsigned int8 *)
+      | Plh : ireg -> ireg -> offset -> instruction          (**r load signed int16 *)
+      | Plhu : ireg -> ireg -> offset -> instruction         (**r load unsigned int16 *)
+      | Plw : ireg -> ireg -> offset -> instruction          (**r load int32 *)
+      | Plw_a : ireg -> ireg -> offset -> instruction        (**r load any32 *)
+      | Pld : ireg -> ireg -> offset -> instruction          (**r load int64 *)
+      | Pld_a : ireg -> ireg -> offset -> instruction        (**r load any64 *)
 
-     FInductive instruction : Type :=
-         | Pmv     (rd: ireg) (rs: ireg)                    (**r integer move *)
-       
-       (** 32-bit integer register-immediate instructions *)
-         | Paddiw  (rd: ireg) (rs: ireg0) (imm: int)        (**r add immediate *)
-         | Psltiw  (rd: ireg) (rs: ireg0) (imm: int)        (**r set-less-than immediate *)
-         | Psltiuw (rd: ireg) (rs: ireg0) (imm: int)        (**r set-less-than unsigned immediate *)
-         | Pandiw  (rd: ireg) (rs: ireg0) (imm: int)        (**r and immediate *)
-         | Poriw   (rd: ireg) (rs: ireg0) (imm: int)        (**r or immediate *)
-         | Pxoriw  (rd: ireg) (rs: ireg0) (imm: int)        (**r xor immediate *)
-         | Pslliw  (rd: ireg) (rs: ireg0) (imm: int)        (**r shift-left-logical immediate *)
-         | Psrliw  (rd: ireg) (rs: ireg0) (imm: int)        (**r shift-right-logical immediate *)
-         | Psraiw  (rd: ireg) (rs: ireg0) (imm: int)        (**r shift-right-arith immediate *)
-         | Pluiw   (rd: ireg)             (imm: int)        (**r load upper-immediate *)
-       (** 32-bit integer register-register instructions *)
-         | Paddw   (rd: ireg) (rs1 rs2: ireg0)              (**r integer addition *)
-         | Psubw   (rd: ireg) (rs1 rs2: ireg0)              (**r integer subtraction *)
-                   
-         | Pmulw   (rd: ireg) (rs1 rs2: ireg0)              (**r integer multiply low *)
-         | Pmulhw  (rd: ireg) (rs1 rs2: ireg0)              (**r integer multiply high signed *)
-         | Pmulhuw (rd: ireg) (rs1 rs2: ireg0)              (**r integer multiply high unsigned *)
-         | Pdivw   (rd: ireg) (rs1 rs2: ireg0)              (**r integer division *)
-         | Pdivuw  (rd: ireg) (rs1 rs2: ireg0)              (**r unsigned integer division *)
-         | Premw   (rd: ireg) (rs1 rs2: ireg0)              (**r integer remainder *)
-         | Premuw  (rd: ireg) (rs1 rs2: ireg0)              (**r unsigned integer remainder *)
-         | Psltw   (rd: ireg) (rs1 rs2: ireg0)              (**r set-less-than *)
-         | Psltuw  (rd: ireg) (rs1 rs2: ireg0)              (**r set-less-than unsigned *)
-         | Pseqw   (rd: ireg) (rs1 rs2: ireg0)              (**r [rd <- rs1 == rs2] (pseudo) *)
-         | Psnew   (rd: ireg) (rs1 rs2: ireg0)              (**r [rd <- rs1 != rs2] (pseudo) *)
-         | Pandw   (rd: ireg) (rs1 rs2: ireg0)              (**r bitwise and *)
-         | Porw    (rd: ireg) (rs1 rs2: ireg0)              (**r bitwise or *)
-         | Pxorw   (rd: ireg) (rs1 rs2: ireg0)              (**r bitwise xor *)
-         | Psllw   (rd: ireg) (rs1 rs2: ireg0)              (**r shift-left-logical *)
-         | Psrlw   (rd: ireg) (rs1 rs2: ireg0)              (**r shift-right-logical *)
-         | Psraw   (rd: ireg) (rs1 rs2: ireg0)              (**r shift-right-arith *)    
+      | Psb : ireg -> ireg -> offset -> instruction          (**r store int8 *)
+      | Psh : ireg -> ireg -> offset -> instruction          (**r store int16 *)
+      | Psw : ireg -> ireg -> offset -> instruction          (**r store int32 *)
+      | Psw_a : ireg -> ireg -> offset -> instruction        (**r store any32 *)
+      | Psd : ireg -> ireg -> offset -> instruction          (**r store int64 *)
+      | Psd_a : ireg -> ireg -> offset -> instruction        (**r store any64 *)
+            
+      (* floating point register move *)
+      | Pfmv : freg -> freg -> instruction                   (**r move *)
+          
+      (* 32-bit (single-precision) floating point *)
+      | Pfls : freg -> ireg -> offset -> instruction         (**r load float *)
+      | Pfss : freg -> ireg -> offset -> instruction         (**r store float *)
+                      
+      | Pfcvtws : ireg -> freg -> instruction                (**r float32 -> int32 conversion *)
+      | Pfcvtwus : ireg -> freg -> instruction               (**r float32 -> unsigned int32 conversion *)
+      | Pfcvtsw : freg -> ireg0 -> instruction               (**r int32 -> float32 conversion *)
+      | Pfcvtswu : freg -> ireg0 -> instruction              (**r unsigned int32 -> float32 conversion *)
+          
+      | Pfcvtls : ireg -> freg -> instruction                (**r float32 -> int64 conversion *)
+      | Pfcvtlus : ireg -> freg -> instruction               (**r float32 -> unsigned int64 conversion *)
+      | Pfcvtsl : freg -> ireg0 -> instruction               (**r int64 -> float32 conversion *)
+      | Pfcvtslu : freg -> ireg0 -> instruction              (**r unsigned int 64-> float32 conversion *)
 
+      (* 64-bit (double-precision) floating point *)
+      | Pfld : freg -> ireg -> offset -> instruction         (**r load 64-bit float *)
+      | Pfld_a : freg -> ireg -> offset -> instruction       (**r load any64 *)
+      | Pfsd : freg -> ireg -> offset -> instruction         (**r store 64-bit float *)
+      | Pfsd_a : freg -> ireg -> offset -> instruction       (**r store any64 *)
 
-        (* Loads and stores *)
-        | Plb     (rd: ireg) (ra: ireg) (ofs: offset)     (**r load signed int8 *)
-        | Plbu    (rd: ireg) (ra: ireg) (ofs: offset)     (**r load unsigned int8 *)
-        | Plh     (rd: ireg) (ra: ireg) (ofs: offset)     (**r load signed int16 *)
-        | Plhu    (rd: ireg) (ra: ireg) (ofs: offset)     (**r load unsigned int16 *)
-        | Plw     (rd: ireg) (ra: ireg) (ofs: offset)     (**r load int32 *)
-        | Plw_a   (rd: ireg) (ra: ireg) (ofs: offset)     (**r load any32 *)
-        | Pld     (rd: ireg) (ra: ireg) (ofs: offset)     (**r load int64 *)
-        | Pld_a   (rd: ireg) (ra: ireg) (ofs: offset)     (**r load any64 *)
-
-        | Psb     (rs: ireg) (ra: ireg) (ofs: offset)     (**r store int8 *)
-        | Psh     (rs: ireg) (ra: ireg) (ofs: offset)     (**r store int16 *)
-        | Psw     (rs: ireg) (ra: ireg) (ofs: offset)     (**r store int32 *)
-        | Psw_a   (rs: ireg) (ra: ireg) (ofs: offset)     (**r store any32 *)
-        | Psd     (rs: ireg) (ra: ireg) (ofs: offset)     (**r store int64 *)
-        | Psd_a   (rs: ireg) (ra: ireg) (ofs: offset)     (**r store any64 *)                         
-      
+      | Pfcvtwd : ireg -> freg -> instruction                (**r float -> int32 conversion *)
+      | Pfcvtwud : ireg -> freg -> instruction               (**r float -> unsigned int32 conversion *)
+      | Pfcvtdw : freg -> ireg0 -> instruction               (**r int32 -> float conversion *)
+      | Pfcvtdwu : freg -> ireg0 -> instruction              (**r unsigned int32 -> float conversion *)
+          
+      | Pfcvtld : ireg -> freg -> instruction                (**r float -> int64 conversion *)
+      | Pfcvtlud : ireg -> freg -> instruction               (**r float -> unsigned int64 conversion *)
+      | Pfcvtdl : freg -> ireg0 -> instruction               (**r int64 -> float conversion *)
+      | Pfcvtdlu : freg -> ireg0 -> instruction              (**r unsigned int64 -> float conversion *)
+          
+      | Pfcvtds : freg -> freg -> instruction                (**r float32 -> float   *)
+      | Pfcvtsd : freg -> freg -> instruction                (**r float   -> float32 *)                  
+          
       (* Unconditional jumps.  Links are always to X1/RA. *)
-       | Pj_l    (l: label)                              (**r jump to label *)
-       | Pj_r    (r: ireg)     (sg: signature)           (**r jump register *)
-     
-       (* Conditional branches, 32-bit comparisons *)
-       | Pbeqw   (rs1 rs2: ireg0) (l: label)             (**r branch-if-equal *)
-       | Pbnew   (rs1 rs2: ireg0) (l: label)             (**r branch-if-not-equal signed *)
-       | Pbltw   (rs1 rs2: ireg0) (l: label)             (**r branch-if-less signed *)
-       | Pbltuw  (rs1 rs2: ireg0) (l: label)             (**r branch-if-less unsigned *)
-       | Pbgew   (rs1 rs2: ireg0) (l: label)             (**r branch-if-greater-or-equal signed *)
-       | Pbgeuw  (rs1 rs2: ireg0) (l: label)             (**r branch-if-greater-or-equal unsigned *)
+      | Pj_l : label -> instruction                          (**r jump to label *)
+      | Pj_r : ireg -> signature -> instruction              (**r jump register *)
+        
+      (* Conditional branches, 32-bit comparisons *)
+      | Pbeqw : ireg0 -> ireg0 -> label -> instruction       (**r branch-if-equal *)
+      | Pbnew : ireg0 -> ireg0 -> label -> instruction       (**r branch-if-not-equal signed *)
+      | Pbltw : ireg0 -> ireg0 -> label -> instruction       (**r branch-if-less signed *)
+      | Pbltuw : ireg0 -> ireg0 -> label -> instruction      (**r branch-if-less unsigned *)
+      | Pbgew : ireg0 -> ireg0 -> label -> instruction       (**r branch-if-greater-or-equal signed *)
+      | Pbgeuw : ireg0 -> ireg0 -> label -> instruction      (**r branch-if-greater-or-equal unsigned *)
+          
+      | Pbeql : ireg0 -> ireg0 -> label -> instruction       (**r branch-if-equal *)
+      | Pbnel : ireg0 -> ireg0 -> label -> instruction       (**r branch-if-not-equal signed *)
+      | Pbltl : ireg0 -> ireg0 -> label -> instruction       (**r branch-if-less signed *)
+      | Pbltul : ireg0 -> ireg0 -> label -> instruction      (**r branch-if-less unsigned *)
+      | Pbgel : ireg0 -> ireg0 -> label -> instruction       (**r branch-if-greater-or-equal signed *)
+      | Pbgeul : ireg0 -> ireg0 -> label -> instruction      (**r branch-if-greater-or-equal unsigned *)                 
 
       (* Pseudo-instructions *)
-       | Plabel  (lbl: label)                            (**r define a code label *)    
-       | Pnop : instruction                             (**r nop instruction *)       
+      | Plabel : label -> instruction                        (**r define a code label *)    
+      | Pnop : instruction.                                   (**r nop instruction *)
+
+     
                   
-     Definition code := list instruction.
-     Record function : Type := mkfunction { fn_sig: signature; fn_code: code }.
-      
+    FDefinition code := list instruction.
+    MetaData function.
+    Record function : Type := mkfunction { fn_sig: signature; fn_code: self__Asm.code }.
+    FEnd function.
+    FDefinition fundef := AST.fundef function.
+    FDefinition program := AST.program fundef unit.    
+    
+    
+    (* Operational Semantics *)
     Family Sem. 
-          Definition regset := Pregmap.t val.
-          Definition genv := Genv.t fundef unit.
+          MetaData Pregmap.
+              Module PregEq.
+               Definition t  := self__Asm.preg.
+               Definition eq := self__Asm.preg_eq.
+             End PregEq.
+             
+             Module Pregmap := EMap(PregEq).
+          FEnd Pregmap.
+          FDefinition regset := Pregmap.t val.
+          FDefinition genv := Genv.t fundef unit.
           
-          Inductive outcome: Type :=
-             | Next:  regset -> mem -> outcome
-             | Stuck: outcome.
+          FDefinition get0w : regset -> ireg0 -> val := fun rs r =>
+            match r with
+            | self__Asm.X0 => Vint Int.zero
+            | self__Asm.X r => rs (self__Asm.IR r)
+            end.
+
+          FDefinition get0l : regset -> ireg0 -> val := fun rs r =>
+            match r with
+            | self__Asm.X0 => Vlong Int64.zero
+            | self__Asm.X r => rs (self__Asm.IR r)
+            end.
+
+          (* Notation "a # b" := (a b) (at level 1, only parsing) : asm.
+          Notation "a ## b" := (get0w a b) (at level 1) : asm.
+          Notation "a ### b" := (get0l a b) (at level 1) : asm.
+          Notation "a # b <- c" := (Pregmap.set b c a) (at level 1, b at next level) : asm. *)
           
-          Fixpoint label_pos (lbl: label) (pos: Z) (c: code) {struct c} : option Z :=
+          MetaData undef_regs.
+          Fixpoint undef_regs (l: list self__Asm.preg) (rs: self__Sem.regset) : self__Sem.regset :=
+             match l with
+             | nil => rs
+             | r :: l' => undef_regs l' (self__Sem.Pregmap.set r Vundef rs)
+             end.
+          FEnd undef_regs.
+          
+          MetaData set_regs.
+          Fixpoint set_regs (rl: list self__Asm.preg) (vl: list val) (rs: self__Sem.regset) : self__Sem.regset :=
+             match rl, vl with
+             | r1 :: rl', v1 :: vl' => set_regs rl' vl' (self__Sem.Pregmap.set r1 v1 rs)
+             | _, _ => rs
+             end.
+          FEnd set_regs.
+
+          MetaData find_instr.
+          Fixpoint find_instr (pos: Z) (c: self__Asm.code) {struct c} : option self__Asm.instruction :=
+             match c with
+             | nil => None
+             | i :: il => if zeq pos 0 then Some i else find_instr (pos - 1) il
+             end.
+          FEnd find_instr.
+
+          (* FRecursion *)
+          (* Definition is_label (lbl: label) (instr: instruction) : bool :=
+            match instr with
+            | Plabel lbl' => if peq lbl lbl' then true else false
+            | _ => false
+            end.*)          
+          MetaData is_label.
+          Axiom is_label : self__Asm.label -> self__Asm.instruction -> bool.
+          FEnd is_label.
+          
+          MetaData label_pos.
+          Fixpoint label_pos (lbl: self__Asm.label) (pos: Z) (c: self__Asm.code) {struct c} : option Z :=
             match c with
             | nil => None
             | instr :: c' =>
-                if is_label lbl instr then Some (pos + 1) else label_pos lbl (pos + 1) c'
+                if self__Sem.is_label lbl instr then Some (pos + 1) else label_pos lbl (pos + 1) c'
             end.
+          FEnd label_pos.
+          
+          MetaData outcome.
+          Inductive outcome: Type :=
+             | Next:  self__Sem.regset -> mem -> outcome
+             | Stuck: outcome.
+          FEnd outcome.
+          
+          FDefinition nextinstr := fun (rs: regset) =>
+            Pregmap.set self__Asm.PC (Val.offset_ptr (rs self__Asm.PC) Ptrofs.one) rs.                    
 
-          Definition goto_label (f: function) (lbl: label) (rs: regset) (m: mem) :=
-            match label_pos lbl 0 (fn_code f) with
-            | None => Stuck
+          FDefinition goto_label := fun (f: self__Asm.function) (lbl: self__Asm.label) (rs: self__Sem.regset) (m: mem) =>
+            match label_pos lbl 0 (self__Asm.fn_code f) with
+            | None => self__Sem.Stuck
             | Some pos =>
-                match rs#PC with
-                | Vptr b ofs => Next (rs#PC <- (Vptr b (Ptrofs.repr pos))) m
-                | _          => Stuck
+                match (rs self__Asm.PC) with
+                | Vptr b ofs => self__Sem.Next (Pregmap.set self__Asm.PC (Vptr b (Ptrofs.repr pos)) rs) m
+                | _          => self__Sem.Stuck
                 end
             end.
 
-          Definition eval_branch (f: function) (l: label) (rs: regset) (m: mem) (res: option bool) : outcome :=
+          MetaData low_half.
+          Parameter low_half: self__Sem.genv -> ident -> ptrofs -> ptrofs.
+          FEnd low_half.
+          
+          MetaData high_half.
+          Parameter high_half: self__Sem.genv -> ident -> ptrofs -> val.
+          FEnd high_half.
+                    
+          FDefinition eval_offset : self__Sem.genv -> self__Asm.offset -> ptrofs := fun ge ofs =>
+             match ofs with
+             | self__Asm.Ofsimm n => n
+             | self__Asm.Ofslow id delta => low_half ge id delta
+             end.          
+
+          FDefinition exec_load := fun (ge : genv) (chunk: memory_chunk) (rs: regset) (m: mem)
+                              (d: preg) (a: ireg) (ofs: offset) =>
+            match Mem.loadv chunk m (Val.offset_ptr (rs (self__Asm.IR a)) (eval_offset ge ofs)) with
+            | None => self__Sem.Stuck
+            | Some v => self__Sem.Next (nextinstr (Pregmap.set d v rs)) m
+            end.          
+          
+          FDefinition exec_store := fun (ge : genv) (chunk: memory_chunk) (rs: regset) (m: mem)
+                                (s: preg) (a: ireg) (ofs: offset) =>
+            match Mem.storev chunk m (Val.offset_ptr (rs (self__Asm.IR a)) (eval_offset ge ofs)) (rs s) with
+            | None => self__Sem.Stuck
+            | Some m' => self__Sem.Next (nextinstr rs) m'
+            end.
+
+          FDefinition eval_branch := fun (f: function) (l: label) (rs: regset) (m: mem) (res: option bool) =>
             match res with
               | Some true  => goto_label f l rs m
-              | Some false => Next (nextinstr rs) m
-              | None => Stuck
-            end.
-
-          Definition exec_load (chunk: memory_chunk) (rs: regset) (m: mem)
-                              (d: preg) (a: ireg) (ofs: offset) :=
-            match Mem.loadv chunk m (Val.offset_ptr (rs a) (eval_offset ofs)) with
-            | None => Stuck
-            | Some v => Next (nextinstr (rs#d <- v)) m
-            end.
-
-          Definition exec_store (chunk: memory_chunk) (rs: regset) (m: mem)
-                                (s: preg) (a: ireg) (ofs: offset) :=
-            match Mem.storev chunk m (Val.offset_ptr (rs a) (eval_offset ofs)) (rs s) with
-            | None => Stuck
-            | Some m' => Next (nextinstr rs) m'
+              | Some false => self__Sem.Next (nextinstr rs) m
+              | None => self__Sem.Stuck
             end.
           
-          FRecursion exec_instr about instruction motive (fun (_ : instruction) => function -> regset -> mem -> outcome).
-              Case Pmv := (fun d s => fun f rs m =>  Next (nextinstr (rs#d <- (rs#s))) m).
-              Case Paddiw := (fun d s i => fun f rs m =>  Next (nextinstr (rs#d <- (Val.add rs##s (Vint i)))) m).
-              Case Psltiw := (fun d s i => fun f rs m => Next (nextinstr (rs#d <- (Val.cmp Clt rs##s (Vint i)))) m).
-              Case Psltiuw := (fun d s i => fun f rs m =>  Next (nextinstr (rs#d <- (Val.cmpu (Mem.valid_pointer m) Clt rs##s (Vint i)))) m).
-              Case Pandiw := (fun d s i => fun f rs m =>  Next (nextinstr (rs#d <- (Val.and rs##s (Vint i))) m).
-              Case Poriw := (fun d s i => fun f rs m =>  Next (nextinstr (rs#d <- (Val.or rs##s (Vint i))) m).
-              Case Pxoriw := (fun d s i => fun f rs m =>  Next (nextinstr (rs#d <- (Val.xor rs##s (Vint i))) m).
-              Case Pslliw := (fun d s i => fun f rs m =>  Next (nextinstr (rs#d <- (Val.shl rs##s (Vint i))) m).
-              Case Psrliw := (fun d s i => fun f rs m =>  Next (nextinstr (rs#d <- (Val.shru rs##s (Vint i))) m).
-              Case Psraiw := (fun d s i => fun f rs m =>  Next (nextinstr (rs#d <- (Val.shr rs##s (Vint i))) m).
-              Case Pluiw := (fun d i => fun f rs m =>  Next (nextinstr (rs#d <- (Vint (Int.shl i (Int.repr 12))))) m).
+          FRecursion exec_instr about instruction motive (fun (_ : instruction) => genv -> function -> regset -> mem -> outcome) by _rect.
+          Case Pmv := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.IR d) (rs (self__Asm.IR s)) rs)) m).
 
-              Case Paddw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.add rs##s1 rs##s2)) m).
-              Case Psubw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.sub rs##s1 rs##s2)) m).
-              Case Pmulw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.mul rs##s1 rs##s2)) m).
-              Case Pmulhw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.mulhs rs##s1 rs##s2)) m).
-              Case Pmulhuw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.mulhu rs##s1 rs##s2)) m).
-              Case Pdivw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.divs rs##s1 rs##s2)))) m).
-              Case Pdivuw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.divu rs##s1 rs##s2))) m).
-              Case Premw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.mods rs##s1 rs##s2))) m).
-              Case Premuw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.modu rs##s1 rs##s2))) m).
-              Case Psltw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.cmp Clt rs##s1 rs##s2)) m).
-              Case Psltuw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.cmpu (Mem.valid_pointer m) Clt rs##s1 rs##s2)) m).
-              Case Pseqw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.cmpu (Mem.valid_pointer m) Ceq rs##s1 rs##s2))) m).
-              Case Psnew := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.cmpu (Mem.valid_pointer m) Cne rs##s1 rs##s2))) m).
-              Case Pandw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.and rs##s1 rs##s2)) m).
-              Case Porw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.or rs##s1 rs##s2)) m).
-              Case Pxorw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.xor rs##s1 rs##s2)) m).
-              Case Psllw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.shl rs##s1 rs##s2)) m).
-              Case Psrlw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.shru rs##s1 rs##s2)) m).
-              Case Psraw := (fun d s1 s2 => fun f rs m =>  Next (nextinstr (rs#d <- (Val.shr rs##s1 rs##s2)) m).
+          Case Plb := (fun d a ofs ge f rs m => exec_load ge Mint8signed rs m (self__Asm.IR d) a ofs).
+          Case Plbu := (fun d a ofs ge f rs m => exec_load ge Mint8unsigned rs m (self__Asm.IR d) a ofs).
+          Case Plh := (fun d a ofs ge f rs m => exec_load ge Mint16signed rs m (self__Asm.IR d) a ofs).
+          Case Plhu := (fun d a ofs ge f rs m => exec_load ge Mint16unsigned rs m (self__Asm.IR d) a ofs).
+          Case Plw := (fun d a ofs ge f rs m => exec_load ge Mint32 rs m (self__Asm.IR d) a ofs).
+          Case Plw_a := (fun d a ofs ge f rs m => exec_load ge Many32 rs m (self__Asm.IR d) a ofs).
+          Case Pld := (fun d a ofs ge f rs m => exec_load ge Mint64 rs m (self__Asm.IR d) a ofs).
+          Case Pld_a := (fun d a ofs ge f rs m => exec_load ge Many64 rs m (self__Asm.IR d) a ofs).
+          Case Psb := (fun s a ofs ge f rs m => exec_store ge Mint8unsigned rs m (self__Asm.IR s) a ofs).
+          Case Psh := (fun s a ofs ge f rs m => exec_store ge Mint16unsigned rs m (self__Asm.IR s) a ofs).
+          Case Psw := (fun s a ofs ge f rs m => exec_store ge Mint32 rs m (self__Asm.IR s) a ofs).
+          Case Psw_a := (fun s a ofs ge f rs m => exec_store ge Many32 rs m (self__Asm.IR s) a ofs).
+          Case Psd := (fun s a ofs ge f rs m => exec_store ge Mint64 rs m (self__Asm.IR s) a ofs).
+          Case Psd_a := (fun s a ofs ge f rs m => exec_store ge Many64 rs m (self__Asm.IR s) a ofs).
 
-              Case Pbeqw := (fun s1 s2 l => fun f rs m => 
-                              eval_branch f l rs m (Val.cmpu_bool (Mem.valid_pointer m) Ceq rs##s1 rs##s2)).
-              Case Pbnew := (fun s1 s2 l => fun f rs m => 
-                              eval_branch f l rs m (Val.cmpu_bool (Mem.valid_pointer m) Cne rs##s1 rs##s2)).
-              Case Pbltw := (fun s1 s2 l => fun f rs m => 
-                              eval_branch f l rs m (Val.cmp_bool Clt rs##s1 rs##s2)).
-              Case Pbltuw := (fun s1 s2 l => fun f rs m => 
-                              eval_branch f l rs m (Val.cmpu_bool (Mem.valid_pointer m) Clt rs##s1 rs##s2)).
-              Case Pbgew := (fun s1 s2 l => fun f rs m => 
-                              eval_branch f l rs m (Val.cmp_bool Cge rs##s1 rs##s2)).
-              Case Pbgeuw := (fun s1 s2 l => fun f rs m => 
-                              eval_branch f l rs m (Val.cmpu_bool (Mem.valid_pointer m) Cge rs##s1 rs##s2)).
-              Case Plabel := (fun lbl => fun f rs m =>  Next (nextinstr rs) m).
+          Case Pfmv := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.FR d) (rs (self__Asm.FR s)) rs)) m).
+          (* Pfmvxa, pfmvsx, pfmvxd, pfmvdx *)
+          
+          Case Pfls := (fun d a ofs ge f rs m => exec_load ge Mfloat32 rs m (self__Asm.FR d) a ofs).
+          Case Pfss := (fun s a ofs ge f rs m => exec_store ge Mfloat32 rs m (self__Asm.FR s) a ofs).
 
-              (* Loads and Stores *)
-              Case Plb := (fun d a ofs => fun f rs m => 
-                             exec_load Mint8signed rs m d a ofs).
-              Case Plbu := (fun d a ofs => fun f rs m => 
-                             exec_load Mint8unsigned rs m d a ofs).
-              Case Plh := (fun d a ofs => fun f rs m => 
-                             exec_load Mint16signed rs m d a ofs).
-              Case Plhu := (fun d a ofs => fun f rs m => 
-                             exec_load Mint16unsigned rs m d a ofs).
-              Case Plw := (fun d a ofs => fun f rs m => 
-                             exec_load Mint32 rs m d a ofs).
-              Case Plw_a := (fun d a ofs => fun f rs m => 
-                             exec_load Many32 rs m d a ofs).
-              Case Pld := (fun d a ofs => fun f rs m => 
-                             exec_load Mint64 rs m d a ofs).
-              Case Pld_a := (fun d a ofs => fun f rs m => 
-                             exec_load Many64 rs m d a ofs).
-              Case Psb := (fun s a ofs => fun f rs m => 
-                             exec_store Mint8signed rs m s a ofs).
-              Case Psh := (fun s a ofs => fun f rs m => 
-                             exec_store Mint16signed rs m s a ofs).
-              Case Psw := (fun s a ofs => fun f rs m => 
-                             exec_store Mint32 rs m s a ofs).
-              Case Psw_a := (fun s a ofs => fun f rs m => 
-                             exec_store Many32 rs m s a ofs).
-              Case Psd := (fun s a ofs => fun f rs m => 
-                             exec_store Mint64 rs m s a ofs).
-              Case Psd_a := (fun s a ofs => fun f rs m => 
-                             exec_store Many64 rs m s a ofs).
+          Case Pfcvtws := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.IR d) (Val.maketotal (Val.intofsingle (rs (self__Asm.FR s)))) rs)) m).
+          Case Pfcvtwus := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.IR d) (Val.maketotal (Val.intuofsingle (rs (self__Asm.FR s)))) rs)) m).
+          Case Pfcvtsw := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.FR d) (Val.maketotal (Val.singleofint cheat (*rs s*))) rs)) m).
+          Case Pfcvtswu := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.FR d) (Val.maketotal (Val.singleofintu cheat (*rs s*))) rs)) m).
+          
+          Case Pfcvtls := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.IR d) (Val.maketotal (Val.longofsingle (rs (self__Asm.FR s)))) rs)) m).
+          Case Pfcvtlus := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.IR d) (Val.maketotal (Val.longuofsingle (rs (self__Asm.FR s)))) rs)) m).
+          Case Pfcvtsl := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.FR d) (Val.maketotal (Val.singleoflong cheat (*rs s*))) rs)) m).
+          Case Pfcvtslu := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.FR d) (Val.maketotal (Val.singleoflongu cheat (*rs s*))) rs)) m).
 
-              Case Pj_l := (fun l => fun f rs m =>  goto_label f l rs m).
-              (* Jump to a regiser *)
-              Case Pj_r := (fun r sg => fun f rs m => Next (rs#PC <- (rs#r)) m).
+          Case Pfld := (fun d a ofs ge f rs m => exec_load ge Mfloat64 rs m (self__Asm.FR d) a ofs).
+          Case Pfld_a := (fun d a ofs ge f rs m => exec_load ge Many64 rs m (self__Asm.FR d) a ofs).
+          Case Pfsd := (fun s a ofs ge f rs m => exec_store ge Mfloat64 rs m (self__Asm.FR s) a ofs).
+          Case Pfsd_a := (fun s a ofs ge f rs m => exec_store ge Many64 rs m (self__Asm.FR s) a ofs).
 
-              (** The following instructions and directives are not generated directly by Asmgen,
-                   so we do not model them. *)
-              Case Pnop := (fun f rs m => Stuck).
+          Case Pfcvtwd := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.IR d) (Val.maketotal (Val.intoffloat (rs (self__Asm.FR s)))) rs)) m).
+          Case Pfcvtwud := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.IR d) (Val.maketotal (Val.intuoffloat (rs (self__Asm.FR s)))) rs)) m).
+          Case Pfcvtdw := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.FR d) (Val.maketotal (Val.floatofint (get0w rs s))) rs)) m).
+          Case Pfcvtdwu := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.FR d) (Val.maketotal (Val.floatofintu (get0w rs s))) rs)) m).
+
+          Case Pfcvtld := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.IR d) (Val.maketotal (Val.longoffloat (rs (self__Asm.FR s)))) rs)) m).
+          Case Pfcvtlud := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.IR d) (Val.maketotal (Val.longuoffloat (rs (self__Asm.FR s)))) rs)) m).
+          Case Pfcvtdl := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.FR d) (Val.maketotal (Val.floatoflong (get0l rs s))) rs)) m).
+          Case Pfcvtdlu := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.FR d) (Val.maketotal (Val.floatoflongu (get0l rs s))) rs)) m).
+
+          Case Pfcvtds := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.FR d) (Val.floatofsingle (rs (self__Asm.FR s))) rs)) m).
+          Case Pfcvtsd := (fun d s ge f rs m => self__Sem.Next (nextinstr (Pregmap.set (self__Asm.FR d) (Val.singleoffloat (rs (self__Asm.FR s))) rs)) m).
+          
+          Case Pj_l := (fun lbl ge f rs m => goto_label f lbl rs m).
+          Case Pj_r := (fun r sg ge f rs m => self__Sem.Next (Pregmap.set self__Asm.PC (rs (self__Asm.IR r)) rs)  m).
+          
+          Case Pbeqw := (fun s1 s2 l ge f rs m => eval_branch f l rs m (Val.cmpu_bool (Mem.valid_pointer m) Ceq cheat (*rs s1*) cheat (*rs s2*))).
+          Case Pbnew := (fun s1 s2 l ge f rs m => eval_branch f l rs m (Val.cmpu_bool (Mem.valid_pointer m) Cne cheat (*rs s1*) cheat (*rs s2*))).
+          Case Pbltw := (fun s1 s2 l ge f rs m => eval_branch f l rs m (Val.cmp_bool Clt cheat (*rs s1*) cheat (*rs s2*))).
+          Case Pbltuw := (fun s1 s2 l ge f rs m => eval_branch f l rs m (Val.cmpu_bool (Mem.valid_pointer m) Clt cheat (*rs s1*) cheat (*rs s2*))).
+          Case Pbgew := (fun s1 s2 l ge f rs m => eval_branch f l rs m (Val.cmp_bool Cge cheat (*rs s1*) cheat (*rs s2*))).          
+          Case Pbgeuw := (fun s1 s2 l ge f rs m => eval_branch f l rs m (Val.cmpu_bool (Mem.valid_pointer m) Cge cheat (*rs s1*) cheat (*rs s2*))).
+          
+          Case Pbeql := (fun s1 s2 l ge f rs m => eval_branch f l rs m (Val.cmplu_bool (Mem.valid_pointer m) Ceq cheat (*rs s1*) cheat (*rs s2*))).
+          Case Pbnel := (fun s1 s2 l ge f rs m => eval_branch f l rs m (Val.cmplu_bool (Mem.valid_pointer m) Cne cheat (*rs s1*) cheat (*rs s2*))).
+          Case Pbltl := (fun s1 s2 l ge f rs m => eval_branch f l rs m (Val.cmpl_bool Clt cheat (*rs s1*) cheat (*rs s2*))).
+          Case Pbltul := (fun s1 s2 l ge f rs m => eval_branch f l rs m (Val.cmplu_bool (Mem.valid_pointer m) Clt cheat (*rs s1*) cheat (*rs s2*))).
+          Case Pbgel := (fun s1 s2 l ge f rs m => eval_branch f l rs m (Val.cmpl_bool Cge cheat (*rs s1*) cheat (*rs s2*))).
+          Case Pbgeul := (fun s1 s2 l ge f rs m => eval_branch f l rs m (Val.cmplu_bool (Mem.valid_pointer m) Cge cheat (*rs s1*) cheat (*rs s2*))).
+
+            
+          Case Plabel := (fun lbl ge f rs m => self__Sem.Next (nextinstr rs) m).
+          Case Pnop := (fun ge f rs m => self__Sem.Next (nextinstr rs) m).            
+
           FEnd exec_instr.
 
-          (** Execution of the instruction at [rs PC]. *)
 
+
+        (** Execution of the instruction at [rs PC]. *)
+
+        MetaData state.
         Inductive state: Type :=
-          | State: regset -> mem -> state.
+          | State: self__Sem.regset -> mem -> state.
+        FEnd state.
 
-        FInductive step: state -> trace -> state -> Prop :=
-          | exec_step_internal:
-              forall b ofs f i rs m rs' m',
-              rs PC = Vptr b ofs ->
-              Genv.find_funct_ptr ge b = Some (Internal f) ->
-              find_instr (Ptrofs.unsigned ofs) (fn_code f) = Some i ->
-              exec_instr f i rs m = Next rs' m' ->
-              step (State rs m) E0 (State rs' m'). 
         
-        Inductive initial_state (p: program): state -> Prop :=
+        FInductive step: genv -> state -> trace -> state -> Prop :=
+          | exec_step_internal:
+              forall ge b ofs f i rs m rs' m',
+              rs self__Asm.PC = Vptr b ofs ->
+              Genv.find_funct_ptr ge b = Some (Internal f) ->
+              find_instr (Ptrofs.unsigned ofs) (self__Asm.fn_code f) = Some i ->
+              exec_instr i ge f rs m = self__Sem.Next rs' m' ->
+              step ge (self__Sem.State rs m) E0 (self__Sem.State rs' m').        
+
+        MetaData initial_state.
+        Notation "a # b" := (a b) (at level 1, only parsing) : asm.
+        Notation "a # b <- c" := (self__Sem.Pregmap.set b c a) (at level 1, b at next level) : asm.
+        Open Scope asm.
+        Inductive initial_state (p: self__Asm.program): self__Sem.state -> Prop :=
           | initial_state_intro: forall m0,
               let ge := Genv.globalenv p in
               let rs0 :=
-                (Pregmap.init Vundef)
-                # PC <- (Genv.symbol_address ge p.(prog_main) Ptrofs.zero)
-                # SP <- Vnullptr
-                # RA <- Vnullptr in
+                (self__Sem.Pregmap.init Vundef)
+                # self__Asm.PC <- (Genv.symbol_address ge p.(prog_main) Ptrofs.zero)
+                # (self__Asm.IR self__Asm.X2) <- Vnullptr
+                # (self__Asm.IR self__Asm.X1) <- Vnullptr in
               Genv.init_mem p = Some m0 ->
-              initial_state p (State rs0 m0).
+              initial_state p (self__Sem.State rs0 m0).
+        FEnd initial_state.
 
-        Inductive final_state: state -> int -> Prop :=
+        MetaData final_state.
+        Inductive final_state: self__Sem.state -> int -> Prop :=
           | final_state_intro: forall rs m r,
-              rs PC = Vnullptr ->
-              rs X10 = Vint r ->
-              final_state (State rs m) r.
-
-      FEnd Sem.                   
+              rs self__Asm.PC = Vnullptr ->
+              rs (self__Asm.IR (self__Asm.X10)) = Vint r ->
+              final_state (self__Sem.State rs m) r.
+        FEnd final_state.
+      FEnd Sem.         
    FEnd Asm.
 
    (* Processor dependent intermediate representations *)
@@ -3239,7 +3440,7 @@ Inductive bitfield : Type :=
        FInductive expr : Type :=
           | Evar : ident -> expr          
           | Econdition : condexpr -> expr -> expr -> expr
-          | Eop : operation -> exprlist -> expr
+          | Eop : Asm.operation -> exprlist -> expr
           | Elet : expr -> expr -> expr
           | Eletvar : nat -> expr
        with exprlist : Type :=
@@ -3249,56 +3450,88 @@ Inductive bitfield : Type :=
           | CEcond : Asm.condition -> exprlist -> condexpr
           | CEcondition : condexpr -> condexpr -> condexpr -> condexpr
           | CElet: expr -> condexpr -> condexpr.
-       
+
+       FDefinition label := ident.
        FInductive stmt : Type :=
           | Sskip: stmt
           | Sassign : ident -> expr -> stmt
           | Sseq: stmt -> stmt -> stmt
-          | Sifthenelse: condexpr -> stmt -> stmt -> stmt
+          | Sifthenelse: self__CminorSel.condexpr -> stmt -> stmt -> stmt
           | Sloop: stmt -> stmt
           | Sblock: stmt -> stmt
           | Sexit: nat -> stmt
           | Sreturn: option expr -> stmt
           | Slabel: label -> stmt -> stmt
           | Sgoto: label -> stmt.
-       
+
+       MetaData function.
        Record function : Type := mkfunction {
           fn_sig: signature;
           fn_params: list ident;
           fn_vars: list ident;
           fn_stackspace: Z;
-          fn_body: stmt
+          fn_body: self__CminorSel.stmt
        }.
+       FEnd function.
+
+       FDefinition fundef := AST.fundef function.
+       FDefinition program := AST.program fundef unit.
+
+       FDefinition funsig := fun (fd: fundef) =>
+         match fd with
+         | Internal f => self__CminorSel.fn_sig f
+         | External ef => cheat
+         end.       
 
        Family Sem. 
-          Definition genv := Genv.t fundef unit.
-          Definition letenv := list val.
+          FDefinition genv := Genv.t fundef unit.
+          FDefinition letenv := list val.
+          FDefinition env := PTree.t val.
+          
+          FDefinition eval_operation := fun op => Asm.eval_operation op fundef unit.
+
+          MetaData set_params.
+           Fixpoint set_params (vl: list val) (il: list ident) {struct il} : self__Sem.env :=
+           match il, vl with
+           | i1 :: is, v1 :: vs => PTree.set i1 v1 (set_params vs is)
+           | i1 :: is, nil => PTree.set i1 Vundef (set_params nil is)
+           | _, _ => PTree.empty val
+           end.
+          FEnd set_params.
+
+          MetaData set_locals.
+          Fixpoint set_locals (il: list ident) (e: self__Sem.env) {struct il} : self__Sem.env :=
+           match il with
+           | nil => e
+           | i1 :: is => PTree.set i1 Vundef (set_locals is e)
+           end.
+          FEnd set_locals.              
            
           FInductive cont : Type := 
              | Kstop: cont
              | Kseq: stmt -> cont -> cont
              | Kblock: cont -> cont.             
 
-          FRecursion call_cont about cont motive (fun (_ : cont) => cont).
+          FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
               Case Kstop := Kstop.
               Case Kseq := (fun s k call_cont_k => call_cont_k).                
               Case Kblock := (fun k call_cont_k => call_cont_k).              
           FEnd call_cont.
             
-          FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop).
+          FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
              Case Kstop := True.
              Case Kseq := (fun s k _ => False).                
              Case Kblock := (fun k _ => False).              
           FEnd is_call_cont.
 
-          FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)). 
-              Case Sskip := (fun lbl k => None)
-              Case Sassign := (fun id e lbl k => None)
+          FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect. 
+              Case Sskip := (fun lbl k => None).
+              Case Sassign := (fun id e lbl k => None).
               Case Sseq := (fun s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
                                        match find_label_s1 lbl (Kseq s2 k) with 
                                        | Some sk => Some sk 
                                        | None => find_label_s2 lbl k end).
-              Case Sifthenelse := (fun e s1 _ s2 _ => fun lbl k => 
+              Case Sifthenelse := (fun e s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
                                        match find_label_s1 lbl k with 
                                        | Some sk => Some sk 
                                        | None => find_label_s2 lbl k end).
@@ -3314,111 +3547,318 @@ Inductive bitfield : Type :=
           FEnd find_label.
            
           FInductive state: Type :=
-               | State : function -> stmt -> cont -> val -> env -> mem -> state                   
+               | State : function -> stmt -> cont -> val -> env -> mem -> state
                | Callstate : fundef -> list val -> cont -> mem -> state                   
                | Returnstate : val -> cont -> mem -> state.
-           
-          FInductive eval_expr: letenv -> expr -> val -> Prop :=
-              | eval_Evar: forall le id v,
+          
+          (*
+          Variable ge : genv  
+          Variable sp: val.
+          Variable e: env.
+          Variable m: mem.*)
+          FInductive eval_expr: genv -> val -> env -> mem -> letenv -> expr -> val -> Prop :=
+              | eval_Evar: forall ge sp e m le id v,
                   PTree.get id e = Some v ->
-                  eval_expr le (Evar id) v              
-              | eval_Econdition: forall le a b c va v,
-                  eval_condexpr le a va ->
-                  eval_expr le (if va then b else c) v ->
-                  eval_expr le (Econdition a b c) v
-              | eval_Elet: forall le a b v1 v2,
-                  eval_expr le a v1 ->
-                  eval_expr (v1 :: le) b v2 ->
-                  eval_expr le (Elet a b) v2
-              | eval_Eletvar: forall le n v,
+                  eval_expr ge sp e m le (Evar id) v
+              | eval_Eop: forall ge sp e m le op al vl v,
+                  eval_exprlist ge sp e m le al vl ->
+                  Asm.eval_operation ge sp op vl m = Some v ->
+                  eval_expr ge sp e m le (Eop op al) v
+              | eval_Econdition: forall ge sp e m le a b c va v,
+                  eval_condexpr ge sp e m le a va ->
+                  eval_expr ge sp e m le (if va then b else c) v ->
+                  eval_expr ge sp e m le (Econdition a b c) v
+              | eval_Elet: forall ge sp e m le a b v1 v2,
+                  eval_expr ge sp e m le a v1 ->
+                  eval_expr ge sp e m (v1 :: le) b v2 ->
+                  eval_expr ge sp e m le (Elet a b) v2
+              | eval_Eletvar: forall ge sp e m le n v,
                   nth_error le n = Some v ->
-                  eval_expr le (Eletvar n) v              
-          with eval_exprlist: letenv -> exprlist -> list val -> Prop :=
-             | eval_Enil: forall le,
-                 eval_exprlist le Enil nil
-             | eval_Econs: forall le a1 al v1 vl,
-                 eval_expr le a1 v1 -> eval_exprlist le al vl ->
-                 eval_exprlist le (Econs a1 al) (v1 :: vl)
-          with eval_condexpr: letenv -> condexpr -> bool -> Prop :=
-             | eval_CEcond: forall le cond al vl vb,
-                 eval_exprlist le al vl ->
+                  eval_expr ge sp e m le (Eletvar n) v
+          with eval_exprlist: genv -> val -> env -> mem -> letenv -> self__CminorSel.exprlist -> list val -> Prop :=
+             | eval_Enil: forall ge sp e m le,
+                 eval_exprlist ge sp e m le Enil nil
+             | eval_Econs: forall ge sp e m le a1 al v1 vl,
+                 eval_expr ge sp e m le a1 v1 -> eval_exprlist ge sp e m le al vl ->
+                 eval_exprlist ge sp e m le (Econs a1 al) (v1 :: vl)
+          with eval_condexpr: genv -> val -> env -> mem -> letenv -> self__CminorSel.condexpr -> bool -> Prop :=
+             | eval_CEcond: forall ge sp e m le cond al vl vb,
+                 eval_exprlist ge sp e m le al vl ->
                  Asm.eval_condition cond vl m = Some vb ->
-                 eval_condexpr le (CEcond cond al) vb
-             | eval_CEcondition: forall le a b c va v,
-                 eval_condexpr le a va ->
-                 eval_condexpr le (if va then b else c) v ->
-                 eval_condexpr le (CEcondition a b c) v
-             | eval_CElet: forall le a b v1 v2,
-                 eval_expr le a v1 ->
-                 eval_condexpr (v1 :: le) b v2 ->
-                 eval_condexpr le (CElet a b) v2.
+                 eval_condexpr ge sp e m le (CEcond cond al) vb
+             | eval_CEcondition: forall ge sp e m le a b c va v,
+                 eval_condexpr ge sp e m le a va ->
+                 eval_condexpr ge sp e m le (if va then b else c) v ->
+                 eval_condexpr ge sp e m le (CEcondition a b c) v
+             | eval_CElet: forall ge sp e m le a b v1 v2,
+                 eval_expr ge sp e m le a v1 ->
+                 eval_condexpr ge sp e m (v1 :: le) b v2 ->
+                 eval_condexpr ge sp e m le (CElet a b) v2.
            
-          FInductive step: state -> trace -> state -> Prop :=
-             | step_skip_seq: forall f s k sp e m,
-                   step (State f Sskip (Kseq s k) sp e m)
+          FInductive step: genv -> state -> trace -> state -> Prop :=
+             | step_skip_seq: forall ge f s k sp e m,
+                   step ge (State f Sskip (Kseq s k) sp e m)
                      E0 (State f s k sp e m)
-             | step_skip_block: forall f k sp e m,
-                   step (State f Sskip (Kblock k) sp e m)
+             | step_skip_block: forall ge f k sp e m,
+                   step ge (State f Sskip (Kblock k) sp e m)
                      E0 (State f Sskip k sp e m)
-             | step_skip_call: forall f k sp e m m',
+             | step_skip_call: forall ge f k sp e m m',
                    is_call_cont k ->
-                   Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-                   step (State f Sskip k (Vptr sp Ptrofs.zero) e m)
+                   Mem.free m sp 0 f.(self__CminorSel.fn_stackspace) = Some m' ->
+                   step ge (State f Sskip k (Vptr sp Ptrofs.zero) e m)
                      E0 (Returnstate Vundef k m')
-
-             | step_assign: forall f id a k sp e m v,
-                   eval_expr sp e m nil a v ->
-                   step (State f (Sassign id a) k sp e m)
+             | step_assign: forall ge f id a k sp e m v,
+                   eval_expr ge sp e m nil a v ->
+                   step ge (State f (Sassign id a) k sp e m)
                      E0 (State f Sskip k sp (PTree.set id v e) m)
-
-             | step_seq: forall f s1 s2 k sp e m,
-                   step (State f (Sseq s1 s2) k sp e m)
+             | step_seq: forall ge f s1 s2 k sp e m,
+                   step ge (State f (Sseq s1 s2) k sp e m)
                      E0 (State f s1 (Kseq s2 k) sp e m)
-
              | step_ifthenelse: forall f c s1 s2 k sp e m b,
-                   eval_condexpr sp e m nil c b ->
-                   step (State f (Sifthenelse c s1 s2) k sp e m)
+                   eval_condexpr ge sp e m nil c b ->
+                   step ge (State f (Sifthenelse c s1 s2) k sp e m)
                      E0 (State f (if b then s1 else s2) k sp e m)
-
-             | step_loop: forall f s k sp e m,
-                   step (State f (Sloop s) k sp e m)
+             | step_loop: forall ge f s k sp e m,
+                   step ge (State f (Sloop s) k sp e m)
                      E0 (State f s (Kseq (Sloop s) k) sp e m)
-
-             | step_block: forall f s k sp e m,
-                   step (State f (Sblock s) k sp e m)
+             | step_block: forall ge f s k sp e m,
+                   step ge (State f (Sblock s) k sp e m)
                      E0 (State f s (Kblock k) sp e m)
-
-             | step_exit_seq: forall f n s k sp e m,
-                   step (State f (Sexit n) (Kseq s k) sp e m)
+             | step_exit_seq: forall ge f n s k sp e m,
+                   step ge (State f (Sexit n) (Kseq s k) sp e m)
                      E0 (State f (Sexit n) k sp e m)
-             | step_exit_block_0: forall f k sp e m,
-                   step (State f (Sexit O) (Kblock k) sp e m)
+             | step_exit_block_0: forall ge f k sp e m,
+                   step ge (State f (Sexit O) (Kblock k) sp e m)
                      E0 (State f Sskip k sp e m)
-             | step_exit_block_S: forall f n k sp e m,
-                   step (State f (Sexit (S n)) (Kblock k) sp e m)
+             | step_exit_block_S: forall ge f n k sp e m,
+                   step ge (State f (Sexit (S n)) (Kblock k) sp e m)
                      E0 (State f (Sexit n) k sp e m)
-
-             | step_return_0: forall f k sp e m m',
-                   Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-                   step (State f (Sreturn None) k (Vptr sp Ptrofs.zero) e m)
+             | step_return_0: forall ge f k sp e m m',
+                   Mem.free m sp 0 f.(self__CminorSel.fn_stackspace) = Some m' ->
+                   step ge (State f (Sreturn None) k (Vptr sp Ptrofs.zero) e m)
                      E0 (Returnstate Vundef (call_cont k) m')
-             | step_return_1: forall f a k sp e m v m',
-                   eval_expr (Vptr sp Ptrofs.zero) e m nil a v ->
-                   Mem.free m sp 0 f.(fn_stackspace) = Some m' ->
-                   step (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m)
+             | step_return_1: forall ge f a k sp e m v m',
+                   eval_expr ge (Vptr sp Ptrofs.zero) e m nil a v ->
+                   Mem.free m sp 0 f.(self__CminorSel.fn_stackspace) = Some m' ->
+                   step ge (State f (Sreturn (Some a)) k (Vptr sp Ptrofs.zero) e m)
                      E0 (Returnstate v (call_cont k) m')
-
-             | step_label: forall f lbl s k sp e m,
-                   step (State f (Slabel lbl s) k sp e m)
+             | step_label: forall ge f lbl s k sp e m,
+                   step ge (State f (Slabel lbl s) k sp e m)
                      E0 (State f s k sp e m)
+             | step_goto: forall ge f lbl k sp e m s' k',
+                   find_label lbl f.(self__CminorSel.fn_body) (call_cont k) = Some(s', k') ->
+                   step ge (State f (Sgoto lbl) k sp e m)
+                     E0 (State f s' k' sp e m)
+             | step_internal_function: forall ge f vargs k m m' sp e,
+                  Mem.alloc m 0 f.(self__CminorSel.fn_stackspace) = (m', sp) ->
+                  set_locals
+                    f.(self__CminorSel.fn_vars)
+                    (set_params vargs f.(self__CminorSel.fn_params)) = e ->
+                  step ge (Callstate (Internal f) vargs k m)
+                    E0 (State f f.(self__CminorSel.fn_body) k (Vptr sp Ptrofs.zero) e m')
 
-             | step_goto: forall f lbl k sp e m s' k',
-                   find_label lbl f.(fn_body) (call_cont k) = Some(s', k') ->
-                   step (State f (Sgoto lbl) k sp e m)
-                     E0 (State f s' k' sp e m).
+             MetaData initial_state.
+              Inductive initial_state (p: self__CminorSel.program): self__Sem.state -> Prop :=
+                  | initial_state_intro: forall b f m0,
+                      let ge := Genv.globalenv p in
+                      Genv.init_mem p = Some m0 ->
+                      Genv.find_symbol ge p.(prog_main) = Some b ->
+                      Genv.find_funct_ptr ge b = Some f ->
+                      self__CminorSel.funsig f = signature_main ->
+                      initial_state p (self__Sem.Callstate f nil self__Sem.Kstop m0).
+             FEnd initial_state.
+
+             MetaData final_state.
+              Inductive final_state: self__Sem.state -> int -> Prop :=
+                  | final_state_intro: forall r m,
+                      final_state (self__Sem.Returnstate (Vint r) self__Sem.Kstop m) r.
+             FEnd final_state.
        FEnd Sem.
-    FEnd CminorSel.   
+   FEnd CminorSel.
 
+   (* Cminor -> CminorSel *)
+   Family Selection.
+       FDefinition longconst : int64 -> expr := fun n =>
+          if Archi.splitlong then SplitLong.longconst n else CminorSel.Eop (Asm.Olongconst n) CminorSel.Enil.
+
+       FRecurcion sel_constant about Cminor.constant motive (fun (_ : Cminor.constant) => CminorSel.constant).
+           Case Ointconst := (fun n => CminorSel.Eop (Asm.Ointconst n) CminorSel.Enil).
+           Case Ofloatconst := (fun n => CminorSel.Eop (Asm.Ofloatconst f) CminorSel.Enil).
+           Case Osingleconst := (fun n =>  CminorSel.Eop (Asm.Osingleconst f) CminorSel.Enil).
+           Case Olongconst := (fun n => longconst n).
+       FEnd sel_constant.
+
+       FRecursion sel_expr about Cminor.expr motive (fun (_ : Cminor.expr) => CminorSel.expr).          
+           Case Evar := (fun id => CminorSel.Evar id).
+           Case Econst := (fun cst => sel_constant cst).           
+       FEnd sel_expr.
+       
+       FRecursion select_condition about Asm.operation motive (fun (_ : Asm.operation) => CminorSel.exprlist -> condition) by _rect.
+           Case Ocmp := (fun c args => CminorSel.CEcond c args).
+       FEnd select_condition.
+       
+       FRecursion condexpr_of_expr about CminorSel.expr motive (fun (_ : Cminor.expr) => CminorSel.condexpr) by _rect.
+           Case Eop op args := select_condition op args.
+           Case Econdition a b c := (CminorSel.CEcondition a (condexpr_of_expr b) (condexpr_of_expr c))
+           Case Elet a b := (CElet a (condexpr_of_expr b)).
+           Case Eletvar n := (CminorSel.CEcond (Asm.Ccompuimm Cne Int.zero) (CminorSel.Econs e Cminor.Enil)).
+           Case Evar i := (CminorSel.CEcond (Asm.Ccompuimm Cne Int.zero) (CminorSel.Econs e Cminor.Enil)).
+       FEnd condexpr_of_expr.
+
+       Function condexpr_of_expr (e: expr) : condexpr :=
+           match e with
+           | Eop (Ocmp c) el => CEcond c el
+           | Econdition a b c => CEcondition a (condexpr_of_expr b) (condexpr_of_expr c)
+           | Elet a b => CElet a (condexpr_of_expr b)
+           | _ => CEcond (Ccompuimm Cne Int.zero) (e ::: Enil)
+           end.
+       
+       FRecursion sel_stmt about Cminor.stmt 
+                            motive (fun (_ : Cminor.stmt) => res CminorSel.stmt) by _rect.
+          Case Sskip := (OK CminorSel.Sskip).
+          Case Sassign id e := (OK (CminorSel.Sassign id (sel_expr e))).
+          Case Sseq s1 s2 := (
+                 do s1' <- sel_stmt s1 ; 
+                 do s2' <- sel_stmt s2 ;
+                 OK (CminorSel.Sseq s1' s2')).
+          Case Sifthenelse e ifso ifnot := (
+               (* For simplicity, don't use the
+                  "if conversion heuristics" present in CompCert *)                      
+                 do ifso' <- sel_stmt ifso ;
+                 do ifnot' <- sel_stmt ifnot ;
+                 OK (Sifthenelse (condexpr_of_expr (sel_expr e)) ifso' ifnot')).
+          Case Sloop body := (do body' <- sel_stmt body; OK (CminorSel.Sloop body')).
+          Case Sblock s := (do body' <- sel_stmt body; OK (CminorSel.Sblock body')). 
+          Case Sexit := (OK (CminorSel.Sexit n)).
+          Case Sreturn e := (match e with 
+                             | None => OK (CminorSel.Sreturn None) 
+                             | Some e => OK (CminorSel.Sreturn (Some (sel_expr e)))).
+          Case Slabel lbl body := (do body' <- sel_stmt body; OK (CminorSel.Slabel lbl body')) 
+          Case Sgoto := (OK (CminorSel.Sgoto lbl)).
+        FEnd sel_stmt.
+
+       FDefinition sel_function : Cminor.function -> res function := fun f =>             
+             do body' <- sel_stmt f.(self__Imp.Cminor.fn_body);
+             OK (self__Imp.CminorSel.mkfunction
+                   f.(self__Imp.Cminor.fn_sig)
+                   f.(self__Imp.Cminor.fn_params)
+                   f.(self__Imp.Cminor.fn_vars)
+                   f.(self__Imp.Cminor.fn_stackspace)
+                   body').
+
+       FDefinition sel_fundef : Cminor.fundef -> res fundef := fun f =>
+         transf_partial_fundef (sel_function) f.
+
+       FDefinition sel_program : Cminor.program -> res program := fun p =>         
+        transform_partial_program (sel_fundef) p.       
+       
+       Family Proof. 
+           Inductive match_cont: Cminor.program -> helper_functions -> known_idents -> typenv -> Cminor.cont -> CminorSel.cont -> Prop :=
+               | match_cont_seq: forall cunit hf ki env s s' k k',
+                   sel_stmt (prog_defmap cunit) ki env s = OK s' ->
+                   match_cont cunit hf ki env k k' ->
+                   match_cont cunit hf ki env (Cminor.Kseq s k) (Kseq s' k')
+               | match_cont_block: forall cunit hf ki env k k',
+                   match_cont cunit hf ki env k k' ->
+                   match_cont cunit hf ki env (Cminor.Kblock k) (Kblock k')
+               | match_cont_other: forall cunit hf ki env k k',
+                   match_call_cont k k' ->
+                   match_cont cunit hf ki env k k'
+           with match_call_cont: Cminor.cont -> CminorSel.cont -> Prop :=
+             | match_cont_stop:
+                 match_call_cont Cminor.Kstop Kstop
+             | match_cont_call: forall cunit hf env id f sp e k f' e' k',
+                 linkorder cunit prog ->
+                 helper_functions_declared cunit hf ->
+                 sel_function (prog_defmap cunit) hf f = OK f' ->
+                 type_function f = OK env ->
+                 match_cont cunit hf (known_id f) env k k' ->
+                 env_lessdef e e' ->
+                 match_call_cont (Cminor.Kcall id f sp e k) (Kcall id f' sp e' k').
+
+       Inductive match_states: Cminor.state -> CminorSel.state -> Prop :=
+         | match_state: forall cunit hf f f' s k s' k' sp e m e' m' env
+               (LINK: linkorder cunit prog)
+               (HF: helper_functions_declared cunit hf)
+               (TF: sel_function (prog_defmap cunit) hf f = OK f')
+               (TYF: type_function f = OK env)
+               (TS: sel_stmt (prog_defmap cunit) (known_id f) env s = OK s')
+               (MC: match_cont cunit hf (known_id f) env k k')
+               (LD: env_lessdef e e')
+               (ME: Mem.extends m m'),
+             match_states
+               (Cminor.State f s k sp e m)
+               (State f' s' k' sp e' m')
+         | match_callstate: forall cunit f f' args args' k k' m m'
+               (LINK: linkorder cunit prog)
+               (TF: match_fundef cunit f f')
+               (MC: match_call_cont k k')
+               (LD: Val.lessdef_list args args')
+               (ME: Mem.extends m m'),
+             match_states
+               (Cminor.Callstate f args k m)
+               (Callstate f' args' k' m')
+         | match_returnstate: forall v v' k k' m m'
+               (MC: match_call_cont k k')
+               (LD: Val.lessdef v v')
+               (ME: Mem.extends m m'),
+             match_states
+               (Cminor.Returnstate v k m)
+               (Returnstate v' k' m')
+         | match_builtin_1: forall cunit hf ef args optid f sp e k m al f' e' k' m' env
+               (LINK: linkorder cunit prog)
+               (HF: helper_functions_declared cunit hf)
+               (TF: sel_function (prog_defmap cunit) hf f = OK f')
+               (TYF: type_function f = OK env)
+               (MC: match_cont cunit hf (known_id f) env k k')
+               (EA: Cminor.eval_exprlist ge sp e m al args)
+               (LDE: env_lessdef e e')
+               (ME: Mem.extends m m'),
+             match_states
+               (Cminor.Callstate (External ef) args (Cminor.Kcall optid f sp e k) m)
+               (State f' (sel_builtin optid ef al) k' sp e' m')
+         | match_builtin_2: forall cunit hf v v' optid f sp e k m f' e' m' k' env
+               (LINK: linkorder cunit prog)
+               (HF: helper_functions_declared cunit hf)
+               (TF: sel_function (prog_defmap cunit) hf f = OK f')
+               (TYF: type_function f = OK env)
+               (MC: match_cont cunit hf (known_id f) env k k')
+               (LDV: Val.lessdef v v')
+               (LDE: env_lessdef (set_optvar optid v e) e')
+               (ME: Mem.extends m m'),
+             match_states
+               (Cminor.Returnstate v (Cminor.Kcall optid f sp e k) m)
+               (State f' Sskip k' sp e' m').
+
+           Definition measure (s: Cminor.state) : nat :=
+              match s with
+              | Cminor.Callstate _ _ _ _ => 0%nat
+              | Cminor.State _ _ _ _ _ _ => 1%nat
+              | Cminor.Returnstate _ _ _ => 2%nat
+              end.
+
+           Lemma sel_step_correct:
+             forall S1 t S2, Cminor.step ge S1 t S2 ->
+             forall T1, match_states S1 T1 -> wt_state S1 ->
+             (exists T2, plus step tge T1 t T2 /\ match_states S2 T2)
+             \/ (measure S2 < measure S1 /\ t = E0 /\ match_states S2 T1)%nat
+             \/ (exists T2 n, step tge T1 t T2 /\ eventually n S2 (fun S3 => match_states S3 T2)).
+           Proof.
+           
+           Lemma sel_initial_states:
+             forall S, Cminor.initial_state prog S ->
+             exists R, initial_state tprog R /\ match_states S R.
+           Proof.
+           
+           Lemma sel_final_states:
+             forall S R r,
+             match_states S R -> Cminor.final_state S r -> final_state R r.
+           Proof.
+       FEnd Proof.
+
+  FEnd Selection.
+
+   
    Family RTL.
        Definition node := positive.
       
@@ -3493,9 +3933,244 @@ Inductive bitfield : Type :=
                     | final_state_intro: forall r m,
                         final_state (Returnstate nil (Vint r) m) r.
       FEnd Sem.
-   FEnd RTL.
+  FEnd RTL.
 
-   Family LTL.
+  (* CminorSel -> RTL *)
+  Family RTLgen.
+        FRecursion transl_expr about CminorSel.expr motive (fun (_ : CminorSel.expr) => mapping -> reg -> node -> node).
+            Case Evar := (fun id => fun map rd nd => 
+                             do r <- find_var map v; 
+                                add_move r rd nd).
+            Case Eop := (fun op al => fun map rd nd => 
+                            do rl <- alloc_regs map al;
+                            do no <- add_instr (Iop op rl rd nd);
+                            transl_exprlist map al rl no).
+            Case Econdition := (fun a b transl_b c transl_c => fun map rd nd => 
+                                     do nfalse <- transl_expr map c rd nd;
+                                    do ntrue <- transl_expr map b rd nd;
+                                      transl_condexpr map a ntrue nfalse).
+            Case Elet := (fun b c => fun map rd nd => 
+                                       do r <- new_reg;
+                                      do nc <- transl_expr (add_letvar map r) c rd nd;
+                                        transl_expr map b r nc).
+            Case Eletvar := (fun n => fun map rd nd => 
+                                      do r <- find_letvar map n; add_move r rd nd).            
+        FEnd transl_expr.        
+        (* with transl_exprlist about CminorSel.exprlist motive (fun (_ : CminorSel.exprlist) => mapping -> list reg -> node -> node).
+              Case Enil := (fun map al rl nd => match rl with nil => ret nd | _ => error (Errors.msg "RTLgen.transl_exprlist") end).
+              Case Econs := (fun fun b bs transl_bs => map al rl nd => 
+                                  match rl with 
+                                  | r :: rs =>  
+                                      do no <- transl_exprlist map bs rs nd; 
+                                      transl_expr map b r no 
+                                | _ => error (Errors.msg "RTLgen.transl_exprlist") end).
+         *)
+        (* with transl_condexpr about CminorSel.condexpr (fun (_ : CminorSel.condexpr) => mapping  -> node -> node -> node)
+              Case CEcond := (fun c al => fun map ntrue nfalse => 
+                              do rl <- alloc_regs map al;
+                              do nt <- add_instr (Icond c rl ntrue nfalse);
+                                transl_exprlist map al rl nt).
+              Case CEcondition := (fun a b transl_b c transl_c => fun map ntrue nfalse => 
+                                     do nc <- transl_c map ntrue nfalse;
+                                    do nb <- transl_b map ntrue nfalse;
+                                      transl_condexpr map a nb nc).
+              Case CElet := (fun b c transl_c => fun map ntrue nfalse => 
+                             do r <- new_reg;
+                            do nc <- transl_condexpr (add_letvar map r) c ntrue nfalse;
+                                transl_expr map b r nc).              
+        FEnd transl_expr. *)      
+
+        Definition transl_exit (nexits: list node) (n: nat) : mon node :=
+          match nth_error nexits n with
+          | None => error (Errors.msg "RTLgen: wrong exit")
+          | Some ne => ret ne
+          end.
+
+        Definition labelmap : Type := PTree.t node.
+        
+        FRecursion transl_stmt about CminorSel.stmt
+          motive (fun (_ : CminorSel.stmt) => 
+                    mapping -> node -> list node -> labelmap -> node -> option reg -> node).
+             Case Sskip := (fun map nd nexits ngoto nret rret => ret nd).
+             Case Sassign := (fun id e => fun map nd nexits ngoto nret rret => 
+                                  do r <- find_var map v;
+                                  transl_expr map b r nd). 
+             Case Sseq := (fun s1 transl_s1 s2 transl_s2 => fun map nd nexits ngoto nret rret =>  
+                         do ns <- transl_s2 map nd nexits ngoto nret rret;
+                         transl_s1 map ns nexits ngoto nret rret).
+             Case Sifthenelse := (fun c strue transl_strue sfalse transl_sfalse =>
+                                     fun map nd nexits ngoto nret rret => 
+                            (* Don't use "more likely" heuristic *)
+                            do ntrue <- transl_strue map nd nexits ngoto nret rret;
+                            do nfalse <- transl_sfalse map nd nexits ngoto nret rret;
+                            transl_condexpr map c ntrue nfalse).
+             Case Sloop := (fun s tranl_s => fun map nd nexits ngoto nret rret => 
+                                do n1 <- reserve_instr;
+                                do n2 <- transl_s map n1 nexits ngoto nret rret;
+                                do xx <- update_instr n1 (Inop n2);
+                                add_instr (Inop n2)).
+             Case Sblock := (fun s tranl_s => fun map nd nexits ngoto nret rret => 
+                                   transl_s map nd (nd :: nexits) ngoto nret rret).
+             Case Sexit := (fun n => fun map nd nexits ngoto nret rret =>  transl_exit nexits n).
+             Case Sreturn := (fun opt_a => fun map nd nexits ngoto nret rret => 
+                                match opt_a, rret with
+                                | None, _ => ret nret
+                                | Some a, Some r => transl_expr map a r nret
+                                | _, _ => error (Errors.msg "RTLgen: type mismatch on return")
+                                end).
+             Case Slabel := (fun lbl s transl_s => fun map nd nexits ngoto nret rret => 
+                               do ns <- transl_stmt map s' nd nexits ngoto nret rret;
+                               (* Some eror handling stuff about labels *)
+                               ret ns).
+             Case Sgoto := (fun lbl => fun map nd nexits ngoto nret rret => 
+                              match ngoto!lbl with
+                              | None => error (Errors.MSG "Undefined defined label " ::
+                                              Errors.CTX lbl :: nil)
+                              | Some n => ret n
+                              end).
+        FEnd transl_stmt.
+
+        (* Non executable relation spec for transl_stmt, defined via an Inductive type *)
+        Family Spec.
+             (* tr_move c ns rs nd rd holds if the graph c, between nodes ns and nd, contains 
+                instructions that move the value of register rs to register rd. *)
+             Inductive tr_move (c: code):
+                    node -> reg -> node -> reg -> Prop :=
+                | tr_move_0: forall n r,
+                    tr_move c n r n r
+                | tr_move_1: forall ns rs nd rd,
+                    c!ns = Some (RTL.Iop Asm.Omove (rs :: nil) rd nd) ->
+                    tr_move c ns rs nd rd.
+
+              Inductive reg_map_ok: mapping -> reg -> option ident -> Prop :=
+                | reg_map_ok_novar: forall map rd,
+                    ~reg_in_map map rd ->
+                    reg_map_ok map rd None
+                | reg_map_ok_somevar: forall map rd id,
+                    map.(map_vars)!id = Some rd ->
+                    reg_map_ok map rd (Some id).
+ 
+                 
+              FInductive tr_expr (c: code):
+                      mapping -> list reg -> expr -> node -> node -> reg -> option ident -> Prop :=
+                  | tr_Evar: forall map pr id ns nd r rd dst,
+                      map.(map_vars)!id = Some r ->
+                      ((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr)) ->
+                      tr_move c ns r nd rd ->
+                      tr_expr c map pr (Evar id) ns nd rd dst
+                  | tr_Eop: forall map pr op al ns nd rd n1 rl dst,
+                      tr_exprlist c map pr al ns n1 rl ->
+                      c!n1 = Some (Iop op rl rd nd) ->
+                      reg_map_ok map rd dst -> ~In rd pr ->
+                      tr_expr c map pr (Eop op al) ns nd rd dst
+                  | tr_Eload: forall map pr chunk addr al ns nd rd n1 rl dst,
+                      tr_exprlist c map pr al ns n1 rl ->
+                      c!n1 = Some (Iload chunk addr rl rd nd) ->
+                      reg_map_ok map rd dst -> ~In rd pr ->
+                      tr_expr c map pr (Eload chunk addr al) ns nd rd dst
+                  | tr_Econdition: forall map pr a ifso ifnot ns nd rd ntrue nfalse dst,
+                      tr_condition c map pr a ns ntrue nfalse ->
+                      tr_expr c map pr ifso ntrue nd rd dst ->
+                      tr_expr c map pr ifnot nfalse nd rd dst ->
+                      tr_expr c map pr (Econdition a ifso ifnot) ns nd rd dst
+                  | tr_Elet: forall map pr b1 b2 ns nd rd n1 r dst,
+                      ~reg_in_map map r ->
+                      tr_expr c map pr b1 ns n1 r None ->
+                      tr_expr c (add_letvar map r) pr b2 n1 nd rd dst ->
+                      tr_expr c map pr (Elet b1 b2) ns nd rd dst
+                  | tr_Eletvar: forall map pr n ns nd rd r dst,
+                      List.nth_error map.(map_letvars) n = Some r ->
+                      ((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr)) ->
+                      tr_move c ns r nd rd ->
+                      tr_expr c map pr (Eletvar n) ns nd rd dst
+                  with tr_condition (c: code):
+                        mapping -> list reg -> condexpr -> node -> node -> node -> Prop :=
+                    | tr_CEcond: forall map pr cond bl ns ntrue nfalse n1 rl,
+                        tr_exprlist c map pr bl ns n1 rl ->
+                        c!n1 = Some (Icond cond rl ntrue nfalse) ->
+                        tr_condition c map pr (CEcond cond bl) ns ntrue nfalse
+                    | tr_CEcondition: forall map pr a1 a2 a3 ns ntrue nfalse n2 n3,
+                        tr_condition c map pr a1 ns n2 n3 ->
+                        tr_condition c map pr a2 n2 ntrue nfalse ->
+                        tr_condition c map pr a3 n3 ntrue nfalse ->
+                        tr_condition c map pr (CEcondition a1 a2 a3) ns ntrue nfalse
+                    | tr_CElet: forall map pr a b ns ntrue nfalse r n1,
+                        ~reg_in_map map r ->
+                        tr_expr c map pr a ns n1 r None ->
+                        tr_condition c (add_letvar map r) pr b n1 ntrue nfalse ->
+                        tr_condition c map pr (CElet a b) ns ntrue nfalse
+                  with tr_exprlist (c: code):
+                          mapping -> list reg -> exprlist -> node -> node -> list reg -> Prop :=
+                      | tr_Enil: forall map pr n,
+                          tr_exprlist c map pr Enil n n nil
+                      | tr_Econs: forall map pr a1 al ns nd r1 rl n1,
+                          tr_expr c map pr a1 ns n1 r1 None ->
+                          tr_exprlist c map (r1 :: pr) al n1 nd rl ->
+                          tr_exprlist c map pr (Econs a1 al) ns nd (r1 :: rl).
+    
+              FInductive tr_stmt (c: code) (map: mapping):
+                    CminorSel.stmt -> node -> node -> list node -> labelmap -> node -> option reg -> Prop :=
+                  | tr_Sskip: forall ns nexits ngoto nret rret,
+                    tr_stmt c map Sskip ns ns nexits ngoto nret rret
+                  | tr_Sassign: forall id a ns nd nexits ngoto nret rret r,
+                    map.(map_vars)!id = Some r ->
+                    tr_expr c map nil a ns nd r (Some id) ->
+                    tr_stmt c map (Sassign id a) ns nd nexits ngoto nret rret
+                  | tr_Sseq: forall s1 s2 ns nd nexits ngoto nret rret n,
+                    tr_stmt c map s2 n nd nexits ngoto nret rret ->
+                    tr_stmt c map s1 ns n nexits ngoto nret rret ->
+                    tr_stmt c map (Sseq s1 s2) ns nd nexits ngoto nret rret
+                  | tr_Sifthenelse: forall a strue sfalse ns nd nexits ngoto nret rret ntrue nfalse,
+                    tr_stmt c map strue ntrue nd nexits ngoto nret rret ->
+                    tr_stmt c map sfalse nfalse nd nexits ngoto nret rret ->
+                    tr_condition c map nil a ns ntrue nfalse ->
+                    tr_stmt c map (Sifthenelse a strue sfalse) ns nd nexits ngoto nret rret
+                  | tr_Sloop: forall sbody ns nd nexits ngoto nret rret nloop nend,
+                    tr_stmt c map sbody nloop nend nexits ngoto nret rret ->
+                    c!ns = Some(Inop nloop) ->
+                    c!nend = Some(Inop nloop) ->
+                    tr_stmt c map (Sloop sbody) ns nd nexits ngoto nret rret
+                  | tr_Sblock: forall sbody ns nd nexits ngoto nret rret,
+                    tr_stmt c map sbody ns nd (nd :: nexits) ngoto nret rret ->
+                    tr_stmt c map (Sblock sbody) ns nd nexits ngoto nret rret
+                  | tr_Sexit: forall n ns nd nexits ngoto nret rret,
+                    nth_error nexits n = Some ns ->
+                    tr_stmt c map (Sexit n) ns nd nexits ngoto nret rret
+                  | tr_Sreturn_none: forall nret nd nexits ngoto rret,
+                    tr_stmt c map (Sreturn None) nret nd nexits ngoto nret rret
+                  | tr_Sreturn_some: forall a ns nd nexits ngoto nret rret,
+                    tr_expr c map nil a ns nret rret None ->
+                    tr_stmt c map (Sreturn (Some a)) ns nd nexits ngoto nret (Some rret)
+                  | tr_Slabel: forall lbl s ns nd nexits ngoto nret rret n,
+                    ngoto!lbl = Some n ->
+                    c!n = Some (Inop ns) ->
+                    tr_stmt c map s ns nd nexits ngoto nret rret ->
+                    tr_stmt c map (Slabel lbl s) ns nd nexits ngoto nret rret
+                  | tr_Sgoto: forall lbl ns nd nexits ngoto nret rret,
+                    ngoto!lbl = Some ns ->
+                    tr_stmt c map (Sgoto lbl) ns nd nexits ngoto nret rret.   
+
+                Inductive tr_function: CminorSel.function -> RTL.function -> Prop :=
+                    | tr_function_intro:
+                        forall f code rparams map1 s0 s1 i1 rvars map2 s2 i2 nentry ngoto nret rret orret,
+                        add_vars init_mapping f.(CminorSel.fn_params) s0 = OK (rparams, map1) s1 i1 ->
+                        add_vars map1 f.(CminorSel.fn_vars) s1 = OK (rvars, map2) s2 i2 ->
+                        orret = ret_reg f.(CminorSel.fn_sig) rret ->
+                        tr_stmt code map2 f.(CminorSel.fn_body) nentry nret nil ngoto nret orret ->
+                        code!nret = Some(Ireturn orret) ->
+                        tr_function f (RTL.mkfunction
+                                        f.(CminorSel.fn_sig)
+                                        rparams
+                                        f.(CminorSel.fn_stackspace)
+                                        code
+                                        nentry).
+
+                (* Proof that the translation proof meets the specification *)    
+                       
+        FEnd Spec.
+   FEnd RTLgen.
+
+  Family LTL.
       Definition node := positive.
 
       FInductive instruction: Type :=
@@ -3779,281 +4454,7 @@ Inductive bitfield : Type :=
                       rs r = Vint retcode ->
                       final_state (Returnstate nil rs m) retcode.
         FEnd Sem.
-   FEnd Mach.         
-   
-   (* Cminor -> CminorSel *)
-   Family Selection.
-       Definition longconst (n: int64) : expr :=
-          if Archi.splitlong then SplitLong.longconst n else Eop (Olongconst n) Enil.
-
-       FRecurcion sel_constant about Cminor.constant motive (fun (_ : Cminor.constant) => CminorSel.constant).
-           Case Ointconst := (fun n => CminorSel.Eop (Asm.Ointconst n) Enil).
-           Case Ofloatconst := (fun n => CminorSel.Eop (Asm.Ofloatconst f) Enil).
-           Case Osingleconst := (fun n =>  Eop (Osingleconst f) Enil).
-           Case Olongconst := (fun n => longconst n).
-        FEnd sel_constant.
-
-        FRecursion sel_expr about Cminor.expr motive (fun (_ : Cminor.expr) => CminorSel.expr).          
-           Case Evar := (fun id => CminorSel.Evar id).
-           Case Econst := (fun cst => sel_constant cst).
-        FEnd sel_expr.        
-       
-        FRecursion sel_stmt about Cminor.stmt 
-                            motive (fun (_ : Cminor.stmt) => known_idents -> typeenv -> CminorSel.stmt).
-          Case Sskip := (fun ki env => CminorSel.Sskip).
-          Case Sassign := (fun id e => fun ki env => CminorSel.Sassign id (sel_expr e)).
-          Case Sseq := (fun s1 sel_s1 s2 sel_s2 => fun ki env => CminorSel.Sseq (sel_s1 ki env) (sel_s1 ki env)).
-          Case Sifthenelse := 
-                (fun e ifso sel_ifso ifnot sel_ifnot => fun ki env => 
-                      (* Don't use the if conversion heuristics *)
-                      do ifso' <- sel_ifso ki env; do ifnot' <- sel_ifnot ki env;
-                      OK (Sifthenelse (condexpr_of_expr (sel_expr e)) ifso' ifnot')).
-          Case Sloop := (fun s sel_s1 => fun ki env => CminorSel.Sloop (sel_s1 ki env)).
-          Case Sblock := (fun s sel_s1 => fun ki env => CminorSel.Sblock (sel_s1 ki env)).
-          Case Sexit := (fun n => fun ki env => CminorSel.Sexit n).
-          Case Sreturn := (fun e => fun ki env => 
-                               match e with 
-                               | None => CminorSel.Sreturn None 
-                               | Some e => CminorSel.Sreturn (Some (sel_expr e))).
-          Case Slabel := (fun lbl s sel_s => fun ki env => CminorSel.Slabel (sel_s ki env)).
-          Case Sgoto := (fun lbl => fun ki env => CminorSel.Sgoto lbl).
-        FEnd sel_stmt.
-   FEnd Selection.
-
-   (* CminorSel -> RTL *)
-   Family RTLgen.
-        FRecursion transl_expr about CminorSel.expr motive (fun (_ : CminorSel.expr) => mapping -> reg -> node -> node).
-            Case Evar := (fun id => fun map rd nd => 
-                             do r <- find_var map v; 
-                                add_move r rd nd).
-            Case Eop := (fun op al => fun map rd nd => 
-                            do rl <- alloc_regs map al;
-                            do no <- add_instr (Iop op rl rd nd);
-                            transl_exprlist map al rl no).
-            Case Econdition := (fun a b transl_b c transl_c => fun map rd nd => 
-                                     do nfalse <- transl_expr map c rd nd;
-                                    do ntrue <- transl_expr map b rd nd;
-                                      transl_condexpr map a ntrue nfalse).
-            Case Elet := (fun b c => fun map rd nd => 
-                                       do r <- new_reg;
-                                      do nc <- transl_expr (add_letvar map r) c rd nd;
-                                        transl_expr map b r nc).
-            Case Eletvar := (fun n => fun map rd nd => 
-                                      do r <- find_letvar map n; add_move r rd nd).            
-        FEnd transl_expr.        
-        (* with transl_exprlist about CminorSel.exprlist motive (fun (_ : CminorSel.exprlist) => mapping -> list reg -> node -> node).
-              Case Enil := (fun map al rl nd => match rl with nil => ret nd | _ => error (Errors.msg "RTLgen.transl_exprlist") end).
-              Case Econs := (fun fun b bs transl_bs => map al rl nd => 
-                                  match rl with 
-                                  | r :: rs =>  
-                                      do no <- transl_exprlist map bs rs nd; 
-                                      transl_expr map b r no 
-                                | _ => error (Errors.msg "RTLgen.transl_exprlist") end).
-         *)
-        (* with transl_condexpr about CminorSel.condexpr (fun (_ : CminorSel.condexpr) => mapping  -> node -> node -> node)
-              Case CEcond := (fun c al => fun map ntrue nfalse => 
-                              do rl <- alloc_regs map al;
-                              do nt <- add_instr (Icond c rl ntrue nfalse);
-                                transl_exprlist map al rl nt).
-              Case CEcondition := (fun a b transl_b c transl_c => fun map ntrue nfalse => 
-                                     do nc <- transl_c map ntrue nfalse;
-                                    do nb <- transl_b map ntrue nfalse;
-                                      transl_condexpr map a nb nc).
-              Case CElet := (fun b c transl_c => fun map ntrue nfalse => 
-                             do r <- new_reg;
-                            do nc <- transl_condexpr (add_letvar map r) c ntrue nfalse;
-                                transl_expr map b r nc).              
-        FEnd transl_expr. *)      
-
-        Definition transl_exit (nexits: list node) (n: nat) : mon node :=
-          match nth_error nexits n with
-          | None => error (Errors.msg "RTLgen: wrong exit")
-          | Some ne => ret ne
-          end.
-
-        Definition labelmap : Type := PTree.t node.
-        
-        FRecursion transl_stmt about CminorSel.stmt
-          motive (fun (_ : CminorSel.stmt) => 
-                    mapping -> node -> list node -> labelmap -> node -> option reg -> node).
-             Case Sskip := (fun map nd nexits ngoto nret rret => ret nd).
-             Case Sassign := (fun id e => fun map nd nexits ngoto nret rret => 
-                                  do r <- find_var map v;
-                                  transl_expr map b r nd). 
-             Case Sseq := (fun s1 transl_s1 s2 transl_s2 => fun map nd nexits ngoto nret rret =>  
-                         do ns <- transl_s2 map nd nexits ngoto nret rret;
-                         transl_s1 map ns nexits ngoto nret rret).
-             Case Sifthenelse := (fun c strue transl_strue sfalse transl_sfalse =>
-                                     fun map nd nexits ngoto nret rret => 
-                            (* Don't use "more likely" heuristic *)
-                            do ntrue <- transl_strue map nd nexits ngoto nret rret;
-                            do nfalse <- transl_sfalse map nd nexits ngoto nret rret;
-                            transl_condexpr map c ntrue nfalse).
-             Case Sloop := (fun s tranl_s => fun map nd nexits ngoto nret rret => 
-                                do n1 <- reserve_instr;
-                                do n2 <- transl_s map n1 nexits ngoto nret rret;
-                                do xx <- update_instr n1 (Inop n2);
-                                add_instr (Inop n2)).
-             Case Sblock := (fun s tranl_s => fun map nd nexits ngoto nret rret => 
-                                   transl_s map nd (nd :: nexits) ngoto nret rret).
-             Case Sexit := (fun n => fun map nd nexits ngoto nret rret =>  transl_exit nexits n).
-             Case Sreturn := (fun opt_a => fun map nd nexits ngoto nret rret => 
-                                match opt_a, rret with
-                                | None, _ => ret nret
-                                | Some a, Some r => transl_expr map a r nret
-                                | _, _ => error (Errors.msg "RTLgen: type mismatch on return")
-                                end).
-             Case Slabel := (fun lbl s transl_s => fun map nd nexits ngoto nret rret => 
-                               do ns <- transl_stmt map s' nd nexits ngoto nret rret;
-                               (* Some eror handling stuff about labels *)
-                               ret ns).
-             Case Sgoto := (fun lbl => fun map nd nexits ngoto nret rret => 
-                              match ngoto!lbl with
-                              | None => error (Errors.MSG "Undefined defined label " ::
-                                              Errors.CTX lbl :: nil)
-                              | Some n => ret n
-                              end).
-        FEnd transl_stmt.
-
-        (* Non executable relation spec for transl_stmt, defined via an Inductive type *)
-        Family Specification. 
-             (* tr_move c ns rs nd rd holds if the graph c, between nodes ns and nd, contains 
-                instructions that move the value of register rs to register rd. *)
-             Inductive tr_move (c: code):
-                    node -> reg -> node -> reg -> Prop :=
-                | tr_move_0: forall n r,
-                    tr_move c n r n r
-                | tr_move_1: forall ns rs nd rd,
-                    c!ns = Some (RTL.Iop Asm.Omove (rs :: nil) rd nd) ->
-                    tr_move c ns rs nd rd.
-
-              Inductive reg_map_ok: mapping -> reg -> option ident -> Prop :=
-                | reg_map_ok_novar: forall map rd,
-                    ~reg_in_map map rd ->
-                    reg_map_ok map rd None
-                | reg_map_ok_somevar: forall map rd id,
-                    map.(map_vars)!id = Some rd ->
-                    reg_map_ok map rd (Some id).
- 
-                 
-              FInductive tr_expr (c: code):
-                      mapping -> list reg -> expr -> node -> node -> reg -> option ident -> Prop :=
-                  | tr_Evar: forall map pr id ns nd r rd dst,
-                      map.(map_vars)!id = Some r ->
-                      ((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr)) ->
-                      tr_move c ns r nd rd ->
-                      tr_expr c map pr (Evar id) ns nd rd dst
-                  | tr_Eop: forall map pr op al ns nd rd n1 rl dst,
-                      tr_exprlist c map pr al ns n1 rl ->
-                      c!n1 = Some (Iop op rl rd nd) ->
-                      reg_map_ok map rd dst -> ~In rd pr ->
-                      tr_expr c map pr (Eop op al) ns nd rd dst
-                  | tr_Eload: forall map pr chunk addr al ns nd rd n1 rl dst,
-                      tr_exprlist c map pr al ns n1 rl ->
-                      c!n1 = Some (Iload chunk addr rl rd nd) ->
-                      reg_map_ok map rd dst -> ~In rd pr ->
-                      tr_expr c map pr (Eload chunk addr al) ns nd rd dst
-                  | tr_Econdition: forall map pr a ifso ifnot ns nd rd ntrue nfalse dst,
-                      tr_condition c map pr a ns ntrue nfalse ->
-                      tr_expr c map pr ifso ntrue nd rd dst ->
-                      tr_expr c map pr ifnot nfalse nd rd dst ->
-                      tr_expr c map pr (Econdition a ifso ifnot) ns nd rd dst
-                  | tr_Elet: forall map pr b1 b2 ns nd rd n1 r dst,
-                      ~reg_in_map map r ->
-                      tr_expr c map pr b1 ns n1 r None ->
-                      tr_expr c (add_letvar map r) pr b2 n1 nd rd dst ->
-                      tr_expr c map pr (Elet b1 b2) ns nd rd dst
-                  | tr_Eletvar: forall map pr n ns nd rd r dst,
-                      List.nth_error map.(map_letvars) n = Some r ->
-                      ((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr)) ->
-                      tr_move c ns r nd rd ->
-                      tr_expr c map pr (Eletvar n) ns nd rd dst
-                  with tr_condition (c: code):
-                        mapping -> list reg -> condexpr -> node -> node -> node -> Prop :=
-                    | tr_CEcond: forall map pr cond bl ns ntrue nfalse n1 rl,
-                        tr_exprlist c map pr bl ns n1 rl ->
-                        c!n1 = Some (Icond cond rl ntrue nfalse) ->
-                        tr_condition c map pr (CEcond cond bl) ns ntrue nfalse
-                    | tr_CEcondition: forall map pr a1 a2 a3 ns ntrue nfalse n2 n3,
-                        tr_condition c map pr a1 ns n2 n3 ->
-                        tr_condition c map pr a2 n2 ntrue nfalse ->
-                        tr_condition c map pr a3 n3 ntrue nfalse ->
-                        tr_condition c map pr (CEcondition a1 a2 a3) ns ntrue nfalse
-                    | tr_CElet: forall map pr a b ns ntrue nfalse r n1,
-                        ~reg_in_map map r ->
-                        tr_expr c map pr a ns n1 r None ->
-                        tr_condition c (add_letvar map r) pr b n1 ntrue nfalse ->
-                        tr_condition c map pr (CElet a b) ns ntrue nfalse
-                  with tr_exprlist (c: code):
-                          mapping -> list reg -> exprlist -> node -> node -> list reg -> Prop :=
-                      | tr_Enil: forall map pr n,
-                          tr_exprlist c map pr Enil n n nil
-                      | tr_Econs: forall map pr a1 al ns nd r1 rl n1,
-                          tr_expr c map pr a1 ns n1 r1 None ->
-                          tr_exprlist c map (r1 :: pr) al n1 nd rl ->
-                          tr_exprlist c map pr (Econs a1 al) ns nd (r1 :: rl).
-    
-              FInductive tr_stmt (c: code) (map: mapping):
-                    CminorSel.stmt -> node -> node -> list node -> labelmap -> node -> option reg -> Prop :=
-                  | tr_Sskip: forall ns nexits ngoto nret rret,
-                    tr_stmt c map Sskip ns ns nexits ngoto nret rret
-                  | tr_Sassign: forall id a ns nd nexits ngoto nret rret r,
-                    map.(map_vars)!id = Some r ->
-                    tr_expr c map nil a ns nd r (Some id) ->
-                    tr_stmt c map (Sassign id a) ns nd nexits ngoto nret rret
-                  | tr_Sseq: forall s1 s2 ns nd nexits ngoto nret rret n,
-                    tr_stmt c map s2 n nd nexits ngoto nret rret ->
-                    tr_stmt c map s1 ns n nexits ngoto nret rret ->
-                    tr_stmt c map (Sseq s1 s2) ns nd nexits ngoto nret rret
-                  | tr_Sifthenelse: forall a strue sfalse ns nd nexits ngoto nret rret ntrue nfalse,
-                    tr_stmt c map strue ntrue nd nexits ngoto nret rret ->
-                    tr_stmt c map sfalse nfalse nd nexits ngoto nret rret ->
-                    tr_condition c map nil a ns ntrue nfalse ->
-                    tr_stmt c map (Sifthenelse a strue sfalse) ns nd nexits ngoto nret rret
-                  | tr_Sloop: forall sbody ns nd nexits ngoto nret rret nloop nend,
-                    tr_stmt c map sbody nloop nend nexits ngoto nret rret ->
-                    c!ns = Some(Inop nloop) ->
-                    c!nend = Some(Inop nloop) ->
-                    tr_stmt c map (Sloop sbody) ns nd nexits ngoto nret rret
-                  | tr_Sblock: forall sbody ns nd nexits ngoto nret rret,
-                    tr_stmt c map sbody ns nd (nd :: nexits) ngoto nret rret ->
-                    tr_stmt c map (Sblock sbody) ns nd nexits ngoto nret rret
-                  | tr_Sexit: forall n ns nd nexits ngoto nret rret,
-                    nth_error nexits n = Some ns ->
-                    tr_stmt c map (Sexit n) ns nd nexits ngoto nret rret
-                  | tr_Sreturn_none: forall nret nd nexits ngoto rret,
-                    tr_stmt c map (Sreturn None) nret nd nexits ngoto nret rret
-                  | tr_Sreturn_some: forall a ns nd nexits ngoto nret rret,
-                    tr_expr c map nil a ns nret rret None ->
-                    tr_stmt c map (Sreturn (Some a)) ns nd nexits ngoto nret (Some rret)
-                  | tr_Slabel: forall lbl s ns nd nexits ngoto nret rret n,
-                    ngoto!lbl = Some n ->
-                    c!n = Some (Inop ns) ->
-                    tr_stmt c map s ns nd nexits ngoto nret rret ->
-                    tr_stmt c map (Slabel lbl s) ns nd nexits ngoto nret rret
-                  | tr_Sgoto: forall lbl ns nd nexits ngoto nret rret,
-                    ngoto!lbl = Some ns ->
-                    tr_stmt c map (Sgoto lbl) ns nd nexits ngoto nret rret.   
-
-                Inductive tr_function: CminorSel.function -> RTL.function -> Prop :=
-                    | tr_function_intro:
-                        forall f code rparams map1 s0 s1 i1 rvars map2 s2 i2 nentry ngoto nret rret orret,
-                        add_vars init_mapping f.(CminorSel.fn_params) s0 = OK (rparams, map1) s1 i1 ->
-                        add_vars map1 f.(CminorSel.fn_vars) s1 = OK (rvars, map2) s2 i2 ->
-                        orret = ret_reg f.(CminorSel.fn_sig) rret ->
-                        tr_stmt code map2 f.(CminorSel.fn_body) nentry nret nil ngoto nret orret ->
-                        code!nret = Some(Ireturn orret) ->
-                        tr_function f (RTL.mkfunction
-                                        f.(CminorSel.fn_sig)
-                                        rparams
-                                        f.(CminorSel.fn_stackspace)
-                                        code
-                                        nentry).
-
-                (* Proof that the translation proof meets the specification *)    
-                       
-        FEnd Specification.
-   FEnd RTLgen.   
+  FEnd Mach.  
    
   Family Renumber.
       MetaData _renum_pc. 
