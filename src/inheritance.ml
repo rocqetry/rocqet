@@ -83,6 +83,9 @@ and linkage_elem_concatenate ~(derived : LinkageElem.t) ~(base : LinkageElem.t)
     in
     aux [] lst
   in
+  (* TODO: Since we will never compile a field twice, 
+     we can actualy check for equality of compiled functor 
+     for cases where we don't overriding or not? *)
   match (derived, base) with
   | LinkageElem.ComputationalAxiom derived, LinkageElem.ComputationalAxiom _ ->
       LinkageElem.ComputationalAxiom derived
