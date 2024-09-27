@@ -454,3 +454,10 @@ end
 module PluginCmdScope = struct
   type t = { command : PluginCmd.t; names : Names.Id.t list; close : unit -> unit }
 end
+
+module Frec_arg = struct  
+   type t = 
+     { name: Names.Id.t; 
+       inductive: Libnames.qualid;
+       motive: Constrexpr.constr_expr }
+end

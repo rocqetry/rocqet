@@ -134,9 +134,11 @@ let close_recursion () =
 
   Ctx.clear ()
 
-let open_recursion ~(name : Names.Id.t) ~(inductive_path : Libnames.qualid)
-    ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t)
+let open_recursion 
+    ~(args : Frec_arg.t list)
+    ~(suffix : RecKind.t)
     ~(arguments : Names.Id.t list) =
+  let Frec_arg.{ name; inductive = inductive_path; motive } = List.hd args in  
   Inheritance.inherit_dependencies ~prefix:name;
   let context = Context.get () in
   let motive_expr = Resolver.resolve_constrexpr ~context ~expression:motive in
@@ -375,5 +377,6 @@ let elegant name (args : (Names.Id.t * Constrexpr.constr_expr) list) =
     Context.lookup_inductive_for_recursion ~name:inductive_name context
   in
   let suffix = infer_inductive_suffix inductive in
-  open_recursion ~name ~inductive_path:inductive_name ~motive ~suffix
+  let args = [ Frec_arg.{ name; inductive = inductive_name; motive }  ] in
+  open_recursion ~args ~suffix
     ~arguments:(List.map fst middle)
