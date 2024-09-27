@@ -98,6 +98,8 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "FEnd" ident(scope_name) ] -> { Entry.fend scope_name }
 
+| [ "FEnd" ne_ident_list_sep(scope_names, "with") ] -> { Entry.fend_with scope_names }
+
 | [ "FDefinition" ident(name) ":" llconstr_ip(body_type) ":=" llconstr_ip(body_expr)  ] ->
    { Entry.definition ~name ~body_type body_expr }
 
@@ -110,23 +112,25 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "FDefinition" ident(name) ":=" llconstr_ip(body_expr)  ] ->
    { Entry.definition ~name body_expr }
 
-| [ "FRecursion" ident(name) 
+(*| [ "FRecursion" ident(name) 
                "about" reference_ip(inductive)
                "motive" llconstr_ip(motive)
                "by" ident(reckind)  ] ->  
-   { Entry.frecursion ~name ~inductive ~motive ~suffix:(Types.RecKind.of_name reckind) }
+   { Entry.frecursion ~name ~inductive ~motive ~suffix:(Types.RecKind.of_name reckind) }*)
 
-| [ "FRecursion" ident(name) ":" argument_flist(args) ] -> 
+| [ "FRecursion" ident(name) ] -> { Entry.frecursion_extension ~name } 
+
+| [ "FRecursion" induction_decls(ind_decls) "by" ident(reckind) ] -> 
+   { () }
+
+(*| [ "FRecursion" ident(name) ":" argument_flist(args) ] -> 
    { Entry.frecursion_elegant name args }
 
 (* Default case is by _rec *)
 | [ "FRecursion" ident(name) 
                "about" reference_ip(inductive)
                "motive" llconstr_ip(motive) ] ->  
-   { Entry.frecursion ~name ~inductive ~motive ~suffix:Types.RecKind.Rec }
-
-| [ "FRecursion" ident(name) ] -> 
-   { Entry.frecursion_extension ~name } 
+   { Entry.frecursion ~name ~inductive ~motive ~suffix:Types.RecKind.Rec }*)
 
 | [ "Case" ident(name) list1ident(arguments) ":=" constr(handler) ] -> 
    {  Entry.frecursion_handler ~name ~arguments:(Some arguments) ~handler }

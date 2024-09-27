@@ -7,41 +7,46 @@ let finductive inductive_definitions =
   (* PluginScopes.ensure_in_scope ~scope:PluginCmd.Family;*)
   Inductive.add_inductive_definition inductive_definitions
 
-let fend scope_name =
-  match PluginScopes.pop scope_name with
+let fend_with (scope_names: Names.Id.t list) = 
+  match PluginScopes.pop scope_names with
   | None -> Errors.fail ~info:"There is no open scope"
   | Some scope ->
       let PluginCmdScope.{ close; _ } = scope in
       close ()
 
+let fend scope_name = fend_with [scope_name]  
+
 let family name =
+  let names = [name] in
   Family.open_family name;
   PluginScopes.push
     PluginCmdScope.
-      { name; command = PluginCmd.Family; close = Family.close_family }
+      { names; command = PluginCmd.Family; close = Family.close_family }
 
 let family_extends ~derived ~base =
+  let names = [derived] in
   Family.open_family_with_base ~base ~name:derived;
   PluginScopes.push
     PluginCmdScope.
       {
-        name = derived;
+        names;
         command = PluginCmd.Family;
         close = Family.close_family;
       }
 
-let family_extends_list ~derived ~bases =
-  let name = derived in
-  Family.open_family_with_base_list ~name ~bases;
+let family_extends_list ~derived ~bases =  
+  let names = [derived] in
+  Family.open_family_with_base_list ~name:derived ~bases;
   PluginScopes.push
     PluginCmdScope.
-      { name; command = PluginCmd.Family; close = Family.close_family }
+      { names; command = PluginCmd.Family; close = Family.close_family }
 
 let metadata name =
+  let names = [name] in
   Metadata.open_metadata name;
   PluginScopes.push
     PluginCmdScope.
-      { name; command = PluginCmd.MetaData; close = Metadata.close_metadata }
+      { names; command = PluginCmd.MetaData; close = Metadata.close_metadata }
 
 let definition ~name ?body_type body_expr =
   Definition.add_definition ~name ?body_type body_expr
@@ -53,38 +58,44 @@ let foverride = Definition.override
 
 let frecursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t) =
+  (* TODO *)
+  let names = [name] in 
   Recursion.open_recursion ~name ~inductive_path:inductive ~motive ~suffix
     ~arguments:[];
   PluginScopes.push
     PluginCmdScope.
-      { name; command = PluginCmd.Recursion; close = Recursion.close_recursion }
+      { names; command = PluginCmd.Recursion; close = Recursion.close_recursion }
 
 let frecursion_extension ~(name : Names.Id.t) =
+  let names = [name] in
   Recursion.open_recursion_extension ~name;
   PluginScopes.push
     PluginCmdScope.
-      { name; command = PluginCmd.Recursion; close = Recursion.close_recursion }
+      { names; command = PluginCmd.Recursion; close = Recursion.close_recursion }
 
 let frecursion_handler = Recursion.add_handler
 
 let frecursion_elegant name args =
+  let names = [name] in
   Recursion.elegant name args;
   PluginScopes.push
     PluginCmdScope.
-      { name; command = PluginCmd.Recursion; close = Recursion.close_recursion }
+      { names; command = PluginCmd.Recursion; close = Recursion.close_recursion }
 
 let finduction ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     ~(motive : Constrexpr.constr_expr) =
+  let names = [name] in
   Theorem.open_theorem ~name ~inductive ~motive;
   PluginScopes.push
     PluginCmdScope.
-      { name; command = PluginCmd.Induction; close = Theorem.close_theorem }
+      { names; command = PluginCmd.Induction; close = Theorem.close_theorem }
 
 let finduction_extension ~(name : Names.Id.t) =
+  let names = [name] in
   Theorem.open_theorem_extension ~name;
   PluginScopes.push
     PluginCmdScope.
-      { name; command = PluginCmd.Induction; close = Theorem.close_theorem }
+      { names; command = PluginCmd.Induction; close = Theorem.close_theorem }
 
 (* FProof *)
 let fproof () = Theorem.start_proving ()

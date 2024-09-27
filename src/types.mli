@@ -79,7 +79,7 @@ module PluginCmd : sig
 end
 
 module PluginCmdScope : sig
-  type t = { command : PluginCmd.t; name : Names.Id.t; close : unit -> unit }
+  type t = { command : PluginCmd.t; names : Names.Id.t list; close : unit -> unit }
 end
 
 module rec LinkageElem : sig

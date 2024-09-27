@@ -452,5 +452,5 @@ end
 (* A scope is a plugin command enriched with a name and a "closing" handler *)
 (* `close` is a generic handle that is called to close the scope *)
 module PluginCmdScope = struct
-  type t = { command : PluginCmd.t; name : Names.Id.t; close : unit -> unit }
+  type t = { command : PluginCmd.t; names : Names.Id.t list; close : unit -> unit }
 end
