@@ -206,7 +206,7 @@ let generate_one_computational_axiom ~inductive ~recursor_name ~recursor_path
     in
     let types =
       flatten_inductive_constructor_type ~inductive
-        ~constructor:constructor_name
+        ~constructor:constructor_name 
     in
     let arguments =
       constructor_params
