@@ -98,7 +98,7 @@ module VernacInductive = struct
 
   (* base -> derived *)
   let path_subtitution (inductive : t) ~source ~target =
-    let check_one_type ((((_, (_, _)) as a), b, c, newcstrs), _) =
+    let check_one_type (((u, paramty, tyty, newcstrs): Vernacexpr.inductive_expr), _) =
       let childcstrs =
         match newcstrs with
         | Vernacexpr.Constructors constr ->
@@ -112,7 +112,8 @@ module VernacInductive = struct
             Vernacexpr.Constructors base_constr_renamed
         | _ -> Errors.fail ~info:"Record types are not yet supported"
       in
-      let child_ind = (a, b, c, childcstrs) in
+      let tyty = tyty |> Option.map (Naming.replace_qualid_root ~source ~target) in
+      let child_ind = (u, paramty, tyty, childcstrs) in
       (child_ind, [])
     in
     inductive |> List.map check_one_type
