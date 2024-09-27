@@ -46,6 +46,9 @@ let metadata name =
 let definition ~name ?body_type body_expr =
   Definition.add_definition ~name ?body_type body_expr
 
+let opaque_definition ~name ~body_type ~body_expr =
+  Definition.add_opaque_definition ~name ~body_type ~body_expr
+
 let frecursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t) =
   Recursion.open_recursion ~name ~inductive_path:inductive ~motive ~suffix
