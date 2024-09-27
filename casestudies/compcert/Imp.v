@@ -1969,17 +1969,16 @@ Inductive bitfield : Type :=
                     final_state (self__Sem.Returnstate (Vint r) self__Sem.Kstop m) r.
             FEnd final_state.
        FEnd Sem.
-     FEnd CminorVariant.
-
+  FEnd CminorVariant.
   
-  Family Csharpminor extends CminorVariant.       
+  Family Csharpminor extends CminorVariant.
+       (*Override FDefinition fenv := PTree.t (block * Z).
 
-       Override FDefinition fenv : Type := PTree.t (block * Z).
-       Override FDefinition empty_fenv : Type := PTree.empty (block * Z).
-
-       Override FDefinition free_function_env (m : mem) (e : function_env) (f : function) :=
+       Override FDefinition empty_fenv := PTree.empty (block * Z).
+       Override FDefinition free_function_env m e f :=
            Mem.free_list m (blocks_of_env e).
-       Override FDefinition update_env e := e.
+       Override FDefinition update_env e := e.*)
+       
        (*MetaData function.
        Record function : Type := mkfunction {
          fn_sig: signature;
@@ -2000,11 +1999,12 @@ Inductive bitfield : Type :=
 
   Family Cminor extends CminorVariant.
 
-       Override FDefinition fenv : Type := val. (* stack pointer *)
-       Override FDefinition empty_fenv : Type := Z.
+       Override FDefinition fenv := val. (* stack pointer *)
+       Override FDefinition empty_fenv := Z.
 
-       Override FDefinition free_function_env (m : mem) (sp : function_env) (f : function) := 
-		 Mem.free m sp 0 f.(fn_stackspace).
+       Override FDefinition free_function_env m sp f  := 
+	 Mem.free m sp 0 f.(fn_stackspace).
+       
        Override FDefinition update_env sp := (Vptr sp Ptrofs.zero).
 
   FEnd Cminor.

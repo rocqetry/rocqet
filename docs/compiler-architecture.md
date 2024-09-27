@@ -159,6 +159,7 @@ family Base {
 	family SplitLong extends CminorTransl { }
 	family SelDiv extends CminorTransl { }
 	
+	** EXtend the nananopaases in the reserve direction to enable sharing
 	
 	family RTL { }
 	
