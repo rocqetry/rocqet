@@ -332,10 +332,7 @@ let handler_type_for_recursion ~(name : Names.Id.t)
                  [ inductive_name; case_name ] |> Names.Id.Set.of_list
                in               
                Naming.add_prefix_path ~path ~names ~target:handler
-         in
-         let sigma, env = global_env () in
-         let s = Pp.string_of_ppcmds @@ Ppconstr.pr_constr_expr env sigma handler in 
-         Printf.printf "Handler before resolving: %s\n" s;
+         in         
          let handler =
            Resolver.resolve_constrexpr ~context:(Env.Context.get ())
              ~expression:handler
