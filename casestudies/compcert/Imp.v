@@ -2006,8 +2006,16 @@ Inductive bitfield : Type :=
 	 Mem.free m sp 0 f.(fn_stackspace).
        
        Override FDefinition update_env sp := (Vptr sp Ptrofs.zero).
-
+  
   FEnd Cminor.
+
+  Family CminorTransl. 
+      Family Source extends CminorVariant.
+      FEnd Source. 
+
+      Family Target extends CminorVariant.
+      FEnd Target.      
+  FEnd CminorTransl.
   
   (* Clight -> Csharpminor *)
   Family Cshmgen.
