@@ -18,6 +18,8 @@ val metadata : Names.Id.t -> unit
 (* Handle a `FInductive ... := ...` command *)
 val finductive : VernacInductive.t -> unit
 
+val fend_with: Names.Id.t list -> unit
+
 (* Handle a `FEnd ...` command *)
 val fend : Names.Id.t -> unit
 

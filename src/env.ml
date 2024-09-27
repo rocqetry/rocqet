@@ -18,17 +18,19 @@ module PluginScopes = struct
         } ->
         scopes := scope :: !scopes
 
+  let names_to_string names = names |> List.map Names.Id.to_string |> String.concat " with "
+
   (* Basically, the caller wants to close the scope with
      name `scope_name`. `scope_name` can also serve as a form
      of verification, ensuring that we pop the right scope *)
-  let pop scope_name =
+  let pop scope_names =
     match !scopes with
     | [] -> None (* The caller should know how to handle this *)
-    | ({ PluginCmdScope.name; _ } as scope) :: scopes_rest
-      when name = scope_name ->
+    | ({ PluginCmdScope.names; _ } as scope) :: scopes_rest
+      when names = scope_names ->
         scopes := scopes_rest;
         Some scope
-    | { PluginCmdScope.name; command; _ } :: rest ->
+    | { PluginCmdScope.names; command; _ } :: rest ->
         let command =
           match command with
           | Lemma -> "FLemma"
@@ -36,27 +38,25 @@ module PluginScopes = struct
           | Induction -> "FInduction"
           | Recursion -> "FRecursion"
           | MetaData -> "MetaData"
-          | Trait -> "Trait"
-        in
+          | Trait -> "Trait"        
+        in        
         let rest =
           rest
-          |> List.map (fun (scope : PluginCmdScope.t) -> scope.name)
-          |> List.map Names.Id.to_string
+          |> List.map (fun (scope : PluginCmdScope.t) -> names_to_string scope.names)          
           |> String.concat ", "
-        in
+        in        
         let info =
           Printf.sprintf
             "Closing wrong scope: expected to close a scope which was opened \
              by \"%s %s.\" Commands waiting to be closed: %s."
-            command (Names.Id.to_string name) rest
+            command (names_to_string names) rest
         in
         Errors.fail ~info
 
   let display () =
     let rest =
       !scopes
-      |> List.map (fun (scope : PluginCmdScope.t) -> scope.name)
-      |> List.map Names.Id.to_string
+      |> List.map (fun (scope : PluginCmdScope.t) -> names_to_string scope.names)
       |> String.concat ", "
     in
     Feedback.msg_info (Pp.str rest)
