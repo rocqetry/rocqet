@@ -56,11 +56,12 @@ let opaque_definition ~name ~body_type ~body_expr =
 
 let foverride = Definition.override 
 
-let frecursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
-    ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t) =
-  (* TODO *)
-  let names = [name] in 
-  Recursion.open_recursion ~name ~inductive_path:inductive ~motive ~suffix
+let frecursion 
+     (args : Frec_arg.t list)
+     (suffix : RecKind.t) =
+  (* TODO: Check that all the inductives come from the same inductive group  *)
+  let names = args |> List.map (fun Frec_arg.{ name; _ } -> name) in 
+  Recursion.open_recursion ~args ~suffix
     ~arguments:[];
   PluginScopes.push
     PluginCmdScope.

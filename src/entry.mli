@@ -53,10 +53,8 @@ val foverride_lemma :
 
 (* Handle an `FRecursion ...` *)
 val frecursion :
-  name:Names.Id.t ->
-  inductive:Libnames.qualid ->
-  motive:Constrexpr.constr_expr ->
-  suffix:RecKind.t ->
+  Frec_arg.t list ->
+  RecKind.t ->
   unit
 
 (* Handle an `FRecursion ...` extension *)

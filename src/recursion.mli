@@ -3,9 +3,7 @@ open Types
 val close_recursion : unit -> unit
 
 val open_recursion :
-  name:Names.Id.t ->
-  inductive_path:Libnames.qualid ->
-  motive:Constrexpr.constr_expr ->
+  args:Frec_arg.t list ->
   suffix:RecKind.t ->
   arguments:Names.Id.t list ->
   unit

@@ -196,3 +196,10 @@ end
 and LinkageCtx : sig
   type t = Toplevel of Linkage.t | Nested of t * Linkage.t
 end
+
+module Frec_arg : sig 
+   type t = 
+     { name: Names.Id.t; 
+       inductive: Libnames.qualid;
+       motive: Constrexpr.constr_expr }
+end 
