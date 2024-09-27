@@ -209,6 +209,8 @@ module CompiledRecursors = struct
   }
 end
 
+(* TODO: Keep only the big principle and 
+   compute the handler types on demand *)
 module Recursor = struct
   type t = {
     inductive_names : Names.Id.t list;
@@ -220,6 +222,7 @@ end
 (* Contains the type of the
    "rec" principle and the types
    of each handler for that particular "rec" *)
+(* map from inductive to the "separate big" principle *)
 module Recursors = struct
   type t = Recursor.t RecursorStore.t
 end
