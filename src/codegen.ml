@@ -492,6 +492,11 @@ let compile_computational_axiom_implementation ~axiom_name ~axiom_expr =
   let ty = Naming.replace_self_qualification ~target:None axiom_expr in
   B.thunk (B.construct_term_using_proof ~name:axiom_name ~proof:auto_tactic ~ty)
 
+(*let compile_closing_fact_implementation ~name ~(script: Ltac_plugin.Tacexpr.raw_tactic_expr) =   
+  let ty = Naming.replace_self_qualification ~target:None axiom_expr in
+  B.thunk (B.construct_term_using_proof ~name:axiom_name ~proof:script ~ty)*)
+  
+
 (* The name of the equation to generate axioms for *)
 let compile_computational_axiom_signature
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
