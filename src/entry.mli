@@ -42,6 +42,11 @@ val opaque_definition :
   body_expr:Constrexpr.constr_expr ->
   unit
 
+val foverride:
+  name:Names.Id.t ->
+  expr:Constrexpr.constr_expr ->
+  unit
+
 (* Handle an `FRecursion ...` *)
 val frecursion :
   name:Names.Id.t ->

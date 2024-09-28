@@ -9,3 +9,5 @@ val add_opaque_definition :
   body_type:Constrexpr.constr_expr ->
   body_expr:Constrexpr.constr_expr ->
   unit
+
+val override : name:Names.Id.t -> expr:Constrexpr.constr_expr -> unit
