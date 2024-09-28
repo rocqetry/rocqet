@@ -316,6 +316,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
             MetaDataSection { metadata with compiled_context }
         | OpaqueFieldDefinition field ->
             OpaqueFieldDefinition { field with compiled_context }
+        | ClosingFact fact -> ClosingFact { fact with compiled_context }
         (* Exhaustiveness checks *)
         | RecursorDefinition recursive ->
             let inductive, _, _ =

@@ -5,6 +5,7 @@ DECLARE PLUGIN "nfpop.plugin"
   [@@@warning "-27"]
   (* Diable warnings about unused names in the generared ml file *)
   open Stdarg
+  open Ltac_plugin.Tacarg
   open Pvernac.Vernac_
   open Pcoq.Constr
   open Pcoq.Prim
@@ -150,6 +151,9 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "MetaData" ident(i) ] -> { Entry.metadata i }
 
 | [ "FDisplay" "PluginScope" ] -> { Entry.display_plugin_scope () }
+
+| [ "Closing" "Fact" ident(fname) ":" llconstr_ip(eT) "by" "{" tactic(script) "}" ] -> 
+  { () }
 
 END
 

@@ -148,6 +148,12 @@ module rec LinkageElem : sig
         compiled_impl : CompiledModule.t;
         default_ctx_params : CompiledModule.t list;
       }
+    | ClosingFact of { 
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        script: Ltac_plugin.Tacexpr.raw_tactic_expr;
+        default_ctx_params : CompiledModule.t list;
+    }
 end
 
 and Linkage : sig

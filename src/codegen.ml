@@ -658,6 +658,11 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
   | Bwd.Snoc
       ( _,
         ( _,
+          ClosingFact
+            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
+  | Bwd.Snoc
+      ( _,
+        ( _,
           FamilyDefinition
             { default_ctx_params; compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
@@ -718,7 +723,7 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
         let* _ = compile_fields fields in
         names
         |> List.map (fun name -> B.define_term ~name (qualify name))
-        |> flatmap
+        |> flatmap    
     | Snoc (fields, (_, ComputationalAxiom { name; _ })) ->
         let open B in
         let* _ = compile_fields fields in
@@ -744,6 +749,10 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
     | Snoc (fields, (name, FieldDefinition _)) ->
+        let open B in
+        let* _ = compile_fields fields in
+        B.define_term ~name (qualify name)
+    | Snoc (fields, (name, ClosingFact _ )) ->
         let open B in
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
@@ -838,6 +847,11 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         let* _ = compile_fields fields ctx in
         compile_computational_axiom_implementation ~axiom_name:name
           ~axiom_expr:axiom
+    | Snoc (fields, (_, ClosingFact { script; _ })) ->
+        let open B in
+        let* _ = compile_fields fields ctx in
+        script |> ignore; 
+        Errors.fail ~info:"TODO"
     | Snoc (fields, (_, FamilyDefinition { linkage = nested_linkage; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in
@@ -964,6 +978,12 @@ let compile_linkage_signature linkage =
         ( _,
           ( _,
             TheoremDefinition
+              { default_ctx_params; compiled_context; compiled_signature; _ } )
+        )
+    | Bwd.Snoc
+        ( _,
+          ( _,
+            ClosingFact
               { default_ctx_params; compiled_context; compiled_signature; _ } )
         )
     | Bwd.Snoc

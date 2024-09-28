@@ -297,7 +297,13 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
         default_ctx_params : CompiledModule.t list;
-      }    
+      }
+    | ClosingFact of { 
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        script: Ltac_plugin.Tacexpr.raw_tactic_expr;
+        default_ctx_params : CompiledModule.t list;
+    }
 end =
   LinkageElem
 
@@ -339,13 +345,14 @@ end = struct
     match elem with
     | LinkageElem.MetaDataSection metadata ->
         LinkageElem.MetaDataSection metadata
-    | LinkageElem.InductiveConstr constr -> LinkageElem.InductiveConstr constr
-    | LinkageElem.OpaqueFieldDefinition definition ->
-        LinkageElem.OpaqueFieldDefinition definition
-    | LinkageElem.ComputationalAxiom comp ->
+    | ClosingFact fact -> ClosingFact fact
+    | InductiveConstr constr -> InductiveConstr constr
+    | OpaqueFieldDefinition definition ->
+        OpaqueFieldDefinition definition
+    | ComputationalAxiom comp ->
         let axiom = Naming.replace_qualid_root ~source ~target comp.axiom in
-        LinkageElem.ComputationalAxiom { comp with axiom }
-    | LinkageElem.FamilyDefinition family ->
+        ComputationalAxiom { comp with axiom }
+    | FamilyDefinition family ->
         let g (name, expr) =
           if Names.Id.equal source name then (target, expr) else (name, expr)
         in
@@ -353,18 +360,18 @@ end = struct
         let linkage =
           { (path_subtitution family.linkage ~source ~target) with context }
         in
-        LinkageElem.FamilyDefinition { family with linkage }
-    | LinkageElem.InductiveDefinition definition ->
-        LinkageElem.InductiveDefinition
+        FamilyDefinition { family with linkage }
+    | InductiveDefinition definition ->
+        InductiveDefinition
           {
             definition with
             inductive =
               VernacInductive.path_subtitution definition.inductive ~source
                 ~target;
           }
-    | LinkageElem.FieldDefinition field -> FieldDefinition field
-    | LinkageElem.RecursorDefinition definition -> RecursorDefinition definition
-    | LinkageElem.TheoremDefinition definition -> TheoremDefinition definition
+    | FieldDefinition field -> FieldDefinition field
+    | RecursorDefinition definition -> RecursorDefinition definition
+    | TheoremDefinition definition -> TheoremDefinition definition
 
   and path_subtitution linkage ~source ~target =
     let f (name, elem) = (name, path_substitution_elem elem ~source ~target) in
