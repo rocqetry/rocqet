@@ -28,6 +28,8 @@ let add_definition ~name ?body_type body_expr =
 
 let add_opaque_definition ~name ~body_type ~body_expr = 
   Inheritance.inherit_dependencies ~prefix:name;
+  let type_name = Naming.fresh_name ~prefix:"OpaqueTy" in
+  let _ = add_definition ~name:type_name body_type in 
   let context = Context.get () in
   let default_ctx_params =
     context |> Context.family_linkage |> function
@@ -35,10 +37,11 @@ let add_opaque_definition ~name ~body_type ~body_expr =
   in
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:name context
-  in
+  in  
   let body_expr = Resolver.resolve_constrexpr ~context ~expression:body_expr in
   let body_type =
-    Resolver.resolve_constrexpr ~context ~expression:body_type    
+    let expression = Constrexpr_ops.mkIdentC type_name in
+    Resolver.resolve_constrexpr ~context ~expression
   in
   let compiled_impl =
     Codegen.compile_definition ~name ~body_type ~body_expr parameters
@@ -48,6 +51,12 @@ let add_opaque_definition ~name ~body_type ~body_expr =
   in 
   let elem =
     LinkageElem.OpaqueFieldDefinition
-      { compiled_context; compiled_signature; compiled_impl; default_ctx_params }
+      {
+        type_name;
+        compiled_context;
+        compiled_signature;
+        compiled_impl;
+        default_ctx_params
+      }
   in
   Context.add_field ~name ~elem

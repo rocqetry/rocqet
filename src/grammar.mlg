@@ -100,11 +100,11 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "FDefinition" ident(name) ":" llconstr_ip(body_type) ":=" llconstr_ip(body_expr)  ] ->
    { Entry.definition ~name ~body_type body_expr}
 
-| [ "FOpaque" "FDefinition" ident(name) ":" llconstr_ip(body_type) ":=" llconstr_ip(body_expr)  ] ->
+| [ "FOpaque" "Definition" ident(name) ":" llconstr_ip(body_type) ":=" llconstr_ip(body_expr)  ] ->
    { Entry.opaque_definition ~name ~body_type ~body_expr }
 
-| [ "FOverride" "FDefinition" ident(name) ":" llconstr_ip(body_type) ":=" llconstr_ip(body_expr)  ] ->
-   { Entry.opaque_definition ~name ~body_type ~body_expr }
+| [ "FOverride" "Definition" ident(name) ":=" llconstr_ip(body_expr)  ] ->
+   { () }
 
 | [ "FDefinition" ident(name) ":=" llconstr_ip(body_expr)  ] ->
    { Entry.definition ~name body_expr }

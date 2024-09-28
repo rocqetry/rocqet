@@ -259,7 +259,8 @@ module rec LinkageElem : sig
       }
     (* Opaque definitions are overridable *)
     | OpaqueFieldDefinition of {
-        compiled_context : CompiledModuleType.t;
+        type_name : Names.Id.t;
+        compiled_context : CompiledModuleType.t;        
         compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : CompiledModule.t list;
@@ -296,7 +297,7 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
         default_ctx_params : CompiledModule.t list;
-      }
+      }    
 end =
   LinkageElem
 
