@@ -10,9 +10,9 @@ module Ctx = struct
   type t = {
     name : Names.Id.t;
     compiled_context : CompiledModuleType.t;
-    parameters : (Names.Id.t * Constrexpr.module_ast) list;
-    goal : Constrexpr.constr_expr;
+    parameters : (Names.Id.t * Constrexpr.module_ast) list;    
     module_name : Names.Id.t;
+    type_name : Names.Id.t;
   }
 
   let store = Summary.ref ~name:"LemmaCtx" (None : t option)
@@ -27,7 +27,12 @@ module Ctx = struct
 end
 
 let prepare_proving () =
-  let Ctx.{ module_name; parameters; goal; name; _ } = Ctx.get () in
+  let Ctx.{ module_name; parameters; type_name; name; _ } = Ctx.get () in
+  let goal =
+    let context = Context.get () in
+    let expression = Constrexpr_ops.mkIdentC type_name in
+    Resolver.resolve_constrexpr ~context ~expression
+  in
   let _ = DB.start_module module_name parameters in
   let sigma, env = Termutils.global_env () in
   let sigma, internalized_goal = Termutils.internalize env goal sigma in
@@ -37,29 +42,55 @@ let prepare_proving () =
   ongoing_proof
 
 let open_flemma name t =
-  let context = Context.get () in
-  let goal = Resolver.resolve_constrexpr ~context ~expression:t in
+  Inheritance.inherit_dependencies ~prefix:name;
+  let type_name = Naming.fresh_name ~prefix:"LemmaTy" in
+  let _ = Definition.add_definition ~name:type_name t in 
+  let context = Context.get () in  
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:name context
   in
   let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in
-  let ctx = Ctx.{ name; compiled_context; parameters; goal; module_name } in
+  let ctx = Ctx.{ name; compiled_context; parameters; type_name; module_name } in
   Ctx.update ctx
 
+let override name =
+  Inheritance.inherit_dependencies ~prefix:name;
+  let context = Context.get () in
+  let base_elem = Inheritance.lookup_field_in_base ~field:name ~context in
+  let type_name = 
+     match base_elem with
+     | None -> Errors.fail ~info:"Can't override. No such element in base"
+     | Some (LinkageElem.OpaqueFieldDefinition { type_name; _ }) -> type_name        
+     | Some _ -> Errors.fail ~info:"Can't override. Only Opaque fields can be overriden"
+  in
+  let context = Context.get () in  
+  let compiled_context, parameters =
+    Codegen.compile_linkage_context ~field_name:name context
+  in
+  let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in
+  let ctx = Ctx.{ name; compiled_context; parameters; type_name; module_name } in
+  Ctx.update ctx
+  
+
 let close_flemma () =
-  let Ctx.{ parameters; goal; name; compiled_context; _ } = Ctx.get () in
-  let default_ctx_params =
-    let context = Context.get () in
+  let Ctx.{ parameters; type_name; name; compiled_context; _ } = Ctx.get () in
+  let context = Context.get () in
+  let default_ctx_params =    
     context |> Context.family_linkage |> function
     | { default_ctx_params; _ } -> default_ctx_params
-  in
+  in  
   let compiled_impl = DB.end_module () in
+  let goal =    
+    let expression = Constrexpr_ops.mkIdentC type_name in
+    Resolver.resolve_constrexpr ~context ~expression
+  in
   let compiled_signature =
     Codegen.compile_lemma_signature ~name ~ty:goal ~parameters
   in
   let elem =
     LinkageElem.OpaqueFieldDefinition
       {
+        type_name;
         compiled_context;
         compiled_impl;
         compiled_signature;
@@ -68,3 +99,5 @@ let close_flemma () =
   in
   Context.add_field ~name ~elem;
   Ctx.clear ()
+
+

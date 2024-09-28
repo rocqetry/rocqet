@@ -109,6 +109,7 @@ module rec LinkageElem : sig
         default_ctx_params : CompiledModule.t list;
       }
     | OpaqueFieldDefinition of {
+        type_name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;

@@ -9,6 +9,7 @@
  (modules
   ;Handler_types
   ;C_compcert
+  ;Opaque_override 
   ;Linkage_concat
   ;Demo
   ;STLC

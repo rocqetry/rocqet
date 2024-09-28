@@ -36,6 +36,20 @@ val definition :
   Constrexpr.constr_expr ->
   unit
 
+val opaque_definition :
+  name:Names.Id.t ->
+  body_type:Constrexpr.constr_expr ->
+  body_expr:Constrexpr.constr_expr ->
+  unit
+
+val foverride:
+  name:Names.Id.t ->
+  expr:Constrexpr.constr_expr ->
+  unit
+
+val foverride_lemma :
+  Names.Id.t -> unit
+
 (* Handle an `FRecursion ...` *)
 val frecursion :
   name:Names.Id.t ->

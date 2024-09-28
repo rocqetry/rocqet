@@ -46,6 +46,11 @@ let metadata name =
 let definition ~name ?body_type body_expr =
   Definition.add_definition ~name ?body_type body_expr
 
+let opaque_definition ~name ~body_type ~body_expr =
+  Definition.add_opaque_definition ~name ~body_type ~body_expr
+
+let foverride = Definition.override 
+
 let frecursion ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     ~(motive : Constrexpr.constr_expr) ~(suffix : RecKind.t) =
   Recursion.open_recursion ~name ~inductive_path:inductive ~motive ~suffix
@@ -88,6 +93,7 @@ let flemma name t = Lemma.open_flemma name t
 (* PluginScopes.push
    PluginCmdScope.
      { name; command = PluginCmd.Lemma; close = Lemma.close_flemma }*)
+let foverride_lemma = Lemma.override
 
 let close_flemma = Lemma.close_flemma
 let display_plugin_scope = PluginScopes.display

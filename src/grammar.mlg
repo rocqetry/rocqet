@@ -100,6 +100,12 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "FDefinition" ident(name) ":" llconstr_ip(body_type) ":=" llconstr_ip(body_expr)  ] ->
    { Entry.definition ~name ~body_type body_expr}
 
+| [ "FOpaque" "Definition" ident(name) ":" llconstr_ip(body_type) ":=" llconstr_ip(body_expr)  ] ->
+   { Entry.opaque_definition ~name ~body_type ~body_expr }
+
+| [ "FOverride" "Definition" ident(name) ":=" llconstr_ip(expr)  ] ->
+   { Entry.foverride ~name ~expr }
+
 | [ "FDefinition" ident(name) ":=" llconstr_ip(body_expr)  ] ->
    { Entry.definition ~name body_expr }
 
@@ -135,6 +141,9 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
    { Entry.finduction_extension ~name }
 
 | [ "FLemma" ident(name) ":" llconstr_ip(t) ] -> { Entry.flemma name t }
+
+| [ "FOverride" "Lemma" ident(name)  ] ->
+   { Entry.foverride_lemma name }
 
 | [ "CloseFLemma" ] -> { Entry.close_flemma () }
 
