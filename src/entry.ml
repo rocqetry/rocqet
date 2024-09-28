@@ -93,6 +93,7 @@ let flemma name t = Lemma.open_flemma name t
 (* PluginScopes.push
    PluginCmdScope.
      { name; command = PluginCmd.Lemma; close = Lemma.close_flemma }*)
+let foverride_lemma = Lemma.override
 
 let close_flemma = Lemma.close_flemma
 let display_plugin_scope = PluginScopes.display

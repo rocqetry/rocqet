@@ -53,6 +53,25 @@ let open_flemma name t =
   let ctx = Ctx.{ name; compiled_context; parameters; type_name; module_name } in
   Ctx.update ctx
 
+let override name =
+  Inheritance.inherit_dependencies ~prefix:name;
+  let context = Context.get () in
+  let base_elem = Inheritance.lookup_field_in_base ~field:name ~context in
+  let type_name = 
+     match base_elem with
+     | None -> Errors.fail ~info:"Can't override. No such element in base"
+     | Some (LinkageElem.OpaqueFieldDefinition { type_name; _ }) -> type_name        
+     | Some _ -> Errors.fail ~info:"Can't override. Only Opaque fields can be overriden"
+  in
+  let context = Context.get () in  
+  let compiled_context, parameters =
+    Codegen.compile_linkage_context ~field_name:name context
+  in
+  let module_name = Naming.fresh_name ~prefix:(Names.Id.to_string name) in
+  let ctx = Ctx.{ name; compiled_context; parameters; type_name; module_name } in
+  Ctx.update ctx
+  
+
 let close_flemma () =
   let Ctx.{ parameters; type_name; name; compiled_context; _ } = Ctx.get () in
   let context = Context.get () in
@@ -80,3 +99,5 @@ let close_flemma () =
   in
   Context.add_field ~name ~elem;
   Ctx.clear ()
+
+

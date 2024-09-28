@@ -47,6 +47,9 @@ val foverride:
   expr:Constrexpr.constr_expr ->
   unit
 
+val foverride_lemma :
+  Names.Id.t -> unit
+
 (* Handle an `FRecursion ...` *)
 val frecursion :
   name:Names.Id.t ->
