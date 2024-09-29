@@ -241,7 +241,7 @@ module Vernac = struct
     let evd, type_checked_goal = Constrintern.interp_constr_evars env evd ty in
     let info = Declare.Info.make () in
     let cinfo = Declare.CInfo.make ~name ~typ:type_checked_goal () in
-    let is_starting_plain = true in
+    let is_starting_plain = false in
     let proof = Declare.Proof.start ~info ~cinfo evd in
     let proof =
       (* apply unfold if not starting_plain  *)

@@ -492,6 +492,10 @@ let compile_computational_axiom_implementation ~axiom_name ~axiom_expr =
   let ty = Naming.replace_self_qualification ~target:None axiom_expr in
   B.thunk (B.construct_term_using_proof ~name:axiom_name ~proof:auto_tactic ~ty)
 
+let compile_closing_fact_implementation ~name ~type_name ~(script: Ltac_plugin.Tacexpr.raw_tactic_expr) =   
+  let ty = Constrexpr_ops.mkIdentC type_name in  
+  B.thunk (B.construct_term_using_proof ~name ~proof:script ~ty)
+
 (* The name of the equation to generate axioms for *)
 let compile_computational_axiom_signature
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
@@ -658,6 +662,11 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
   | Bwd.Snoc
       ( _,
         ( _,
+          ClosingFact
+            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
+  | Bwd.Snoc
+      ( _,
+        ( _,
           FamilyDefinition
             { default_ctx_params; compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
@@ -718,7 +727,7 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
         let* _ = compile_fields fields in
         names
         |> List.map (fun name -> B.define_term ~name (qualify name))
-        |> flatmap
+        |> flatmap    
     | Snoc (fields, (_, ComputationalAxiom { name; _ })) ->
         let open B in
         let* _ = compile_fields fields in
@@ -744,6 +753,10 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
     | Snoc (fields, (name, FieldDefinition _)) ->
+        let open B in
+        let* _ = compile_fields fields in
+        B.define_term ~name (qualify name)
+    | Snoc (fields, (name, ClosingFact _ )) ->
         let open B in
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
@@ -838,6 +851,10 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         let* _ = compile_fields fields ctx in
         compile_computational_axiom_implementation ~axiom_name:name
           ~axiom_expr:axiom
+    | Snoc (fields, (name, ClosingFact { type_name; script; _ })) ->
+        let open B in
+        let* _ = compile_fields fields ctx in        
+        compile_closing_fact_implementation ~name ~type_name ~script
     | Snoc (fields, (_, FamilyDefinition { linkage = nested_linkage; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in
@@ -964,6 +981,12 @@ let compile_linkage_signature linkage =
         ( _,
           ( _,
             TheoremDefinition
+              { default_ctx_params; compiled_context; compiled_signature; _ } )
+        )
+    | Bwd.Snoc
+        ( _,
+          ( _,
+            ClosingFact
               { default_ctx_params; compiled_context; compiled_signature; _ } )
         )
     | Bwd.Snoc
