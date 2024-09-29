@@ -99,3 +99,5 @@ let close_flemma = Lemma.close_flemma
 let display_plugin_scope = PluginScopes.display
 
 let closing_fact = Closing_fact.add
+
+let inherit_name = Inheritance.inherit_name

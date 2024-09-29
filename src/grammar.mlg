@@ -143,6 +143,8 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "FLemma" ident(name) ":" llconstr_ip(t) ] -> { Entry.flemma name t }
 
+| [ "Inherit" ident(name) ] -> { Entry.inherit_name ~name }
+
 | [ "FOverride" "Lemma" ident(name)  ] ->
    { Entry.foverride_lemma name }
 

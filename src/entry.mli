@@ -94,3 +94,5 @@ val closing_fact :
   ty:Constrexpr.constr_expr -> 
   script:Ltac_plugin.Tacexpr.raw_tactic_expr -> 
   unit
+
+val inherit_name : name:Names.Id.t -> unit
