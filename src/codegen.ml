@@ -632,7 +632,7 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
   | Bwd.Snoc
       ( _,
         ( _,
-          InductiveConstr
+          InductiveAxiom
             { default_ctx_params; compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
@@ -760,7 +760,7 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
         let open B in
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
-    | Snoc (fields, (_, InductiveConstr _)) -> compile_fields fields
+    | Snoc (fields, (_, InductiveAxiom _)) -> compile_fields fields
     | Snoc (fields, (_, InductiveDefinition { inductive; _ })) ->
         let open B in
         let* _ = compile_fields fields in
@@ -865,7 +865,7 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
             let _ = compile_linkage (Some synth_ctx) nested_linkage in
             return ())
     (* An implementation will be provided by the inductive *)
-    | Snoc (fields, (_, InductiveConstr _)) -> compile_fields fields ctx
+    | Snoc (fields, (_, InductiveAxiom _)) -> compile_fields fields ctx
     | Snoc
         (fields, (_, MetaDataSection { default_ctx_params; compiled_impl; _ }))
     | Snoc
@@ -954,7 +954,7 @@ let compile_linkage_signature linkage =
     | Snoc
         ( _,
           ( _,
-            InductiveConstr
+            InductiveAxiom
               { default_ctx_params; compiled_context; compiled_signature; _ } )
         )
     | Snoc

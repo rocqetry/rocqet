@@ -5,6 +5,8 @@
 let motive_of name = Nameops.add_prefix "__motiveT" name
 let internal_name name = Nameops.add_prefix "__internal_" name
 
+let inductive_axiom_name = Nameops.add_prefix "ind__"
+
 let recursor_type ~inductive suffix =
   Nameops.add_prefix "__recursor_type_" (Nameops.add_suffix inductive suffix)
 

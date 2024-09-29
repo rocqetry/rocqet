@@ -92,7 +92,7 @@ module rec LinkageElem : sig
         compiled_impl : CompiledModule.t;
         default_ctx_params : CompiledModule.t list;
       }
-    | InductiveConstr of {
+    | InductiveAxiom of {
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : CompiledModule.t list;

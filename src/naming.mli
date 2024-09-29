@@ -3,6 +3,8 @@ val internal_name : Names.Id.t -> Names.Id.t
 val recursor_type : inductive:Names.Id.t -> string -> Names.Id.t
 val handler_type : Names.Id.t -> suffix:string -> Names.Id.t
 
+val inductive_axiom_name : Names.Id.t -> Names.Id.t
+
 val recursion_handler_type :
   function_name:Names.Id.t -> case_name:Names.Id.t -> Names.Id.t
 

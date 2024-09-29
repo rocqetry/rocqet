@@ -95,7 +95,7 @@ and linkage_elem_concatenate ~(derived : LinkageElem.t) ~(base : LinkageElem.t)
           ~base:base.inductive
       in
       InductiveDefinition { derived with inductive }
-  | InductiveConstr derived, InductiveConstr _ -> InductiveConstr derived
+  | InductiveAxiom derived, InductiveAxiom _ -> InductiveAxiom derived
   | FamilyDefinition derived, FamilyDefinition base ->
       let linkage =
         linkage_concatenate ~derived:derived.linkage ~base:base.linkage
@@ -308,8 +308,8 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                       }))
         | ComputationalAxiom comp ->
             ComputationalAxiom { comp with compiled_context }
-        | InductiveConstr constr ->
-            InductiveConstr { constr with compiled_context }
+        | InductiveAxiom constr ->
+            InductiveAxiom { constr with compiled_context }
         | FieldDefinition field ->
             FieldDefinition { field with compiled_context }
         | MetaDataSection metadata ->

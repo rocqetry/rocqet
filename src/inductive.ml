@@ -1,8 +1,6 @@
 open Types
 open Env
 
-let inductive_constr_name = Nameops.add_prefix "ind"
-
 let add_inductive_constr ~name ~ty =
   Inheritance.inherit_dependencies ~prefix:name;
   let context = Context.get () in
@@ -18,13 +16,13 @@ let add_inductive_constr ~name ~ty =
     Codegen.compile_inductive_constr ~name ~ty ~ctx:parameters
   in
   let elem =
-    LinkageElem.InductiveConstr
+    LinkageElem.InductiveAxiom
       { compiled_context; compiled_signature; default_ctx_params }
   in
   (* Fake names becuase the inductive will already
      have the names and expose then to the resolver
      too *)
-  let name = inductive_constr_name name in
+  let name = Naming.inductive_axiom_name name in
   Context.add_field ~name ~elem
 
 (* Extract the constructors *)
@@ -143,7 +141,7 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
     let _ =
       inherited_types
       |> List.map (fun (name, _) ->
-             Inheritance.inherit_name ~name:(inductive_constr_name name))
+             Inheritance.inherit_name ~name:(Naming.inductive_axiom_name name))
     in
 
     new_types |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
@@ -160,7 +158,7 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
     let _ =
       inherited_constructors
       |> List.map (fun (name, _) ->
-             Inheritance.inherit_name ~name:(inductive_constr_name name))
+             Inheritance.inherit_name ~name:(Naming.inductive_axiom_name name))
     in
 
     new_constructors

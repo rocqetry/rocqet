@@ -240,8 +240,9 @@ module rec LinkageElem : sig
         default_ctx_params : CompiledModule.t list;
       }
     (* All names bound by an inductive definition:
-       inductive type names and constructor names *)
-    | InductiveConstr of {
+       inductive type names and constructor names, as 
+       parameters in the context *)
+    | InductiveAxiom of {
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : CompiledModule.t list;
@@ -347,7 +348,7 @@ end = struct
     | LinkageElem.MetaDataSection metadata ->
         LinkageElem.MetaDataSection metadata
     | ClosingFact fact -> ClosingFact fact
-    | InductiveConstr constr -> InductiveConstr constr
+    | InductiveAxiom constr -> InductiveAxiom constr
     | OpaqueFieldDefinition definition ->
         OpaqueFieldDefinition definition
     | ComputationalAxiom comp ->

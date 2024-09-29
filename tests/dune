@@ -25,5 +25,6 @@
   ;Mixin
   ;Salad
   ;Path_subst_ind
+  ;Inherit_name
   ;Play
   ))
