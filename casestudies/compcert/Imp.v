@@ -1893,11 +1893,7 @@ Inductive bitfield : Type :=
                     eval_expr e le m (Evar id) v                  
                 | eval_Econst: forall e le m cst v,
                     eval_constant cst = Some v ->
-                    eval_expr e le m (Econst cst) v.            
-            
-            
-            FDefinition block_of_binding := fun (id_b_sz: ident * (block * Z)) => 
-              match id_b_sz with (id, (b, sz)) => (b, 0, sz) end.                        
+                    eval_expr e le m (Econst cst) v.                                                
                            
             FInductive step : genv -> state -> trace -> state -> Prop :=
                    | step_skip_seq: forall ge f s k e le m,
@@ -1990,25 +1986,66 @@ Inductive bitfield : Type :=
 
        Family Sem.
           FOverride Definition fenv := PTree.t (block * Z).
-          
-          FOverride Definition empty_fenv := PTree.empty (block * Z).
-          FOverride Definition free_function_env m e f :=
+          FOverride Definition empty_fenv := PTree.empty (block * Z).                    
+
+          FDefinition block_of_binding := fun (id_b_sz: ident * (block * Z)) => 
+              match id_b_sz with (id, (b, sz)) => (b, 0, sz) end.
+
+          FDefinition blocks_of_env : fenv -> list (block * Z * Z) := fun e => 
+             List.map block_of_binding (PTree.elements e).          
+
+          FOverride Definition free_fenv := fun m e f =>
                Mem.free_list m (blocks_of_env e).
-          FOverride Definition update_env e := e.
+          FOverride Definition update_fenv := fun e => e. 
+   
+          MetaData alloc_variables.
+            Inductive alloc_variables: self__Sem.fenv -> mem ->
+                           list (ident * Z) ->
+                           self__Sem.fenv -> mem -> Prop :=
+            | alloc_variables_nil:
+              forall e m,
+                alloc_variables e m nil e m
+            | alloc_variables_cons:
+              forall e m id sz vars m1 b1 m2 e2,
+                Mem.alloc m 0 sz = (m1, b1) ->
+                alloc_variables (PTree.set id (b1, sz) e) m1 vars e2 m2 ->
+                alloc_variables e m ((id, sz) :: vars) e2 m2.
+          FEnd alloc_variables.
+            
+          (*FOverride Definition alloc_fenv := fun e m f e' m' => 
+            list_norepet (map fst f.(self__Csharpminor.fn_vars)) /\
+            list_norepet f.(self__Csharpminor.fn_params) /\
+            list_disjoint f.(self__Csharpminor.fn_params) f.(self__Csharpminor.fn_temps) /\
+            alloc_variables self__Sem.empty_fenv m (self__Csharpminor.fn_vars f) e m'.*)
        FEnd Sem.
-                
   FEnd Csharpminor.
 
   Family Cminor extends CminorVariant.
-
-       Override FDefinition fenv := val. (* stack pointer *)
-       Override FDefinition empty_fenv := Z.
-
-       Override FDefinition free_function_env m sp f  := 
-	 Mem.free m sp 0 f.(fn_stackspace).
+       (* 
+       MetaData function.
+           Record function : Type := mkfunction {
+              fn_sig: signature;
+              fn_params: list ident;
+              fn_vars: list ident;
+              fn_stackspace: Z;
+              fn_body: self__Cminor.stmt
+           }.
+       FEnd function.
+        *)
        
-       Override FDefinition update_env sp := (Vptr sp Ptrofs.zero).
-  
+       Family Sem. 
+         (* stack pointer *)
+         FOverride Definition fenv := val.
+         FOverride Definition empty_fenv := Vundef.
+   
+         FOverride FDefinition free_fenv := fun m sp f =>
+   	 Mem.free m sp 0 f.(fn_stackspace).
+          
+         FOverride Definition update_env := fun sp => (Vptr sp Ptrofs.zero).          
+          
+         FOverride Definition alloc_fenv := fun sp m f sp' m' => 
+           Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp)
+       FEnd Sem.
   FEnd Cminor.
 
   Family CminorTransl. 
@@ -2016,7 +2053,10 @@ Inductive bitfield : Type :=
       FEnd Source. 
 
       Family Target extends CminorVariant.
-      FEnd Target.      
+      FEnd Target.
+
+      Family SimProof.
+      FEnd SimProof.
   FEnd CminorTransl.
   
   (* Clight -> Csharpminor *)
@@ -3289,25 +3329,7 @@ Inductive bitfield : Type :=
           FDefinition letenv := list val.
           FDefinition env := PTree.t val.
           
-          FDefinition eval_operation := fun op => Asm.eval_operation op fundef unit.
-
-          MetaData set_params.
-           Fixpoint set_params (vl: list val) (il: list ident) {struct il} : self__Sem.env :=
-           match il, vl with
-           | i1 :: is, v1 :: vs => PTree.set i1 v1 (set_params vs is)
-           | i1 :: is, nil => PTree.set i1 Vundef (set_params nil is)
-           | _, _ => PTree.empty val
-           end.
-          FEnd set_params.
-
-          MetaData set_locals.
-          Fixpoint set_locals (il: list ident) (e: self__Sem.env) {struct il} : self__Sem.env :=
-           match il with
-           | nil => e
-           | i1 :: is => PTree.set i1 Vundef (set_locals is e)
-           end.
-          FEnd set_locals.              
-                     
+          FDefinition eval_operation := fun op => Asm.eval_operation op fundef unit.                     
           
           (*
           Variable ge : genv  
@@ -3360,7 +3382,7 @@ Inductive bitfield : Type :=
        FDefinition longconst : int64 -> expr := fun n =>
           if Archi.splitlong then SplitLong.longconst n else CminorSel.Eop (Asm.Olongconst n) CminorSel.Enil.
 
-       FRecurcion sel_constant about Cminor.constant motive (fun (_ : Cminor.constant) => CminorSel.constant).
+       FRecurcion sel_constant about Cminor.constant motive (fun (_ : Cminor.constant) => CminorSel.expr).
            Case Ointconst := (fun n => CminorSel.Eop (Asm.Ointconst n) CminorSel.Enil).
            Case Ofloatconst := (fun n => CminorSel.Eop (Asm.Ofloatconst f) CminorSel.Enil).
            Case Osingleconst := (fun n =>  CminorSel.Eop (Asm.Osingleconst f) CminorSel.Enil).
