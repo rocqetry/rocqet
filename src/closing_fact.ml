@@ -1,8 +1,6 @@
 open Types
 open Env
 
-let g : Ltac_plugin.Tacexpr.t_nam = failwith ""
-
 let add ~name ~ty ~(script: Ltac_plugin.Tacexpr.raw_tactic_expr) = 
   Inheritance.inherit_dependencies ~prefix:name;  
   let type_name = Naming.fresh_name ~prefix:"ClosingFactTy" in
