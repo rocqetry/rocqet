@@ -364,13 +364,13 @@ let inherit_name ~(name : Names.Id.t) =
   let linkage = Context.family_linkage context in
   let inherit_name ~(name : Names.Id.t) ~(base : Linkage.t)
       ~(linkage : Linkage.t) =
-    let rec find_element = function
+    let rec find_element name = function
       | Bwd.Emp -> None
       | Snoc (_, (field, element)) when Names.Id.equal name field ->
           Some element
-      | Snoc (fields, _) -> find_element fields
+      | Snoc (fields, _) -> find_element name fields
     in
-    let element = find_element base.fields in
+    let element = find_element name base.fields in
     match element with
     | None ->
         let info =
@@ -380,13 +380,31 @@ let inherit_name ~(name : Names.Id.t) =
             (Names.Id.to_string name)
         in
         Errors.fail ~info
+    | Some (InductiveDefinition { inductive; _ } as element) ->           
+       let names =          
+         inductive 
+         |> VernacInductive.extract_all_names 
+         |> List.concat_map (fun (ind, ctrs) -> ind :: ctrs)          
+         |> List.map (fun axiom -> 
+                let axiom = Naming.inductive_axiom_name axiom in
+                match find_element axiom base.fields with
+                | Some element -> (axiom, element)
+                | None -> Errors.fail ~info:"Couldn't find inductive axiom")              
+       in
+       let names = (name, element) :: names in
+       List.fold_left 
+       (fun linkage (name, element) -> 
+         print_endline @@ Names.Id.to_string @@ name;
+         inherit_one ~name ~element ~linkage ~context)
+       linkage 
+       names      
     | Some element -> inherit_one ~name ~element ~linkage ~context
-  in
+  in  
   match base with
-  | Some base ->
-      let linkage = inherit_deps ~field:name ~base ~derived:linkage ~context in
-      let linkage = inherit_name ~name ~base ~linkage in
-      Context.replace ~linkage
+  | Some base ->     
+     let linkage = inherit_deps ~field:name ~base ~derived:linkage ~context in
+     let linkage = inherit_name ~name ~base ~linkage in
+     Context.replace ~linkage
   | _ -> Errors.fail ~info:"There is no base to inherit from"
 
 (** This updates the context so you must call Context.get again after using this *)

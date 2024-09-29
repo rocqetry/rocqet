@@ -17,6 +17,6 @@ Family Y extends STLC.
    Family X.   
      Inherit ty.
 
-     FDefinition alias := ty.
+     FDefinition alias := ty_arrow.
    FEnd X.
 FEnd Y.
