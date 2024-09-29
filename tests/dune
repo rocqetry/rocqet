@@ -24,5 +24,6 @@
   ;Multiple_FRecursion
   ;Mixin
   ;Salad
+  ;Path_subst_ind
   ;Play
   ))
