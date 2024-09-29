@@ -1795,26 +1795,26 @@ Inductive bitfield : Type :=
             | Slabel: label -> stmt -> stmt
             | Sgoto: label -> stmt.
        
-       FDefinition function : Type := cheat.
-       FDefinition function_body : function -> stmt := cheat.
+       FOpaque Definition function : Type := cheat.
+       FOpaque Definition function_body : function -> stmt := cheat.
        
        FDefinition fundef := AST.fundef function.       
        FDefinition program : Type := AST.program fundef unit.
 
-       FDefinition funsig : fundef -> signature := cheat.
+       FOpaque Definition funsig : fundef -> signature := cheat.
          
        Family Sem.
             FDefinition genv := Genv.t fundef unit.
             (* Function env/stack space *)
-            FDefinition fenv : Type := cheat.
+            FOpaque Definition fenv : Type := cheat.
+            FOpaque Definition empty_fenv : fenv := cheat.
             
-            FDefinition env := PTree.t val.
-            FDefinition empty_fenv : fenv := cheat.
+            FDefinition env := PTree.t val.            
             FDefinition empty_env : env := PTree.empty val.
 
-            FDefinition free_fenv : mem -> fenv -> function -> option mem := cheat.
-            FDefinition update_fenv : fenv -> fenv := cheat.
-            FDefinition alloc_fenv : fenv -> mem -> function -> fenv -> mem -> Prop := cheat.
+            FOpaque Definition free_fenv : mem -> fenv -> function -> option mem := cheat.
+            FOpaque Definition update_fenv : fenv -> fenv := cheat.
+            FOpaque Definition alloc_fenv : fenv -> mem -> function -> fenv -> mem -> Prop := cheat.
             
             MetaData create_undef_temps.
             Fixpoint create_undef_temps (temps: list ident) : self__Sem.env :=
@@ -1972,13 +1972,6 @@ Inductive bitfield : Type :=
   FEnd CminorVariant.
   
   Family Csharpminor extends CminorVariant.
-       (*Override FDefinition fenv := PTree.t (block * Z).
-
-       Override FDefinition empty_fenv := PTree.empty (block * Z).
-       Override FDefinition free_function_env m e f :=
-           Mem.free_list m (blocks_of_env e).
-       Override FDefinition update_env e := e.*)
-       
        (*MetaData function.
        Record function : Type := mkfunction {
          fn_sig: signature;
@@ -1994,6 +1987,15 @@ Inductive bitfield : Type :=
          | Internal f => self__Csharpminor.fn_sig f
          | External ef => cheat (* No external functions *)
          end.*)
+
+       Family Sem.
+          FOverride Definition fenv := PTree.t (block * Z).
+          
+          FOverride Definition empty_fenv := PTree.empty (block * Z).
+          FOverride Definition free_function_env m e f :=
+               Mem.free_list m (blocks_of_env e).
+          FOverride Definition update_env e := e.
+       FEnd Sem.
                 
   FEnd Csharpminor.
 
