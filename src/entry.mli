@@ -88,3 +88,9 @@ val fproof_lemma : unit -> Declare.Proof.t
 val flemma : Names.Id.t -> Constrexpr.constr_expr -> unit
 val close_flemma : unit -> unit
 val display_plugin_scope : unit -> unit
+
+val closing_fact : 
+  name:Names.Id.t -> 
+  ty:Constrexpr.constr_expr -> 
+  script:Ltac_plugin.Tacexpr.raw_tactic_expr -> 
+  unit

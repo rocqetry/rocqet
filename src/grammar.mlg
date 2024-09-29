@@ -152,8 +152,8 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "FDisplay" "PluginScope" ] -> { Entry.display_plugin_scope () }
 
-| [ "Closing" "Fact" ident(fname) ":" llconstr_ip(eT) "by" "{" tactic(script) "}" ] -> 
-  { () }
+| [ "Closing" "Fact" ident(name) ":" llconstr_ip(ty) "by" "{" tactic(script) "}" ] -> 
+  { Entry.closing_fact ~name ~ty ~script }
 
 END
 
