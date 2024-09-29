@@ -8,6 +8,7 @@
  (theories NFPOP)
  (modules
   ;Handler_types
+  ;Closing_facts_test
   ;C_compcert
   ;Opaque_override 
   ;Linkage_concat
