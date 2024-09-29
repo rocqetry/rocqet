@@ -299,6 +299,7 @@ module rec LinkageElem : sig
         default_ctx_params : CompiledModule.t list;
       }
     | ClosingFact of { 
+        type_name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         script: Ltac_plugin.Tacexpr.raw_tactic_expr;

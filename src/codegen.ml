@@ -492,10 +492,9 @@ let compile_computational_axiom_implementation ~axiom_name ~axiom_expr =
   let ty = Naming.replace_self_qualification ~target:None axiom_expr in
   B.thunk (B.construct_term_using_proof ~name:axiom_name ~proof:auto_tactic ~ty)
 
-(*let compile_closing_fact_implementation ~name ~(script: Ltac_plugin.Tacexpr.raw_tactic_expr) =   
-  let ty = Naming.replace_self_qualification ~target:None axiom_expr in
-  B.thunk (B.construct_term_using_proof ~name:axiom_name ~proof:script ~ty)*)
-  
+let compile_closing_fact_implementation ~name ~type_name ~(script: Ltac_plugin.Tacexpr.raw_tactic_expr) =   
+  let ty = Constrexpr_ops.mkIdentC type_name in  
+  B.thunk (B.construct_term_using_proof ~name ~proof:script ~ty)
 
 (* The name of the equation to generate axioms for *)
 let compile_computational_axiom_signature
@@ -852,11 +851,10 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         let* _ = compile_fields fields ctx in
         compile_computational_axiom_implementation ~axiom_name:name
           ~axiom_expr:axiom
-    | Snoc (fields, (_, ClosingFact { script; _ })) ->
+    | Snoc (fields, (name, ClosingFact { type_name; script; _ })) ->
         let open B in
-        let* _ = compile_fields fields ctx in
-        script |> ignore; 
-        Errors.fail ~info:"TODO"
+        let* _ = compile_fields fields ctx in        
+        compile_closing_fact_implementation ~name ~type_name ~script
     | Snoc (fields, (_, FamilyDefinition { linkage = nested_linkage; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in
