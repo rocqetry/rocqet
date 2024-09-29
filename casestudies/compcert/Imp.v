@@ -1797,11 +1797,18 @@ Inductive bitfield : Type :=
        
        FOpaque Definition function : Type := cheat.
        FOpaque Definition function_body : function -> stmt := cheat.
+       FOpaque Definition function_locals : function -> list ident := cheat.
+       FOpaque Definition function_params : function -> list ident := cheat.       
+       FOpaque Definition function_sig : function -> signature := cheat. 
        
        FDefinition fundef := AST.fundef function.       
-       FDefinition program : Type := AST.program fundef unit.
-
-       FOpaque Definition funsig : fundef -> signature := cheat.
+       FDefinition program : Type := AST.program fundef unit.              
+       
+       FDefinition funsig := fun (fd: fundef) =>
+         match fd with
+         | Internal f => function_sig f
+         | External ef => cheat (* No external functions *)
+         end.
          
        Family Sem.
             FDefinition genv := Genv.t fundef unit.
@@ -1811,6 +1818,27 @@ Inductive bitfield : Type :=
             
             FDefinition env := PTree.t val.            
             FDefinition empty_env : env := PTree.empty val.
+            
+            MetaData set_params.
+            Fixpoint set_params (vl: list val) (il: list ident) {struct il} : self__Sem.env :=
+               match il, vl with
+               | i1 :: is, v1 :: vs => PTree.set i1 v1 (set_params vs is)
+               | i1 :: is, nil => PTree.set i1 Vundef (set_params nil is)
+               | _, _ => PTree.empty val
+               end.
+            FEnd set_params.
+
+            MetaData set_locals.
+            Fixpoint set_locals (il: list ident) (e: self__Sem.env) {struct il} : self__Sem.env :=
+              match il with
+              | nil => e
+              | i1 :: is => PTree.set i1 Vundef (set_locals is e)
+              end.
+            FEnd set_locals.
+            
+            FDefinition init_env : function -> list val -> env := fun f vargs => 
+              set_locals (function_locals f) (set_params vargs (function_params f)).
+            
 
             FOpaque Definition free_fenv : mem -> fenv -> function -> option mem := cheat.
             FOpaque Definition update_fenv : fenv -> fenv := cheat.
@@ -1944,7 +1972,7 @@ Inductive bitfield : Type :=
                          E0 (State f s' k' e le m)
                    | step_internal_function: forall ge f vargs k m m1 e le,                                               
                        alloc_fenv empty_fenv m f e m1 ->
-                        (* bind_parameters f.(self__Csharpminor.fn_params) vargs (create_undef_temps f.(self__Csharpminor.fn_temps)) = Some le ->*)
+                       init_env f vargs = le ->                        
                         step ge (Callstate (Internal f) vargs k m)
                           E0 (State f (function_body f) k e le m1).
             
@@ -1967,22 +1995,25 @@ Inductive bitfield : Type :=
        FEnd Sem.
   FEnd CminorVariant.
   
-  Family Csharpminor extends CminorVariant.
-       (*MetaData function.
-       Record function : Type := mkfunction {
+  Family Csharpminor extends CminorVariant.       
+       
+       Inherit stmt.
+       
+       MetaData fn.
+       Record fn : Type := mkfunction {
          fn_sig: signature;
          fn_params: list ident;
          fn_vars: list (ident * Z);
          fn_temps: list ident;
          fn_body: self__Csharpminor.stmt
        }.
-       FEnd function.*)              
-
-       (*FDefinition funsig := fun (fd: fundef) =>
-         match fd with
-         | Internal f => self__Csharpminor.fn_sig f
-         | External ef => cheat (* No external functions *)
-         end.*)
+       FEnd fn.
+       
+       FOverride Definition function := fn.
+       FOverride Definition function_body := self__Csharpminor.fn_body.
+       FOverride Definition function_locals := self__Csharpminor.fn_temps.
+       FOverride Definition function_params := self__Csharpminor.fn_params.
+       FOverride Definition function_sig := self__Csharpminor.fn_sig.
 
        Family Sem.
           FOverride Definition fenv := PTree.t (block * Z).
@@ -2012,26 +2043,32 @@ Inductive bitfield : Type :=
                 alloc_variables e m ((id, sz) :: vars) e2 m2.
           FEnd alloc_variables.
             
-          (*FOverride Definition alloc_fenv := fun e m f e' m' => 
+          FOverride Definition alloc_fenv := fun e m f e' m' => 
             list_norepet (map fst f.(self__Csharpminor.fn_vars)) /\
             list_norepet f.(self__Csharpminor.fn_params) /\
             list_disjoint f.(self__Csharpminor.fn_params) f.(self__Csharpminor.fn_temps) /\
-            alloc_variables self__Sem.empty_fenv m (self__Csharpminor.fn_vars f) e m'.*)
+            alloc_variables self__Sem.empty_fenv m (self__Csharpminor.fn_vars f) e m'.
        FEnd Sem.
   FEnd Csharpminor.
 
   Family Cminor extends CminorVariant.
-       (* 
-       MetaData function.
-           Record function : Type := mkfunction {
-              fn_sig: signature;
-              fn_params: list ident;
-              fn_vars: list ident;
-              fn_stackspace: Z;
-              fn_body: self__Cminor.stmt
-           }.
-       FEnd function.
-        *)
+       Inherit stmt.
+        
+       MetaData fn.
+          Record fn : Type := mkfunction {
+             fn_sig: signature;
+             fn_params: list ident;
+             fn_vars: list ident;
+             fn_stackspace: Z;
+             fn_body: self__Cminor.stmt
+          }.
+       FEnd fn.       
+
+       FOverride Definition function := fn.
+       FOverride Definition function_body := self__Cminor.fn_body.
+       FOverride Definition function_locals := self__Cminor.fn_vars.
+       FOverride Definition function_params := self__Cminor.fn_params.
+       FOverride Definition function_sig := self__Csharpminor.fn_sig.
        
        Family Sem. 
          (* stack pointer *)
@@ -2039,23 +2076,108 @@ Inductive bitfield : Type :=
          FOverride Definition empty_fenv := Vundef.
    
          FOverride FDefinition free_fenv := fun m sp f =>
-   	 Mem.free m sp 0 f.(fn_stackspace).
+   	    Mem.free m sp 0 f.(fn_stackspace).
           
          FOverride Definition update_env := fun sp => (Vptr sp Ptrofs.zero).          
           
          FOverride Definition alloc_fenv := fun sp m f sp' m' => 
-           Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp)
+            Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp)
        FEnd Sem.
   FEnd Cminor.
 
-  Family CminorTransl. 
+  Family CminorTransl.
       Family Source extends CminorVariant.
-      FEnd Source. 
+      FEnd Source.
 
       Family Target extends CminorVariant.
       FEnd Target.
 
       Family SimProof.
+          FOpaque Definition match_prog : Source.program -> Target.program -> Prop := cheat.
+          
+          FOpaque Definition match_stack_frame := ...
+          Inductive match_cont := ...
+
+          FInductive match_states : Source.Sem.state -> Target.Sem.state -> Prop := 
+             | match_state : 
+                (* Translate function = OK *)
+                (* Translate stmt = OK *)
+                (* Match stack frame *)
+                (* Translated Memory >= Init. Memory *)
+                (* Translated Env >= Init. Env *)
+             | match_call_state : ...
+             | match_return_state : ...
+             
+          FInduction transl_expr_correct:
+              forall f m tm cenv tf e le te sp lo hi cs
+                (MINJ: Mem.inject f m tm)
+                (MATCH: match_callstack f m tm
+                         (Frame cenv tf e le te sp lo hi :: cs)
+                         (Mem.nextblock m) (Mem.nextblock tm)),
+              forall a v,
+              Csharpminor.eval_expr ge e le m a v ->
+              forall ta
+                (TR: transl_expr cenv a = OK ta),
+              exists tv,
+                 eval_expr tge (Vptr sp Ptrofs.zero) te tm ta tv
+              /\ Val.inject f v tv.
+          
+          FOpaque Definition measure : Source.Sem.state -> Source.Sem.state -> nat := 
+             fun _ _ => 0.
+
+          FInduction transl_step_correct about Source.Sem.step motive
+            (fun ge S1 t S2 (_ : Source.Sem.step ge S1 t S2) => 
+             forall prog tprog tge, match_prog prog tprog -> 
+                    Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->               
+          forall T1, match_states ge S1 T1 -> 
+          (exists T2, plus Target.Sem.step tge T1 t T2 /\ match_states ge S2 T2) 
+          \/ (measure S2 < measure S1 /\ t = E0 /\ match_states ge S2 T1)%nat).
+        FProof.
+          finduction.
+          (* skip seq *)
+          + intros. apply cheat.
+          (* skip block *)
+          + intros. apply cheat.
+          (* skip call *)
+          + intros. apply cheat.
+          (* set *)
+          + intros. apply cheat.
+          (* seq *)
+          + intros. apply cheat.
+          (* ifthenelse *)
+          + intros. apply cheat.
+          (* loop *)
+          + apply cheat.
+          (* block *)
+          + apply cheat.
+          (* return none *)
+          + apply cheat.
+          (* return some *)
+          + apply cheat.
+          (* label *)
+          + apply cheat.
+          (* goto *)
+          + apply cheat.
+          (* internal function *)
+          + intros. apply cheat.
+        Qed.
+        FEnd transl_step_correct.
+        
+        FLemma transl_initial_states:
+          forall S prog tprog ge, Csharpminor.Sem.initial_state prog S ->
+          transl_program prog = OK tprog ->
+          exists R, Cminor.Sem.initial_state tprog R /\ match_states ge S R.
+            FProofLemma.
+              apply cheat.
+            Qed.
+        CloseFLemma.
+        
+        FLemma transl_final_states:
+          forall S R r ge,
+          match_states ge S R -> Csharpminor.Sem.final_state S r -> Cminor.Sem.final_state R r.
+            FProofLemma.
+              intros. inv H0. inv H. inv MK. inv RESINJ. constructor. Qed.            
+        CloseFLemma.
       FEnd SimProof.
   FEnd CminorTransl.
   
@@ -2351,7 +2473,7 @@ Inductive bitfield : Type :=
   FEnd Cshmgen.             
 
    (* Csharpminor -> Cminor *)
-   Family Cminorgen.
+  Family Cminorgen.
       FDefinition compilenv := PTree.t Z.
 
       FRecursion translate_constant about
@@ -2659,7 +2781,7 @@ Inductive bitfield : Type :=
           forall T1, match_states ge S1 T1 -> 
           (exists T2, plus Cminor.Sem.step tge T1 t T2 /\ match_states ge S2 T2) 
           \/ (measure S2 < measure S1 /\ t = E0 /\ match_states ge S2 T1)%nat).
-        FProof. 
+        FProof.
           finduction.
           (* skip seq *)
           + intros. apply cheat.

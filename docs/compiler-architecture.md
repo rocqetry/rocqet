@@ -151,7 +151,7 @@ family Base {
 	
 	(* Cminor -> CminorSel *)
 	family Selection extends CminorTransl { }
-	family SelSwitch extends CminorTransl { } 
+	family SelSwitch extends CminorTransl { }
 	family SelBuiltin extends CminorTransl { }
 	family SelBinary extends CminorTransl { }
 	family SelUnary extends CminorTransl { }
@@ -159,7 +159,7 @@ family Base {
 	family SplitLong extends CminorTransl { }
 	family SelDiv extends CminorTransl { }
 	
-	** EXtend the nananopaases in the reserve direction to enable sharing
+	** Extend the nananopaases in the reserve direction to enable sharing
 	
 	family RTL { }
 	
