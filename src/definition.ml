@@ -83,16 +83,11 @@ let override ~name ~expr =
      in
      let compiled_impl =
        Codegen.compile_definition ~name ~body_type ~body_expr parameters
-     in
-     let compiled_signature = 
-       Codegen.compile_lemma_signature ~name  ~ty:body_type ~parameters
-     in 
+     in     
      let elem =
-       LinkageElem.OpaqueFieldDefinition
-         {
-           type_name;
-           compiled_context;
-           compiled_signature;
+       LinkageElem.FieldDefinition
+         {           
+           compiled_context;           
            compiled_impl;
            default_ctx_params
          }
