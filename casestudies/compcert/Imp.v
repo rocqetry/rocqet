@@ -2049,6 +2049,7 @@ Inductive bitfield : Type :=
   FEnd Csharpminor.
 
   Family Cminor extends CminorVariant.
+  
        Inherit stmt.
         
        MetaData fn.
@@ -2059,29 +2060,29 @@ Inductive bitfield : Type :=
              fn_stackspace: Z;
              fn_body: self__Cminor.stmt
           }.
-       FEnd fn.       
+       FEnd fn.
 
        FOverride Definition function := fn.
        FOverride Definition function_body := self__Cminor.fn_body.
        FOverride Definition function_locals := self__Cminor.fn_vars.
        FOverride Definition function_params := self__Cminor.fn_params.
-       FOverride Definition function_sig := self__Csharpminor.fn_sig.
+       FOverride Definition function_sig := self__Cminor.fn_sig.
        
        Family Sem. 
          (* stack pointer *)
          (* Vptr sp Ptrofs.zero *)
          FOverride Definition fenv := block.
    
-         FOverride FDefinition free_fenv := fun m sp f =>
-   	    Mem.free m sp 0 f.(fn_stackspace).                   
+         FOverride Definition free_fenv := fun m sp f =>
+   	    Mem.free m sp 0 f.(self__Cminor.fn_stackspace).
           
          FOverride Definition alloc_fenv := fun sp m f sp' m' => 
-            Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp)
+            Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp).
        FEnd Sem.
   FEnd Cminor.
 
   Family CminorTransl.
-      Family Source extends CminorVariant.          
+      Family Source extends CminorVariant.
       FEnd Source.
 
       Family Target extends CminorVariant.
@@ -2128,7 +2129,8 @@ Inductive bitfield : Type :=
       FOpaque Definition transl_function : Source.function -> res Target.function :=
         cheat.
 
-      Family SimProof.                
+      (* Simulation Proof *)
+      Family Sim.                
           (* Invariant on abstract call stack *)
           MetaData frame.
           Inductive frame : Type :=
@@ -2195,18 +2197,7 @@ Inductive bitfield : Type :=
 
           FOpaque Definition match_prog := ...
 
-          FOpaque Definition match_stack_frame := ...
-          Inductive match_cont := ...
-
-          FInductive match_states : Source.Sem.state -> Target.Sem.state -> Prop := 
-             | match_state : 
-                (* Translate function = OK *)
-                (* Translate stmt = OK *)
-                (* Match stack frame *)
-                (* Translated Memory >= Init. Memory *)
-                (* Translated Env >= Init. Env *)
-             | match_call_state : ...
-             | match_return_state : ...
+          FOpaque Definition match_stack_frame := ...          
              
           FInduction transl_expr_correct:
               forall f m tm cenv tf e le te sp lo hi cs
@@ -2232,7 +2223,7 @@ Inductive bitfield : Type :=
               forall T1, match_states ge S1 T1 -> 
               (exists T2, plus Target.Sem.step tge T1 t T2 /\ match_states ge S2 T2) \/
               (measure S2 < measure S1 /\ t = E0 /\ match_states ge S2 T1)%nat).
-            FProof.          
+            FProof.
               (* skip seq *)
               + intros. apply cheat.
               (* skip block *)
@@ -2277,7 +2268,7 @@ Inductive bitfield : Type :=
             FProofLemma.
               intros. inv H0. inv H. inv MK. inv RESINJ. constructor. Qed.            
         CloseFLemma.
-      FEnd SimProof.
+      FEnd Sim.
   FEnd CminorTransl.
   
   (* Clight -> Csharpminor *)
