@@ -90,30 +90,30 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | InductiveAxiom of {
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | FamilyDefinition of {
         linkage : Linkage.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | FieldDefinition of {
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModuleType.t;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | OpaqueFieldDefinition of {
         type_name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | RecursorDefinition of {
         names : Names.Id.t list;
@@ -124,7 +124,7 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         arguments : Names.Id.t list;
         prefix : Libnames.qualid;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | TheoremDefinition of {
         names : Names.Id.t list;
@@ -133,34 +133,34 @@ module rec LinkageElem : sig
         handlers : Names.Id.t list;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | ComputationalAxiom of {
         name : Names.Id.t;
         axiom : Constrexpr.constr_expr;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | MetaDataSection of {
         name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | ClosingFact of { 
         type_name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         script: Ltac_plugin.Tacexpr.raw_tactic_expr;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
     }
 end
 
 and Linkage : sig
   type t = {
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
-    default_ctx_params : CompiledModule.t list;
+    default_ctx_params : (Names.Id.t * CompiledModule.t) list;
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;

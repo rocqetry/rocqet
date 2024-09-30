@@ -118,4 +118,5 @@ val compile_lemma_signature :
   CompiledModuleType.t
 
 val compile_default_params :
-  context:(Names.Id.t * Constrexpr.module_ast) list -> CompiledModule.t list
+  context:(Names.Id.t * Constrexpr.module_ast) list -> 
+  (Names.Id.t * CompiledModule.t) list

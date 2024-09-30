@@ -237,7 +237,7 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     (* All names bound by an inductive definition:
        inductive type names and constructor names, as 
@@ -245,18 +245,18 @@ module rec LinkageElem : sig
     | InductiveAxiom of {
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | FamilyDefinition of {
         linkage : Linkage.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | FieldDefinition of {
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     (* Opaque definitions are overridable *)
     | OpaqueFieldDefinition of {
@@ -264,7 +264,7 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;        
         compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | RecursorDefinition of {
         names : Names.Id.t list;
@@ -275,7 +275,7 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         arguments : Names.Id.t list;
         prefix : Libnames.qualid;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | TheoremDefinition of {
         names : Names.Id.t list;
@@ -284,27 +284,27 @@ module rec LinkageElem : sig
         handlers : Names.Id.t list;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | ComputationalAxiom of {
         name : Names.Id.t;
         axiom : Constrexpr.constr_expr;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | MetaDataSection of {
         name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | ClosingFact of { 
         type_name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         script: Ltac_plugin.Tacexpr.raw_tactic_expr;
-        default_ctx_params : CompiledModule.t list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
     }
 end =
   LinkageElem
@@ -312,7 +312,7 @@ end =
 and Linkage : sig
   type t = {
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
-    default_ctx_params : CompiledModule.t list;
+    default_ctx_params : (Names.Id.t * CompiledModule.t) list;
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
@@ -327,7 +327,7 @@ and Linkage : sig
 end = struct
   type t = {
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
-    default_ctx_params : CompiledModule.t list;
+    default_ctx_params : (Names.Id.t * CompiledModule.t) list;
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
@@ -343,37 +343,56 @@ end = struct
     | [] -> Naming.self_version linkage.name
     | (name, _) :: _ -> name
 
-  let rec path_substitution_elem elem ~source ~target =
+  let rec path_substitution_elem elem ~source ~target =      
+    let g (name, expr) =
+          if Names.Id.equal source name then (target, expr) else (name, expr)
+    in
+    let path_subst_ctx ctx = 
+      ctx |> List.map g
+    in 
     match elem with
     | LinkageElem.MetaDataSection metadata ->
-        LinkageElem.MetaDataSection metadata
-    | ClosingFact fact -> ClosingFact fact
-    | InductiveAxiom constr -> InductiveAxiom constr
+        let default_ctx_params = path_subst_ctx metadata.default_ctx_params in
+        LinkageElem.MetaDataSection { metadata with default_ctx_params }
+    | ClosingFact fact -> 
+       let default_ctx_params = path_subst_ctx fact.default_ctx_params in
+       ClosingFact { fact with default_ctx_params }
+    | InductiveAxiom axiom -> 
+       let default_ctx_params = path_subst_ctx axiom.default_ctx_params in
+       InductiveAxiom { axiom with default_ctx_params } 
     | OpaqueFieldDefinition definition ->
-        OpaqueFieldDefinition definition
+        let default_ctx_params = path_subst_ctx definition.default_ctx_params in
+        OpaqueFieldDefinition { definition with default_ctx_params; }
     | ComputationalAxiom comp ->
         let axiom = Naming.replace_qualid_root ~source ~target comp.axiom in
-        ComputationalAxiom { comp with axiom }
-    | FamilyDefinition family ->
-        let g (name, expr) =
-          if Names.Id.equal source name then (target, expr) else (name, expr)
-        in
+        let default_ctx_params = path_subst_ctx comp.default_ctx_params in
+        ComputationalAxiom { comp with axiom; default_ctx_params }
+    | FamilyDefinition family ->        
         let context = family.linkage.context |> Bwd.map g in
         let linkage =
           { (path_subtitution family.linkage ~source ~target) with context }
         in
-        FamilyDefinition { family with linkage }
+        let default_ctx_params = path_subst_ctx family.default_ctx_params in
+        FamilyDefinition { family with linkage; default_ctx_params }
     | InductiveDefinition definition ->
+       let default_ctx_params = path_subst_ctx definition.default_ctx_params in
         InductiveDefinition
           {
             definition with
+            default_ctx_params;
             inductive =
               VernacInductive.path_subtitution definition.inductive ~source
                 ~target;
           }
-    | FieldDefinition field -> FieldDefinition field
-    | RecursorDefinition definition -> RecursorDefinition definition
-    | TheoremDefinition definition -> TheoremDefinition definition
+    | FieldDefinition field -> 
+       let default_ctx_params = path_subst_ctx field.default_ctx_params in
+       FieldDefinition { field with default_ctx_params; }
+    | RecursorDefinition definition -> 
+       let default_ctx_params = path_subst_ctx definition.default_ctx_params in
+       RecursorDefinition { definition with default_ctx_params }
+    | TheoremDefinition definition -> 
+       let default_ctx_params = path_subst_ctx definition.default_ctx_params in
+       TheoremDefinition { definition with default_ctx_params }
 
   and path_subtitution linkage ~source ~target =
     let f (name, elem) = (name, path_substitution_elem elem ~source ~target) in
