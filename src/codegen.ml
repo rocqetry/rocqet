@@ -573,8 +573,14 @@ let normalize_parameters
   if compare_result = 0 then parameters
   else if compare_result < 0 then
     (* The base context has more params.
-       We need to reparameterize via adding dummy args *)
-    Errors.fail ~info:"TODO: reparam more"
+       We need to reparameterize via adding dummy args *)    
+    default_ctx_params
+    |> List.to_seq 
+    |>  Seq.take params_len
+    |> Seq.map (fun (real, fake) -> 
+        let real = Libnames.qualid_of_ident real in 
+        if List.mem real parameters then real else fake)
+    |> List.of_seq    
   else
     (* if compare_result > 0 *)
     (* The current context in which we about to include the module 
