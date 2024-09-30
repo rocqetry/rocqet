@@ -1840,8 +1840,7 @@ Inductive bitfield : Type :=
               set_locals (function_locals f) (set_params vargs (function_params f)).
             
 
-            FOpaque Definition free_fenv : mem -> fenv -> function -> option mem := cheat.
-            FOpaque Definition update_fenv : fenv -> fenv := cheat.
+            FOpaque Definition free_fenv : mem -> fenv -> function -> option mem := cheat.            
             FOpaque Definition alloc_fenv : fenv -> mem -> function -> fenv -> mem -> Prop := cheat.
             
             MetaData create_undef_temps.
@@ -1961,8 +1960,7 @@ Inductive bitfield : Type :=
                        eval_expr e le m a v ->
                        free_fenv m e f = Some m' ->
                        step ge (State f (Sreturn (Some a)) k e le m)
-                         E0 (Returnstate v (call_cont k) m')
-            
+                         E0 (Returnstate v (call_cont k) m')            
                    | step_label: forall ge f lbl s k e le m,
                        step ge (State f (Slabel lbl s) k e le m)
                          E0 (State f s k e le m)
@@ -2026,8 +2024,7 @@ Inductive bitfield : Type :=
              List.map block_of_binding (PTree.elements e).          
 
           FOverride Definition free_fenv := fun m e f =>
-               Mem.free_list m (blocks_of_env e).
-          FOverride Definition update_fenv := fun e => e. 
+            Mem.free_list m (blocks_of_env e).          
    
           MetaData alloc_variables.
             Inductive alloc_variables: self__Sem.fenv -> mem ->
@@ -2072,13 +2069,11 @@ Inductive bitfield : Type :=
        
        Family Sem. 
          (* stack pointer *)
-         FOverride Definition fenv := val.
-         FOverride Definition empty_fenv := Vundef.
+         (* Vptr sp Ptrofs.zero *)
+         FOverride Definition fenv := block.
    
          FOverride FDefinition free_fenv := fun m sp f =>
-   	    Mem.free m sp 0 f.(fn_stackspace).
-          
-         FOverride Definition update_env := fun sp => (Vptr sp Ptrofs.zero).          
+   	    Mem.free m sp 0 f.(fn_stackspace).                   
           
          FOverride Definition alloc_fenv := fun sp m f sp' m' => 
             Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp)
@@ -2086,15 +2081,120 @@ Inductive bitfield : Type :=
   FEnd Cminor.
 
   Family CminorTransl.
-      Family Source extends CminorVariant.
+      Family Source extends CminorVariant.          
       FEnd Source.
 
       Family Target extends CminorVariant.
       FEnd Target.
+   
+      FRecursion transl_expr about Source.expr motive (fun (_ : Source.expr) => res Cminor.expr) by _rect.
+         Case Evar := (fun id => OK (Cminor.Evar id)).
+      FEnd transl_expr.
 
-      Family SimProof.
-          FOpaque Definition match_prog : Source.program -> Target.program -> Prop := cheat.
+      FRecursion transl_stmt about Source.stmt motive (fun (_ : Source.stmt) => res Target.stmt) by _rect.
+          Case Sskip := (OK (Target.Sskip)).
+          Case Sset := (fun id e =>
+                       do te <- transl_expr e cenv;
+                       OK (Target.Sassign id te)).
+          Case Sseq := (fun s1 transl_stmt_s1 s2 transl_stmt_s2 =>                        
+                          do ts1 <- transl_stmt_s1; 
+                          do ts2 <- transl_stmt_s2; 
+                          OK (Target.Sseq ts1 ts2)).
+          Case Sifthenelse := (fun e s1 transl_stmt_s1 s2 transl_stmt_s2 =>                               
+                                   do te <- transl_expr e;
+                                   do ts1 <- transl_stmt_s1;
+                                   do ts2 <- transl_stmt_s2;
+                                   OK (Target.Sifthenelse te ts1 ts2)).
+          Case Sloop := (fun s1 transl_stmt_s1 =>
+                            do ts <- transl_stmt_s1;
+                            OK (Target.Sloop ts)).
+          Case Sblock := (fun s transl_stmt_s =>
+                             do ts <- transl_stmt_s;
+                             OK (Target.Sblock ts)).
+          Case Sexit := (fun n => OK (Target.Sexit n)).
+          Case Sreturn := (fun expr =>
+                             match expr with
+                             | None => OK (Target.Sreturn None)
+                             | Some expr =>
+                                  do te <- transl_expr expr;
+                                  OK (Target.Sreturn (Some te))
+                             end).
+          Case Slabel := (fun lbl s transl_stmt_s =>                          
+                            do ts <- transl_stmt_s;
+                            OK (Target.Slabel lbl ts)).
+          Case Sgoto := (fun lbl => OK (Target.Sgoto lbl)).
+      FEnd transl_stmt.
+      
+      FOpaque Definition transl_function : Source.function -> res Target.function :=
+        cheat.
+
+      Family SimProof.                
+          (* Invariant on abstract call stack *)
+          MetaData frame.
+          Inductive frame : Type :=
+              Frame(tf: Target.function)
+                   (e: Source.fenv)
+                   (le: Source.env)
+                   (te: Target.env)
+                   (sp: Target.fenv)
+                   (lo hi: block).
+          FEnd frame.
+
+          FDefinition callstack : Type := list frame.
           
+          (* This subsumes "match_env" for the C family lanauges *)
+          FOpaque Definition match_callstack : 
+             meminj -> mem -> mem ->
+             callstack -> block -> block -> Prop := cheat.              
+          
+          FOpaque Definition transl_mem_invariant : meminj -> mem -> mem -> Prop := cheat.
+          FOpaque Definition transl_vals_invariant : meminj -> list val -> list val -> Prop := cheat.
+          FOpaque Definition transl_val_invariant : meminj -> val -> val -> Prop := cheat.
+          
+          FInductive match_cont: Source.cont -> Target.cont -> Prop :=
+             | match_Kstop:
+                 match_cont Source.Kstop Target.Kstop
+             | match_Kseq: forall s k ts tk cenv xenv cs,
+                 transl_stmt s = OK ts ->
+                 match_cont k tk ->
+                 match_cont (Source.Kseq s k) (Target.Kseq ts tk)             
+             | match_Kblock: forall k tk cenv xenv cs,
+                 match_cont k tk cenv xenv cs ->
+                 match_cont (Source.Kblock k) (Target.Kblock tk).
+      
+          Inductive match_states: Csharpminor.state -> Cminor.state -> Prop :=
+              | match_state:
+                  forall fn s k e le m tfn ts tk sp te tm f lo hi cs sz
+                  (TRF: transl_function fn = OK tfn)
+                  (TR: transl_stmt s = OK ts)
+                  (MINJ: transl_mem_invariant f m tm)
+                  (MCS: match_callstack f m tm
+                           (Frame cenv tfn e le te sp lo hi :: cs)
+                           (Mem.nextblock m) (Mem.nextblock tm))
+                  (MK: match_cont k tk),
+                  match_states (Source.State fn s k e le m)
+                               (Target.State tfn ts tk sp te tm)                               
+              | match_callstate:
+                  forall fd args k m tfd targs tk tm f cs cenv
+                  (TR: transl_fundef fd = OK tfd)
+                  (MINJ: transl_mem_invariant f m tm)
+                  (MCS: match_callstack f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
+                  (MK: match_cont k tk)
+                  (ISCC: Source.is_call_cont k)
+                  (ARGSINJ: transl_val_invariant f args targs),
+                  match_states (Source.Callstate fd args k m)
+                               (Target.Callstate tfd targs tk tm)
+              | match_returnstate:
+                  forall v k m tv tk tm f cs cenv
+                  (MINJ: transl_mem_invariant f m tm)
+                  (MCS: match_callstack f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
+                  (MK: match_cont k tk cenv nil cs)
+                  (RESINJ: transl_val_invariant f v tv),
+                  match_states (Source.Returnstate v k m)
+                               (Target.Returnstate tv tk tm).
+
+          FOpaque Definition match_prog := ...
+
           FOpaque Definition match_stack_frame := ...
           Inductive match_cont := ...
 
@@ -2122,46 +2222,45 @@ Inductive bitfield : Type :=
                  eval_expr tge (Vptr sp Ptrofs.zero) te tm ta tv
               /\ Val.inject f v tv.
           
-          FOpaque Definition measure : Source.Sem.state -> Source.Sem.state -> nat := 
-             fun _ _ => 0.
+          FOpaque Definition measure : Source.Sem.state -> nat := 
+             fun _ => 0.
 
           FInduction transl_step_correct about Source.Sem.step motive
             (fun ge S1 t S2 (_ : Source.Sem.step ge S1 t S2) => 
-             forall prog tprog tge, match_prog prog tprog -> 
+            forall prog tprog tge, match_prog prog tprog -> 
                     Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->               
-          forall T1, match_states ge S1 T1 -> 
-          (exists T2, plus Target.Sem.step tge T1 t T2 /\ match_states ge S2 T2) 
-          \/ (measure S2 < measure S1 /\ t = E0 /\ match_states ge S2 T1)%nat).
-        FProof.
-          finduction.
-          (* skip seq *)
-          + intros. apply cheat.
-          (* skip block *)
-          + intros. apply cheat.
-          (* skip call *)
-          + intros. apply cheat.
-          (* set *)
-          + intros. apply cheat.
-          (* seq *)
-          + intros. apply cheat.
-          (* ifthenelse *)
-          + intros. apply cheat.
-          (* loop *)
-          + apply cheat.
-          (* block *)
-          + apply cheat.
-          (* return none *)
-          + apply cheat.
-          (* return some *)
-          + apply cheat.
-          (* label *)
-          + apply cheat.
-          (* goto *)
-          + apply cheat.
-          (* internal function *)
-          + intros. apply cheat.
-        Qed.
-        FEnd transl_step_correct.
+              forall T1, match_states ge S1 T1 -> 
+              (exists T2, plus Target.Sem.step tge T1 t T2 /\ match_states ge S2 T2) \/
+              (measure S2 < measure S1 /\ t = E0 /\ match_states ge S2 T1)%nat).
+            FProof.          
+              (* skip seq *)
+              + intros. apply cheat.
+              (* skip block *)
+              + intros. apply cheat.
+              (* skip call *)
+              + intros. apply cheat.
+              (* set *)
+              + intros. apply cheat.
+              (* seq *)
+              + intros. apply cheat.
+              (* ifthenelse *)
+              + intros. apply cheat.
+              (* loop *)
+              + apply cheat.
+              (* block *)
+              + apply cheat.
+              (* return none *)
+              + apply cheat.
+              (* return some *)
+              + apply cheat.
+              (* label *)
+              + apply cheat.
+              (* goto *)
+              + apply cheat.
+              (* internal function *)
+              + intros. apply cheat.
+            Qed.
+          FEnd transl_step_correct.
         
         FLemma transl_initial_states:
           forall S prog tprog ge, Csharpminor.Sem.initial_state prog S ->
