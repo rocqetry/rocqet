@@ -2147,7 +2147,7 @@ Inductive bitfield : Type :=
           (* This subsumes "match_env" for the C family lanauges *)
           FOpaque Definition match_callstack : 
              meminj -> mem -> mem ->
-             callstack -> block -> block -> Prop := cheat.              
+             callstack -> block -> block -> Prop := cheat.
           
           FOpaque Definition transl_mem_invariant : meminj -> mem -> mem -> Prop := cheat.
           FOpaque Definition transl_vals_invariant : meminj -> list val -> list val -> Prop := cheat.
@@ -2193,28 +2193,23 @@ Inductive bitfield : Type :=
                   (MK: match_cont k tk cenv nil cs)
                   (RESINJ: transl_val_invariant f v tv),
                   match_states (Source.Returnstate v k m)
-                               (Target.Returnstate tv tk tm).
-
-          FOpaque Definition match_prog := ...
-
-          FOpaque Definition match_stack_frame := ...          
+                               (Target.Returnstate tv tk tm).          
              
-          FInduction transl_expr_correct:
+          (*FInduction transl_expr_correct:
               forall f m tm cenv tf e le te sp lo hi cs
-                (MINJ: Mem.inject f m tm)
+                (MINJ: transl_mem_invariant f m tm)
                 (MATCH: match_callstack f m tm
                          (Frame cenv tf e le te sp lo hi :: cs)
                          (Mem.nextblock m) (Mem.nextblock tm)),
               forall a v,
-              Csharpminor.eval_expr ge e le m a v ->
+              Source.eval_expr ge e le m a v ->
               forall ta
                 (TR: transl_expr cenv a = OK ta),
               exists tv,
-                 eval_expr tge (Vptr sp Ptrofs.zero) te tm ta tv
-              /\ Val.inject f v tv.
+                 Target.eval_expr tge sp te tm ta tv
+              /\ transl_val_invariant f v tv.*)
           
-          FOpaque Definition measure : Source.Sem.state -> nat := 
-             fun _ => 0.
+          FOpaque Definition measure : Source.Sem.state -> nat := cheat.
 
           FInduction transl_step_correct about Source.Sem.step motive
             (fun ge S1 t S2 (_ : Source.Sem.step ge S1 t S2) => 
