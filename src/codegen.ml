@@ -580,12 +580,10 @@ let normalize_parameters
     (* The current context in which we about to include the module 
        with parameters `default_ctx_param` has more parameters, so 
        we are use our own arguments since this context subsumes *)
+    (* TODO: actually check that the names in `default_ctx_params` are in 
+        `parameters` *)
     default_ctx_params
     |> List.map (fun (self_name, _) -> Libnames.qualid_of_ident self_name)    
-    
-    (*parameters |> List.rev |> List.to_seq
-    |> Seq.take default_params_len
-    |> List.of_seq |> List.rev*)
 
 let compile_linkage_context ~field_name (context : LinkageCtx.t) :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
