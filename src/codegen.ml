@@ -574,13 +574,10 @@ let normalize_parameters
   else if compare_result < 0 then
     (* The base context has more params.
        We need to reparameterize via adding dummy args *)    
-    default_ctx_params
-    |> List.to_seq 
-    |>  Seq.take params_len
-    |> Seq.map (fun (real, fake) -> 
-        let real = Libnames.qualid_of_ident real in 
+    default_ctx_params    
+    |> List.map (fun (real, fake) -> 
+        let real = Libnames.qualid_of_ident real in
         if List.mem real parameters then real else fake)
-    |> List.of_seq    
   else
     (* if compare_result > 0 *)
     (* The current context in which we about to include the module 
@@ -903,7 +900,14 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
             normalize_parameters 
               ~default_ctx_params 
               ~parameters:(Linkage.context_parameters linkage) 
-          in
+          in          
+          let _ = 
+            print_endline "Start";
+            parameters 
+            |> List.iter (fun n -> Printf.printf "Param: %s\n" (Pretty.pretty_qualid n));
+            print_endline "End"
+          in 
+          (* We shouldn't shift "Reparam" parameters *)
           match parameters with
           | [] -> []
           | _ :: l ->              
