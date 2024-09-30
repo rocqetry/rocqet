@@ -564,7 +564,8 @@ let compile_theorem_implementation ~(name : Names.Id.t)
   let* _ = define_term ~name recursor in
   return ()
 
-let normalize_parameters ~(default_ctx_params : CompiledModule.t list)
+let normalize_parameters 
+    ~(default_ctx_params : (Names.Id.t * CompiledModule.t) list)
     ~(parameters : CompiledModule.t list) =
   let default_params_len = List.length default_ctx_params in
   let params_len = List.length parameters in
@@ -576,14 +577,15 @@ let normalize_parameters ~(default_ctx_params : CompiledModule.t list)
     Errors.fail ~info:"TODO: reparam more"
   else
     (* if compare_result > 0 *)
-    (* The base context has less params.
-       Take only the required arguments. *)
-    (* We are tyring to take the last n params from the 
-       derived context to apply to the base. Here n is the 
-       number of params that base takes. *)
-    parameters |> List.rev |> List.to_seq
+    (* The current context in which we about to include the module 
+       with parameters `default_ctx_param` has more parameters, so 
+       we are use our own arguments since this context subsumes *)
+    default_ctx_params
+    |> List.map (fun (self_name, _) -> Libnames.qualid_of_ident self_name)    
+    
+    (*parameters |> List.rev |> List.to_seq
     |> Seq.take default_params_len
-    |> List.of_seq |> List.rev
+    |> List.of_seq |> List.rev*)
 
 let compile_linkage_context ~field_name (context : LinkageCtx.t) :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
@@ -1187,9 +1189,12 @@ let reparameterize
 
 (* Note that this is the context parameter,
    not the parameters to a field *)
+(* self_0 => defualt_0
+   ...
+   self_1 => defualt_1 *)
 let compile_default_params
     ~(context : (Names.Id.t * Constrexpr.module_ast) list) :
-    CompiledModule.t list =
+    (Names.Id.t * CompiledModule.t) list =
   let compile ~(names : CompiledModule.t list) =
     let module_name = Naming.fresh_name ~prefix:"Reparam" in
     let f = List.hd names in
@@ -1210,8 +1215,9 @@ let compile_default_params
     | Constrexpr.CMwith (_, _) ->
         Errors.fail ~info:"extract_idents: too complex to extract ident"
   in
-  let find (map : (Libnames.qualid * CompiledModule.t) Bwd.t)
-      (name : Libnames.qualid) =
+  let find (map : (Names.Id.t * CompiledModule.t) Bwd.t)
+      (name : Libnames.qualid) =    
+    let map = Bwd.map (fun (name, expr) -> Libnames.qualid_of_ident name, expr) map in
     match map |> Bwd.to_list |> List.assoc name with
     | name -> name
     | exception Not_found ->
@@ -1221,15 +1227,14 @@ let compile_default_params
         in
         Errors.fail ~info
   in
-  let mapping : (Libnames.qualid * CompiledModule.t) Bwd.t = Bwd.Emp in
+  let mapping : (Names.Id.t * CompiledModule.t) Bwd.t = Bwd.Emp in
   (* This is too messy! TODO: make it *beautiful* *)
   List.fold_left
-    (fun map (name, expr) ->
-      let name = Libnames.qualid_of_ident name in
+    (fun map (name, expr) ->      
       let names = expr |> extract_idents |> List.rev in
       let f, args = (List.hd names, List.tl names) in
       let names = f :: List.map (find map) args in
       let compiled = compile ~names in
       Bwd.Snoc (map, (name, compiled)))
     mapping context
-  |> Bwd.map snd |> Bwd.to_list
+  |> Bwd.to_list
