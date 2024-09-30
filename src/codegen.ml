@@ -788,19 +788,24 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
           [ name; Names.Id.of_string "Ctx" ] |> Naming.list_to_path
         in
         let parameters =
-          match context |> Bwd.to_list |> List.map fst with
+          let parameters = context |> Bwd.to_list |> List.map (fun (n, _) -> Libnames.qualid_of_ident n) in
+          let parameters = normalize_parameters ~default_ctx_params ~parameters in
+          match parameters with
           | [] -> []
           | l ->
               let l = List.tl l in
-              let current = module_name |> Naming.self_version in
+              let current = module_name |> Naming.self_version |> Libnames.qualid_of_ident in
               l @ [ current ]
         in
         let parameters =
           parameters
           |> List.map (fun parameter ->
-                 parameter |> Naming.un_self_version |> qualify)
-        in
-        let parameters = normalize_parameters ~default_ctx_params ~parameters in
+                 parameter 
+                 |> Naming.path_to_list 
+                 |> List.hd 
+                 |> Naming.un_self_version 
+                 |> qualify)
+        in        
         let module_expr = Termutils.ident_to_module_expr compiled_impl in
         let module_expr =
           Termutils.apply_module ~functor_expr:module_expr ~arguments:parameters
@@ -890,21 +895,25 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
            In some sense, this is like shifting the parameters 
            one "unit" to the right. *)
         let parameters =
-          match Linkage.context_parameters linkage with
+          let parameters = 
+            normalize_parameters 
+              ~default_ctx_params 
+              ~parameters:(Linkage.context_parameters linkage) 
+          in
+          match parameters with
           | [] -> []
           | _ :: l ->              
               let current =
                 name |> Naming.self_version |> Libnames.qualid_of_ident
               in
               l @ [ current ]
-        in
+        in        
         let parameters =
           parameters
           |> List.map (fun parameter ->
                  parameter |> Naming.path_to_list |> List.hd
                  |> Naming.un_self_version |> qualify)
         in
-        let parameters = normalize_parameters ~default_ctx_params ~parameters in
         let* _ = compile_fields fields ctx in
         let module_expr = Termutils.ident_to_module_expr compiled_impl in
         let module_expr =
