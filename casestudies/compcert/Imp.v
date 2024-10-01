@@ -364,11 +364,11 @@ Inductive bitfield : Type :=
       (* Invariant on abstract call stack *)
       MetaData frame.
       Inductive frame : Type :=
-          Frame(tf: self__CminorTransl.Target.function)
-               (e: self__CminorTransl.Source.Sem.fenv)
-               (le: self__CminorTransl.Source.Sem.env)
-               (te: self__CminorTransl.Target.Sem.env)
-               (sp: self__CminorTransl.Target.Sem.fenv)
+          Frame(tf: self__Cfamtransl.Target.function)
+               (e: self__Cfamtransl.Source.fenv)
+               (le: self__Cfamtransl.Source.env)
+               (te: self__Cfamtransl.Target.env)
+               (sp: self__Cfamtransl.Target.fenv)
                (lo hi: block).
       FEnd frame.
 
@@ -383,31 +383,31 @@ Inductive bitfield : Type :=
       FOpaque Definition transl_vals_invariant : meminj -> list val -> list val -> Prop := cheat.
       FOpaque Definition transl_val_invariant : meminj -> val -> val -> Prop := cheat.
           
-      FInductive match_cont: Source.Sem.cont -> Target.Sem.cont -> Prop :=
+      FInductive match_cont: Source.cont -> Target.cont -> Prop :=
          | match_Kstop:
-             match_cont Source.Sem.Kstop Target.Sem.Kstop
+             match_cont Source.Kstop Target.Kstop
          | match_Kseq: forall s k ts tk,
              transl_stmt s = OK ts ->
              match_cont k tk ->
-             match_cont (Source.Sem.Kseq s k) (Target.Sem.Kseq ts tk)
+             match_cont (Source.Kseq s k) (Target.Kseq ts tk)
          | match_Kblock: forall k tk,
              match_cont k tk ->
-             match_cont (Source.Sem.Kblock k) (Target.Sem.Kblock tk).
+             match_cont (Source.Kblock k) (Target.Kblock tk).
       
       MetaData match_states.
       Inductive match_states: 
-         self__CminorTransl.Source.Sem.state -> self__CminorTransl.Target.Sem.state -> Prop :=
+         self__Cfamtransl.Source.state -> self__Cfamtransl.Target.state -> Prop :=
           | match_state:
-              forall fn s k e le m tfn ts tk sp te tm (*f lo hi cs*)
-              (*(TRF: self__CminorTransl.transl_function fn = OK tfn)
-              (TR: self__CminorTransl.transl_stmt s = OK ts)
-              (MINJ: self__CminorTransl.transl_mem_invariant f m tm)
-              (MCS: self__CminorTransl.match_callstack f m tm
-                       (self__CminorTransl.Frame tfn e le te sp lo hi :: cs)
-                       (Mem.nextblock m) (Mem.nextblock tm))*)
-              (MK: self__CminorTransl.match_cont k tk),
-              match_states (self__CminorTransl.Source.Sem.State fn s k e le m)
-                           (self__CminorTransl.Target.Sem.State tfn ts tk sp te tm).
+              forall fn s k e le m tfn ts tk sp te tm f lo hi cs
+              (TRF: self__Cfamtransl.transl_function fn = OK tfn)
+              (TR: self__Cfamtransl.transl_stmt s = OK ts)
+              (MINJ: self__Cfamtransl.transl_mem_invariant f m tm)
+              (MCS: self__Cfamtransl.match_callstack f m tm
+                       (self__Cfamtransl.Frame tfn e le te sp lo hi :: cs)
+                       (Mem.nextblock m) (Mem.nextblock tm))
+              (MK: self__Cfamtransl.match_cont k tk),
+              match_states (self__Cfamtransl.Source.State fn s k e le m)
+                           (self__Cfamtransl.Target.State tfn ts tk sp te tm).
       FEnd match_states.
 
       (* | match_callstate:
@@ -444,22 +444,37 @@ Inductive bitfield : Type :=
                  Target.eval_expr tge sp te tm ta tv
               /\ transl_val_invariant f v tv.*)
           
-      FOpaque Definition measure : Source.Sem.state -> nat := cheat.
+      FOpaque Definition measure : Source.state -> nat := cheat.
 
-      FInduction transl_step_correct about Source.Sem.step motive
-        (fun ge S1 t S2 (_ : Source.Sem.step ge S1 t S2) => 
+      FInduction transl_step_correct about Source.step motive
+        (fun ge S1 t S2 (_ : Source.step ge S1 t S2) => 
         forall prog tprog tge, (* match_prog prog tprog -> *)
                 Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->               
           forall T1, match_states S1 T1 -> 
-          (exists T2, plus Target.Sem.step tge T1 t T2 /\ match_states S2 T2) \/
+          (exists T2, plus Target.step tge T1 t T2 /\ match_states S2 T2) \/
           (measure S2 < measure S1 /\ t = E0 /\ match_states S2 T1)%nat).
         FProof.
           (* skip seq *)
-          +  unfold self__CminorTransl.__motiveTtransl_step_correct. 
-             intros ge f s k e le m prog tprog tge H G.             
-             intros.             
-            left. econstructor; split. apply plus_one. 
-            apply self__CminorTransl.Target.Sem.step_skip_seq.
+          +              
+            unfold self__Cfamtransl.__motiveTtransl_step_correct. 
+            intros ge f s k e le m prog tprog tge H G.
+            intros T1 MSTATE. inv MSTATE.
+            left. inv MK. exists               
+              (self__Cfamtransl.Target.State 
+                 tfn self__Cfamtransl.Target.Sskip 
+                 (self__Cfamtransl.Target.Kseq s k) e le m).
+            split. apply plus_one. 
+            apply self__Cfamtransl.Target.step_skip_seq.
+            apply self__Cfamtransl.match_state.
+
+            left. econstructor; split. apply plus_one.
+            
+            apply self__Cfamtransl.Target.step_skip_seq.
+
+            left. exists ()
+            econstructor; split. apply plus_one. 
+            
+            apply self__Cfamtransl.Target.step_skip_seq.
 
             apply cheat.
           (* skip block *)
