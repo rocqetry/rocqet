@@ -101,7 +101,7 @@ FInductive value : self__STLC.tm -> Prop :=
 *)
 
 FInduction _value_not_tm_var 
-  about self__STLC.value
+  about value
   motive (fun z (h : self__STLC.value z) => forall i,  (self__STLC.tm_var i) = z -> False).
 FProof.
 + intros. prec_discriminate self__STLC.tm_prec H. 
