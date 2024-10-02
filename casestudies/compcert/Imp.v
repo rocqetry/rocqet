@@ -407,10 +407,8 @@ Inductive bitfield : Type :=
                        (Mem.nextblock m) (Mem.nextblock tm))
               (MK: self__Cfamtransl.match_cont k tk),
               match_states (self__Cfamtransl.Source.State fn s k e le m)
-                           (self__Cfamtransl.Target.State tfn ts tk sp te tm).
-      FEnd match_states.
-
-      (* | match_callstate:
+                           (self__Cfamtransl.Target.State tfn ts tk sp te tm).      
+         | match_callstate:
               forall fd args k m tfd targs tk tm f cs
               (TR: self__CminorTransl.transl_fundef fd = OK tfd)
               (MINJ: self__CminorTransl.transl_mem_invariant f m tm)
@@ -428,7 +426,7 @@ Inductive bitfield : Type :=
               (RESINJ: self__CminorTransl.transl_val_invariant f v tv),
               match_states (self__CminorTransl.Source.Sem.Returnstate v k m)
                            (self__CminorTransl.Target.Sem.Returnstate tv tk tm).
-      FEnd match_states.*)
+      FEnd match_states.
              
           (*FInduction transl_expr_correct:
               forall f m tm cenv tf e le te sp lo hi cs
