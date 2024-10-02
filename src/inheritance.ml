@@ -57,7 +57,7 @@ let rec linkage_concatenate ~(derived : Linkage.t) ~(base : Linkage.t) =
               inherit_elements ~elements:(Bwd.to_list dependencies) ~linkage
             in
             let element =
-              linkage_elem_concatenate ~derived:element ~base:base_element
+              linkage_elem_concatenate ~name ~derived:element ~base:base_element
             in
             let pred = Bwd.mem name (Bwd.map fst linkage.fields) in
             assert (not pred);
@@ -73,7 +73,7 @@ let rec linkage_concatenate ~(derived : Linkage.t) ~(base : Linkage.t) =
    hanlders from the base
    family come before the derived family's handlers
 *)
-and linkage_elem_concatenate ~(derived : LinkageElem.t) ~(base : LinkageElem.t)
+and linkage_elem_concatenate ~name ~(derived : LinkageElem.t) ~(base : LinkageElem.t)
     : LinkageElem.t =
   let remove_duplicates lst =
     let rec aux seen = function
@@ -113,8 +113,14 @@ and linkage_elem_concatenate ~(derived : LinkageElem.t) ~(base : LinkageElem.t)
       let handlers = remove_duplicates (base.handlers @ derived.handlers) in
       TheoremDefinition { derived with names; handlers }
   | MetaDataSection derived, MetaDataSection _ -> MetaDataSection derived
+  | ClosingFact fact, ClosingFact _ -> ClosingFact fact
   | _, _ ->
-      Errors.fail ~info:"Can't concatenate different kinds of linkage element"
+      let info = 
+        Printf.sprintf 
+          "Can't concatenate different kinds of linkage element: %s" 
+          (Names.Id.to_string name)
+      in
+      Errors.fail ~info
 
 let linkages_concatenate linkages =
   match linkages with
