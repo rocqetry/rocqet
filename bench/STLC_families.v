@@ -296,9 +296,14 @@ FInduction  subst_lemma
   (forall G', has_type G' k T1) ->
   has_type G (subst body x k) T2).
   FProof.
-+ intros; cbn in *. frec_eval self__STLC.subst. 
-unfold self__STLC.subst_handler.tm_var. 
-destruct (PeanoNat.Nat.eq_dec x0 x); subst; eauto;
++ intros; cbn in *. 
+  unfold self__STLC.__motiveTsubst_lemma.
+  rewrite self__STLC.subst_tm_var_eq.
+  unfold self__STLC.substtm_var.
+  intros.
+  (* frec_eval self__STLC.subst. *)
+  (* unfold self__STLC.subst_handler.tm_var. *)
+  destruct (PeanoNat.Nat.eq_dec x0 x); subst; eauto;
 try rewrite PeanoNat.Nat.eqb_refl in *; eauto. unfold update in e.
 rewrite PeanoNat.Nat.eqb_refl in *; eauto. inversion e; subst; eauto.
 rewrite <- PeanoNat.Nat.eqb_neq in n; subst; eauto. 
