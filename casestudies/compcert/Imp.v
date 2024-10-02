@@ -180,12 +180,14 @@ Inductive bitfield : Type :=
           | Kseq: stmt -> cont -> cont
           | Kblock: cont -> cont.
                    
-       FInductive state: Type :=
+       MetaData state.
+       Inductive state: Type :=
          | State :
              self__Cfam.function -> self__Cfam.stmt -> self__Cfam.cont ->
              self__Cfam.fenv -> self__Cfam.env -> mem -> state                 
          | Callstate: self__Cfam.fundef -> list val -> self__Cfam.cont -> mem -> state                    
          | Returnstate : val -> self__Cfam.cont -> mem -> state.
+       FEnd state.
             
        FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
              Case Kstop := Kstop.
@@ -238,55 +240,55 @@ Inductive bitfield : Type :=
                            
        FInductive step : genv -> state -> trace -> state -> Prop :=
               | step_skip_seq: forall ge f s k e le m,
-                  step ge (State f Sskip (Kseq s k) e le m)
-                    E0 (State f s k e le m)
+                  step ge (self__Cfam.State f Sskip (Kseq s k) e le m)
+                    E0 (self__Cfam.State f s k e le m)
               | step_skip_block: forall ge f k e le m,
-                  step ge (State f Sskip (Kblock k) e le m)
-                    E0 (State f Sskip k e le m)
+                  step ge (self__Cfam.State f Sskip (Kblock k) e le m)
+                    E0 (self__Cfam.State f Sskip k e le m)
               | step_skip_call: forall ge f k e le m m',
                   is_call_cont k ->                       
                   free_fenv m e f = Some m' ->
-                  step ge (State f Sskip k e le m)
-                    E0 (Returnstate Vundef k m')
+                  step ge (self__Cfam.State f Sskip k e le m)
+                    E0 (self__Cfam.Returnstate Vundef k m')
               | step_set: forall ge f id a k e le m v,
                   eval_expr e le m a v ->
-                  step ge (State f (Sset id a) k e le m)
-                    E0 (State f Sskip k e (PTree.set id v le) m)
+                  step ge (self__Cfam.State f (Sset id a) k e le m)
+                    E0 (self__Cfam.State f Sskip k e (PTree.set id v le) m)
               | step_seq: forall ge f s1 s2 k e le m,
-                  step ge (State f (Sseq s1 s2) k e le m)
-                    E0 (State f s1 (Kseq s2 k) e le m)
+                  step ge (self__Cfam.State f (Sseq s1 s2) k e le m)
+                    E0 (self__Cfam.State f s1 (Kseq s2 k) e le m)
               | step_ifthenelse: forall ge f a s1 s2 k e le m v b,
                   eval_expr e le m a v ->
                   Val.bool_of_val v b ->
-                  step ge (State f (Sifthenelse a s1 s2) k e le m)
-                    E0 (State f (if b then s1 else s2) k e le m)
+                  step ge (self__Cfam.State f (Sifthenelse a s1 s2) k e le m)
+                    E0 (self__Cfam.State f (if b then s1 else s2) k e le m)
               | step_loop: forall ge f s k e le m,
-                  step ge (State f (Sloop s) k e le m)
-                    E0 (State f s (Kseq (Sloop s) k) e le m)        
+                  step ge (self__Cfam.State f (Sloop s) k e le m)
+                    E0 (self__Cfam.State f s (Kseq (Sloop s) k) e le m)        
               | step_block: forall ge f s k e le m,
-                  step ge (State f (Sblock s) k e le m)
-                    E0 (State f s (Kblock k) e le m)
+                  step ge (self__Cfam.State f (Sblock s) k e le m)
+                    E0 (self__Cfam.State f s (Kblock k) e le m)
               | step_return_0: forall ge f k e le m m',                       
                   free_fenv m e f = Some m' ->
-                  step ge (State f (Sreturn None) k e le m)
-                    E0 (Returnstate Vundef (call_cont k) m')            
+                  step ge (self__Cfam.State f (Sreturn None) k e le m)
+                    E0 (self__Cfam.Returnstate Vundef (call_cont k) m')            
               | step_return_1: forall ge f a k e le m v m',
                   eval_expr e le m a v ->
                   free_fenv m e f = Some m' ->
-                  step ge (State f (Sreturn (Some a)) k e le m)
-                    E0 (Returnstate v (call_cont k) m')            
+                  step ge (self__Cfam.State f (Sreturn (Some a)) k e le m)
+                    E0 (self__Cfam.Returnstate v (call_cont k) m')            
               | step_label: forall ge f lbl s k e le m,
-                  step ge (State f (Slabel lbl s) k e le m)
-                    E0 (State f s k e le m)
+                  step ge (self__Cfam.State f (Slabel lbl s) k e le m)
+                    E0 (self__Cfam.State f s k e le m)
               | step_goto: forall ge f lbl k e le m s' k',
                   find_label (function_body f) lbl (call_cont k) = Some(s', k') ->
-                  step ge (State f (Sgoto lbl) k e le m)
-                    E0 (State f s' k' e le m)
+                  step ge (self__Cfam.State f (Sgoto lbl) k e le m)
+                    E0 (self__Cfam.State f s' k' e le m)
               | step_internal_function: forall ge f vargs k m m1 e le,                                               
                   alloc_fenv empty_fenv m f e m1 ->
                   init_env f vargs = le ->                        
-                   step ge (Callstate (Internal f) vargs k m)
-                     E0 (State f (function_body f) k e le m1).
+                   step ge (self__Cfam.Callstate (Internal f) vargs k m)
+                     E0 (self__Cfam.State f (function_body f) k e le m1).
        
        FOpaque Definition is_main_function : fundef -> Prop := cheat.
             
@@ -407,25 +409,25 @@ Inductive bitfield : Type :=
                        (Mem.nextblock m) (Mem.nextblock tm))
               (MK: self__Cfamtransl.match_cont k tk),
               match_states (self__Cfamtransl.Source.State fn s k e le m)
-                           (self__Cfamtransl.Target.State tfn ts tk sp te tm).      
+                           (self__Cfamtransl.Target.State tfn ts tk sp te tm)      
          | match_callstate:
               forall fd args k m tfd targs tk tm f cs
-              (TR: self__CminorTransl.transl_fundef fd = OK tfd)
-              (MINJ: self__CminorTransl.transl_mem_invariant f m tm)
-              (MCS: self__CminorTransl.match_callstack f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
-              (MK: self__CminorTransl.match_cont k tk)
-              (ISCC: self__CminorTransl.Source.Sem.is_call_cont k)
-              (ARGSINJ: self__CminorTransl.transl_vals_invariant f args targs),
-              match_states (self__CminorTransl.Source.Sem.Callstate fd args k m)
-                           (self__CminorTransl.Target.Sem.Callstate tfd targs tk tm)
+              (TR: self__Cfamtransl.transl_fundef fd = OK tfd)
+              (MINJ: self__Cfamtransl.transl_mem_invariant f m tm)
+              (MCS: self__Cfamtransl.match_callstack f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
+              (MK: self__Cfamtransl.match_cont k tk)
+              (ISCC: self__Cfamtransl.Source.is_call_cont k)
+              (ARGSINJ: self__Cfamtransl.transl_vals_invariant f args targs),
+              match_states (self__Cfamtransl.Source.Callstate fd args k m)
+                           (self__Cfamtransl.Target.Callstate tfd targs tk tm)
           | match_returnstate:
               forall v k m tv tk tm f cs
-              (MINJ: self__CminorTransl.transl_mem_invariant f m tm)
-              (MCS: self__CminorTransl.match_callstack f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
-              (MK: self__CminorTransl.match_cont k tk)
-              (RESINJ: self__CminorTransl.transl_val_invariant f v tv),
-              match_states (self__CminorTransl.Source.Sem.Returnstate v k m)
-                           (self__CminorTransl.Target.Sem.Returnstate tv tk tm).
+              (MINJ: self__Cfamtransl.transl_mem_invariant f m tm)
+              (MCS: self__Cfamtransl.match_callstack f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
+              (MK: self__Cfamtransl.match_cont k tk)
+              (RESINJ: self__Cfamtransl.transl_val_invariant f v tv),
+              match_states (self__Cfamtransl.Source.Returnstate v k m)
+                           (self__Cfamtransl.Target.Returnstate tv tk tm).
       FEnd match_states.
              
           (*FInduction transl_expr_correct:
@@ -483,23 +485,19 @@ Inductive bitfield : Type :=
           (* set *)
           + intros. apply cheat.
           (* seq *)
-          + 
-            intros ge f s k e le m prog tprog tge H G I.
-            intros T1 MSTATE. inv MSTATE.            
-            left. econstructor. split. apply plus_one. apply cheat.
-            apply self__Cfamtransl.match_state with (tfn := tfn) (lo := lo) (hi := hi) (cs := cs) (f := f0).
-            apply TRF.
-            
-            assert (E: s0 = (self__Cfamtransl.Source.Sseq s k)). { apply cheat. }            
-            monadInv TR.
-            rewrite -> E in TR.            
+          +  unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f s1 s2 k e le m prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE.                                    
             rewrite -> self__Cfamtransl.transl_stmt_Sseq_eq in TR.
             unfold self__Cfamtransl.transl_stmtSseq in TR.
-            
+            monadInv TR. 
+            left. econstructor. split. apply plus_one. 
             apply self__Cfamtransl.Target.step_seq.
-            assert (A : self__Cfamtransl.transl_stmt s = OK s').
-            
-            intros. apply cheat.
+            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).
+            - assumption. - assumption. - assumption. - assumption.                                                                                  
+            - apply self__Cfamtransl.match_Kseq.
+              assumption. assumption.
+              
           (* ifthenelse *)
           + intros. apply cheat.
           (* loop *)
