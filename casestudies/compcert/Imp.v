@@ -456,6 +456,7 @@ Inductive bitfield : Type :=
         FProof.
           (* skip seq *)
           +              
+            (*
             unfold self__Cfamtransl.__motiveTtransl_step_correct. 
             intros ge f s k e le m prog tprog tge H G.
             intros T1 MSTATE. inv MSTATE.
@@ -474,7 +475,7 @@ Inductive bitfield : Type :=
             left. exists ()
             econstructor; split. apply plus_one. 
             
-            apply self__Cfamtransl.Target.step_skip_seq.
+            apply self__Cfamtransl.Target.step_skip_seq.*)
 
             apply cheat.
           (* skip block *)
@@ -484,7 +485,23 @@ Inductive bitfield : Type :=
           (* set *)
           + intros. apply cheat.
           (* seq *)
-          + intros. apply cheat.
+          + 
+            intros ge f s k e le m prog tprog tge H G I.
+            intros T1 MSTATE. inv MSTATE.            
+            left. econstructor. split. apply plus_one. apply cheat.
+            apply self__Cfamtransl.match_state with (tfn := tfn) (lo := lo) (hi := hi) (cs := cs) (f := f0).
+            apply TRF.
+            
+            assert (E: s0 = (self__Cfamtransl.Source.Sseq s k)). { apply cheat. }            
+            monadInv TR.
+            rewrite -> E in TR.            
+            rewrite -> self__Cfamtransl.transl_stmt_Sseq_eq in TR.
+            unfold self__Cfamtransl.transl_stmtSseq in TR.
+            
+            apply self__Cfamtransl.Target.step_seq.
+            assert (A : self__Cfamtransl.transl_stmt s = OK s').
+            
+            intros. apply cheat.
           (* ifthenelse *)
           + intros. apply cheat.
           (* loop *)
