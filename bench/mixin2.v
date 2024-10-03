@@ -329,7 +329,7 @@ try rewrite PeanoNat.Nat.eqb_refl; cbn in *; subst; eauto.
    unfold self__STLC.__motiveTsubst_lemma.
   rewrite self__STLC.subst_tm_unit_eq.
   unfold self__STLC.substtm_unit. intros.  
-(*frec_eval self__STLC.subst. unfold self__STLC.subst_handler.tm_unit.*) eapply self__STLC.ht_unit.
+  eapply self__STLC.ht_unit.
 Qed. FEnd subst_lemma  .
 
 FInductive fv : ident -> self__STLC.tm -> Prop :=
@@ -374,19 +374,19 @@ FInduction free_var_in_ctx
     exists U, G x = Some U
   ).
 FProof.
+unfold self__STLC.__motiveTfree_var_in_ctx.
 repeat split; repeat (intro; intros); cbn in * .
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
 
-(*+ forwards*: self__STLC.fv_inv_tm_var. subst; eauto.
-+ forwards*: self__STLC.fv_inv_tm_app. destruct_ALL; eauto. apply (*cheat. apply cheat. *)
-+ forwards*: self__STLC.fv_inv_tm_abs; destruct_ALL; subst; eauto. (*apply cheat.   *)
++ forwards*: self__STLC.fv_inv_tm_var. subst; eauto.
++ unfold self__STLC.__motiveTfree_var_in_ctx. intros. 
+forwards*: self__STLC.fv_inv_tm_app. destruct_ALL; eauto.
+   
++ unfold self__STLC.__motiveTfree_var_in_ctx. intros. 
+  forwards*: self__STLC.fv_inv_tm_abs; destruct_ALL; subst; eauto.
 forwards*: H; eauto; destruct_ALL; subst; eauto. unfold update in H3.
 assert ((x =? x0) = false) as HH. eapply PeanoNat.Nat.eqb_neq; eauto.
 rewrite HH in *; eauto.
-+ destruct (self__STLC.fv_inv_tm_unit _ H).*)
++ unfold self__STLC.__motiveTfree_var_in_ctx. intros.  destruct (self__STLC.fv_inv_tm_unit _ H).
 Qed. FEnd free_var_in_ctx.
 
 FInduction 
