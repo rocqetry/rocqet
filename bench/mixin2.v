@@ -316,11 +316,11 @@ eapply self__STLC.ht_app;eauto.
 +  intros; cbn in *;subst; eauto.
    unfold self__STLC.__motiveTsubst_lemma.
   rewrite self__STLC.subst_tm_abs_eq.
-  unfold self__STLC.substtm_abs. intros.  
+  unfold self__STLC.substtm_abs. intros.
 (*frec_eval self__STLC.subst. unfold self__STLC.subst_handler.tm_abs.*)
 destruct (PeanoNat.Nat.eq_dec x0 x); subst; eauto;
 try rewrite PeanoNat.Nat.eqb_refl; cbn in *; subst; eauto.   
-++ eapply self__STLC.ht_abs; eauto. (*rewrite update_shadow in __i;*) eauto. apply cheat.
+++ eapply self__STLC.ht_abs; eauto. clear H. rewrite update_shadow in __i; eauto. 
 ++ assert ((x0 =? x) = false) as H0. eapply PeanoNat.Nat.eqb_neq; eauto.
   rewrite H0 in *. eapply self__STLC.ht_abs; eauto.
   eapply H; subst; eauto. eapply update_permute; eauto.
