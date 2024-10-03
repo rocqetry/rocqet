@@ -308,13 +308,26 @@ try rewrite PeanoNat.Nat.eqb_refl in *; eauto. unfold update in e.
 rewrite PeanoNat.Nat.eqb_refl in *; eauto. inversion e; subst; eauto.
 rewrite <- PeanoNat.Nat.eqb_neq in n; subst; eauto. 
 unfold update in e. rewrite n in *; cbn in *; eauto. eapply self__STLC.ht_var; eauto.
-+ intros; cbn in *. 
-frec_eval self__STLC.subst.
-subst; eauto. unfold self__STLC.subst_handler.tm_app. 
-eapply self__STLC.ht_app;eauto.
++ intros; cbn in *.
+  unfold self__STLC.__motiveTsubst_lemma.
+  intros.
+  rewrite self__STLC.subst_tm_app_eq.
+  unfold self__STLC.substtm_app.
+  eapply self__STLC.ht_app;eauto.
++ intros; cbn in *;subst; eauto.
+  unfold self__STLC.__motiveTsubst_lemma.
+  intros.
+  rewrite self__STLC.subst_tm_abs_eq.
+  unfold self__STLC.substtm_abs.
+  destruct (PeanoNat.Nat.eq_dec x0 x); subst; eauto;
+    try rewrite PeanoNat.Nat.eqb_refl in *; eauto.
+  ++ eapply self__STLC.ht_abs; eauto.
+     (* here *)
+     rewrite update_shadow in __i ; eauto.
 
-+  intros; cbn in *;subst; eauto.
-frec_eval self__STLC.subst. unfold self__STLC.subst_handler.tm_abs.
+
+     
+     frec_eval self__STLC.subst. unfold self__STLC.subst_handler.tm_abs.
 destruct (PeanoNat.Nat.eq_dec x0 x); subst; eauto;
 try rewrite PeanoNat.Nat.eqb_refl; cbn in *; subst; eauto.
 ++ eapply self__STLC.ht_abs; eauto. rewrite update_shadow in __i; eauto.
