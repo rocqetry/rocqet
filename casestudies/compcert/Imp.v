@@ -439,20 +439,22 @@ Inductive bitfield : Type :=
                            (self__Cfamtransl.Target.Returnstate tv tk tm).
       FEnd match_states.
              
-          (*FInduction transl_expr_correct:
-              forall f m tm cenv tf e le te sp lo hi cs
-                (MINJ: transl_mem_invariant f m tm)
+      FInduction transl_expr_correct about Source.eval_expr motive 
+         (fun  e le m a v (_ : Source.eval_expr e le m a v) => 
+            forall f m tm tf te sp lo hi cs
+                (MINJ: match_mem f m tm)
                 (MATCH: match_callstack f m tm
-                         (Frame cenv tf e le te sp lo hi :: cs)
-                         (Mem.nextblock m) (Mem.nextblock tm)),
-              forall a v,
-              Source.eval_expr ge e le m a v ->
-              forall ta
-                (TR: transl_expr cenv a = OK ta),
+                         (self__Cfamtransl.Frame tf e le te sp lo hi :: cs)
+                         (Mem.nextblock m) (Mem.nextblock tm)),                
+                    forall ta
+                (TR: transl_expr a = OK ta),
               exists tv,
-                 Target.eval_expr tge sp te tm ta tv
-              /\ transl_val_invariant f v tv.*)
-                
+                 Target.eval_expr sp te tm ta tv
+              /\ match_value f v tv).
+      FProof.
+        + intros. apply cheat.
+        + intros. apply cheat.
+      Qed. FEnd transl_expr_correct.
       
       (* call stack match even with set *)
       (* Lemma match_callstack_set_temp:
@@ -589,10 +591,11 @@ Inductive bitfield : Type :=
             monadInv TR. 
             left. econstructor. split. apply plus_one. 
             apply self__Cfamtransl.Target.step_seq.
-            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).
-            - assumption. - assumption. - assumption. - assumption.                                                                                  
+            eapply self__Cfamtransl.match_state; (try eassumption ;apply self__Cfamtransl.match_Kseq; eassumption).
+            
+            (*- assumption. - assumption. - assumption. - assumption.                                                                                  
             - apply self__Cfamtransl.match_Kseq.
-              assumption. assumption.
+              assumption. assumption.*)
               
           (* ifthenelse *)
           + unfold self__Cfamtransl.__motiveTtransl_step_correct.
@@ -601,15 +604,17 @@ Inductive bitfield : Type :=
             rewrite -> self__Cfamtransl.transl_stmt_Sifthenelse_eq in TR.
             unfold self__Cfamtransl.transl_stmtSifthenelse in TR.            
             monadInv TR.
+            exploit self__Cfamtransl.transl_expr_correct. apply EV. apply MINJ. apply MCS. apply EQ.
+            intros TV.
             left. econstructor. split. apply plus_one. 
-            apply self__Cfamtransl.Target.step_ifthenelse with (v := v).
-            apply cheat (* exploit transl_expr_correct *).
-            apply cheat. (* Val.bool_of_val *)
-            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).            
-            apply TRF. apply cheat (* prove that boolean values match *).
-            apply MINJ.
-            apply MCS.
-            apply MK.
+            eapply self__Cfamtransl.Target.step_ifthenelse.
+            destruct TV as [tv [H1 H2]].
+            assert (H_eq: tv = v). { apply cheat. }
+            rewrite <- H_eq. apply H1. apply V. 
+            destruct b.
+            ++ eapply self__Cfamtransl.match_state; eassumption. 
+            ++ eapply self__Cfamtransl.match_state. apply TRF. apply EQ0.
+               apply MINJ. apply MCS. apply MK.
 
           (* loop *)
           + 
