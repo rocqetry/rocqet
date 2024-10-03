@@ -108,3 +108,11 @@ FEnd ArithExtBuild.
 
 Family STLCArithIf extends ArithExtBuild.Derived.
 FEnd STLCArithIf.
+
+Family Ol.
+Family STLCArithIf extends ArithExtBuild.Derived.
+FEnd STLCArithIf.
+FEnd Ol.
+
+Family U extends Ol.STLCArithIf.
+FEnd U.

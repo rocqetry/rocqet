@@ -573,8 +573,11 @@ let normalize_parameters
   if compare_result = 0 then parameters
   else if compare_result < 0 then
     (* The base context has more params.
-       We need to reparameterize via adding dummy args *)
-    Errors.fail ~info:"TODO: reparam more"
+       We need to reparameterize via adding dummy args *)    
+    default_ctx_params    
+    |> List.map (fun (real, fake) -> 
+        let real = Libnames.qualid_of_ident real in
+        if List.mem real parameters then real else fake)
   else
     (* if compare_result > 0 *)
     (* The current context in which we about to include the module 
@@ -892,19 +895,27 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
            of the current family, not the upper family. 
            In some sense, this is like shifting the parameters 
            one "unit" to the right. *)
-        let parameters =
+        let reparam, parameters =
           let parameters = 
             normalize_parameters 
               ~default_ctx_params 
               ~parameters:(Linkage.context_parameters linkage) 
+          in          
+          (* We shouldn't shift "Reparam" parameters *)
+          (* REPARAM; REPARAM; self__Imp *)          
+          let reparam, parameters = 
+            parameters 
+            |> List.partition (fun id -> 
+                 let n = id |> Naming.path_to_list |> List.hd |> Names.Id.to_string in 
+                 String.starts_with n ~prefix:"Reparam")            
           in
           match parameters with
-          | [] -> []
+          | [] -> [], []
           | _ :: l ->              
               let current =
                 name |> Naming.self_version |> Libnames.qualid_of_ident
               in
-              l @ [ current ]
+              reparam, l @ [ current ]
         in        
         let parameters =
           parameters
@@ -912,6 +923,7 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
                  parameter |> Naming.path_to_list |> List.hd
                  |> Naming.un_self_version |> qualify)
         in
+        let parameters = reparam @ parameters in
         let* _ = compile_fields fields ctx in
         let module_expr = Termutils.ident_to_module_expr compiled_impl in
         let module_expr =
