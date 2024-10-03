@@ -706,8 +706,7 @@ Inductive bitfield : Type :=
             intros ge f vargs k m m1 e le FENV ENV prog tprog tge H G. 
             intros T1 MSTATE. inv MSTATE.            
             left. econstructor. split. apply plus_one.
-             apply self__Cfamtransl.Target.step_internal_function.*)
-            
+             apply self__Cfamtransl.Target.step_internal_function.*)            
         Qed.
       FEnd transl_step_correct.
     
