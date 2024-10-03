@@ -381,9 +381,18 @@ Inductive bitfield : Type :=
          meminj -> mem -> mem ->
          callstack -> block -> block -> Prop := cheat.
           
-      FOpaque Definition transl_mem_invariant : meminj -> mem -> mem -> Prop := cheat.
-      FOpaque Definition transl_vals_invariant : meminj -> list val -> list val -> Prop := cheat.
-      FOpaque Definition transl_val_invariant : meminj -> val -> val -> Prop := cheat.
+      FOpaque Definition match_mem : meminj -> mem -> mem -> Prop := cheat.
+      
+      FInductive match_value : meminj -> val -> val -> Prop := 
+        | match_value_refl : forall f v, match_value f v v
+        | match_value_undef : forall f v, match_value f Vundef v.                                                     
+        
+      FInductive match_values : meminj -> list val -> list val -> Prop :=
+        | match_values_nil : forall mi,
+          match_values mi nil nil
+        | match_values_cons : forall mi v v' vl vl' ,
+            match_value mi v v' -> match_values mi vl vl'->
+            match_values mi (v :: vl) (v' :: vl').
           
       FInductive match_cont: Source.cont -> Target.cont -> Prop :=
          | match_Kstop:
@@ -403,29 +412,29 @@ Inductive bitfield : Type :=
               forall fn s k e le m tfn ts tk sp te tm f lo hi cs
               (TRF: self__Cfamtransl.transl_function fn = OK tfn)
               (TR: self__Cfamtransl.transl_stmt s = OK ts)
-              (MINJ: self__Cfamtransl.transl_mem_invariant f m tm)
+              (MINJ: self__Cfamtransl.match_mem f m tm)
               (MCS: self__Cfamtransl.match_callstack f m tm
                        (self__Cfamtransl.Frame tfn e le te sp lo hi :: cs)
                        (Mem.nextblock m) (Mem.nextblock tm))
               (MK: self__Cfamtransl.match_cont k tk),
               match_states (self__Cfamtransl.Source.State fn s k e le m)
-                           (self__Cfamtransl.Target.State tfn ts tk sp te tm)      
+                           (self__Cfamtransl.Target.State tfn ts tk sp te tm)
          | match_callstate:
               forall fd args k m tfd targs tk tm f cs
               (TR: self__Cfamtransl.transl_fundef fd = OK tfd)
-              (MINJ: self__Cfamtransl.transl_mem_invariant f m tm)
+              (MINJ: self__Cfamtransl.match_mem f m tm)
               (MCS: self__Cfamtransl.match_callstack f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
               (MK: self__Cfamtransl.match_cont k tk)
               (ISCC: self__Cfamtransl.Source.is_call_cont k)
-              (ARGSINJ: self__Cfamtransl.transl_vals_invariant f args targs),
+              (ARGSINJ: self__Cfamtransl.match_values f args targs),
               match_states (self__Cfamtransl.Source.Callstate fd args k m)
                            (self__Cfamtransl.Target.Callstate tfd targs tk tm)
           | match_returnstate:
               forall v k m tv tk tm f cs
-              (MINJ: self__Cfamtransl.transl_mem_invariant f m tm)
+              (MINJ: self__Cfamtransl.match_mem f m tm)
               (MCS: self__Cfamtransl.match_callstack f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
               (MK: self__Cfamtransl.match_cont k tk)
-              (RESINJ: self__Cfamtransl.transl_val_invariant f v tv),
+              (RESINJ: self__Cfamtransl.match_value f v tv),
               match_states (self__Cfamtransl.Source.Returnstate v k m)
                            (self__Cfamtransl.Target.Returnstate tv tk tm).
       FEnd match_states.
@@ -443,7 +452,49 @@ Inductive bitfield : Type :=
               exists tv,
                  Target.eval_expr tge sp te tm ta tv
               /\ transl_val_invariant f v tv.*)
-          
+                
+      
+      (* call stack match even with set *)
+      (* Lemma match_callstack_set_temp:
+           forall f cenv e le te sp lo hi cs bound tbound m tm tf id v tv,
+           Val.inject f v tv ->
+           match_callstack f m tm (Frame cenv tf e le te sp lo hi :: cs) bound tbound ->
+           match_callstack f m tm (Frame cenv tf e (PTree.set id v le) (PTree.set id tv te) sp lo hi :: cs) bound tbound.*)
+      
+      (* Call cont lemma *)
+      (* FInduction match_is_call_cont:
+         forall tfn te sp tm k tk cenv xenv cs,
+         match_cont k tk cenv xenv cs ->
+         Csharpminor.is_call_cont k ->
+         exists tk',
+           star step tge (State tfn Sskip tk sp te tm)
+                      E0 (State tfn Sskip tk' sp te tm)
+           /\ is_call_cont tk'
+           /\ match_cont k tk' cenv nil cs.*)
+
+      (* Preservation of match_callstack by freeing 
+         function env allocated at function entry *)
+      (*FLemma match_callstack_freelist:
+        forall f cenv tf e le te sp lo hi cs m m' tm,
+          Mem.inject f m tm ->
+          Mem.free_list m (blocks_of_env e) = Some m' ->
+          match_callstack f m tm (Frame cenv tf e le te sp lo hi :: cs) (Mem.nextblock m) (Mem.nextblock tm) ->
+          exists tm',
+          Mem.free tm sp 0 tf.(fn_stackspace) = Some tm'
+          /\ match_callstack f m' tm' cs (Mem.nextblock m') (Mem.nextblock tm')
+          /\ Mem.inject f m' tm'.*)
+
+      (* Find label *)
+      (* FInduction transl_find_label_body:
+          forall cenv xenv size f tf k tk cs lbl s' k',
+          transl_funbody cenv size f = OK tf ->
+          match_cont k tk cenv xenv cs ->
+          Csharpminor.find_label lbl f.(Csharpminor.fn_body) (Csharpminor.call_cont k) = Some (s', k') ->
+          exists ts', exists tk', exists xenv',
+             find_label lbl tf.(fn_body) (call_cont tk) = Some(ts', tk')
+          /\ transl_stmt cenv xenv' s' = OK ts'
+          /\ match_cont k' tk' cenv xenv' cs.*)
+      
       FOpaque Definition measure : Source.state -> nat := cheat.
 
       FInduction transl_step_correct about Source.step motive
@@ -454,38 +505,83 @@ Inductive bitfield : Type :=
           (exists T2, plus Target.step tge T1 t T2 /\ match_states S2 T2) \/
           (measure S2 < measure S1 /\ t = E0 /\ match_states S2 T1)%nat).
         FProof.
+
           (* skip seq *)
-          +              
-            (*
-            unfold self__Cfamtransl.__motiveTtransl_step_correct. 
-            intros ge f s k e le m prog tprog tge H G.
+          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f s k e le m prog tprog tge H G. 
             intros T1 MSTATE. inv MSTATE.
-            left. inv MK. exists               
-              (self__Cfamtransl.Target.State 
-                 tfn self__Cfamtransl.Target.Sskip 
-                 (self__Cfamtransl.Target.Kseq s k) e le m).
-            split. apply plus_one. 
-            apply self__Cfamtransl.Target.step_skip_seq.
-            apply self__Cfamtransl.match_state.
-
-            left. econstructor; split. apply plus_one.
+            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq in TR.
+            unfold self__Cfamtransl.transl_stmtSskip in TR.
+            monadInv TR. 
+            left. econstructor. split. apply plus_one. 
             
-            apply self__Cfamtransl.Target.step_skip_seq.
-
-            left. exists ()
-            econstructor; split. apply plus_one. 
+            (* We need to somehow prove that *)
+            (* match_cont (self__Cfamtransl.Source.Kseq s k) tk ==> tk = Kseq s' k' *)
+            apply (* self__Cfamtransl.Target.step_skip_seq*) cheat.
+            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).            
+            apply TRF.
+            apply cheat. (* prove TR again?? *)
+            apply MINJ.
+            apply MCS.
+            apply cheat. (* This is in a way a consequence of the call_cont theorem above *)
             
-            apply self__Cfamtransl.Target.step_skip_seq.*)
-
-            apply cheat.
           (* skip block *)
-          + intros. apply cheat.
+          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f k e le m prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE.
+            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq in TR.
+            unfold self__Cfamtransl.transl_stmtSskip in TR.
+            monadInv TR.
+            left. econstructor. split. apply plus_one. 
+            (* Same as above, we need to show the cont is a Kblock *)
+            apply (*self__Cfamtransl.Target.step_skip_block*) cheat.
+            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).
+            apply TRF.
+            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq.
+            unfold self__Cfamtransl.transl_stmtSskip.
+            reflexivity.
+            apply MINJ.
+            apply MCS.
+            apply cheat. (* call_cont *)
+
           (* skip call *)
-          + intros. apply cheat.
+          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f k e le m m' CC FENV prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE.
+            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq in TR.
+            unfold self__Cfamtransl.transl_stmtSskip in TR.
+            monadInv TR. 
+            left. econstructor. split. apply plus_one. 
+            apply self__Cfamtransl.Target.step_skip_call.
+            apply cheat. (* exploit match_is_call_cont *)
+            apply cheat (*  exploit match_callstack_freelist *).
+            apply self__Cfamtransl.match_returnstate with (f := f0) (cs := cs).
+            apply cheat. (*  exploit match_callstack_freelist *)
+            apply cheat. (* match call stack *)
+            apply MK.
+            apply self__Cfamtransl.match_value_refl.
+
           (* set *)
-          + intros. apply cheat.
+          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f id a k e le m v EVAL prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE.                        
+            rewrite -> self__Cfamtransl.transl_stmt_Sset_eq in TR.
+            unfold self__Cfamtransl.transl_stmtSset in TR.
+            monadInv TR. 
+            left. econstructor. split. apply plus_one. 
+            apply self__Cfamtransl.Target.step_set with (v := v).
+            apply cheat (* eval_expr_correct *).
+            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).
+            apply TRF.
+            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq.
+            unfold self__Cfamtransl.transl_stmtSskip.
+            reflexivity.
+            apply MINJ.
+            apply cheat (* exploi match_callstack_set_temp *).
+            apply MK.
+          
           (* seq *)
-          +  unfold self__Cfamtransl.__motiveTtransl_step_correct.
+          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
             intros ge f s1 s2 k e le m prog tprog tge H G. 
             intros T1 MSTATE. inv MSTATE.                                    
             rewrite -> self__Cfamtransl.transl_stmt_Sseq_eq in TR.
@@ -499,21 +595,119 @@ Inductive bitfield : Type :=
               assumption. assumption.
               
           (* ifthenelse *)
-          + intros. apply cheat.
+          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f a s1 s2 k e le m v b EV V prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE.
+            rewrite -> self__Cfamtransl.transl_stmt_Sifthenelse_eq in TR.
+            unfold self__Cfamtransl.transl_stmtSifthenelse in TR.            
+            monadInv TR.
+            left. econstructor. split. apply plus_one. 
+            apply self__Cfamtransl.Target.step_ifthenelse with (v := v).
+            apply cheat (* exploit transl_expr_correct *).
+            apply cheat. (* Val.bool_of_val *)
+            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).            
+            apply TRF. apply cheat (* prove that boolean values match *).
+            apply MINJ.
+            apply MCS.
+            apply MK.
+
           (* loop *)
-          + apply cheat.
+          + 
+            unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f s k e le m prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE.            
+            rewrite -> self__Cfamtransl.transl_stmt_Sloop_eq in TR.
+            unfold self__Cfamtransl.transl_stmtSloop in TR.            
+            monadInv TR. 
+            left. econstructor. split. apply plus_one. 
+            apply self__Cfamtransl.Target.step_loop.            
+            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).
+            - auto. - auto. - auto. - auto.
+            - apply self__Cfamtransl.match_Kseq.  
+           rewrite -> self__Cfamtransl.transl_stmt_Sloop_eq.
+            unfold self__Cfamtransl.transl_stmtSloop. apply cheat. apply MK.     
+            
           (* block *)
-          + apply cheat.
+          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f s k e le m prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE. 
+            rewrite -> self__Cfamtransl.transl_stmt_Sblock_eq in TR.
+            unfold self__Cfamtransl.transl_stmtSblock in TR.
+            monadInv TR. 
+            left. econstructor. split. apply plus_one. 
+            apply self__Cfamtransl.Target.step_block.
+            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).
+            apply TRF. apply EQ. apply MINJ. apply MCS. apply self__Cfamtransl.match_Kblock.  apply MK.
+            
           (* return none *)
-          + apply cheat.
+          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f k e le m m' F prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE. 
+            rewrite -> self__Cfamtransl.transl_stmt_Sreturn_eq in TR.
+            unfold self__Cfamtransl.transl_stmtSreturn in TR.
+            monadInv TR.
+            left. econstructor. split. apply plus_one. 
+            apply self__Cfamtransl.Target.step_return_0.            
+            (* Some abstract lemma needed here  *)
+            apply cheat. (* exploit match_callstack_freelist*)
+            apply self__Cfamtransl.match_returnstate with (f := f0) (cs := cs).            
+            apply cheat. (* match_mem *)
+            apply cheat. (* match_callstack *)
+            apply cheat. (* match_cont (call_cont s) (call_cont tk) *)
+            apply self__Cfamtransl.match_value_refl.
+            
           (* return some *)
-          + apply cheat.
+          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f a k e le m v m' E F prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE. 
+            rewrite -> self__Cfamtransl.transl_stmt_Sreturn_eq in TR.
+            unfold self__Cfamtransl.transl_stmtSreturn in TR.
+            monadInv TR.
+            left. econstructor. split. apply plus_one. 
+            apply self__Cfamtransl.Target.step_return_1.
+            apply cheat. (* eval expr correct lemma *)
+            apply cheat. (* free env lemma *)
+            apply self__Cfamtransl.match_returnstate with (f := f0) (cs := cs).
+            apply cheat. (* match mem *)
+            apply cheat. (* match call stack *)
+            apply cheat. (* match cont with call cont *)
+            apply cheat. (* match value *)
+
           (* label *)
-          + apply cheat.
+          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f lbl s k e le m prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE. 
+            rewrite -> self__Cfamtransl.transl_stmt_Slabel_eq in TR.
+            unfold self__Cfamtransl.transl_stmtSlabel in TR.
+            monadInv TR.
+            left. econstructor. split. apply plus_one. 
+            apply self__Cfamtransl.Target.step_label.
+            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).
+            apply TRF. apply EQ. apply MINJ. apply MCS. apply MK.            
+            
           (* goto *)
-          + apply cheat.
+          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f lbl k e le m s' k' FL prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE.
+            rewrite -> self__Cfamtransl.transl_stmt_Sgoto_eq in TR.
+            unfold self__Cfamtransl.transl_stmtSgoto in TR.
+            monadInv TR.
+            left. econstructor. split. apply plus_one.
+            apply self__Cfamtransl.Target.step_goto.
+            apply cheat. (* Use transl_find_label_body *)
+            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).
+            apply TRF. apply cheat (* stmt used by find_label *). apply MINJ. apply MCS.
+            apply cheat (* const used by find_label *).
+                        
           (* internal function *)
-          + intros. apply cheat.
+          + 
+            apply cheat.
+            (*unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f vargs k m m1 e le FENV ENV prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE.            
+            left. econstructor. split. apply plus_one.
+             apply self__Cfamtransl.Target.step_internal_function.*)
+            
         Qed.
       FEnd transl_step_correct.
     
