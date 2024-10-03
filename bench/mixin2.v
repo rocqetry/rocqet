@@ -429,18 +429,19 @@ FInduction preservation
   step t t' ->
   has_type empty t' T).
 FProof.
-unfold self__STLC.__motiveTpreservation. intros.
-repeat split; repeat (intro; intros); cbn in *; 
-try (subst; cbn in *; self__STLC.clean_up_impossibilities).
-(* Case tm_app *) subst; cbn in *. 
-unfold self__STLC.__motiveTpreservation. intros. destruct (self__STLC.step_tm_app_inv _ _ _ H2); destruct_ALL; eauto; 
-unfold self__STLC.__motiveTpreservation. try eapply self__STLC.ht_app; subst; eauto; try self__STLC.clean_up_impossibilities.
-(*eapply self__STLC.subst_lemma;*) apply cheat. eauto. apply cheat. (*eapply self__STLC.ht_abs_inv; eauto.*)
-intros. unfold self__STLC.__motiveTpreservation. intros. eapply self__STLC.weakening_lemma; eauto.
-+ apply cheat. 
-+ apply cheat.
++ unfold self__STLC.__motiveTpreservation. intros.
+  try (subst; cbn in *; self__STLC.clean_up_impossibilities).
++ unfold self__STLC.__motiveTpreservation. intros.
+  destruct (self__STLC.step_tm_app_inv _ _ _ H2); destruct_ALL; eauto; 
+  try eapply self__STLC.ht_app; subst; eauto; try self__STLC.clean_up_impossibilities.
+  eapply self__STLC.subst_lemma; eauto.
+  eapply self__STLC.ht_abs_inv; eauto.
+  eapply self__STLC.weakening_lemma; eauto.
++ unfold self__STLC.__motiveTpreservation. intros.
+  try (subst; cbn in *; self__STLC.clean_up_impossibilities).
++ unfold self__STLC.__motiveTpreservation. intros.
+  try (subst; cbn in *; self__STLC.clean_up_impossibilities).
 Qed. FEnd preservation.
-
 
 FLemma preservation2 :
   forall t t',
@@ -879,42 +880,44 @@ by {
 
 FInduction progress. 
 FProof.
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
-(*repeat split; __unfold_ftheorem_motive; (repeat intro;intros); 
-subst; eauto; try
++ unfold self__STLC_sum.__motiveTprogress. intros.
+  try
 (forwardALL; destruct_ALL;
 try (left; eauto using self__STLC_sum.vinl, self__STLC_sum.vinr; fail);
 try (right; eauto using self__STLC_sum.st_inl, self__STLC_sum.st_inr;fail); fail);(repeat intro;intros).
-(* tm_case *)
-+ unfold self__STLC_sum.__motiveTprogress in H. 
-(*clear H1; clear H0.*)
-right. 
-forwardALL; destruct_ALL; eauto using self__STLC_sum.st_case0,self__STLC_sum.st_case1,self__STLC_sum.st_case2.
-forwards*: self__STLC_sum.value_sum_type_inv; destruct_ALL; subst; eauto using self__STLC_sum.st_case0,self__STLC_sum.st_case1,self__STLC_sum.st_case2.*)
-
++ unfold self__STLC_sum.__motiveTprogress. intros.
+  try
+(forwardALL; destruct_ALL;
+try (left; eauto using self__STLC_sum.vinl, self__STLC_sum.vinr; fail);
+try (right; eauto using self__STLC_sum.st_inl, self__STLC_sum.st_inr;fail); fail);(repeat intro;intros).
++ unfold self__STLC_sum.__motiveTprogress. intros.
+   try
+(forwardALL; destruct_ALL;
+try (left; eauto using self__STLC_sum.vinl, self__STLC_sum.vinr; fail);
+try (right; eauto using self__STLC_sum.st_inl, self__STLC_sum.st_inr;fail); fail);(repeat intro;intros).
+  clear H1; clear H0. right.
+  forwardALL; destruct_ALL; eauto using self__STLC_sum.st_case0,self__STLC_sum.st_case1,self__STLC_sum.st_case2.
+forwards*: self__STLC_sum.value_sum_type_inv; destruct_ALL; subst; eauto using self__STLC_sum.st_case0,self__STLC_sum.st_case1,self__STLC_sum.st_case2.
 Qed. FEnd progress.
-
 
 FInduction subst_lemma.
 FProof. 
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
-(*+ unfold  self__STLC_sum.__motiveTsubst_lemma. intros.
 
-(*repeat split; __unfold_ftheorem_motive; (repeat intro;intros); subst; frec_eval self__STLC_sum.subst; eauto using self__STLC_sum.ht_sum0, self__STLC_sum.ht_sum1, self__STLC_sum.ht_case; cbn in *; eauto.*)
-(* ht_case *)
-(*unfold self__STLC_sum.subst_handler.tm_case.*)
-rewrite self__STLC_sum.subst_tm_inl_eq.
-unfold self__STLC_sum.substtm_inl. 
-
-
-destruct (Nat.eq_dec i x); subst; eauto; try rewrite Nat.eqb_refl; subst.
++ unfold self__STLC_sum.__motiveTsubst_lemma. intros.
+  rewrite self__STLC_sum.subst_tm_inl_eq.
+  unfold self__STLC_sum.substtm_inl. 
+  eauto using self__STLC_sum.ht_sum0, self__STLC_sum.ht_sum1, self__STLC_sum.ht_case; cbn in *; eauto.
++ unfold self__STLC_sum.__motiveTsubst_lemma. intros.
+  rewrite self__STLC_sum.subst_tm_inr_eq.
+  unfold self__STLC_sum.substtm_inr. 
+  eauto using self__STLC_sum.ht_sum0, self__STLC_sum.ht_sum1, self__STLC_sum.ht_case; cbn in *; eauto.
++ unfold self__STLC_sum.__motiveTsubst_lemma. intros.
+  rewrite self__STLC_sum.subst_tm_case_eq.
+  unfold self__STLC_sum.substtm_case. 
+  destruct (Nat.eq_dec i x); subst; eauto; try rewrite Nat.eqb_refl; subst.
 eapply self__STLC_sum.ht_case; try rewrite update_shadow in __i0;try rewrite update_shadow in __i1; eauto.
 rewrite <- PeanoNat.Nat.eqb_neq in n; rewrite n. rewrite Nat.eqb_neq in n.
-eapply self__STLC_sum.ht_case; eauto; [try eapply H0 | try eapply H1]; eauto using update_permute.*)
+eapply self__STLC_sum.ht_case; eauto; [try eapply H0 | try eapply H1]; eauto using update_permute.
 Qed. FEnd subst_lemma.  
 
 FInductive fv  : ident -> self__STLC_sum.tm -> Prop :=
@@ -958,19 +961,24 @@ by { intros x c i lb rb h; inversion h; subst; eauto }.
 
 FInduction free_var_in_ctx.
 FProof. 
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
 
-(*repeat split;
-(repeat intro;intros); cbn in *; eauto; subst; eauto;
++ unfold self__STLC_sum.__motiveTfree_var_in_ctx.
+  intros.
+  cbn in *; eauto; subst; eauto;
 eauto using self__STLC_sum.fv_inv_tm_inl, self__STLC_sum.fv_inv_tm_inr, self__STLC_sum.fv_inv_tm_case.
-
-forwards*: self__STLC_sum.fv_inv_tm_case;
++ unfold self__STLC_sum.__motiveTfree_var_in_ctx.
+  intros.
+  cbn in *; eauto; subst; eauto;
+eauto using self__STLC_sum.fv_inv_tm_inl, self__STLC_sum.fv_inv_tm_inr, self__STLC_sum.fv_inv_tm_case.
++ unfold self__STLC_sum.__motiveTfree_var_in_ctx.
+  intros.
+  cbn in *; eauto; subst; eauto;
+eauto using self__STLC_sum.fv_inv_tm_inl, self__STLC_sum.fv_inv_tm_inr, self__STLC_sum.fv_inv_tm_case.
+  forwards*: self__STLC_sum.fv_inv_tm_case;
 destruct_ALL; subst; eauto. rewrite <- Nat.eqb_neq in H3.
 forwards*: H0; destruct_ALL; subst; eauto. unfold update in H5. rewrite H3 in *. eauto.
 rewrite <- Nat.eqb_neq in H3.
-forwards*: H1; destruct_ALL; subst; eauto. unfold update in H5. rewrite H3 in *. eauto.*)
+forwards*: H1; destruct_ALL; subst; eauto. unfold update in H5. rewrite H3 in *. eauto.
 
 Qed. FEnd free_var_in_ctx.
 
@@ -978,21 +986,21 @@ Qed. FEnd free_var_in_ctx.
 
 FInduction free_var_matters.
 FProof.
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
-(*repeat split; (repeat intro;intros); cbn in *; eauto; subst; eauto using 
++ unfold self__STLC_sum.__motiveTfree_var_matters. intros.
+  cbn in *; eauto; subst; eauto using 
 self__STLC_sum.ht_sum0,self__STLC_sum.ht_sum1, self__STLC_sum.ht_case, self__STLC_sum.fv_inl,self__STLC_sum.fv_inr.
-
-eapply self__STLC_sum.ht_case; eauto using self__STLC_sum.fv_case, self__STLC_sum.fv_case1, self__STLC_sum.fv_case2. 
++ unfold self__STLC_sum.__motiveTfree_var_matters. intros.
+  cbn in *; eauto; subst; eauto using 
+self__STLC_sum.ht_sum0,self__STLC_sum.ht_sum1, self__STLC_sum.ht_case, self__STLC_sum.fv_inl,self__STLC_sum.fv_inr.
++ unfold self__STLC_sum.__motiveTfree_var_matters. intros.
+  cbn in *; eauto; subst; eauto using 
+self__STLC_sum.ht_sum0,self__STLC_sum.ht_sum1, self__STLC_sum.ht_case, self__STLC_sum.fv_inl,self__STLC_sum.fv_inr.
+  eapply self__STLC_sum.ht_case; eauto using self__STLC_sum.fv_case, self__STLC_sum.fv_case1, self__STLC_sum.fv_case2. 
 (*  *)
 eapply H0. intros. unfold update. destruct (Nat.eq_dec i x); subst; try rewrite Nat.eqb_refl; eauto. rewrite <- Nat.eqb_neq in n; rewrite n; rewrite Nat.eqb_neq in n. eapply H2; eauto using  self__STLC_sum.fv_case1, self__STLC_sum.fv_case2. 
 
-eapply H1. intros. unfold update. destruct (Nat.eq_dec i x); subst; try rewrite Nat.eqb_refl; eauto. rewrite <- Nat.eqb_neq in n; rewrite n; rewrite Nat.eqb_neq in n. eapply H2; eauto using  self__STLC_sum.fv_case1, self__STLC_sum.fv_case2.*)
+eapply H1. intros. unfold update. destruct (Nat.eq_dec i x); subst; try rewrite Nat.eqb_refl; eauto. rewrite <- Nat.eqb_neq in n; rewrite n; rewrite Nat.eqb_neq in n. eapply H2; eauto using  self__STLC_sum.fv_case1, self__STLC_sum.fv_case2.
 Qed. FEnd free_var_matters.
-
-
-
 
 (*Inherit Until Field preservation.*)
 
@@ -1037,9 +1045,11 @@ Closing Fact ht_inr_inv:
 
 FInduction preservation.
 FProof.
++ unfold self__STLC_sum.__motiveTpreservation. intros.  
+  forwards*: self__STLC_sum.step_tm_inl_inv; destruct_ALL; subst; eauto using self__STLC_sum.ht_sum0.
 + apply cheat.
 + apply cheat.
-+ apply cheat.
+
 (*repeat split; (repeat intro;intros); cbn in *; eauto; subst; eauto.
 forwards*: self__STLC_sum.step_tm_inl_inv; destruct_ALL; subst; eauto using self__STLC_sum.ht_sum0.
 forwards*: self__STLC_sum.step_tm_inr_inv; destruct_ALL; subst; eauto using self__STLC_sum.ht_sum1.
@@ -1068,44 +1078,6 @@ FRecursion substT
     Case ty_isorec := (fun i body rec_body x t=>
     if (eqb x i) then t else (self__STLC_isorec.ty_isorec i (rec_body x t))).
 FEnd substT.
-
-(*Family substT_internal.
-FDefinition motive : self__STLC_isorec.ty -> Set := 
-  fun (_ : self__STLC_isorec.ty) => ident -> self__STLC_isorec.ty -> self__STLC_isorec.ty.
-
-FDefinition ty_unit :
-  ident -> self__STLC_isorec.ty -> self__STLC_isorec.ty :=
-  fun x t => self__STLC_isorec.ty_unit.
-
-FDefinition ty_arrow : 
-  forall (a : self__STLC_isorec.ty) 
-  (rec_a : forall (x : ident) (t : self__STLC_isorec.ty), self__STLC_isorec.ty)
-  (b : self__STLC_isorec.ty) 
-  (rec_b : forall (x : ident) (t : self__STLC_isorec.ty), self__STLC_isorec.ty),
-  forall (x : ident) (t : self__STLC_isorec.ty), self__STLC_isorec.ty :=
-  fun a rec_a b rec_b => 
-    fun x t => self__STLC_isorec.ty_arrow (rec_a x t) (rec_b x t).
-
-
-FDefinition ty_var :
-  forall (s : ident),
-  forall (x : ident) (t : self__STLC_isorec.ty), self__STLC_isorec.ty :=
-  fun s => fun x t => 
-  if (eqb x s) then t else (self__STLC_isorec.ty_var s).
-
-FDefinition ty_isorec :
-  forall (i : ident) (body : self__STLC_isorec.ty) 
-  (rec_body : forall (x : ident) (t : self__STLC_isorec.ty), self__STLC_isorec.ty),
-  forall (x : ident) (t : self__STLC_isorec.ty), self__STLC_isorec.ty  :=
-  fun i body rec_body x t=>
-    if (eqb x i) then t else (self__STLC_isorec.ty_isorec i (rec_body x t)).
-FEnd substT_internal.
-
-FRecursor substT 
-  about self__STLC_isorec.ty 
-  motive self__STLC_isorec.substT_internal.motive 
-  using self__STLC_isorec.substT_internal 
-  by _rec. *)
 
 FInductive tm : Set :=
   (* sum *)
@@ -1140,22 +1112,6 @@ Case tm_unfold :=
 
 FEnd subst.
 
-
-
-(* Inherit Field subst.
-
-Closing Fact subst_tm_fold :
-forall a,
-self__STLC_isorec.subst (self__STLC_isorec.tm_fold a) = self__STLC_isorec.subst_internal.tm_fold a (self__STLC_isorec.subst a)
-by { intros; eauto }.
-
-Closing Fact subst_tm_unfold :
-forall a,
-self__STLC_isorec.subst (self__STLC_isorec.tm_unfold a) = self__STLC_isorec.subst_internal.tm_unfold a (self__STLC_isorec.subst a)
-by { intros; eauto }. *)
-
-
-
 Inherit context.
 
 FInductive step : self__STLC_isorec.tm -> self__STLC_isorec.tm -> Prop :=
@@ -1188,25 +1144,33 @@ by {
 
 FInduction progress. 
 FProof.
-+ apply cheat.
-+ apply cheat.
-
-(*repeat split; __unfold_ftheorem_motive; (repeat intro;intros);
-subst; eauto;
++ unfold self__STLC_isorec.__motiveTprogress. intros.
+  subst; eauto;
 try
 (forwardALL; destruct_ALL;
 try (left; eauto using self__STLC_isorec.vfold; fail);
 try (right; eauto using self__STLC_isorec.st_fold, self__STLC_isorec.st_unfold0,self__STLC_isorec.st_unfold1 ;fail)).
-(* tm_case *)
-forwards*: self__STLC_isorec.value_isorec_type_inv; eauto; destruct_ALL; subst; right; eauto using self__STLC_isorec.st_fold, self__STLC_isorec.st_unfold0,self__STLC_isorec.st_unfold1.*)
++ unfold self__STLC_isorec.__motiveTprogress. intros.
+  subst; eauto;
+    try
+(forwardALL; destruct_ALL;
+try (left; eauto using self__STLC_isorec.vfold; fail);
+try (right; eauto using self__STLC_isorec.st_fold, self__STLC_isorec.st_unfold0,self__STLC_isorec.st_unfold1 ;fail)).
+forwards*: self__STLC_isorec.value_isorec_type_inv; eauto; destruct_ALL; subst; right; eauto using self__STLC_isorec.st_fold, self__STLC_isorec.st_unfold0,self__STLC_isorec.st_unfold1.  
+
 Qed. FEnd progress.
 
 
 FInduction subst_lemma.
 FProof.
-+ apply cheat.
-+ apply cheat.
-(*repeat split; (repeat intro;intros); subst; frec_eval self__STLC_isorec.subst; eauto using self__STLC_isorec.ht_fold,self__STLC_isorec.ht_unfold. *)
++ unfold self__STLC_isorec.__motiveTsubst_lemma. intros.
+  rewrite self__STLC_isorec.subst_tm_fold_eq.
+  unfold self__STLC_isorec.substtm_fold.
+  eauto using self__STLC_isorec.ht_fold,self__STLC_isorec.ht_unfold.
++ unfold self__STLC_isorec.__motiveTsubst_lemma. intros.
+  rewrite self__STLC_isorec.subst_tm_unfold_eq.
+  unfold self__STLC_isorec.substtm_unfold.
+  eauto using self__STLC_isorec.ht_fold,self__STLC_isorec.ht_unfold.
 Qed. FEnd subst_lemma.  
 
 FInductive fv  : ident -> self__STLC_isorec.tm -> Prop :=
@@ -1229,27 +1193,24 @@ by {intros x t h; inversion h; subst; eauto}.
 
 FInduction free_var_in_ctx.
 FProof.
-+ apply cheat.
-+ apply cheat.
-(*repeat split;
-(repeat intro;intros); cbn in *; eauto; subst; eauto;
-eauto using self__STLC_isorec.fv_inv_tm_fold, self__STLC_isorec.fv_inv_tm_unfold. *)
++ unfold self__STLC_isorec.__motiveTfree_var_in_ctx. intros.
+  cbn in *; eauto; subst; eauto;
+eauto using self__STLC_isorec.fv_inv_tm_fold, self__STLC_isorec.fv_inv_tm_unfold.
++ unfold self__STLC_isorec.__motiveTfree_var_in_ctx. intros.
+  cbn in *; eauto; subst; eauto;
+eauto using self__STLC_isorec.fv_inv_tm_fold, self__STLC_isorec.fv_inv_tm_unfold.
 Qed. FEnd free_var_in_ctx.
 
 
 FInduction free_var_matters.
 FProof.
-+ apply cheat.
-+ apply cheat.
-(*repeat split; (repeat intro;intros); cbn in *; eauto; subst; eauto using 
-self__STLC_isorec.ht_fold,self__STLC_isorec.ht_unfold, self__STLC_isorec.fv_unfold, self__STLC_isorec.fv_fold. *)
++ unfold self__STLC_isorec.__motiveTfree_var_matters. intros.
+  cbn in *; eauto; subst; eauto using 
+self__STLC_isorec.ht_fold,self__STLC_isorec.ht_unfold, self__STLC_isorec.fv_unfold, self__STLC_isorec.fv_fold.
++ unfold self__STLC_isorec.__motiveTfree_var_matters. intros.
+  cbn in *; eauto; subst; eauto using 
+self__STLC_isorec.ht_fold,self__STLC_isorec.ht_unfold, self__STLC_isorec.fv_unfold, self__STLC_isorec.fv_fold. 
 Qed. FEnd free_var_matters.
-
-
-
-
-(* Inherit Until Field preservation. *)
-
 
 Closing Fact step_tm_fold_inv:
   forall x y,
@@ -1273,9 +1234,11 @@ by {intros G i t T h; inversion h; subst; eauto}.
 
 FInduction preservation.
 FProof.
-+ apply cheat.
-+ apply cheat.
 
++ unfold self__STLC_isorec.__motiveTpreservation. intros.
+  cbn in *; eauto; subst; eauto.
+forwards*: self__STLC_isorec.step_tm_fold_inv; destruct_ALL; subst; eauto using self__STLC_isorec.ht_fold.
++ apply cheat.
 (*StartFProofAll.
 repeat split; (repeat intro;intros); cbn in *; eauto; subst; eauto.
 forwards*: self__STLC_isorec.step_tm_fold_inv; destruct_ALL; subst; eauto using self__STLC_isorec.ht_fold.
@@ -1347,19 +1310,15 @@ Qed. FEnd progress.
 
 FInduction subst_lemma.
 FProof.
-+ apply cheat.
 
-(*unfold self__STLC_fix.__motiveTsubst_lemma.
-+ intros. rewrite self__STLC_fix.subst_tm_fix_eq.
+unfold self__STLC_fix.__motiveTsubst_lemma. intros.
+rewrite self__STLC_fix.subst_tm_fix_eq.
   unfold self__STLC_fix.substtm_fix.
-
-(*repeat split; (repeat intro;intros); subst; frec_eval self__STLC_fix.subst; eauto using self__STLC_fix.ht_fix.  
-unfold self__STLC_fix.subst_handler.tm_fix.*)
 destruct (PeanoNat.Nat.eq_dec x0 x); subst; eauto;try rewrite PeanoNat.Nat.eqb_refl; cbn in *; subst; eauto.
 + eapply self__STLC_fix.ht_fix; eauto. erewrite <- update_shadow; eauto.
 +   assert ((x0 =? x) = false) as H0. eapply PeanoNat.Nat.eqb_neq; eauto.
   rewrite H0 in *. eapply self__STLC_fix.ht_fix; eauto.
-  eapply H; subst; eauto. eapply update_permute; eauto. *)
+  eapply H; subst; eauto. eapply update_permute; eauto. 
 
 Qed. FEnd subst_lemma.  
 
