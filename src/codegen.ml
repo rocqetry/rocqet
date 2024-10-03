@@ -901,12 +901,6 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
               ~default_ctx_params 
               ~parameters:(Linkage.context_parameters linkage) 
           in          
-          let _ = 
-            print_endline "Start";
-            parameters 
-            |> List.iter (fun n -> Printf.printf "Param: %s\n" (Pretty.pretty_qualid n));
-            print_endline "End"
-          in 
           (* We shouldn't shift "Reparam" parameters *)
           (* REPARAM; REPARAM; self__Imp *)          
           let reparam, parameters = 
@@ -914,7 +908,7 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
             |> List.partition (fun id -> 
                  let n = id |> Naming.path_to_list |> List.hd |> Names.Id.to_string in 
                  String.starts_with n ~prefix:"Reparam")            
-          in 
+          in
           match parameters with
           | [] -> [], []
           | _ :: l ->              
