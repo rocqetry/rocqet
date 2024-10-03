@@ -1409,8 +1409,8 @@ Family STLC_all extends STLC
    Inherit ty.
      
    FRecursion substT.
-      Case ty_prod := (fun _ recs1 _ recs2 x t => self__STLC_all.ty_prod (recs1 x t) (recs2 x t)).
-      Case ty_sum := (fun _ recs1 _ recs2 x t => self__STLC_all.ty_sum (recs1 x t) (recs2 x t)).
+      Case ty_prod := (fun _ recs1 _ recs2 x t => ty_prod (recs1 x t) (recs2 x t)).
+      Case ty_sum := (fun _ recs1 _ recs2 x t => ty_sum (recs1 x t) (recs2 x t)).
    FEnd substT.
 FEnd STLC_all.
 
