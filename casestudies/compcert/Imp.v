@@ -492,6 +492,36 @@ Inductive bitfield : Type :=
         Admitted.
       CloseFLemma.
 
+      FInduction match_is_call_cont about match_cont motive
+        (fun k tk (MK : match_cont k tk) => Source.is_call_cont k ->
+            forall tge tfn te sp tm,
+              exists tk',
+              star Target.step tge (Target.State tfn Target.Sskip tk sp te tm)
+                          E0 (Target.State tfn Target.Sskip tk' sp te tm)
+              /\ Target.is_call_cont tk'
+              /\ match_cont k tk').
+      FProof.
+
+      (* Kstop *)
+      + apply cheat.
+
+      (* Kseq *)
+      + apply cheat.
+
+      (* Kblock *)
+      + apply cheat.
+      Qed. FEnd match_is_call_cont.
+        
+        :
+         forall tfn te sp tm k tk cenv xenv cs,
+         match_cont k tk cenv xenv cs ->
+         Csharpminor.is_call_cont k ->
+         exists tk',
+           star step tge (State tfn Sskip tk sp te tm)
+                      E0 (State tfn Sskip tk' sp te tm)
+           /\ is_call_cont tk'
+           /\ match_cont k tk' cenv nil cs.
+      
       (* Find label *)
       FInduction transl_find_label about Source.stmt motive
          (fun (s : Source.stmt) => forall k ts tk lbl,
