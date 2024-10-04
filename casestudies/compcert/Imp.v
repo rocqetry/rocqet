@@ -537,7 +537,7 @@ Inductive bitfield : Type :=
             left. econstructor. split. apply plus_one. 
             (* Same as above, we need to show the cont is a Kblock *)
             apply (*self__Cfamtransl.Target.step_skip_block*) cheat.
-            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).
+            eapply self__Cfamtransl.match_state.
             apply TRF.
             rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq.
             unfold self__Cfamtransl.transl_stmtSskip.
@@ -573,7 +573,7 @@ Inductive bitfield : Type :=
             left. econstructor. split. apply plus_one. 
             apply self__Cfamtransl.Target.step_set with (v := v).
             apply cheat (* eval_expr_correct *).
-            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).
+            eapply self__Cfamtransl.match_state. 
             apply TRF.
             rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq.
             unfold self__Cfamtransl.transl_stmtSskip.
