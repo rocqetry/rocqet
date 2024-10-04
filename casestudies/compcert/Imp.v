@@ -154,6 +154,7 @@ Inductive bitfield : Type :=
        FDefinition init_env : function -> list val -> env := fun f vargs => 
          set_locals (function_locals f) (set_params vargs (function_params f)).            
 
+       (* Semantics for allocation of variables and binding of parameters at function entry. *)
        FOpaque Definition free_fenv : mem -> fenv -> function -> option mem := cheat.            
        FOpaque Definition alloc_fenv : fenv -> mem -> function -> fenv -> mem -> Prop := cheat.
        
@@ -490,7 +491,43 @@ Inductive bitfield : Type :=
           /\ Mem.inject f m' tm'.*)
 
       (* Find label *)
-      (* FInduction transl_find_label_body:
+
+      FInduction transl_find_label about Source.stmt motive
+         (fun (s : Source.stmt) => forall k ts tk lbl,
+              transl_stmt s = OK ts -> 
+              match_cont k tk -> 
+              match Source.find_label s lbl k with
+              | None => Target.find_label ts lbl tk = None
+              | Some(s', k') =>
+                  exists ts', exists tk',
+                    Target.find_label ts lbl tk = Some(ts', tk')
+                 /\ transl_stmt s' = OK ts'
+                 /\ match_cont k' tk'
+              end).
+      FProof.
+      (* Skip *)
+      + apply cheat.
+      (* Set *)
+      + apply cheat.
+      (* Seq *)
+      + apply cheat.
+      (* Sifthenelse *)
+      + apply cheat.
+      (* Sloop *)
+      + apply cheat.
+      (* Sblock *)
+      + apply cheat.
+      (* Sexit *)
+      + apply cheat.
+       (* Sreturn *)
+      + apply cheat.
+       (* Slabel *)
+      + apply cheat.
+       (* Sgoto *)
+      + apply cheat.
+      Qed. FEnd transl_find_label.
+     
+      (*FInduction transl_find_label_body:
           forall cenv xenv size f tf k tk cs lbl s' k',
           transl_funbody cenv size f = OK tf ->
           match_cont k tk cenv xenv cs ->
@@ -593,11 +630,7 @@ Inductive bitfield : Type :=
             monadInv TR. 
             left. econstructor. split. apply plus_one. 
             apply self__Cfamtransl.Target.step_seq.
-            eapply self__Cfamtransl.match_state; (try eassumption ;apply self__Cfamtransl.match_Kseq; eassumption).
-            
-            (*- assumption. - assumption. - assumption. - assumption.                                                                                  
-            - apply self__Cfamtransl.match_Kseq.
-              assumption. assumption.*)
+            eapply self__Cfamtransl.match_state; (try eassumption ;apply self__Cfamtransl.match_Kseq; eassumption).                        
               
           (* ifthenelse *)
           + unfold self__Cfamtransl.__motiveTtransl_step_correct.
@@ -628,11 +661,13 @@ Inductive bitfield : Type :=
             monadInv TR. 
             left. econstructor. split. apply plus_one. 
             apply self__Cfamtransl.Target.step_loop.            
-            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).
-            - auto. - auto. - auto. - auto.
+            eapply self__Cfamtransl.match_state; eauto.            
             - apply self__Cfamtransl.match_Kseq.  
            rewrite -> self__Cfamtransl.transl_stmt_Sloop_eq.
-            unfold self__Cfamtransl.transl_stmtSloop. apply cheat. apply MK.     
+            unfold self__Cfamtransl.transl_stmtSloop. 
+            (* (do ts <- self__Cfamtransl.transl_stmt s; OK (self__Cfamtransl.Target.Sloop ts)) =
+                OK (self__Cfamtransl.Target.Sloop x) *)
+            apply cheat. apply MK.     
             
           (* block *)
           + unfold self__Cfamtransl.__motiveTtransl_step_correct.
@@ -654,10 +689,10 @@ Inductive bitfield : Type :=
             unfold self__Cfamtransl.transl_stmtSreturn in TR.
             monadInv TR.
             left. econstructor. split. apply plus_one. 
-            apply self__Cfamtransl.Target.step_return_0.            
+            apply self__Cfamtransl.Target.step_return_0.
             (* Some abstract lemma needed here  *)
             apply cheat. (* exploit match_callstack_freelist*)
-            apply self__Cfamtransl.match_returnstate with (f := f0) (cs := cs).            
+            eapply self__Cfamtransl.match_returnstate.
             apply cheat. (* match_mem *)
             apply cheat. (* match_callstack *)
             apply cheat. (* match_cont (call_cont s) (call_cont tk) *)
@@ -696,13 +731,14 @@ Inductive bitfield : Type :=
           + unfold self__Cfamtransl.__motiveTtransl_step_correct.
             intros ge f lbl k e le m s' k' FL prog tprog tge H G. 
             intros T1 MSTATE. inv MSTATE.
+            exploit self__Cfamtransl.transl_find_label; eauto. intros.
             rewrite -> self__Cfamtransl.transl_stmt_Sgoto_eq in TR.
             unfold self__Cfamtransl.transl_stmtSgoto in TR.
-            monadInv TR.
+            monadInv TR.            
             left. econstructor. split. apply plus_one.
             apply self__Cfamtransl.Target.step_goto.
             apply cheat. (* Use transl_find_label_body *)
-            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).
+            eapply self__Cfamtransl.match_state.
             apply TRF. apply cheat (* stmt used by find_label *). apply MINJ. apply MCS.
             apply cheat (* const used by find_label *).
                         
