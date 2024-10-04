@@ -457,22 +457,25 @@ Inductive bitfield : Type :=
       Qed. FEnd transl_expr_correct.
       
       (* call stack match even with set *)
-      (* Lemma match_callstack_set_temp:
-           forall f cenv e le te sp lo hi cs bound tbound m tm tf id v tv,
-           Val.inject f v tv ->
-           match_callstack f m tm (Frame cenv tf e le te sp lo hi :: cs) bound tbound ->
-           match_callstack f m tm (Frame cenv tf e (PTree.set id v le) (PTree.set id tv te) sp lo hi :: cs) bound tbound.*)
+      FLemma match_callstack_set_temp:
+           forall f e le te sp lo hi cs bound tbound m tm tf id v tv,
+           match_value f v tv ->
+           match_callstack f m tm (self__Cfamtransl.Frame tf e le te sp lo hi :: cs) bound tbound ->
+           match_callstack f m tm (self__Cfamtransl.Frame tf e (PTree.set id v le) (PTree.set id tv te) sp lo hi :: cs) bound tbound.
+      FProofLemma.
+      Admitted.
+      CloseFLemma.
       
       (* Call cont lemma *)
-      (* FInduction match_is_call_cont:
+      (*FInduction match_is_call_cont:
          forall tfn te sp tm k tk cenv xenv cs,
-         match_cont k tk cenv xenv cs ->
-         Csharpminor.is_call_cont k ->
+         match_cont k tk ->
+         Source.is_call_cont k ->
          exists tk',
-           star step tge (State tfn Sskip tk sp te tm)
-                      E0 (State tfn Sskip tk' sp te tm)
-           /\ is_call_cont tk'
-           /\ match_cont k tk' cenv nil cs.*)
+           star Target.step tge (Target.State tfn Sskip tk sp te tm)
+                      E0 (Target.State tfn Sskip tk' sp te tm)
+           /\ Target.is_call_cont tk'
+           /\ Target.match_cont k tk' cenv nil cs.*)
 
       (* Preservation of match_callstack by freeing 
          function env allocated at function entry *)
@@ -568,19 +571,18 @@ Inductive bitfield : Type :=
             intros ge f id a k e le m v EVAL prog tprog tge H G. 
             intros T1 MSTATE. inv MSTATE.                        
             rewrite -> self__Cfamtransl.transl_stmt_Sset_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSset in TR.
+            unfold self__Cfamtransl.transl_stmtSset in TR.            
             monadInv TR. 
-            left. econstructor. split. apply plus_one. 
-            apply self__Cfamtransl.Target.step_set with (v := v).
-            apply cheat (* eval_expr_correct *).
-            eapply self__Cfamtransl.match_state. 
-            apply TRF.
+            exploit self__Cfamtransl.transl_expr_correct; eauto.            
+            intros H. destruct H as [tv [EV MV]].
+            left. econstructor. split. apply plus_one.             
+            eapply self__Cfamtransl.Target.step_set.
+            apply EV.
+            exploit self__Cfamtransl.match_callstack_set_temp; eauto.
+            intros G.
+            eapply self__Cfamtransl.match_state; eauto.
             rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq.
-            unfold self__Cfamtransl.transl_stmtSskip.
-            reflexivity.
-            apply MINJ.
-            apply cheat (* exploi match_callstack_set_temp *).
-            apply MK.
+            unfold self__Cfamtransl.transl_stmtSskip. reflexivity.            
           
           (* seq *)
           + unfold self__Cfamtransl.__motiveTtransl_step_correct.
