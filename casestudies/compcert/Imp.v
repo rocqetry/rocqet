@@ -510,17 +510,7 @@ Inductive bitfield : Type :=
 
       (* Kblock *)
       + apply cheat.
-      Qed. FEnd match_is_call_cont.
-        
-        :
-         forall tfn te sp tm k tk cenv xenv cs,
-         match_cont k tk cenv xenv cs ->
-         Csharpminor.is_call_cont k ->
-         exists tk',
-           star step tge (State tfn Sskip tk sp te tm)
-                      E0 (State tfn Sskip tk' sp te tm)
-           /\ is_call_cont tk'
-           /\ match_cont k tk' cenv nil cs.
+      Qed. FEnd match_is_call_cont.                
       
       (* Find label *)
       FInduction transl_find_label about Source.stmt motive
@@ -624,15 +614,14 @@ Inductive bitfield : Type :=
             rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq in TR.
             unfold self__Cfamtransl.transl_stmtSskip in TR.
             monadInv TR. 
-            left. econstructor. split. apply plus_one. 
+            left.
+            exploit self__Cfamtransl.match_is_call_cont; eauto. intros [tk' [A [B C]]].
+            exploit self__Cfamtransl.match_callstack_freelist; eauto. intros [tm' [P [Q R]]].                      
+            econstructor. split. apply plus_one. 
             apply self__Cfamtransl.Target.step_skip_call.
-            apply cheat. (* exploit match_is_call_cont *)
-            apply cheat (*  exploit match_callstack_freelist *).
-            apply self__Cfamtransl.match_returnstate with (f := f0) (cs := cs).
-            apply cheat. (*  exploit match_callstack_freelist *)
-            apply cheat. (* match call stack *)
-            apply MK.
-            apply self__Cfamtransl.match_value_refl.
+            apply cheat. apply P.
+            eapply self__Cfamtransl.match_returnstate; eauto.
+            apply self__Cfamtransl.match_value_refl.                        
 
           (* set *)
           + unfold self__Cfamtransl.__motiveTtransl_step_correct.
