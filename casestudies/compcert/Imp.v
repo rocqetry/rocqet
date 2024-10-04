@@ -478,20 +478,21 @@ Inductive bitfield : Type :=
            /\ Target.is_call_cont tk'
            /\ Target.match_cont k tk' cenv nil cs.*)
 
-      (* Preservation of match_callstack by freeing 
-         function env allocated at function entry *)
-      (*FLemma match_callstack_freelist:
-        forall f cenv tf e le te sp lo hi cs m m' tm,
-          Mem.inject f m tm ->
-          Mem.free_list m (blocks_of_env e) = Some m' ->
-          match_callstack f m tm (Frame cenv tf e le te sp lo hi :: cs) (Mem.nextblock m) (Mem.nextblock tm) ->
-          exists tm',
-          Mem.free tm sp 0 tf.(fn_stackspace) = Some tm'
+      (* Preservation of match_callstack by freeing  function env allocated at function entry *)      
+      FLemma match_callstack_freelist:
+        forall f sf tf e le te sp lo hi cs m m' tm,
+          match_mem f m tm ->          
+          Source.free_fenv m e sf = Some m' -> 
+          match_callstack f m tm (self__Cfamtransl.Frame tf e le te sp lo hi :: cs) (Mem.nextblock m) (Mem.nextblock tm) ->
+          exists tm',            
+            Target.free_fenv tm sp tf = Some tm' 
           /\ match_callstack f m' tm' cs (Mem.nextblock m') (Mem.nextblock tm')
-          /\ Mem.inject f m' tm'.*)
+          /\  match_mem f m' tm'.
+      FProofLemma.
+        Admitted.
+      CloseFLemma.
 
       (* Find label *)
-
       FInduction transl_find_label about Source.stmt motive
          (fun (s : Source.stmt) => forall k ts tk lbl,
               transl_stmt s = OK ts -> 
@@ -546,8 +547,8 @@ Inductive bitfield : Type :=
           forall T1, match_states S1 T1 -> 
           (exists T2, plus Target.step tge T1 t T2 /\ match_states S2 T2) \/
           (measure S2 < measure S1 /\ t = E0 /\ match_states S2 T1)%nat).
-        FProof.
-
+      FProof.
+      
           (* skip seq *)
           + unfold self__Cfamtransl.__motiveTtransl_step_correct.
             intros ge f s k e le m prog tprog tge H G. 
@@ -630,7 +631,7 @@ Inductive bitfield : Type :=
             monadInv TR. 
             left. econstructor. split. apply plus_one. 
             apply self__Cfamtransl.Target.step_seq.
-            eapply self__Cfamtransl.match_state; (try eassumption ;apply self__Cfamtransl.match_Kseq; eassumption).                        
+            eapply self__Cfamtransl.match_state; (try eassumption ;apply self__Cfamtransl.match_Kseq; eassumption).
               
           (* ifthenelse *)
           + unfold self__Cfamtransl.__motiveTtransl_step_correct.
