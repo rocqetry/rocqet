@@ -561,6 +561,21 @@ Inductive bitfield : Type :=
        (* Sgoto *)
       + apply cheat.
       Qed. FEnd transl_find_label.
+
+      FLemma bool_of_val_match:
+         forall f v tv b,
+         Val.bool_of_val v b -> match_value f v tv -> Val.bool_of_val tv b.
+      FProofLemma.
+      Admitted. CloseFLemma.      
+
+      (* Lemma make_boolean_correct:
+          forall e le m a v ty b,
+          eval_expr ge e le m a v ->
+          bool_val v ty m = Some b ->
+           exists vb,
+             eval_expr ge e le m (make_boolean a ty) vb
+             /\ Val.bool_of_val vb b.*)
+
      
       (*FInduction transl_find_label_body:
           forall cenv xenv size f tf k tk cs lbl s' k',
@@ -673,18 +688,15 @@ Inductive bitfield : Type :=
             rewrite -> self__Cfamtransl.transl_stmt_Sifthenelse_eq in TR.
             unfold self__Cfamtransl.transl_stmtSifthenelse in TR.            
             monadInv TR.
-            exploit self__Cfamtransl.transl_expr_correct. apply EV. apply MINJ. apply MCS. apply EQ.
-            intros TV.
-            left. econstructor. split. apply plus_one. 
-            eapply self__Cfamtransl.Target.step_ifthenelse.
-            destruct TV as [tv [H1 H2]].
-            assert (H_eq: tv = v). { apply cheat. }
-            rewrite <- H_eq. apply H1. apply V. 
-            destruct b.
-            ++ eapply self__Cfamtransl.match_state; eassumption. 
-            ++ eapply self__Cfamtransl.match_state. apply TRF. apply EQ0.
-               apply MINJ. apply MCS. apply MK.
-
+            exploit self__Cfamtransl.transl_expr_correct; eauto. intros [tv [H1 H2]].
+            left. 
+            exists (self__Cfamtransl.Target.State tfn (if b then x0 else x1) tk sp te tm). 
+            split. apply plus_one. 
+            eapply self__Cfamtransl.Target.step_ifthenelse; eauto.
+            eapply self__Cfamtransl.bool_of_val_match; eauto.
+            eapply self__Cfamtransl.match_state; eauto.
+            destruct b; eauto.
+                        
           (* loop *)
           + 
             unfold self__Cfamtransl.__motiveTtransl_step_correct.
@@ -753,8 +765,7 @@ Inductive bitfield : Type :=
             monadInv TR.
             left. econstructor. split. apply plus_one. 
             apply self__Cfamtransl.Target.step_label.
-            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).
-            apply TRF. apply EQ. apply MINJ. apply MCS. apply MK.            
+            eapply self__Cfamtransl.match_state; eauto.            
             
           (* goto *)
           + unfold self__Cfamtransl.__motiveTtransl_step_correct.
