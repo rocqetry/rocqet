@@ -1429,48 +1429,5 @@ FEnd STLC_fix.
 Family STLC_all extends STLC using STLC_bool, STLC_prod, STLC_fix.
 
 FEnd STLC_all.
-Family STLC_all extends STLC using STLC_bool, STLC_prod, STLC_fix.
-FEnd STLC_all.
-
-Family STLC_bool_prod extends STLC 
-    using STLC_bool, STLC_prod.
-
-Family STLC_bool_prod_sum extends STLC 
-    using STLC_sum using STLC_bool_prod.
-
-Family STLC_bool_prod_sum_fix extends STLC 
-    using STLC_bool_prod_sum using STLC_fix.
-
-
-Family STLC_bool_prod_fix extends STLC 
-    using STLC_bool_prod using STLC_fix.
-
-(* Family STLC_bool_sum extends STLC 
-    using STLC_bool using STLC_sum. 
-
-Family STLC_bool_sum_fix extends STLC 
-    using STLC_bool_sum using STLC_fix. 
-
-Family STLC_bool_fix extends STLC 
-    using STLC_bool using STLC_fix. 
-
-Family STLC_prod_sum extends STLC 
-    using STLC_prod using STLC_sum.  *)
-
-
-(* Family STLC_prod_sum extends STLC 
-    using STLC_prod using STLC_sum. 
-
-Family STLC_prod_fix extends STLC 
-    using STLC_prod using STLC_fix. 
-
-Family STLC_prod_sum_fix extends STLC 
-    using STLC_prod_sum using STLC_fix. 
-
-Family STLC_sum_fix extends STLC 
-    using STLC_sum using STLC_fix.  *)
-
-
-Print STLC_bool_prod_sum_fix.
 
 End STLC_Families.
