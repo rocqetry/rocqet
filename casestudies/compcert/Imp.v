@@ -561,6 +561,18 @@ Inductive bitfield : Type :=
        (* Sgoto *)
       + apply cheat.
       Qed. FEnd transl_find_label.
+       
+      FLemma transl_find_label_body:
+         forall f tf k tk lbl s' k',
+         transl_function f = OK tf ->
+         match_cont k tk ->
+         Source.find_label (Source.function_body f) lbl (Source.call_cont k) = Some (s', k') ->
+         exists ts', exists tk',
+            Target.find_label (Target.function_body tf) lbl (Target.call_cont tk) = Some(ts', tk')
+         /\ transl_stmt s' = OK ts'
+         /\ match_cont k' tk'.
+      FProofLemma.
+      Admitted. CloseFLemma.
 
       FLemma bool_of_val_match:
          forall f v tv b,
@@ -774,13 +786,13 @@ Inductive bitfield : Type :=
             exploit self__Cfamtransl.transl_find_label; eauto. intros.
             rewrite -> self__Cfamtransl.transl_stmt_Sgoto_eq in TR.
             unfold self__Cfamtransl.transl_stmtSgoto in TR.
-            monadInv TR.            
+            monadInv TR.
+            exploit self__Cfamtransl.transl_find_label_body; eauto. intros [ts' [tk' [A [B C]]]].
+            (* exploit (self__Cfamtransl.transl_find_label (self__Cfamtransl.Source.function_body f)); eauto.*)            
             left. econstructor. split. apply plus_one.
             apply self__Cfamtransl.Target.step_goto.
-            apply cheat. (* Use transl_find_label_body *)
-            eapply self__Cfamtransl.match_state.
-            apply TRF. apply cheat (* stmt used by find_label *). apply MINJ. apply MCS.
-            apply cheat (* const used by find_label *).
+            exact A.            
+            eapply self__Cfamtransl.match_state; eauto.            
                         
           (* internal function *)
           + unfold self__Cfamtransl.__motiveTtransl_step_correct.
