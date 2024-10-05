@@ -513,7 +513,7 @@ Inductive bitfield : Type :=
 
       (* Kblock *)
       + apply cheat.
-      Qed. FEnd match_is_call_cont.
+      Qed. FEnd match_is_call_cont.                                 
       
       (* Find label *)
       FInduction transl_find_label about Source.stmt motive
@@ -734,8 +734,8 @@ Inductive bitfield : Type :=
             
           (* return some *)
           + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f a k e le m v m' E F prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE. 
+            intros ge f a k e le m v m' E F prog tprog tge H G.
+            intros T1 MSTATE. inv MSTATE.
             rewrite -> self__Cfamtransl.transl_stmt_Sreturn_eq in TR.
             unfold self__Cfamtransl.transl_stmtSreturn in TR.
             monadInv TR. left.
@@ -744,7 +744,7 @@ Inductive bitfield : Type :=
             econstructor. split. apply plus_one. 
             eapply self__Cfamtransl.Target.step_return_1; eauto.
             eapply self__Cfamtransl.match_returnstate; eauto.
-            eapply self__Cfamtransl.match_call_cont.            
+            eapply self__Cfamtransl.match_call_cont.
 
           (* label *)
           + unfold self__Cfamtransl.__motiveTtransl_step_correct.
