@@ -465,18 +465,7 @@ Inductive bitfield : Type :=
            match_callstack f m tm (self__Cfamtransl.Frame tf e (PTree.set id v le) (PTree.set id tv te) sp lo hi :: cs) bound tbound.
       FProofLemma.
       Admitted.
-      CloseFLemma.
-      
-      (* Call cont lemma *)
-      (*FInduction match_is_call_cont:
-         forall tfn te sp tm k tk cenv xenv cs,
-         match_cont k tk ->
-         Source.is_call_cont k ->
-         exists tk',
-           star Target.step tge (Target.State tfn Sskip tk sp te tm)
-                      E0 (Target.State tfn Sskip tk' sp te tm)
-           /\ Target.is_call_cont tk'
-           /\ Target.match_cont k tk' cenv nil cs.*)
+      CloseFLemma.      
 
       (* Preservation of match_callstack by freeing  function env allocated at function entry *)      
       FLemma match_callstack_freelist:
@@ -578,7 +567,7 @@ Inductive bitfield : Type :=
          forall f v tv b,
          Val.bool_of_val v b -> match_value f v tv -> Val.bool_of_val tv b.
       FProofLemma.
-      Admitted. CloseFLemma.      
+      Admitted. CloseFLemma.
 
       (* Lemma make_boolean_correct:
           forall e le m a v ty b,
@@ -586,18 +575,7 @@ Inductive bitfield : Type :=
           bool_val v ty m = Some b ->
            exists vb,
              eval_expr ge e le m (make_boolean a ty) vb
-             /\ Val.bool_of_val vb b.*)
-
-     
-      (*FInduction transl_find_label_body:
-          forall cenv xenv size f tf k tk cs lbl s' k',
-          transl_funbody cenv size f = OK tf ->
-          match_cont k tk cenv xenv cs ->
-          Csharpminor.find_label lbl f.(Csharpminor.fn_body) (Csharpminor.call_cont k) = Some (s', k') ->
-          exists ts', exists tk', exists xenv',
-             find_label lbl tf.(fn_body) (call_cont tk) = Some(ts', tk')
-          /\ transl_stmt cenv xenv' s' = OK ts'
-          /\ match_cont k' tk' cenv xenv' cs.*)
+             /\ Val.bool_of_val vb b.*)           
       
       FOpaque Definition measure : Source.state -> nat := cheat.
 
@@ -792,7 +770,7 @@ Inductive bitfield : Type :=
             left. econstructor. split. apply plus_one.
             apply self__Cfamtransl.Target.step_goto.
             exact A.            
-            eapply self__Cfamtransl.match_state; eauto.            
+            eapply self__Cfamtransl.match_state; eauto.
                         
           (* internal function *)
           + unfold self__Cfamtransl.__motiveTtransl_step_correct.
