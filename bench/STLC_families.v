@@ -467,7 +467,7 @@ FLemma type_safety:
     self__STLC.steps t t' ->
     value t' \/ (exists t'', step t' t'').
 FProofLemma.
-unfold self__STLC.LemmaTy回257. intros.
+unfold self__STLC.LemmaTy回1652. intros.
 eapply self__STLC.progress; eauto using self__STLC.preservation2.
 Qed. CloseFLemma.
 
@@ -1420,7 +1420,6 @@ eauto using self__STLC_fix.ht_fix.
 Qed. FEnd preservation.
 
 FEnd STLC_fix.
-
 (* each four statement below is a piece together
     the current plugin implementation requires a lot of memory
     so I cannot just run all 12 statements together
