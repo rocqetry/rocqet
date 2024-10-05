@@ -467,7 +467,7 @@ FLemma type_safety:
     self__STLC.steps t t' ->
     value t' \/ (exists t'', step t' t'').
 FProofLemma.
-unfold self__STLC.LemmaTy回1652. intros.
+unfold self__STLC.LemmaTy回257. intros.
 eapply self__STLC.progress; eauto using self__STLC.preservation2.
 Qed. CloseFLemma.
 
@@ -1425,7 +1425,10 @@ FEnd STLC_fix.
     so I cannot just run all 12 statements together
   In my machine I can run 4 statements together, 
     so I group them into three groups
-    *)
+ *)
+Family STLC_all extends STLC using STLC_bool, STLC_prod, STLC_fix.
+
+FEnd STLC_all.
 Family STLC_all extends STLC using STLC_bool, STLC_prod, STLC_fix.
 FEnd STLC_all.
 
