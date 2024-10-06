@@ -30,8 +30,8 @@ let fsimpl () =
     in
 
     (* TODO: This can merged into one *)
-    let computational_axioms = 
-      let context = Context.get () in 
+    let context = Context.get () in 
+    let handlers =       
       goal_names
       (* filter self names and extract the unqualified name *)                             
       |> List.filter_map (fun name -> 
@@ -44,6 +44,10 @@ let fsimpl () =
       |> List.filter_map (function 
            | LinkageElem.RecursorDefinition { names; handlers; _} -> Some (names, handlers)
            | _ -> None)      
+    in
+
+    let computational_axioms = 
+      handlers 
       (* Now we create the computational axiom *)
       |> List.concat_map (fun (names, handlers) -> 
            let recursor_name = List.hd names in
@@ -56,7 +60,24 @@ let fsimpl () =
                   in 
                   Resolver.resolve_qualid 
                     ~context 
-                    ~qualid:(Libnames.qualid_of_ident name)))           
+                    ~qualid:(Libnames.qualid_of_ident name)))
+    in 
+    
+    let all_case_definitions = 
+      (* Now we create the handler case definitions *)
+      handlers
+      |> List.concat_map (fun (names, handlers) -> 
+           let recursor = List.hd names in
+           handlers 
+           |> List.map (fun case -> 
+                  let name = 
+                     Naming.handler_name 
+                       ~recursor
+                       ~case
+                  in 
+                  Resolver.resolve_qualid 
+                    ~context 
+                    ~qualid:(Libnames.qualid_of_ident name)))      
     in
 
     (* repeat ( rewrite ... in * || ...) *)
@@ -80,16 +101,62 @@ let fsimpl () =
       (* let repeat_union_rewrites = CAst.make (TacRepeat union_rewrites) in  *)
       Tacinterp.interp union_rewrites
    in
+   
+   (* (unfold ... ) ...  *)
+   let unfolds = 
+      let open Ltac_plugin in 
+      let each_rewrite_tactic (each_eq : Libnames.qualid) = 
+        let each_eq =
+          (Tacexpr.TacCall
+             (CAst.make
+                ( each_eq,
+                  [] )))      
+        in
+        let tactic = 
+           CAst.make
+           (Tacexpr.TacArg
+              (Tacexpr.TacCall
+                 (CAst.make
+                    ( Libnames.qualid_of_ident
+                        (Names.Id.of_string "__funfold"),
+                      [ each_eq ] ))))
+        in 
+        Tacinterp.interp tactic
+      in 
+      let all_unfold_tactics = List.map each_rewrite_tactic all_case_definitions in 
+      let idtac =
+        let idtac =
+          CAst.make
+            (Tacexpr.TacArg
+               (Tacexpr.TacCall
+                  (CAst.make
+                     ( Libnames.qualid_of_ident
+                         (Names.Id.of_string "idtac"),
+                       [] ))))
+        in
+        Tacinterp.interp idtac
+      in  
+      let union_unfolds = 
+        List.fold_right (fun l r -> Tacticals.tclTHEN l r) all_unfold_tactics idtac        
+      in      
+      union_unfolds
+   in
 
     let names = 
       computational_axioms
       |> List.map Pretty.pretty_qualid
       |> String.concat "\n"                             
     in 
-    
+    Feedback.msg_info (Pp.str names) ;    
+
+    let names = 
+      all_case_definitions
+      |> List.map Pretty.pretty_qualid
+      |> String.concat "\n"                             
+    in    
     Feedback.msg_info (Pp.str names) ;    
     
-    rewrites
+    Tacticals.tclTHEN rewrites unfolds
   end
 
 (* finjection *)
