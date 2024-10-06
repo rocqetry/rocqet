@@ -1,12 +1,11 @@
+(* Custom tactics for family polymorphism *)
 open Env
 open Types
-(* Custom tactics for family polymorphism *)
 
 (* fsimpl *)
 let fsimpl () =
   Proofview.Goal.enter begin fun gl ->    
     let goal = Proofview.Goal.concl gl in    
-    (* Get all hypotheses *)
     (* let hyps = Proofview.Goal.hyps gl in*)
     let env = Proofview.Goal.env gl in        
     let evar_map = Evd.from_env env in
@@ -30,6 +29,7 @@ let fsimpl () =
       path |> Naming.path_to_list |> List.exists is_self_name
     in
 
+    (* TODO: This can merged into one *)
     let computational_axioms = 
       let context = Context.get () in 
       goal_names
@@ -49,14 +49,19 @@ let fsimpl () =
            let recursor_name = List.hd names in
            handlers 
            |> List.map (fun constructor_name -> 
-                  Naming.computational_axiom_name 
-                    ~recursor_name 
-                    ~constructor_name))           
-    in 
+                  let name = 
+                     Naming.computational_axiom_name 
+                       ~recursor_name 
+                       ~constructor_name
+                  in 
+                  Resolver.resolve_qualid 
+                    ~context 
+                    ~qualid:(Libnames.qualid_of_ident name)))           
+    in
 
     let names = 
       computational_axioms
-      |> List.map Names.Id.to_string
+      |> List.map Pretty.pretty_qualid
       |> String.concat "\n"                             
     in 
     
