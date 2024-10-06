@@ -59,6 +59,28 @@ let fsimpl () =
                     ~qualid:(Libnames.qualid_of_ident name)))           
     in
 
+    (* repeat ( rewrite ... in * || ...) *)
+    let rewrites = 
+      let open Ltac_plugin in 
+      let each_rewrite_tactic (each_eq : Libnames.qualid) = 
+        (* this section can check g_tactic.mlg *)
+        let rewrite_atom = Constrexpr_ops.mkRefC each_eq in 
+        let l = [(true, Equality.Precisely 1, (None, ( rewrite_atom , Tactypes.NoBindings)))] in 
+        let cl = { Locus.onhyps=None; concl_occs=Locus.AllOccurrences } in 
+        let t = None in 
+        let rewrite_tacatom =  CAst.make @@ Tacexpr.TacAtom (TacRewrite (false,l,cl,t)) in 
+        rewrite_tacatom in 
+      let all_rewrite_tactics = List.map each_rewrite_tactic computational_axioms in 
+      let tacfail = 
+        CAst.make (Tacexpr.TacFail (TacLocal,Locus.ArgArg 0,[]))
+      in 
+      let union_rewrites = 
+        List.fold_right (fun l r -> CAst.make (Tacexpr.TacOrelse (l,r))) all_rewrite_tactics tacfail
+      in 
+      (* let repeat_union_rewrites = CAst.make (TacRepeat union_rewrites) in  *)
+      Tacinterp.interp union_rewrites
+   in
+
     let names = 
       computational_axioms
       |> List.map Pretty.pretty_qualid
@@ -67,7 +89,7 @@ let fsimpl () =
     
     Feedback.msg_info (Pp.str names) ;    
     
-    Proofview.tclUNIT ()
+    rewrites
   end
 
 (* finjection *)
