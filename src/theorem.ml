@@ -38,7 +38,7 @@ let prepare_proving () =
   ()
 
 let start_proving () =
-  let Ctx.{ goal; goal_name; _ } = Ctx.get () in
+  let Ctx.{ goal; goal_name; name; _ } = Ctx.get () in
   let env = Global.env () in
   let sigma = Evd.from_env env in
   let sigma, checked_goal = Termutils.internalize env goal sigma in
@@ -46,54 +46,56 @@ let start_proving () =
   let cinfo = Declare.CInfo.make ~name:goal_name ~typ:checked_goal () in
   let ongoing_proof = Declare.Proof.start ~info ~cinfo sigma in
   (* These tactics are defined in Loader.v *)
-  let open Ltac_plugin in
-  let unfold_first_level =
-    let __unfold_motive_helper =
+  let open Ltac_plugin in  
+  let unfold_motive_precisely =
+    let self__motive = 
+      Resolver.resolve_qualid ~context:(Context.get ()) 
+        ~qualid:(Libnames.qualid_of_ident (Naming.motive_of name))
+    in 
+    let self__motive_tactic =
+      (Tacexpr.TacCall
+         (CAst.make
+            ( self__motive,
+              [] )))      
+    in
+    let unfold_self_motive =
       CAst.make
         (Tacexpr.TacArg
            (Tacexpr.TacCall
               (CAst.make
                  ( Libnames.qualid_of_ident
-                     (Names.Id.of_string "__unfold_ftheorem_motive"),
-                   [] ))))
+                     (Names.Id.of_string "__funfold"),
+                   [self__motive_tactic] ))))
     in
-    Tacinterp.interp __unfold_motive_helper
+    Tacinterp.interp unfold_self_motive
   in
-  let unfold_nonsplit =
-    let __unfold_motive_helper =
+  let idtac =
+    let idtac =
       CAst.make
         (Tacexpr.TacArg
            (Tacexpr.TacCall
               (CAst.make
                  ( Libnames.qualid_of_ident
-                     (Names.Id.of_string "__unfold_ftheorem_motive_nested"),
+                     (Names.Id.of_string "idtac"),
                    [] ))))
     in
-    Tacinterp.interp __unfold_motive_helper
-  in
+    Tacinterp.interp idtac
+  in  
   let split_cases_into_goals =
     let helper =
       CAst.make
         (Tacexpr.TacArg
            (Tacexpr.TacCall
               (CAst.make
-                 (Libnames.qualid_of_ident (Names.Id.of_string "finduction"), []))))
+                 (Libnames.qualid_of_ident (Names.Id.of_string "split_cases_into_goals"), []))))
     in
     Tacinterp.interp helper
   in
-  let repeat_split =
-    Tacticals.tclREPEAT
-      (Tactics.split_with_bindings false [ Tactypes.NoBindings ])
-  in
-  let repeat_split_then_unfold =
-    Tacticals.tclTHEN repeat_split unfold_first_level
-  in
-  let split = false in
+  let combine_tactics ~tactis = 
+    List.fold_right (fun t rest -> Tacticals.tclTHEN t rest) tactis idtac
+  in      
   let starting_operation =
-    if split then repeat_split_then_unfold else unfold_nonsplit
-  in
-  let starting_operation =
-    Tacticals.tclTHEN starting_operation split_cases_into_goals
+    combine_tactics ~tactis:[ unfold_motive_precisely; split_cases_into_goals ]      
   in
   let ongoing_proof, _ = Declare.Proof.by starting_operation ongoing_proof in
   ongoing_proof
