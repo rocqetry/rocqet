@@ -101,3 +101,5 @@ val extract_handler_types_from_principle :
   inductive:VernacInductive.t ->
   principles:(Names.Id.t list * Constrexpr.constr_expr) RecursorStore.t ->
   Recursors.t
+
+val constants_in_econstr: Evd.evar_map -> Evd.econstr -> Libnames.qualid list
