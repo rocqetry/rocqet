@@ -24,8 +24,7 @@ let fsimpl () =
       |> String.concat "\n"                             
     in 
     
-    Feedback.msg_info (Pp.str names) ;
-    failwith names |> ignore;
+    Feedback.msg_info (Pp.str names) ;    
     
     Proofview.tclUNIT ()
   end
