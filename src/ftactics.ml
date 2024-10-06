@@ -16,7 +16,7 @@ open Env
 let fsimpl () =
   Proofview.Goal.enter begin fun gl ->    
     let goal = Proofview.Goal.concl gl in    
-    let hyps : EConstr.named_context = Proofview.Goal.hyps gl in
+    let _hyps : EConstr.named_context = Proofview.Goal.hyps gl in
     let env = Proofview.Goal.env gl in        
     let evar_map = Evd.from_env env in
 
@@ -102,7 +102,7 @@ let fsimpl () =
                        [] ))))
         in
         Tacinterp.interp idtac
-      in  
+    in
 
     (* repeat ( rewrite ... in * || ...) *)
     let rewrites = 
@@ -113,17 +113,19 @@ let fsimpl () =
         let l = [(true, Equality.Precisely 1, (None, ( rewrite_atom , Tactypes.NoBindings)))] in 
         let cl = { Locus.onhyps=None; concl_occs=Locus.AllOccurrences } in 
         let t = None in 
-        let rewrite_tacatom =  CAst.make @@ Tacexpr.TacAtom (TacRewrite (false,l,cl,t)) in 
-        rewrite_tacatom in 
+        let rewrite_tacatom =  CAst.make @@ Tacexpr.TacAtom (TacRewrite (false,l,cl,t)) in         
+        Tacinterp.interp rewrite_tacatom 
+      in 
       let all_rewrite_tactics = List.map each_rewrite_tactic computational_axioms in 
       (*let tacfail = 
         CAst.make (Tacexpr.TacFail (TacLocal,Locus.ArgArg 0,[]))
       in *)
+      (* TODO: We actually wanto to do try (rewrite ...) ...  *)
       let union_rewrites = 
-        List.fold_right (fun l r -> CAst.make (Tacexpr.TacOrelse (l,r))) all_rewrite_tactics idtac
+        List.fold_right (fun l r -> (Tacticals.tclORELSE l r)) all_rewrite_tactics idtac
       in 
       (* let repeat_union_rewrites = CAst.make (TacRepeat union_rewrites) in  *)
-      Tacinterp.interp union_rewrites
+      union_rewrites
    in
    
    (* (unfold ... ) ...  *)
