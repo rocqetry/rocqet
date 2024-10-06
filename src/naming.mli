@@ -65,3 +65,9 @@ val inv_name_map_with :
   (Names.Id.t -> Names.Id.t) -> Names.Id.t list -> Names.Id.t Names.Id.Map.t
 
 val concat_names : Names.Id.t list -> Names.Id.t
+
+val is_self_name : Names.Id.t -> bool
+
+val is_self_qualid : Libnames.qualid -> bool
+
+val remove_self_qualid : Libnames.qualid -> Libnames.qualid

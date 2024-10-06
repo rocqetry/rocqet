@@ -288,3 +288,17 @@ let concat_names names =
   names
   |> List.map Names.Id.to_string
   |> List.sort String.compare |> String.concat "_" |> Names.Id.of_string
+
+let is_self_name name = 
+    name |> Names.Id.to_string |> String.starts_with ~prefix:"self__"
+
+let is_self_qualid path = 
+      path |> path_to_list |> List.exists is_self_name
+
+let remove_self_qualid name = 
+    let rec remove_self_qual = function 
+        | [] -> Errors.fail ~info:"remove_self_qual: empty list"
+        | p :: path when is_self_name p -> list_to_path path
+        | _ :: path -> remove_self_qual path                             
+    in 
+    remove_self_qual (path_to_list name)
