@@ -1,12 +1,22 @@
 (* Custom tactics for family polymorphism *)
-open Env
+
 open Types
+
+(*
+let get_hyps_as_econstr_list (gl : Proofview.Goal.t) : EConstr.t list =
+  let sigma = Proofview.Goal.sigma gl in
+  let hyps = Proofview.Goal.hyps gl in
+  List.map 
+    (fun decl -> Context.Named.Declaration.get_type decl) 
+    (Context.Named.to_vars hyps) *)
+
+open Env
 
 (* fsimpl *)
 let fsimpl () =
   Proofview.Goal.enter begin fun gl ->    
     let goal = Proofview.Goal.concl gl in    
-    (* let hyps = Proofview.Goal.hyps gl in*)
+    let hyps : EConstr.named_context = Proofview.Goal.hyps gl in
     let env = Proofview.Goal.env gl in        
     let evar_map = Evd.from_env env in
 
@@ -80,6 +90,20 @@ let fsimpl () =
                     ~qualid:(Libnames.qualid_of_ident name)))      
     in
 
+    let idtac =
+      let open Ltac_plugin in
+        let idtac =
+          CAst.make
+            (Tacexpr.TacArg
+               (Tacexpr.TacCall
+                  (CAst.make
+                     ( Libnames.qualid_of_ident
+                         (Names.Id.of_string "idtac"),
+                       [] ))))
+        in
+        Tacinterp.interp idtac
+      in  
+
     (* repeat ( rewrite ... in * || ...) *)
     let rewrites = 
       let open Ltac_plugin in 
@@ -92,11 +116,11 @@ let fsimpl () =
         let rewrite_tacatom =  CAst.make @@ Tacexpr.TacAtom (TacRewrite (false,l,cl,t)) in 
         rewrite_tacatom in 
       let all_rewrite_tactics = List.map each_rewrite_tactic computational_axioms in 
-      let tacfail = 
+      (*let tacfail = 
         CAst.make (Tacexpr.TacFail (TacLocal,Locus.ArgArg 0,[]))
-      in 
+      in *)
       let union_rewrites = 
-        List.fold_right (fun l r -> CAst.make (Tacexpr.TacOrelse (l,r))) all_rewrite_tactics tacfail
+        List.fold_right (fun l r -> CAst.make (Tacexpr.TacOrelse (l,r))) all_rewrite_tactics idtac
       in 
       (* let repeat_union_rewrites = CAst.make (TacRepeat union_rewrites) in  *)
       Tacinterp.interp union_rewrites
@@ -123,19 +147,7 @@ let fsimpl () =
         in 
         Tacinterp.interp tactic
       in 
-      let all_unfold_tactics = List.map each_rewrite_tactic all_case_definitions in 
-      let idtac =
-        let idtac =
-          CAst.make
-            (Tacexpr.TacArg
-               (Tacexpr.TacCall
-                  (CAst.make
-                     ( Libnames.qualid_of_ident
-                         (Names.Id.of_string "idtac"),
-                       [] ))))
-        in
-        Tacinterp.interp idtac
-      in  
+      let all_unfold_tactics = List.map each_rewrite_tactic all_case_definitions in       
       let union_unfolds = 
         List.fold_right (fun l r -> Tacticals.tclTHEN l r) all_unfold_tactics idtac        
       in      
