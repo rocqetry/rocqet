@@ -39,6 +39,31 @@ let prepare_proving () =
   let info = Declare.Info.make () in
   let cinfo = Declare.CInfo.make ~name ~typ:internalized_goal () in
   let ongoing_proof = Declare.Proof.start ~info ~cinfo sigma in
+  let open Ltac_plugin in
+  (* unfold LemmaTy *)
+  let starting_operation =    
+    let self__motive = 
+      Resolver.resolve_qualid ~context:(Context.get ()) 
+        ~qualid:(Libnames.qualid_of_ident type_name)
+    in 
+    let self__motive_tactic =
+      (Tacexpr.TacCall
+         (CAst.make
+            ( self__motive,
+              [] )))      
+    in
+    let unfold_self_motive =
+      CAst.make
+        (Tacexpr.TacArg
+           (Tacexpr.TacCall
+              (CAst.make
+                 ( Libnames.qualid_of_ident
+                     (Names.Id.of_string "__funfold"),
+                   [self__motive_tactic] ))))
+    in
+    Tacinterp.interp unfold_self_motive
+  in
+  let ongoing_proof, _ = Declare.Proof.by starting_operation ongoing_proof in
   ongoing_proof
 
 let open_flemma name t =
