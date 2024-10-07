@@ -103,3 +103,8 @@ val extract_handler_types_from_principle :
   Recursors.t
 
 val constants_in_econstr: Evd.evar_map -> Evd.econstr -> Libnames.qualid list
+
+val compute_partial_recursor_signature: 
+  context:LinkageCtx.t -> 
+  inductive_path:Libnames.qualid -> 
+  Constrexpr.constr_expr

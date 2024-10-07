@@ -537,3 +537,68 @@ let rec constants_in_econstr sigma e =
       in
       constants tl @ constants bl
   | Constr.Proj (_, _, c) -> constants c
+
+let compute_partial_recursor_signature 
+      ~context 
+      ~(inductive_path: Libnames.qualid) =   
+  let _inductive, recursors, _ =
+    Env.Context.lookup_inductive_for_recursion ~name:inductive_path context
+  in
+  let suffix = RecKind.Rect in
+  let Recursor.{ recursor; _ } = RecursorStore.find suffix recursors in  
+  let open Constrexpr_ops in
+  
+  let is_P (c : Constrexpr.constr_expr) : bool = 
+    let all_params, _ = collect_argument_and_ret_of_type recursor in 
+    let (ps, _, _), _ = List.hd all_params in
+    let {CAst.v = p; _} = List.hd ps in     
+    let p =
+      match p with 
+      | Names.Name p -> p 
+      | _ -> Errors.fail ~info:"compute_partial_recursor_signature: expected Names.Name" 
+    in 
+    match c with 
+    | {CAst.v = CRef (c, _); _} when (Libnames.qualid_is_ident c) -> 
+      let c = Libnames.qualid_basename c in p = c
+    | _ -> false 
+  in  
+  
+  let _option_decoration = 
+    let _option = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "option" in
+    fun t -> mkAppC (_option, [t])
+  in
+
+  let flipped_indrec_type = 
+    let all_params, ret = collect_argument_and_ret_of_type recursor in 
+    (* make the last parameter into the front *)
+    let rec heads_tail (l) = 
+      match l with 
+      | [] -> Errors.fail ~info:"heads_tail: expected non empty list"
+      | h :: [] -> ([], h) 
+      | h :: t -> 
+         let th, tt = heads_tail t in 
+         (h::th, tt) 
+    in 
+    let heads_param, tail_param = heads_tail all_params in 
+    let all_params = List.map fst @@ tail_param :: heads_param in 
+    let res = List.fold_right (fun (a, b, c) body -> mkProdC (a,b,c, body)) all_params ret in 
+    res 
+  in 
+
+  let ind_rect_type = flipped_indrec_type in 
+  (* then we flip the argument order in ind_rect_type
+      s.t.  *)
+  (* we replace the P t into option (P t) *)
+  let replaced_ind_rect_type = 
+    let rec replace_helper _ r =
+      match r with
+      | { CAst.v = (Constrexpr.CApp (f, _)) ; _ } as original 
+          when (is_P f)  ->
+          (* rename the  *)
+        (_option_decoration original)
+      | cn -> map_constr_expr_with_binders (fun _ _ -> ()) replace_helper () cn 
+    in
+    replace_helper () ind_rect_type
+  in
+  
+  replaced_ind_rect_type
