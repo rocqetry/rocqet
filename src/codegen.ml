@@ -492,6 +492,24 @@ let compile_computational_axiom_implementation ~axiom_name ~axiom_expr =
   let ty = Naming.replace_self_qualification ~target:None axiom_expr in
   B.thunk (B.construct_term_using_proof ~name:axiom_name ~proof:auto_tactic ~ty)
 
+let compile_partial_recursor_implementation ~name ~type_name = 
+  let prove_prec_tactic =      
+     let proof = 
+        let open Ltac_plugin in
+        CAst.make 
+          (Tacexpr.TacArg 
+             (Tacexpr.TacCall 
+                (CAst.make 
+                   (Libnames.qualid_of_ident (Names.Id.of_string "prove_prec") ,[]))) ) 
+      in 
+      (*let arg = Genarg.in_gen (Genarg.rawwit Tacarg.wit_tactic) tac in
+      CAst.make @@ Constrexpr.CHole _ (* (None, IntroAnonymous, Some arg) *)*)
+      proof
+  in       
+  (* B.define_term ~name prove_prec_tactic  *)
+  let ty = Constrexpr_ops.mkIdentC type_name in
+  B.thunk (B.construct_term_using_proof ~name ~proof:prove_prec_tactic ~ty)
+
 let compile_closing_fact_implementation ~name ~type_name ~(script: Ltac_plugin.Tacexpr.raw_tactic_expr) =   
   let ty = Constrexpr_ops.mkIdentC type_name in  
   B.thunk (B.construct_term_using_proof ~name ~proof:script ~ty)
@@ -877,6 +895,11 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         let open B in
         let* _ = compile_fields fields ctx in        
         compile_closing_fact_implementation ~name ~type_name ~script
+    | Snoc
+        (fields, (_, PartialRecursor { name; type_name; _ })) -> 
+        let open B in
+        let* _ = compile_fields fields ctx in        
+        compile_partial_recursor_implementation ~name ~type_name
     | Snoc (fields, (_, FamilyDefinition { linkage = nested_linkage; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in
@@ -895,9 +918,7 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
           (_, OpaqueFieldDefinition { default_ctx_params; compiled_impl; _ }) )
     | Snoc
         ( fields,
-          (_, InductiveDefinition { default_ctx_params; compiled_impl; _ }) )
-    | Snoc
-        (fields, (_, PartialRecursor { default_ctx_params; compiled_impl; _ }))
+          (_, InductiveDefinition { default_ctx_params; compiled_impl; _ }) )    
     | Snoc
         (fields, (_, FieldDefinition { default_ctx_params; compiled_impl; _ }))
       ->
