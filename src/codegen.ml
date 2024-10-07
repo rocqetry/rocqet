@@ -660,6 +660,16 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
   | Bwd.Snoc
       ( _,
         ( _,
+          PartialRecursor
+            {
+              default_ctx_params;
+              compiled_context;
+              compiled_signature;
+              _;
+            } ) )
+  | Bwd.Snoc
+      ( _,
+        ( _,
           InductiveDefinition
             { default_ctx_params; compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
@@ -760,6 +770,10 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
     | Snoc (fields, (name, ClosingFact _ )) ->
+        let open B in
+        let* _ = compile_fields fields in
+        B.define_term ~name (qualify name)
+    | Snoc (fields, (name, PartialRecursor _ )) ->
         let open B in
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
@@ -883,6 +897,8 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         ( fields,
           (_, InductiveDefinition { default_ctx_params; compiled_impl; _ }) )
     | Snoc
+        (fields, (_, PartialRecursor { default_ctx_params; compiled_impl; _ }))
+    | Snoc
         (fields, (_, FieldDefinition { default_ctx_params; compiled_impl; _ }))
       ->
         let open B in
@@ -1002,6 +1018,12 @@ let compile_linkage_signature linkage =
         ( _,
           ( _,
             TheoremDefinition
+              { default_ctx_params; compiled_context; compiled_signature; _ } )
+        )
+    | Bwd.Snoc
+        ( _,
+          ( _,
+            PartialRecursor
               { default_ctx_params; compiled_context; compiled_signature; _ } )
         )
     | Bwd.Snoc
