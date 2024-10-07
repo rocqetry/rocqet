@@ -1,0 +1,37 @@
+(include_subdirs qualified)
+
+(coq.theory
+ (name NFPOP.CompCert)
+ ;; 
+ (theories Flocq NFPOP)
+ (modules   
+   ;Imp
+
+   ; CompCert libraries
+   lib/Coqlib
+   lib/AST
+   lib/Builtins0
+   lib/Events
+   lib/Intv   
+   lib/Archi   
+   lib/Builtins1   
+   lib/Linking
+   lib/Ordered   
+   lib/Floats
+   lib/Maps   
+   lib/Values
+   lib/Axioms   
+   lib/Globalenvs
+   lib/Memdata           
+   lib/Zbits   
+   lib/Ctypes
+   lib/IEEE754_extra
+   lib/Memory
+   lib/Smallstep
+   lib/Builtins
+   lib/Errors
+   lib/Integers
+   lib/Memtype   
+  ))
+
+

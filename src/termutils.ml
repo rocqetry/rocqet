@@ -474,3 +474,66 @@ let extract_handler_types_from_principle ~(inductive : VernacInductive.t)
     Recursor.{ inductive_names; recursor; handlers }
   in
   principles |> RecursorStore.mapi compile_one_recursor
+
+let rec constants_in_econstr sigma e = 
+  let constants = constants_in_econstr sigma in 
+  let kind = EConstr.kind sigma e in 
+  match kind with
+  | Constr.Int _
+  | Constr.Float _
+  | Constr.Construct _
+  | Constr.Ind _ 
+  | Constr.Rel _ 
+  | Constr.Var _
+  | Constr.Meta _ 
+  | Constr.Evar _ 
+  | Constr.Sort _ -> []
+  | Constr.Cast (a, _, c) -> constants a @ constants c
+  | Constr.Prod (_, b, c) 
+  | Constr.Lambda (_, b, c) -> constants b @ constants c
+  | Constr.LetIn (_, a, b, c) -> constants a @ constants b @ constants c
+  | Constr.App (a, b) -> 
+     let b = 
+       b 
+       |> Array.to_list 
+       |> List.concat_map constants 
+     in 
+     constants a @ b
+  | Constr.Const (const, _) -> 
+     let name = 
+       const
+       |> Names.Constant.to_string 
+       |> Libnames.qualid_of_string
+     in
+     [name]
+  | Constr.Array (_, a, b, c) ->
+      let a = 
+       a
+       |> Array.to_list 
+       |> List.concat_map constants 
+      in
+      a @ constants b @ constants c 
+  | Constr.Case (_, _, pcms, ((_, p), _), Constr.NoInvert, c, bl) ->
+     let constants_list x = 
+       x
+       |> Array.to_list 
+       |> List.concat_map constants 
+      in
+      constants_list pcms @ constants p @ constants c @ constants_list (Array.map snd bl)
+  | Constr.Case
+       (_, _, pcms, ((_, p), _), Constr.CaseInvert { indices }, c, bl)  ->
+     let constants_list x = 
+       x
+       |> Array.to_list 
+       |> List.concat_map constants 
+      in
+      constants_list pcms @ constants p @ constants_list indices @ constants c @ constants_list (Array.map snd bl)     
+  | Constr.Fix (_,(_lna,tl,bl))
+  | Constr.CoFix (_,(_lna,tl,bl)) ->
+     let constants x = 
+       x
+       |> Array.to_list 
+       |> List.concat_map constants 
+      in
+      constants tl @ constants bl
+  | Constr.Proj (_, _, c) -> constants c

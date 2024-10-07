@@ -10,11 +10,18 @@ Ltac __unfold_ftheorem_motive :=
   | _ => idtac                                     
   end.
 
-Ltac unfold_nested G :=
+(*Ltac unfold_nested G :=
   match G with 
   | True => idtac
   | (prod (?h ?a) ?G2)  => unfold h; unfold a; unfold_nested G2  
   | ((?h ?a) /\ ?G2) => unfold_motive (h a); unfold_nested G2
+  end.*)
+
+Ltac unfold_nested G :=
+  match G with 
+  | True => idtac
+  | (prod (?h ?a) ?G2)  => unfold h; unfold a; unfold_nested G2  
+  | ((?h ?a) /\ ?G2) => unfold h; unfold a; unfold_motive h; unfold_motive a; unfold_nested G2
   end.
 
 (* Need a recursive unfolding *)
@@ -32,10 +39,19 @@ Ltac __unfold_ftheorem_motive_nested :=
   | _ => idtac
   end.*)
 
-Ltac finduction :=
+(* For some reason we can't access the "unfold" tactic directly *)
+Ltac __funfold f := unfold f.
+
+Ltac __funfold_in f H := unfold f in H.
+
+Ltac __funfold_star f := unfold f in *.
+
+Ltac __frewrite_in f H := try (rewrite f in H).
+
+Ltac split_cases_into_goals :=
   match goal with
   | [ |- ?a /\ ?b ] => 
-      split; finduction      
+      split; split_cases_into_goals
   | _ => auto
   end.
 
