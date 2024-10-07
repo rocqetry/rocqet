@@ -114,6 +114,7 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t) ~(base : LinkageEl
       TheoremDefinition { derived with names; handlers }
   | MetaDataSection derived, MetaDataSection _ -> MetaDataSection derived
   | ClosingFact fact, ClosingFact _ -> ClosingFact fact
+  | PartialRecursor _prec, PartialRecursor _ -> Errors.fail ~info:"TODO: partial recursors"
   | _, _ ->
       let info = 
         Printf.sprintf 
@@ -312,6 +313,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                         compiled_context;
                         compiled_signature;
                       }))
+        | PartialRecursor _prec -> Errors.fail ~info:"TODO: partial recursors"
         | ComputationalAxiom comp ->
             ComputationalAxiom { comp with compiled_context }
         | InductiveAxiom constr ->

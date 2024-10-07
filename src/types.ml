@@ -306,6 +306,15 @@ module rec LinkageElem : sig
         script: Ltac_plugin.Tacexpr.raw_tactic_expr;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
     }
+    | PartialRecursor of { 
+        name: Names.Id.t;
+        handlers: Names.Id.t list;
+        type_name: Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
 end =
   LinkageElem
 
@@ -357,6 +366,9 @@ end = struct
     | ClosingFact fact -> 
        let default_ctx_params = path_subst_ctx fact.default_ctx_params in
        ClosingFact { fact with default_ctx_params }
+    | PartialRecursor prec -> 
+       let default_ctx_params = path_subst_ctx prec.default_ctx_params in
+       PartialRecursor { prec with default_ctx_params }
     | InductiveAxiom axiom -> 
        let default_ctx_params = path_subst_ctx axiom.default_ctx_params in
        InductiveAxiom { axiom with default_ctx_params } 

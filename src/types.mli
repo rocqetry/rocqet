@@ -155,6 +155,15 @@ module rec LinkageElem : sig
         script: Ltac_plugin.Tacexpr.raw_tactic_expr;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
     }
+    | PartialRecursor of { 
+        name: Names.Id.t;
+        handlers: Names.Id.t list;
+        type_name: Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
 end
 
 and Linkage : sig
