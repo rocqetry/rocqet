@@ -1,3 +1,5 @@
+(include_subdirs qualified)
+
 (coq.theory
  (name NFPOP.CompCert)
  ;; 
@@ -6,30 +8,30 @@
    ;Imp
 
    ; CompCert libraries
-   Coqlib
-   AST
-   Builtins0
-   Events
-   Intv   
-   Archi   
-   Builtins1   
-   Linking
-   Ordered   
-   Floats
-   Maps   
-   Values
-   Axioms   
-   Globalenvs
-   Memdata           
-   Zbits   
-   Ctypes
-   IEEE754_extra
-   Memory
-   Smallstep
-   Builtins
-   Errors
-   Integers
-   Memtype   
+   lib/Coqlib
+   lib/AST
+   lib/Builtins0
+   lib/Events
+   lib/Intv   
+   lib/Archi   
+   lib/Builtins1   
+   lib/Linking
+   lib/Ordered   
+   lib/Floats
+   lib/Maps   
+   lib/Values
+   lib/Axioms   
+   lib/Globalenvs
+   lib/Memdata           
+   lib/Zbits   
+   lib/Ctypes
+   lib/IEEE754_extra
+   lib/Memory
+   lib/Smallstep
+   lib/Builtins
+   lib/Errors
+   lib/Integers
+   lib/Memtype   
   ))
 
-(include_subdirs qualified)
+
