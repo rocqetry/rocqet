@@ -163,3 +163,9 @@ VERNAC COMMAND EXTEND FamilyPolyProof CLASSIFIED BY { _in_proof_mode } STATE ope
 | ["FProof"] -> { Entry.fproof () }
 | ["FProofLemma"] -> { Entry.fproof_lemma () }
 END
+
+TACTIC EXTEND fsimpl
+| [ "fsimpl" "in" ident(h) ] -> { Ftactics.fsimpl_in h }
+| [ "fsimpl" "in" "*" ] -> { Ftactics.fsimpl_star () }
+| [ "fsimpl" ] -> { Ftactics.fsimpl () }
+END

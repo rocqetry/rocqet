@@ -42,6 +42,12 @@ Ltac __unfold_ftheorem_motive_nested :=
 (* For some reason we can't access the "unfold" tactic directly *)
 Ltac __funfold f := unfold f.
 
+Ltac __funfold_in f H := unfold f in H.
+
+Ltac __funfold_star f := unfold f in *.
+
+Ltac __frewrite_in f H := try (rewrite f in H).
+
 Ltac split_cases_into_goals :=
   match goal with
   | [ |- ?a /\ ?b ] => 
