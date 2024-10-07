@@ -1,3 +1,5 @@
 -R _build/default/theories NFPOP
+-Q ./casestudies/compcert CompCert
 -I _build/default/src
 -I casestudies/compcert/lib
+-I casestudies/compcert

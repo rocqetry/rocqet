@@ -1,7 +1,7 @@
 From NFPOP Require Import Loader.
 
 Require Import Coq.ZArith.ZArith.
-Require Import Coqlib.
+From CompCert Require Import Coqlib.
 Require Import Values.
 Require Import AST.
 Require Import Integers. 
