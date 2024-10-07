@@ -541,7 +541,7 @@ let rec constants_in_econstr sigma e =
 let compute_partial_recursor_signature 
       ~context 
       ~(inductive_path: Libnames.qualid) =   
-  let _inductive, recursors, _ =
+  let inductive, recursors, _ =
     Env.Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let suffix = RecKind.Rect in
@@ -600,5 +600,26 @@ let compute_partial_recursor_signature
     in
     replace_helper () ind_rect_type
   in
+
+  (* Use the right self_qualification  *)
   
-  replaced_ind_rect_type
+  let target =
+     match inductive_path |> Naming.path_to_list |> List.rev with
+     | [] | [ _ ] -> None
+      (* Remove the inductive name, leave the family *)
+     | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
+  in           
+  let ty = Naming.replace_self_qualification ~target replaced_ind_rect_type in 
+  let names = 
+    inductive 
+    |> VernacInductive.extract_all_names 
+    |> List.concat_map (fun (x, l) -> x :: l)
+    |> Names.Id.Set.of_list
+  in
+  let ty =
+    match target with
+    | None -> ty
+    | Some path -> Naming.add_prefix_path ~path ~names ~target:ty
+  in 
+  
+  Resolver.resolve_constrexpr ~context ~expression:ty
