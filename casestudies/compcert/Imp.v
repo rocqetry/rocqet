@@ -1,18 +1,18 @@
 From NFPOP Require Import Loader.
 
 Require Import Coq.ZArith.ZArith.
-Require Import Coqlib.
-Require Import Values.
-Require Import AST.
-Require Import Integers. 
-Require Import Floats.
-Require Import Errors.
-Require Import Memory.
-Require Import Globalenvs.
-Require Import Smallstep.
-Require Import Events.
-Require Import Maps.
-Require Import Linking.
+From NFPOP Require Import Coqlib.
+From NFPOP Require Import Errors.
+From NFPOP Require Import Values.
+From NFPOP Require Import AST.
+From NFPOP Require Import Integers. 
+From NFPOP Require Import Floats.
+From NFPOP Require Import Memory.
+From NFPOP Require Import Globalenvs.
+From NFPOP Require Import Smallstep.
+From NFPOP Require Import Events.
+From NFPOP Require Import Maps.
+From NFPOP Require Import Linking.
 Require Import FSets.
 Require Import FSetAVL.
 Require Import Orders.
@@ -309,7 +309,7 @@ Inductive bitfield : Type :=
            | final_state_intro: forall r m,
                final_state (self__Cfam.Returnstate (Vint r) self__Cfam.Kstop m) r.
        FEnd final_state.
-  FEnd Cfam.
+  FEnd Cfam.  
 
   (* A translation between C family languages *)
   Family Cfamtransl.
@@ -661,11 +661,10 @@ Inductive bitfield : Type :=
             unfold self__Cfamtransl.transl_stmtSskip. reflexivity.            
           
           (* seq *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+          + 
             intros ge f s1 s2 k e le m prog tprog tge H G. 
             intros T1 MSTATE. inv MSTATE.                                    
-            rewrite -> self__Cfamtransl.transl_stmt_Sseq_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSseq in TR.
+            fsimpl in TR.
             monadInv TR. 
             left. econstructor. split. apply plus_one. 
             apply self__Cfamtransl.Target.step_seq.
@@ -718,11 +717,10 @@ Inductive bitfield : Type :=
             apply TRF. apply EQ. apply MINJ. apply MCS. apply self__Cfamtransl.match_Kblock.  apply MK.
             
           (* return none *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+          + 
             intros ge f k e le m m' F prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE. 
-            rewrite -> self__Cfamtransl.transl_stmt_Sreturn_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSreturn in TR.
+            intros T1 MSTATE. inv MSTATE.  
+            fsimpl in TR.
             monadInv TR.
             left.
             exploit self__Cfamtransl.match_callstack_freelist; eauto. intros [tv [EVAL [VINJ0 VINJ1]]].            
@@ -2049,7 +2047,94 @@ Inductive bitfield : Type :=
               eval_expr ge sp e m le a v1 ->
               eval_condexpr ge sp e m (v1 :: le) b v2 ->
               eval_condexpr ge sp e m le (CElet a b) v2.       
-   FEnd CminorSel.
+  FEnd CminorSel.
+
+  (* Linear family languages *)
+  Family Lfam.
+      Definition label := positive.
+
+      FInductive instruction: Type :=
+        | Lop : Asm.operation -> list mreg -> mreg -> instruction     
+        | Lgetstack : slot -> Z -> typ -> mreg -> instruction
+        | Lsetstack : mreg -> slot -> Z -> typ -> instruction 
+        | Lbranch : node -> instruction
+        | Lcond : Asm.condition -> list mreg -> node -> node -> instruction
+        | Lreturn : instruction.
+       
+      Definition bblock := list instruction.
+      Definition code: Type := PTree.t bblock.
+
+      Record function: Type := mkfunction {
+        fn_sig: signature;
+        fn_stacksize: Z;
+        fn_code: code;
+        fn_entrypoint: node
+      }.
+             
+      Definition genv := Genv.t fundef unit.
+      Definition locset := Locmap.t.
+           
+      FInductive stackframe : Type :=
+         | Stackframe : function -> val -> locset -> bblock -> stackframe.               
+
+      FInductive state : Type :=
+          | State : list stackframe -> function -> val -> node -> locset -> mem -> state                 
+          | Block : list stackframe -> function -> val -> bblock -> locset -> mem -> state               
+          | Callstate : list stackframe -> fundef -> locset -> mem -> state.               
+          | Returnstate : list stackframe -> locset -> mem -> state.
+             
+      FInductive step: state -> trace -> state -> Prop :=
+         | exec_start_block: forall s f sp pc rs m bb,
+             (fn_code f)!pc = Some bb ->
+             step (State s f sp pc rs m)
+               E0 (Block s f sp bb rs m)
+         | exec_Lop: forall s f sp op args res bb rs m v rs',
+             eval_operation ge sp op (reglist rs args) m = Some v ->
+             rs' = Locmap.set (R res) v (undef_regs (destroyed_by_op op) rs) ->
+             step (Block s f sp (Lop op args res :: bb) rs m)
+               E0 (Block s f sp bb rs' m)  
+         | exec_Lgetstack: forall s f sp sl ofs ty dst bb rs m rs',
+             rs' = Locmap.set (R dst) (rs (S sl ofs ty)) (undef_regs (destroyed_by_getstack sl) rs) ->
+             step (Block s f sp (Lgetstack sl ofs ty dst :: bb) rs m)
+               E0 (Block s f sp bb rs' m)
+         | exec_Lsetstack: forall s f sp src sl ofs ty bb rs m rs',
+             rs' = Locmap.set (S sl ofs ty) (rs (R src)) (undef_regs (destroyed_by_setstack ty) rs) ->
+             step (Block s f sp (Lsetstack src sl ofs ty :: bb) rs m)
+               E0 (Block s f sp bb rs' m)
+         | exec_Lbranch: forall s f sp pc bb rs m,
+             step (Block s f sp (Lbranch pc :: bb) rs m)
+               E0 (State s f sp pc rs m)
+         | exec_Lcond: forall s f sp cond args pc1 pc2 bb rs b pc rs' m,
+             eval_condition cond (reglist rs args) m = Some b ->
+             pc = (if b then pc1 else pc2) ->
+             rs' = undef_regs (destroyed_by_cond cond) rs ->
+             step (Block s f sp (Lcond cond args pc1 pc2 :: bb) rs m)
+               E0 (State s f sp pc rs' m)
+         | exec_Lreturn: forall s f sp bb rs m m',
+             Mem.free m sp 0 f.(fn_stacksize) = Some m' ->
+             step (Block s f (Vptr sp Ptrofs.zero) (Lreturn :: bb) rs m)
+               E0 (Returnstate s (return_regs (parent_locset s) rs) m')
+         | exec_return: forall f sp rs1 bb s rs m,
+             step (Returnstate (Stackframe f sp rs1 bb :: s) rs m)
+               E0 (Block s f sp bb rs m).
+
+      Inductive initial_state (p: program): state -> Prop :=
+        | initial_state_intro: forall b f m0,
+            let ge := Genv.globalenv p in
+            Genv.init_mem p = Some m0 ->
+            Genv.find_symbol ge p.(prog_main) = Some b ->
+            Genv.find_funct_ptr ge b = Some f ->
+            funsig f = signature_main ->
+            initial_state p (Callstate nil f (Locmap.init Vundef) m0).
+
+      Inductive final_state: state -> int -> Prop :=
+          | final_state_intro: forall rs m retcode,
+              Locmap.getpair (map_rpair R (loc_result signature_main)) rs = Vint retcode ->
+              final_state (Returnstate nil rs m) retcode.      
+  FEnd Lfam.
+
+  Family Lfamtranl.
+  FEnd Lfamtransl.
 
   (* C -> Clight *)
   Family SimplExpr.

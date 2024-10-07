@@ -431,7 +431,7 @@ Proof.
     apply integer_representable_2p. auto.
     apply (Zpower_gt_0 radix2).
     lia.
-- assert (IZR x <> 0%R) by (apply (IZR_neq _ _ n)).
+- assert (IZR x <> 0%R) by (apply (eq_IZR_contrapositive _ _ n)).
   destruct (BofZ_finite x H) as (A & B & C).
   destruct (BofZ_representable (2^p)) as (D & E & F).
     apply integer_representable_2p. auto.
