@@ -16,6 +16,7 @@
           dune_3
           ocamlformat_0_26_1
           pkgs.coq
+          pkgs.coqPackages.flocq
         ];
       in
         {
