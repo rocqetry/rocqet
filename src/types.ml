@@ -308,6 +308,7 @@ module rec LinkageElem : sig
     }
     | PartialRecursor of { 
         name: Names.Id.t;
+        inductive_path: Libnames.qualid;
         handlers: Names.Id.t list;
         type_name: Names.Id.t;
         compiled_context : CompiledModuleType.t;
