@@ -308,12 +308,11 @@ module rec LinkageElem : sig
     }
     | PartialRecursor of { 
         name: Names.Id.t;
-        inductive_path: Libnames.qualid;
-        handlers: Names.Id.t list;
         type_name: Names.Id.t;
+        inductive_path: Libnames.qualid;
+        handlers: Names.Id.t list;        
         compiled_context : CompiledModuleType.t;
-        compiled_signature : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;
+        compiled_signature : CompiledModuleType.t;        
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
 end =
