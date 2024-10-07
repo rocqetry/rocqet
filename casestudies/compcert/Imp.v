@@ -1,6 +1,5 @@
 From NFPOP Require Import Loader.
 
-Require Import Coq.ZArith.ZArith.
 From NFPOP Require Import Coqlib.
 From NFPOP Require Import Errors.
 From NFPOP Require Import Values.
@@ -13,12 +12,13 @@ From NFPOP Require Import Smallstep.
 From NFPOP Require Import Events.
 From NFPOP Require Import Maps.
 From NFPOP Require Import Linking.
+
 Require Import FSets.
 Require Import FSetAVL.
 Require Import Orders.
 Require Import Mergesort.
 Require Import Ordered.
-
+Require Import Coq.ZArith.ZArith.
 
 Axiom cheat : forall {X}, X.
 Local Open Scope string_scope.
