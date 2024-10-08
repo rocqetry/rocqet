@@ -115,8 +115,7 @@ val generate_one_prec_computational_axiom :
       constructor_name:Names.Id.t -> 
       constructor_path:Libnames.qualid -> 
       handlers:Names.Id.t list -> 
-      prec_suffix: Names.Id.t ->      
-      rhs:Constrexpr.constr_expr option ->
+      prec_suffix: Names.Id.t ->            
       (Names.Id.t * Constrexpr.constr_expr)
 
 (*val generate_prec_computational_axioms : 

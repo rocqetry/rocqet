@@ -57,6 +57,7 @@ let add_new_inductive_definition ~inductive ~inductive_name =
   let recursors =
     Termutils.extract_handler_types_from_principle ~inductive ~principles
   in
+  let prec_suffix = Naming.fresh_name ~prefix:"PrecSuffix" in
   let elem =
     LinkageElem.InductiveDefinition
       {
@@ -66,6 +67,7 @@ let add_new_inductive_definition ~inductive ~inductive_name =
         compiled_signature;
         recursors;
         default_ctx_params;
+        prec_suffix;
       }
   in
   Context.add_field ~name:inductive_name ~elem;
@@ -80,10 +82,13 @@ let add_new_inductive_definition ~inductive ~inductive_name =
     |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
   in
 
-  (* let _ = Partial_recursor.add ~inductive_path ~handlers in *)
+  let inductive_path = Libnames.qualid_of_ident inductive_name in
+  (* Would not work for mutually inductive *)
+  let handlers = constructors inductive |> List.map fst in   
+  let _ = Partial_recursor.add ~inductive_path ~handlers ~prec_suffix in
   ()
 
-let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
+let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name ~old_prec_suffix
     =
   Inheritance.inherit_dependencies ~prefix:inductive_name;
   let inductive =
@@ -110,6 +115,7 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
   let recursors =
     Termutils.extract_handler_types_from_principle ~inductive ~principles
   in
+  let prec_suffix = Naming.fresh_name ~prefix:"PrecSuffix" in
   let elem =
     LinkageElem.InductiveDefinition
       {
@@ -118,6 +124,7 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
         compiled_impl;
         compiled_signature;
         recursors;
+        prec_suffix;
         default_ctx_params;
       }
   in
@@ -148,11 +155,11 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
     new_types |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
   in
   
-  let _ =
-    let inherited_constructors = constructors inherited_inductive in
-    let new_constructors =
-      list_difference (constructors inductive) inherited_constructors
-    in
+  let inherited_constructors = constructors inherited_inductive in
+  let new_constructors =
+    list_difference (constructors inductive) inherited_constructors
+  in
+  let _ =    
 
     (* Force inherit old constructors *)
     let _ =
@@ -166,7 +173,12 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
   in
 
   (* Partial Recursors *)
-  
+  let inductive_path = Libnames.qualid_of_ident inductive_name in
+  (* Would not work for mutually inductive *)
+  let handlers = new_constructors |> List.map fst in
+  let inherited_handlers = inherited_constructors |> List.map fst in
+  let _ = 
+    Partial_recursor.extend ~inductive_path ~old_prec_suffix ~prec_suffix ~inherited_handlers ~handlers in
   ()
 
 let add_inductive_definition inductive =
@@ -175,9 +187,9 @@ let add_inductive_definition inductive =
   let elem = Inheritance.lookup_field_in_base ~context ~field:inductive_name in
   match elem with
   | None -> add_new_inductive_definition ~inductive ~inductive_name
-  | Some (InductiveDefinition { inductive = inherited_inductive; _ }) ->
+  | Some (InductiveDefinition { inductive = inherited_inductive; prec_suffix; _ }) ->
       extend_inductive_definition ~inherited_inductive ~extension:inductive
-        ~inductive_name
+        ~inductive_name ~old_prec_suffix:prec_suffix
   | Some _ ->
       Errors.fail
         ~info:"An inductive type can only be extended by another inductive type"

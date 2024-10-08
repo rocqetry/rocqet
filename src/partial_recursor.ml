@@ -60,8 +60,7 @@ let add ~(inductive_path : Libnames.qualid) ~(handlers: Names.Id.t list) ~(prec_
            let recursor_path = construct_path name in
            let axiom_name, axiom, compiled_signature =
              Codegen.compile_prec_computational_axiom_signature ~ctx:parameters
-               ~constructor_name ~constructor_path ~inductive ~recursor_path ~handlers ~prec_suffix
-                  ~rhs:None
+               ~constructor_name ~constructor_path ~inductive ~recursor_path ~handlers ~prec_suffix                  
            in
            let elem =
              LinkageElem.ComputationalAxiom
@@ -87,7 +86,10 @@ let extend
   let inductive_name = inductive_path |> Naming.path_to_list |> List.rev |> List.hd in   
   (* 1. Inherit the old parital recursor and computational axiom *)
   let old_prect_name = Naming.partial_recursor_name ~inductive_name ~prec_suffix:old_prec_suffix in
-  let names_to_inherit =     
+  Inheritance.inherit_name ~name:old_prect_name;
+  (* How should we inherit the old computational axioms? *)
+  (* There is basically a stack of the with the prec_suffix names *)
+  (*let names_to_inherit =     
     let equations = 
       inherited_handlers 
       |> List.map (fun constructor_name -> 
@@ -100,7 +102,7 @@ let extend
   let _ = 
     names_to_inherit 
     |> List.iter (fun name -> Inheritance.inherit_name ~name)
-  in 
+  in *)
   
   (* 2. New constructors on the old computational axioms *)
   let context = Context.get () in    
@@ -123,12 +125,16 @@ let extend
              Codegen.compile_linkage_context ~field_name:module_name context
            in           
            let constructor_path = construct_path constructor_name in 
-           let recursor_path = construct_path old_prect_name in
-           let rhs = Constrexpr_ops.mkRefC @@ Libnames.qualid_of_string "None" in
+           let recursor_path = construct_path old_prect_name in           
            let axiom_name, axiom, compiled_signature =
-             Codegen.compile_prec_computational_axiom_signature ~ctx:parameters
-               ~constructor_name ~constructor_path ~inductive ~recursor_path ~handlers ~prec_suffix
-                  ~rhs:(Some rhs)
+             Codegen.compile_prec_computational_axiom_signature 
+               ~ctx:parameters
+               ~constructor_name 
+               ~constructor_path 
+               ~inductive 
+               ~recursor_path 
+               ~handlers:inherited_handlers 
+               ~prec_suffix                  
            in
            let elem =
              LinkageElem.ComputationalAxiom
