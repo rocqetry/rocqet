@@ -232,7 +232,7 @@ module Vernac = struct
 
   let construct_term_using_proof ~(name : Names.Id.t)
       ~(proof : Ltac_plugin.Tacexpr.raw_tactic_expr)
-      ~(ty : Constrexpr.constr_expr) () : unit t =
+      ~(ty : Constrexpr.constr_expr) ~(opaque: Vernacexpr.opacity_flag) () : unit t =
     let open Ltac_plugin in
     let interppfs = Tacinterp.interp proof in
     (* Construct proof for it *)
@@ -264,7 +264,7 @@ module Vernac = struct
         unfolded_proof
     in
     let proof, _ = Declare.Proof.by interppfs proof in
-    let opaque = Vernacexpr.Opaque in
+    (*let opaque = Vernacexpr.Opaque in*)
     let _ = Declare.Proof.save_regular ~proof ~opaque ~idopt:None in
     return ()
 end
