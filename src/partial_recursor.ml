@@ -30,7 +30,10 @@ let add ~(inductive_path : Libnames.qualid) =
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:name context
   in
-  let ty = Constrexpr_ops.mkIdentC type_name in  
+  let ty =
+    let expression = Constrexpr_ops.mkIdentC type_name in  
+    Resolver.resolve_constrexpr ~context ~expression
+  in 
   let compiled_signature = 
     Codegen.compile_lemma_signature ~name ~ty ~parameters 
   in 
