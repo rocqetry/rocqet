@@ -80,7 +80,9 @@ val compile_prec_computational_axiom_signature :
     constructor_path : Libnames.qualid ->
     handlers: Names.Id.t list ->
     inductive : VernacInductive.t ->
+    prec_suffix: Names.Id.t ->                
     recursor_path : Libnames.qualid  ->
+    rhs: Constrexpr.constr_expr option ->
     Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t 
 
 val compile_recursive_definition_signature :

@@ -115,12 +115,13 @@ val generate_one_prec_computational_axiom :
       constructor_name:Names.Id.t -> 
       constructor_path:Libnames.qualid -> 
       handlers:Names.Id.t list -> 
-      context:LinkageCtx.t -> 
+      prec_suffix: Names.Id.t ->      
+      rhs:Constrexpr.constr_expr option ->
       (Names.Id.t * Constrexpr.constr_expr)
 
-val generate_prec_computational_axioms : 
+(*val generate_prec_computational_axioms : 
     inductive:VernacInductive.t -> 
     recursor_name:Names.Id.t ->
-    context:LinkageCtx.t -> 
+    prec_suffix: Names.Id.t ->    
     prefix:Libnames.qualid -> 
-    (Names.Id.t * Constrexpr.constr_expr) list
+    (Names.Id.t * Constrexpr.constr_expr) list*)

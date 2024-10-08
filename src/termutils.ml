@@ -645,7 +645,8 @@ let generate_one_prec_computational_axiom
       ~(constructor_name: Names.Id.t)
       ~(constructor_path: Libnames.qualid)
       ~(handlers: Names.Id.t list)
-      ~context =   
+      ~(prec_suffix: Names.Id.t)
+      ~(rhs: Constrexpr.constr_expr option) =   
   let open Constrexpr_ops in
   let constructor_params, fully_applied_constr =
     extract_variables_and_apply (mkRefC constructor_path)
@@ -724,23 +725,25 @@ let generate_one_prec_computational_axiom
     let arguments = List.concat (List.map2 f types c_arguments) in
     let f = h_target |> Libnames.qualid_of_ident |> mkRefC in
     mkAppC (f, arguments)
-  in 
+  in
   let all_arguments = c_arguments @ [p_argument] @ h_arguments in
   let equation = 
     let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in
-    mkAppC (eq_cstr, [ left_hand_side; right_hand_side ])
+    match rhs with 
+    | None -> mkAppC (eq_cstr, [ left_hand_side; right_hand_side ])
+    | Some right_hand_side -> mkAppC (eq_cstr, [ left_hand_side; right_hand_side ])
   in   
   (*let full_equation = lambda_to_prod @@ mk_lambda all_arguments equation in *)
-  let full_equation = mk_prod all_arguments equation in
-  let family_name = context |> Env.Context.family_name in
-  let name = Naming.prec_computational_axiom_name ~constructor_name ~family_name in
+  let full_equation = mk_prod all_arguments equation in  
+  let name = Naming.prec_computational_axiom_name ~constructor_name ~prec_suffix in
   (name, full_equation)
 
+(*
 (* Should be called from inside a parameterized module *)
 let generate_prec_computational_axioms 
     ~(inductive : VernacInductive.t) 
-    ~recursor_name
-    ~context ~prefix =   
+    ~recursor_name ~(prec_suffix: Names.Id.t)
+    ~prefix =   
   let recursor_path = Libnames.qualid_of_ident recursor_name in
   let constructors =
     inductive |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs |> snd
@@ -753,5 +756,5 @@ let generate_prec_computational_axioms
   in
   constructors
   |> List.map (fun (constructor_name, constructor_path) ->
-         generate_one_prec_computational_axiom ~inductive ~context
-           ~recursor_path ~constructor_name ~constructor_path ~handlers)
+         generate_one_prec_computational_axiom ~inductive ~prec_suffix
+           ~recursor_path ~constructor_name ~constructor_path ~handlers)*)

@@ -80,6 +80,7 @@ let add_new_inductive_definition ~inductive ~inductive_name =
     |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
   in
 
+  (* let _ = Partial_recursor.add ~inductive_path ~handlers in *)
   ()
 
 let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
@@ -132,7 +133,7 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
       list1
   in
 
-  (* Type names *)
+  (* Inductive Axioms *)
   let _ =
     let inherited_types = types inherited_inductive in
     let new_types = list_difference (types inductive) inherited_types in
@@ -146,8 +147,7 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
 
     new_types |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
   in
-
-  (* Constructors *)
+  
   let _ =
     let inherited_constructors = constructors inherited_inductive in
     let new_constructors =
@@ -164,6 +164,9 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
     new_constructors
     |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
   in
+
+  (* Partial Recursors *)
+  
   ()
 
 let add_inductive_definition inductive =
