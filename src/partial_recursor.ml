@@ -59,7 +59,7 @@ let add ~(inductive_path : Libnames.qualid) =
   let construct_path name = Naming.qualid_point (Some prefix) name in  
   let _ =     
     handlers 
-    |> List.map (fun constructor_name -> 
+    |> List.iter (fun constructor_name -> 
          let context = Context.get () in
          let module_name = Naming.fresh_name ~prefix:"PrecCtx" in
            let compiled_context, parameters =
@@ -82,35 +82,7 @@ let add ~(inductive_path : Libnames.qualid) =
                }
            in
            Context.add_field ~name:axiom_name ~elem)
-  in
-  
-  (* let module_name = Naming.fresh_name ~prefix:"Freshforprec" in
-  let results = ref [] in
-  let _ = 
-    let open Backend.Vernac in    
-    Backend.Vernac.run @@
-      Backend.Vernac.define_moduletype ~module_name ~parameters ~body:(fun _ctx -> 
-          let* _ = 
-            thunk (fun () -> 
-                let axioms = 
-                  Termutils.generate_prec_computational_axioms
-                    ~inductive
-                    ~recursor_name:name 
-                    ~context 
-                    ~prefix
-                in
-                results := axioms;
-                return ()) in 
-          return ()
-        )
-  in
-  let _ =
-    !results 
-    |> List.iter (fun (name, equation) -> 
-         Feedback.msg_warning (Pp.str (Names.Id.to_string name));          
-         let s = Ppconstr.pr_constr_expr env sigma equation in 
-         Feedback.msg_warning s)
-  in*)
+  in    
 
   ()
   
