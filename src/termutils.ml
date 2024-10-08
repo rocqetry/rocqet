@@ -645,8 +645,7 @@ let generate_one_prec_computational_axiom
       ~(constructor_name: Names.Id.t)
       ~(constructor_path: Libnames.qualid)
       ~(handlers: Names.Id.t list)
-      ~(prec_suffix: Names.Id.t)
-      ~(rhs: Constrexpr.constr_expr option) =   
+      ~(prec_suffix: Names.Id.t) =      
   let open Constrexpr_ops in
   let constructor_params, fully_applied_constr =
     extract_variables_and_apply (mkRefC constructor_path)
@@ -677,9 +676,9 @@ let generate_one_prec_computational_axiom
   in
   let find_position x lst =
      let rec aux current_pos = function
-       | [] -> Errors.fail ~info:"Handler not found"
+       | [] -> None
        | hd :: tl -> 
-           if Names.Id.equal hd x then current_pos
+           if Names.Id.equal hd x then Some current_pos
            else aux (current_pos + 1) tl
      in
      aux 1 lst
@@ -687,7 +686,7 @@ let generate_one_prec_computational_axiom
   let position = find_position constructor_name handlers in
   (* The "H" function of the current handler *)
   let h_target = 
-    Names.Id.of_string (Printf.sprintf "H%d" position)
+    position |> Option.map (fun position -> Names.Id.of_string (Printf.sprintf "H%d" position))
   in
   (* The H arguments *)
   let h_arguments = 
@@ -723,15 +722,18 @@ let generate_one_prec_computational_axiom
           [ arg; rec_arg ]
     in
     let arguments = List.concat (List.map2 f types c_arguments) in
-    let f = h_target |> Libnames.qualid_of_ident |> mkRefC in
-    mkAppC (f, arguments)
+    (* If we can't find the arg then it is the None equation kind *)
+    match h_target with 
+    | Some h_target -> 
+       let f = h_target |> Libnames.qualid_of_ident |> mkRefC in
+       mkAppC (f, arguments)
+    | None -> 
+       "None" |> Libnames.qualid_of_string |> mkRefC
   in
   let all_arguments = c_arguments @ [p_argument] @ h_arguments in
   let equation = 
     let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in
-    match rhs with 
-    | None -> mkAppC (eq_cstr, [ left_hand_side; right_hand_side ])
-    | Some right_hand_side -> mkAppC (eq_cstr, [ left_hand_side; right_hand_side ])
+    mkAppC (eq_cstr, [ left_hand_side; right_hand_side ])    
   in   
   (*let full_equation = lambda_to_prod @@ mk_lambda all_arguments equation in *)
   let full_equation = mk_prod all_arguments equation in  

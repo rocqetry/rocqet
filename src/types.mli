@@ -90,6 +90,7 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
+        prec_suffix : Names.Id.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | InductiveAxiom of {
