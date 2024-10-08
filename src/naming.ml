@@ -39,6 +39,12 @@ let partial_recursor_name ~(inductive_name: Names.Id.t) ~(family_name: Names.Id.
   ^ Names.Id.to_string family_name
   |> Names.Id.of_string
 
+let prec_computational_axiom_name ~constructor_name ~family_name = 
+  Names.Id.to_string constructor_name
+  ^ "_eq_"
+  ^ Names.Id.to_string family_name
+  |> Names.Id.of_string
+
 let point_qualid (f : Names.Id.t) (path : Libnames.qualid) : Libnames.qualid =
   let path, base = Libnames.repr_qualid path in
   let newpath = List.append (Names.DirPath.repr path) [ f ] in
