@@ -124,10 +124,11 @@ let extend
            in           
            let constructor_path = construct_path constructor_name in 
            let recursor_path = construct_path old_prect_name in
+           let rhs = Constrexpr_ops.mkRefC @@ Libnames.qualid_of_string "None" in
            let axiom_name, axiom, compiled_signature =
              Codegen.compile_prec_computational_axiom_signature ~ctx:parameters
                ~constructor_name ~constructor_path ~inductive ~recursor_path ~handlers ~prec_suffix
-                  ~rhs:None
+                  ~rhs:(Some rhs)
            in
            let elem =
              LinkageElem.ComputationalAxiom
