@@ -86,10 +86,10 @@ let extend
   let inductive_name = inductive_path |> Naming.path_to_list |> List.rev |> List.hd in   
   (* 1. Inherit the old parital recursor and computational axiom *)
   let old_prect_name = Naming.partial_recursor_name ~inductive_name ~prec_suffix:old_prec_suffix in
-  Inheritance.inherit_name ~name:old_prect_name;
+  (*Inheritance.inherit_name ~name:old_prect_name;*)
   (* How should we inherit the old computational axioms? *)
   (* There is basically a stack of the with the prec_suffix names *)
-  (*let names_to_inherit =     
+  let names_to_inherit =     
     let equations = 
       inherited_handlers 
       |> List.map (fun constructor_name -> 
@@ -102,7 +102,7 @@ let extend
   let _ = 
     names_to_inherit 
     |> List.iter (fun name -> Inheritance.inherit_name ~name)
-  in *)
+  in
   
   (* 2. New constructors on the old computational axioms *)
   let context = Context.get () in    
@@ -134,7 +134,7 @@ let extend
                ~inductive 
                ~recursor_path 
                ~handlers:inherited_handlers 
-               ~prec_suffix                  
+               ~prec_suffix:old_prec_suffix               
            in
            let elem =
              LinkageElem.ComputationalAxiom
@@ -151,4 +151,5 @@ let extend
 
   
   (* 3. Define the new partial recursor and it's computational axioms *)
+  let handlers = inherited_handlers @ handlers in
   add ~inductive_path ~handlers ~prec_suffix
