@@ -385,6 +385,16 @@ let calculate_inductive_proof_goal
   in
   List.fold_right __prod handler_types __True
 
+let mk_prod arguments body = 
+  let open Constrexpr_ops in    
+  let arguments : Names.lname list = 
+    arguments 
+    |> List.map (fun name -> CAst.make @@ Names.Name.Name name) 
+  in 
+  let binder_kind = Constrexpr.Default Glob_term.Explicit in 
+  let hole = CAst.make @@ Constrexpr.CHole None in  
+  mkProdC  (arguments, binder_kind, hole, body)
+
 let mk_lambda arguments body =
   let f (n : Names.Id.t) =
     Constrexpr.CLocalPattern
@@ -628,6 +638,7 @@ let compute_partial_recursor_signature
 
 (* (forall __i : self__Ix.ty,
  forall P : self__Ix.ty -> Type, forall arg回9 : option (P self__Ix.ty_unit), option (P __i)) *)
+(* Should be called from inside a parameterized module *)
 let generate_one_prec_computational_axiom 
       ~(inductive: VernacInductive.t)      
       ~(recursor_path: Libnames.qualid)
@@ -718,8 +729,9 @@ let generate_one_prec_computational_axiom
   let equation = 
     let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in
     mkAppC (eq_cstr, [ left_hand_side; right_hand_side ])
-  in 
-  let full_equation = lambda_to_prod @@ mk_lambda all_arguments equation in 
+  in   
+  (*let full_equation = lambda_to_prod @@ mk_lambda all_arguments equation in *)
+  let full_equation = mk_prod all_arguments equation in
   let family_name = context |> Env.Context.family_name in
   let name = Naming.prec_computational_axiom_name ~constructor_name ~family_name in
   (name, full_equation)
