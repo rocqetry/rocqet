@@ -100,8 +100,27 @@ let generate_one_computational_axiom
   let name = Naming.prec_computational_axiom_name ~constructor_name ~family_name in
   (name, full_equation)
 
+let generate_computational_axioms 
+    ~(inductive : VernacInductive.t) 
+    ~recursor
+    ~context ~prefix =   
+  let recursor_path = Libnames.qualid_of_ident recursor in
+  let constructors =
+    inductive |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs |> snd
+    |> List.map fst
+  in
+  let handlers = constructors in
+  let constructors =
+    constructors
+    |> List.map (fun name -> (name, Naming.qualid_point prefix name))
+  in
+  constructors
+  |> List.map (fun (constructor_name, constructor_path) ->
+         generate_one_computational_axiom ~inductive ~context
+           ~recursor_path ~constructor_name ~constructor_path ~handlers)
+
 let add ~(inductive_path : Libnames.qualid) = 
-  let context = Context.get () in  
+  let context = Context.get () in    
   let default_ctx_params =
     context |> Context.family_linkage |> function
     | { default_ctx_params; _ } -> default_ctx_params
@@ -151,5 +170,39 @@ let add ~(inductive_path : Libnames.qualid) =
        handlers;
      }
   in 
-  Context.add_field ~name ~elem
+  Context.add_field ~name ~elem; 
+  
+  let prefix = Codegen.calculate_rec_principle_prefix ~inductive_path ~context in
+  
+  
+  
+  let module_name = Naming.fresh_name ~prefix:"Freshforprec" in
+  let results = ref [] in
+  let _ = 
+    let open Backend.Vernac in
+    Backend.Vernac.run @@
+      Backend.Vernac.define_moduletype ~module_name ~parameters ~body:(fun _ctx -> 
+          let* _ = 
+            thunk (fun () -> 
+                let axioms = 
+                  generate_computational_axioms
+                    ~inductive
+                    ~recursor:name 
+                    ~context 
+                    ~prefix:(Some prefix) 
+                in
+                results := axioms;
+                return ()) in 
+          return ()
+        )
+  in
+  let _ =
+    !results 
+    |> List.iter (fun (name, equation) -> 
+         Feedback.msg_warning (Pp.str (Names.Id.to_string name));          
+         let s = Ppconstr.pr_constr_expr env sigma equation in 
+         Feedback.msg_warning s)
+  in 
+
+  ()
   
