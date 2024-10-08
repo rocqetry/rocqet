@@ -313,7 +313,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                         compiled_context;
                         compiled_signature;
                       }))
-        | PartialRecursor _prec -> Errors.fail ~info:"TODO: partial recursors"
+        | PartialRecursor prec -> PartialRecursor { prec with compiled_context }
         | ComputationalAxiom comp ->
             ComputationalAxiom { comp with compiled_context }
         | InductiveAxiom constr ->
