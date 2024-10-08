@@ -489,8 +489,8 @@ let compile_computational_axiom_implementation ~axiom_name ~axiom_expr =
             (CAst.make
                (Libnames.qualid_of_ident (Names.Id.of_string "eauto"), []))))
   in
-  let ty = Naming.replace_self_qualification ~target:None axiom_expr in
-  B.thunk (B.construct_term_using_proof ~name:axiom_name ~proof:auto_tactic ~ty)
+  let ty = Naming.replace_self_qualification ~target:None axiom_expr in  
+  B.thunk (B.construct_term_using_proof ~name:axiom_name ~proof:auto_tactic ~ty ~opaque:Vernacexpr.Opaque)
 
 let compile_partial_recursor_implementation ~name ~type_name = 
   let prove_prec_tactic =      
@@ -501,18 +501,15 @@ let compile_partial_recursor_implementation ~name ~type_name =
              (Tacexpr.TacCall 
                 (CAst.make 
                    (Libnames.qualid_of_ident (Names.Id.of_string "prove_prec") ,[]))) ) 
-      in 
-      (*let arg = Genarg.in_gen (Genarg.rawwit Tacarg.wit_tactic) tac in
-      CAst.make @@ Constrexpr.CHole _ (* (None, IntroAnonymous, Some arg) *)*)
+      in      
       proof
-  in       
-  (* B.define_term ~name prove_prec_tactic  *)
+  in  
   let ty = Constrexpr_ops.mkIdentC type_name in
-  B.thunk (B.construct_term_using_proof ~name ~proof:prove_prec_tactic ~ty)
+  B.thunk (B.construct_term_using_proof ~name ~proof:prove_prec_tactic ~ty ~opaque:Vernacexpr.Transparent)
 
 let compile_closing_fact_implementation ~name ~type_name ~(script: Ltac_plugin.Tacexpr.raw_tactic_expr) =   
   let ty = Constrexpr_ops.mkIdentC type_name in  
-  B.thunk (B.construct_term_using_proof ~name ~proof:script ~ty)
+  B.thunk (B.construct_term_using_proof ~name ~proof:script ~ty ~opaque:Vernacexpr.Opaque)
 
 (* The name of the equation to generate axioms for *)
 let compile_computational_axiom_signature
@@ -540,6 +537,38 @@ let compile_computational_axiom_signature
                    Termutils.generate_one_computational_axiom ~inductive
                      ~recursor_name ~recursor_path ~constructor_name
                      ~constructor_path ~context
+                 in
+                 axiom_name := Some name;
+                 axiom_expr := Some axiom;
+                 postulate_axiom ~name ~ty:axiom)
+           in
+           return ())
+  in
+  (Option.get !axiom_name, Option.get !axiom_expr, compiled_signature)
+
+let compile_prec_computational_axiom_signature
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
+    ~(constructor_name : Names.Id.t)
+    ~(constructor_path : Libnames.qualid)
+    ~(handlers: Names.Id.t list)
+    ~(inductive : VernacInductive.t)
+    ~(recursor_path : Libnames.qualid) :
+    Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t =  
+  let context = (Env.Context.get ()) in
+  let module_name = Naming.fresh_name ~prefix:"ComputationalAxiom" in
+  let axiom_name = ref None in
+  let axiom_expr = ref None in
+  let compiled_signature =
+    B.run
+    @@ B.define_moduletype ~module_name ~parameters:ctx ~body:(fun _ctx ->
+           let open B in
+           let* _ =
+             thunk (fun () ->
+                 let name, axiom =
+                   Termutils.generate_one_prec_computational_axiom 
+                     ~inductive
+                     ~recursor_path ~constructor_name
+                     ~constructor_path ~context ~handlers
                  in
                  axiom_name := Some name;
                  axiom_expr := Some axiom;
