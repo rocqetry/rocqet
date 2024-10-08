@@ -552,9 +552,10 @@ let compile_prec_computational_axiom_signature
     ~(constructor_path : Libnames.qualid)
     ~(handlers: Names.Id.t list)
     ~(inductive : VernacInductive.t)
-    ~(recursor_path : Libnames.qualid) :
-    Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t =  
-  let context = (Env.Context.get ()) in
+    ~(prec_suffix: Names.Id.t)
+    ~(recursor_path : Libnames.qualid) 
+    ~(rhs: Constrexpr.constr_expr option) :
+    Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t =    
   let module_name = Naming.fresh_name ~prefix:"ComputationalAxiom" in
   let axiom_name = ref None in
   let axiom_expr = ref None in
@@ -568,7 +569,7 @@ let compile_prec_computational_axiom_signature
                    Termutils.generate_one_prec_computational_axiom 
                      ~inductive
                      ~recursor_path ~constructor_name
-                     ~constructor_path ~context ~handlers
+                     ~constructor_path ~prec_suffix ~handlers ~rhs
                  in
                  axiom_name := Some name;
                  axiom_expr := Some axiom;

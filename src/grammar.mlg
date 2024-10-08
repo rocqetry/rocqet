@@ -157,9 +157,9 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "Closing" "Fact" ident(name) ":" llconstr_ip(ty) "by" "{" tactic(script) "}" ] -> 
   { Entry.closing_fact ~name ~ty ~script }
 
-| [ "Prect" reference_ip(inductive_path) ] -> { 
+(*| [ "Prect" reference_ip(inductive_path) ] -> { 
     Partial_recursor.add ~inductive_path
-  }
+  }*)
 
 END
 

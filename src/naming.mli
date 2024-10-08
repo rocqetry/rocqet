@@ -15,12 +15,12 @@ val computational_axiom_name :
 
 val partial_recursor_name : 
   inductive_name:Names.Id.t -> 
-  family_name:Names.Id.t -> 
+  prec_suffix:Names.Id.t -> 
   Names.Id.t
 
 val prec_computational_axiom_name: 
   constructor_name:Names.Id.t -> 
-  family_name:Names.Id.t -> 
+  prec_suffix:Names.Id.t -> 
   Names.Id.t
 
 val point_qualid : Names.Id.t -> Libnames.qualid -> Libnames.qualid
