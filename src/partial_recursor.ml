@@ -24,9 +24,9 @@ let add ~(inductive_path : Libnames.qualid) =
   
   let type_name = Naming.fresh_name ~prefix:"PrecTy" in
   let ty = Termutils.compute_partial_recursor_signature ~inductive_path ~context in  
-  let sigma, env = Termutils.global_env () in
+  (*let sigma, env = Termutils.global_env () in
   let s = Ppconstr.pr_constr_expr env sigma ty in 
-  Feedback.msg_warning s;
+  Feedback.msg_warning s;*)
   let _ = Definition.add_definition ~name:type_name ty in
   let context = Context.get () in
   
@@ -54,14 +54,40 @@ let add ~(inductive_path : Libnames.qualid) =
   in 
   Context.add_field ~name ~elem; 
   
+  (* Computational Axioms *)
   let prefix = Codegen.calculate_rec_principle_prefix ~inductive_path ~context in
+  let construct_path name = Naming.qualid_point (Some prefix) name in  
+  let _ =     
+    handlers 
+    |> List.map (fun constructor_name -> 
+         let context = Context.get () in
+         let module_name = Naming.fresh_name ~prefix:"PrecCtx" in
+           let compiled_context, parameters =
+             Codegen.compile_linkage_context ~field_name:module_name context
+           in           
+           let constructor_path = construct_path constructor_name in 
+           let recursor_path = construct_path name in
+           let axiom_name, axiom, compiled_signature =
+             Codegen.compile_prec_computational_axiom_signature ~ctx:parameters
+               ~constructor_name ~constructor_path ~inductive ~recursor_path ~handlers
+           in
+           let elem =
+             LinkageElem.ComputationalAxiom
+               {
+                 name = axiom_name;
+                 axiom;
+                 compiled_context;
+                 compiled_signature;
+                 default_ctx_params;
+               }
+           in
+           Context.add_field ~name:axiom_name ~elem)
+  in
   
-  
-  
-  let module_name = Naming.fresh_name ~prefix:"Freshforprec" in
+  (* let module_name = Naming.fresh_name ~prefix:"Freshforprec" in
   let results = ref [] in
   let _ = 
-    let open Backend.Vernac in
+    let open Backend.Vernac in    
     Backend.Vernac.run @@
       Backend.Vernac.define_moduletype ~module_name ~parameters ~body:(fun _ctx -> 
           let* _ = 
@@ -84,7 +110,7 @@ let add ~(inductive_path : Libnames.qualid) =
          Feedback.msg_warning (Pp.str (Names.Id.to_string name));          
          let s = Ppconstr.pr_constr_expr env sigma equation in 
          Feedback.msg_warning s)
-  in 
+  in*)
 
   ()
   
