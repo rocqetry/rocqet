@@ -109,6 +109,15 @@ val compute_partial_recursor_signature:
   inductive_path:Libnames.qualid -> 
   Constrexpr.constr_expr
 
+val generate_one_prec_computational_axiom :
+      inductive: VernacInductive.t -> 
+      recursor_path:Libnames.qualid -> 
+      constructor_name:Names.Id.t -> 
+      constructor_path:Libnames.qualid -> 
+      handlers:Names.Id.t list -> 
+      context:LinkageCtx.t -> 
+      (Names.Id.t * Constrexpr.constr_expr)
+
 val generate_prec_computational_axioms : 
     inductive:VernacInductive.t -> 
     recursor_name:Names.Id.t ->
