@@ -14,3 +14,8 @@ val inherit_elements :
 
 val linkage_concatenate : derived:Linkage.t -> base:Linkage.t -> Linkage.t
 val linkages_concatenate : Linkage.t list -> Linkage.t
+
+val inherit_partial_recursor : 
+  inductive_path:Libnames.qualid -> 
+  new_handlers:Names.Id.t list -> 
+  unit 

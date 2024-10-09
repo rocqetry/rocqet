@@ -236,8 +236,7 @@ module rec LinkageElem : sig
         recursors : Recursors.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;
-        prec_suffix : Names.Id.t;
+        compiled_impl : CompiledModule.t;        
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     (* All names bound by an inductive definition:
@@ -311,7 +310,10 @@ module rec LinkageElem : sig
         name: Names.Id.t;
         type_name: Names.Id.t;
         inductive_path: Libnames.qualid;
-        handlers: Names.Id.t list;        
+        handlers: Names.Id.t list;
+        (* constructor name, computational axiom name *)
+        behaviour: (Names.Id.t * Names.Id.t) list;
+        prec_suffix : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;        
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
