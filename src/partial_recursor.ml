@@ -101,7 +101,7 @@ let extend
       ~(handlers: Names.Id.t list) =  
   
   (* i.e Make inherited partial recursors exhaustive *)
-  let _ = Inheritance.inherit_partial_recursor ~inductive_path ~new_handlers:handlers in
+  let _ = Inheritance.inherit_partial_recursor ~inductive_path (*~new_handlers:handlers*) in
   
   (* Define the new partial recursor and it's computational axioms *)
   
