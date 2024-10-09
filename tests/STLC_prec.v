@@ -49,7 +49,7 @@ Family A.
 
 FEnd A.
 
-Family B extends A.
+Family B (*extends A*).
    FInductive ty : Set :=     
      | ty_arrow : ty -> ty -> ty.   
 
@@ -77,11 +77,17 @@ FEnd B.
 
 Print B.
 
-Family C extends B.
+Family C (*extends A*).
   FInductive ty : Set :=     
      | ty_nat : ty.   
 
 FEnd C.
+
+Family ABC extends A using B, C.
+FEnd ABC.
+
+Print ABC.
+
 
 Print C.
 
