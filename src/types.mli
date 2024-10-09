@@ -160,6 +160,7 @@ module rec LinkageElem : sig
         type_name: Names.Id.t;
         inductive_path: Libnames.qualid;
         handlers: Names.Id.t list;
+        defining_handlers : Names.Id.t list;
         behaviour: (Names.Id.t * Names.Id.t) list;
         prec_suffix : Names.Id.t;
         compiled_context : CompiledModuleType.t;
