@@ -585,6 +585,7 @@ let inherit_partial_recursor ~(inductive_path: Libnames.qualid) =
      |> List.iter (fun (_, elem) -> 
           match elem with 
           | LinkageElem.PartialRecursor 
-            { name; inductive_path = i; _ } when i = inductive_path -> 
+            { name; inductive_path = i; behaviour; _ } when i = inductive_path -> 
             inherit_name ~name; 
+            behaviour |> List.iter (fun (_, axiom) -> inherit_name ~name:axiom);
           | _ -> ())
