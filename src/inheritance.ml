@@ -426,3 +426,94 @@ let inherit_dependencies ~prefix =
     | Some base -> inherit_deps ~field:prefix ~base ~derived:linkage ~context
   in
   Context.replace ~linkage
+
+let extend_prec_computational_axiom 
+      ~inductive_path 
+      ~handlers 
+      ~new_handlers 
+      ~prect_name ~prec_suffix = 
+  let context = Context.get () in    
+  let default_ctx_params =
+    context |> Context.family_linkage |> function
+    | { default_ctx_params; _ } -> default_ctx_params
+  in
+  let inductive, _, _ =
+    Context.lookup_inductive_for_recursion ~name:inductive_path context
+  in
+  
+  let prefix = Codegen.calculate_rec_principle_prefix ~inductive_path ~context in
+  let construct_path name = Naming.qualid_point (Some prefix) name in
+  let _ =
+    new_handlers 
+    |> List.iter (fun constructor_name -> 
+         let context = Context.get () in
+         let module_name = Naming.fresh_name ~prefix:"PrecCtx" in
+           let compiled_context, parameters =
+             Codegen.compile_linkage_context ~field_name:module_name context
+           in           
+           let constructor_path = construct_path constructor_name in 
+           let recursor_path = construct_path prect_name in           
+           let axiom_name, axiom, compiled_signature =
+             Codegen.compile_prec_computational_axiom_signature 
+               ~ctx:parameters
+               ~constructor_name 
+               ~constructor_path 
+               ~inductive 
+               ~recursor_path 
+               ~handlers
+               ~prec_suffix:prec_suffix               
+           in
+           let elem =
+             LinkageElem.ComputationalAxiom
+               {
+                 name = axiom_name;
+                 axiom;
+                 compiled_context;
+                 compiled_signature;
+                 default_ctx_params;
+               }
+           in
+           Context.add_field ~name:axiom_name ~elem)
+  in
+  ()
+
+let inherit_partial_recursor ~(inductive_path: Libnames.qualid) ~new_handlers =   
+  let context = Context.get () in
+  let base = Context.base_linkage context in
+  match base with 
+  | None -> Errors.fail ~info:"No base linkage"
+  | Some base -> 
+     base.fields
+     |> Bwd.to_list
+     |> List.iter (fun (_, elem) -> 
+          match elem with 
+          | LinkageElem.PartialRecursor 
+            ({ name; handlers; inductive_path = i; prec_suffix; _ } as prec) when i = inductive_path -> 
+            inherit_dependencies ~prefix:name;            
+            let module_name = Naming.fresh_name ~prefix:"PrecCtx" in
+            let context = Context.get () in
+            let compiled_context, _ =
+             Codegen.compile_linkage_context ~field_name:module_name context
+            in
+            let new_behaviour = 
+               new_handlers
+               |> List.map (fun constructor_name -> 
+                      constructor_name,
+                      Naming.prec_computational_axiom_name 
+                        ~constructor_name
+                        ~prec_suffix)
+            in 
+            let old_behaviour = prec.behaviour in
+            let behaviour = old_behaviour @ new_behaviour in
+            let elem = LinkageElem.PartialRecursor { prec with compiled_context; behaviour } in
+            (* Some kinda overriding of the partial recursor *)
+            Context.add_field ~name ~elem;
+            (* Force inherit the computational axioms *)
+            let _ = old_behaviour |> List.iter (fun (_, axiom) -> inherit_name ~name:axiom) in
+            (* Add the new computational axioms *)
+            let _ = 
+              extend_prec_computational_axiom 
+                ~inductive_path ~handlers ~new_handlers ~prect_name:name ~prec_suffix
+            in 
+            ()
+          | _ -> ())
