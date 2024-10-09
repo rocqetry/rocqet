@@ -114,7 +114,7 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t) ~(base : LinkageEl
       TheoremDefinition { derived with names; handlers }
   | MetaDataSection derived, MetaDataSection _ -> MetaDataSection derived
   | ClosingFact fact, ClosingFact _ -> ClosingFact fact
-  | PartialRecursor _prec, PartialRecursor _ -> Errors.fail ~info:"TODO: partial recursors"
+  | PartialRecursor derived, PartialRecursor _ -> PartialRecursor derived
   | _, _ ->
       let info = 
         Printf.sprintf 
@@ -131,6 +131,91 @@ let linkages_concatenate linkages =
         (fun result_linkage linkage ->
           linkage_concatenate ~derived:result_linkage ~base:linkage)
         linkage linkages
+
+let update_context context name elem = 
+   match context with 
+   | LinkageCtx.Toplevel linkage -> 
+      let linkage = { linkage with fields = Bwd.Snoc(linkage.fields, (name, elem)) } in 
+      LinkageCtx.Toplevel linkage
+   | LinkageCtx.Nested (c, linkage) -> 
+      let linkage = { linkage with fields = Bwd.Snoc(linkage.fields, (name, elem)) } in 
+      LinkageCtx.Nested (c, linkage)       
+
+let generate_prec_handlers
+      ~inductive_path 
+      ~handlers ~inductive
+      ~new_handlers ~context
+      ~prect_name ~prec_suffix =   
+  let default_ctx_params =
+    context |> Context.family_linkage |> function
+    | { default_ctx_params; _ } -> default_ctx_params
+  in    
+  
+  let prefix = Codegen.calculate_rec_principle_prefix ~inductive_path ~context in
+  let construct_path name = Naming.qualid_point (Some prefix) name in    
+  List.fold_left (fun (context, acc) constructor_name ->          
+         let module_name = Naming.fresh_name ~prefix:"PrecCtx" in
+         let compiled_context, parameters =
+           Codegen.compile_linkage_context ~field_name:module_name context
+         in  
+         let constructor_path = construct_path constructor_name in 
+         let recursor_path = construct_path prect_name in           
+         let axiom_name, axiom, compiled_signature =
+           Codegen.compile_prec_computational_axiom_signature 
+             ~ctx:parameters
+             ~constructor_name 
+             ~constructor_path 
+             ~inductive 
+             ~recursor_path 
+             ~handlers
+             ~prec_suffix:prec_suffix               
+         in
+         let elem = 
+           LinkageElem.ComputationalAxiom
+           {
+             name = axiom_name;
+             axiom;
+             compiled_context;
+             compiled_signature;
+             default_ctx_params;
+           }
+         in
+         let context = update_context context axiom_name elem in
+         context, ((axiom_name, elem) :: acc)) (context, []) new_handlers          
+      |> function (_, l) -> List.rev l
+
+let inherit_one_partial_recursor ~elem ~new_handlers ~context ~inductive = 
+   match elem with 
+   | LinkageElem.PartialRecursor 
+     ({ name; handlers; inductive_path; prec_suffix; behaviour = old_behaviour; _ } as prec) ->       
+       let new_behaviour = 
+          new_handlers
+          |> List.map (fun constructor_name -> 
+                 constructor_name,
+                 Naming.prec_computational_axiom_name 
+                   ~constructor_name
+                   ~prec_suffix)
+       in             
+       let behaviour = old_behaviour @ new_behaviour in 
+       let compiled_context, _parameters =
+        Codegen.compile_linkage_context ~field_name:name context
+       in
+       let elem = LinkageElem.PartialRecursor { prec with compiled_context; behaviour } in       
+       (* Maybe force inherit older computational axioms here *)
+       (* Add the new computational axioms *)
+       let context = update_context context name elem in       
+       let elements = 
+         generate_prec_handlers
+           ~inductive_path 
+           ~handlers ~new_handlers 
+           ~prect_name:name ~prec_suffix
+           ~context ~inductive
+       in 
+       elem, elements
+   | _ -> 
+      Errors.fail 
+        ~info:"inherit_one_partial_recursor: expected \ 
+               a partial recursor linkage elem"
 
 (* We want to inherit element from a base family into
    a derived family in interactive mode *)
@@ -163,7 +248,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
       let compiled_context, parameters =
         Codegen.compile_linkage_context ~field_name:name context
       in
-      let element =
+      let element, more =
         match element with
         | LinkageElem.InductiveDefinition inductive ->
             let compiled_impl, principles =
@@ -190,7 +275,68 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                 compiled_signature;
                 recursors;
                 default_ctx_params;
-              }
+              }, []
+
+        (* Exhausitivity check, that never fails 
+           becuase we make it exhaustive if it 
+           is not already. *)
+        | PartialRecursor prec ->
+
+           let get_portion_after sublist full_list =
+             let rec take n lst =
+               if n <= 0 then []
+               else match lst with
+                 | [] -> []
+                 | h::t -> h :: take (n-1) t
+             in 
+
+             let rec drop n lst =
+               if n <= 0 then lst
+               else match lst with
+                 | [] -> []
+                 | _::t -> drop (n-1) t
+             in 
+             let rec find_sublist acc = function
+               | [] -> []  (* Sublist not found *)
+               | h :: t as l ->
+                   if List.length l < List.length sublist then []
+                   else if take (List.length sublist) l = sublist then
+                     drop (List.length sublist) l
+                   else find_sublist (h :: acc) t
+             in
+             find_sublist [] full_list
+           in
+
+           let inductive, _, _ =
+              Context.lookup_inductive_for_recursion
+                ~name:prec.inductive_path context
+           in
+           let inductive_handlers = 
+             inductive 
+             |> List.hd 
+             |> fst 
+             |> VernacInductive.extract_type_and_cstrs 
+             |> snd 
+             |> List.map fst 
+           in
+           let defined_handlers = 
+             prec.behaviour |> List.map fst
+           in 
+           let remaining_handlers = get_portion_after defined_handlers inductive_handlers in
+           
+           begin match remaining_handlers with 
+           | [] -> PartialRecursor { prec with compiled_context }, []
+           | new_handlers -> 
+              let elem, more = 
+                inherit_one_partial_recursor
+                  ~elem:element 
+                  ~new_handlers 
+                  ~context
+                  ~inductive 
+              in
+              elem, more
+           end
+
         | FamilyDefinition family -> (
             match family.linkage.base with
             | None ->
@@ -224,7 +370,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                     compiled_context;
                     compiled_signature;
                     linkage;
-                  }
+                  }, []
             | Some base -> (
                 (* TODO: store an actual path in the base *)
                 let path = Libnames.qualid_of_ident base.name in
@@ -260,7 +406,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                         compiled_signature;
                         compiled_context;
                         linkage;
-                      }
+                      }, []
                 | Some new_base ->
                     let new_base =
                       Linkage.path_subtitution new_base
@@ -312,19 +458,19 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                         linkage;
                         compiled_context;
                         compiled_signature;
-                      }))
-        | PartialRecursor prec -> PartialRecursor { prec with compiled_context }
+                      }, []))        
+           
         | ComputationalAxiom comp ->
-            ComputationalAxiom { comp with compiled_context }
+            ComputationalAxiom { comp with compiled_context }, []
         | InductiveAxiom constr ->
-            InductiveAxiom { constr with compiled_context }
+            InductiveAxiom { constr with compiled_context }, []
         | FieldDefinition field ->
-            FieldDefinition { field with compiled_context }
+            FieldDefinition { field with compiled_context }, []
         | MetaDataSection metadata ->
-            MetaDataSection { metadata with compiled_context }
+            MetaDataSection { metadata with compiled_context }, []
         | OpaqueFieldDefinition field ->
-            OpaqueFieldDefinition { field with compiled_context }
-        | ClosingFact fact -> ClosingFact { fact with compiled_context }
+            OpaqueFieldDefinition { field with compiled_context }, []
+        | ClosingFact fact -> ClosingFact { fact with compiled_context }, []
         (* Exhaustiveness checks *)
         | RecursorDefinition recursive ->
             let inductive, _, _ =
@@ -334,7 +480,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
             let name = List.hd recursive.names in
             Checks.check_exhaustive ~name ~inductive
               ~handlers:recursive.handlers;
-            RecursorDefinition { recursive with compiled_context }
+            RecursorDefinition { recursive with compiled_context }, []
         | TheoremDefinition theorem ->
             let inductive, _, _ =
               Context.lookup_inductive_for_recursion
@@ -342,9 +488,10 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
             in
             let name = List.hd theorem.names in
             Checks.check_exhaustive ~name ~inductive ~handlers:theorem.handlers;
-            TheoremDefinition { theorem with compiled_context }
-      in
-      let fields = Snoc (linkage.fields, (name, element)) in
+            TheoremDefinition { theorem with compiled_context }, []
+      in      
+      let open Bwd.Infix in
+      let fields = Snoc (linkage.fields, (name, element)) <@ more in
       { linkage with fields }
 
 and inherit_elements ~(elements : (Names.Id.t * LinkageElem.t) list)

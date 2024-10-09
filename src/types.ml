@@ -313,7 +313,7 @@ module rec LinkageElem : sig
         (* Might include some handlers that are inherited, 
            but needed to calculate the right arguments to the prect *)
         handlers: Names.Id.t list;
-        (* The handlers actually defined with some in this extension
+        (* The handlers actually defined with "some" in this extension
            It is important for fdicriminate to know this. *)
         defining_handlers : Names.Id.t list;
         (* constructor name, computational axiom name *)
