@@ -310,7 +310,12 @@ module rec LinkageElem : sig
         name: Names.Id.t;
         type_name: Names.Id.t;
         inductive_path: Libnames.qualid;
+        (* Might include some handlers that are inherited, 
+           but needed to calculate the right arguments to the prect *)
         handlers: Names.Id.t list;
+        (* The handlers actually defined with some in this extension
+           It is important for fdicriminate to know this. *)
+        defining_handlers : Names.Id.t list;
         (* constructor name, computational axiom name *)
         behaviour: (Names.Id.t * Names.Id.t) list;
         prec_suffix : Names.Id.t;

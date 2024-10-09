@@ -83,7 +83,7 @@ let add_new_inductive_definition ~inductive ~inductive_name =
   let inductive_path = Libnames.qualid_of_ident inductive_name in
   (* Would not work for mutually inductive *)
   let handlers = constructors inductive |> List.map fst in   
-  let _ = Partial_recursor.add ~inductive_path ~handlers in
+  let _ = Partial_recursor.add ~inductive_path ~inherited_handlers:[] ~handlers in
   ()
 
 let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name

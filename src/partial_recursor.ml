@@ -1,7 +1,10 @@
 open Env
 open Types
 
-let add ~(inductive_path : Libnames.qualid) ~(handlers: Names.Id.t list) = 
+let add 
+      ~(inductive_path : Libnames.qualid)        
+      ~(inherited_handlers: Names.Id.t list) 
+      ~(handlers: Names.Id.t list) = 
   let context = Context.get () in    
   let default_ctx_params =
     context |> Context.family_linkage |> function
@@ -16,9 +19,6 @@ let add ~(inductive_path : Libnames.qualid) ~(handlers: Names.Id.t list) =
   
   let type_name = Naming.fresh_name ~prefix:"PrecTy" in
   let ty = Termutils.compute_partial_recursor_signature ~inductive_path ~context in  
-  (*let sigma, env = Termutils.global_env () in
-  let s = Ppconstr.pr_constr_expr env sigma ty in 
-  Feedback.msg_warning s;*)
   let _ = Definition.add_definition ~name:type_name ty in
   let context = Context.get () in
   
@@ -32,14 +32,20 @@ let add ~(inductive_path : Libnames.qualid) ~(handlers: Names.Id.t list) =
   let compiled_signature = 
     Codegen.compile_lemma_signature ~name ~ty ~parameters 
   in
-  let behaviour = 
+  let defining_handlers = 
+    (* We don't create equations for inherited handlers *)
     handlers 
+    |> List.filter (fun constructor_name -> 
+         not (List.mem constructor_name inherited_handlers))
+  in 
+  let behaviour = 
+    defining_handlers
     |> List.map (fun constructor_name -> 
            constructor_name,
            Naming.prec_computational_axiom_name 
              ~constructor_name
              ~prec_suffix)
-  in 
+  in   
   let elem = 
     LinkageElem.PartialRecursor 
      { 
@@ -51,6 +57,7 @@ let add ~(inductive_path : Libnames.qualid) ~(handlers: Names.Id.t list) =
        prec_suffix;
        default_ctx_params;
        handlers;
+       defining_handlers;
        behaviour;
      }
   in 
@@ -59,8 +66,8 @@ let add ~(inductive_path : Libnames.qualid) ~(handlers: Names.Id.t list) =
   (* Computational Axioms *)
   let prefix = Codegen.calculate_rec_principle_prefix ~inductive_path ~context in
   let construct_path name = Naming.qualid_point (Some prefix) name in  
-  let _ =     
-    handlers 
+  let _ =  
+    defining_handlers
     |> List.iter (fun constructor_name -> 
          let context = Context.get () in
          let module_name = Naming.fresh_name ~prefix:"PrecCtx" in
@@ -102,4 +109,4 @@ let extend
   in 
   
   let handlers = inherited_handlers @ handlers in
-  add ~inductive_path ~handlers
+  add ~inductive_path ~inherited_handlers ~handlers
