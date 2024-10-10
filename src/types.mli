@@ -190,7 +190,3 @@ end
 and LinkageCtx : sig
   type t = Toplevel of Linkage.t | Nested of t * Linkage.t
 end
-
-module FieldInhKind : sig
-  type t = New | Extend of LinkageElem.t
-end

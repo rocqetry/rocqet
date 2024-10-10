@@ -330,11 +330,14 @@ and Linkage : sig
   type t = {
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
     default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+    (* TODO: This should be a Libnames.qualid *)
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
+  (* TODO: Some of these are not needed and some should be moved to
+     inheritance.ml *)
   val context_parameters : t -> Libnames.qualid list
   val top_most_self_name : t -> Names.Id.t
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
@@ -437,9 +440,4 @@ end
 (* `close` is a generic handle that is called to close the scope *)
 module PluginCmdScope = struct
   type t = { command : PluginCmd.t; name : Names.Id.t; close : unit -> unit }
-end
-
-(* Does a field exends a field in the base family? *)
-module FieldInhKind = struct
-  type t = New | Extend of LinkageElem.t
 end

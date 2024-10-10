@@ -149,8 +149,7 @@ let generate_prec_handlers
   let default_ctx_params =
     context |> Context.family_linkage |> function
     | { default_ctx_params; _ } -> default_ctx_params
-  in
-  
+  in  
   let prefix = Codegen.calculate_rec_principle_prefix ~inductive_path ~context in
   let construct_path name = Naming.qualid_point (Some prefix) name in    
   List.fold_left (fun (context, acc) constructor_name ->          
@@ -202,7 +201,7 @@ let inherit_one_partial_recursor ~elem ~new_handlers ~context ~inductive =
        in
        let elem = LinkageElem.PartialRecursor { prec with compiled_context; behaviour } in       
        (* Add the new computational axioms *)
-       let context = update_context context name elem in       
+       let context = update_context context name elem in
        let elements = 
          generate_prec_handlers
            ~inductive_path 
@@ -461,8 +460,8 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
            
         | ComputationalAxiom comp ->
             ComputationalAxiom { comp with compiled_context }, []
-        | InductiveAxiom constr ->
-            InductiveAxiom { constr with compiled_context }, []
+        | InductiveAxiom axiom ->
+            InductiveAxiom { axiom with compiled_context }, []
         | FieldDefinition field ->
             FieldDefinition { field with compiled_context }, []
         | MetaDataSection metadata ->
