@@ -205,7 +205,7 @@ let fsimpl_in h =
              match binding with
              | Context.Named.Declaration.LocalAssum ({ binder_name; _ }, ty) when Names.Id.equal binder_name h -> Some [ty]
              | Context.Named.Declaration.LocalDef ({ binder_name; _ }, tm, ty) when Names.Id.equal binder_name h -> Some [tm;ty]
-             | _ -> None)                 
+             | _ -> None)              
       |> List.concat                             
     in
     let env = Proofview.Goal.env gl in        
