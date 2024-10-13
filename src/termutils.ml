@@ -760,3 +760,14 @@ let generate_prec_computational_axioms
   |> List.map (fun (constructor_name, constructor_path) ->
          generate_one_prec_computational_axiom ~inductive ~prec_suffix
            ~recursor_path ~constructor_name ~constructor_path ~handlers)*)
+
+let is_indexed_inductive (i: VernacInductive.t) =
+  let kind = 
+    i |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs |> fst |> snd
+  in
+  match kind with
+  | None -> false
+  | Some kind ->
+     match kind.v with
+     | Constrexpr.CNotation (_, (_, "_ -> _"), _) -> true
+     | _ -> false

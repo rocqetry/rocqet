@@ -12,7 +12,7 @@ let add
   in
   let inductive, _, _ =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
-  in  
+  in
   let prec_suffix = Naming.fresh_name ~prefix:"PrecSuffix" in
   let inductive_name = inductive_path |> Naming.path_to_list |> List.rev |> List.hd in     
   let name = Naming.partial_recursor_name ~inductive_name ~prec_suffix in
@@ -101,7 +101,7 @@ let extend
       ~(handlers: Names.Id.t list) =  
   
   (* i.e Make inherited partial recursors exhaustive *)
-  let _ = Inheritance.inherit_partial_recursor ~inductive_path in    
+  let _ = Inheritance.inherit_partial_recursor ~inductive_path in
   
   let handlers = inherited_handlers @ handlers in
   add ~inductive_path ~inherited_handlers ~handlers
