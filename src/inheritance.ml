@@ -246,7 +246,11 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
       let compiled_context, parameters =
         Codegen.compile_linkage_context ~field_name:name context
       in
-      let element, more =
+      (* Inheriting a LinkageElem.t updates that linkage
+         element wrt to the current context. It might also create
+         new elements in addition to that update. This captures
+         exact this idea. *)
+      let element, fresh_elements =
         match element with
         | LinkageElem.InductiveDefinition inductive ->
             let compiled_impl, principles =
@@ -489,7 +493,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
             TheoremDefinition { theorem with compiled_context }, []
       in      
       let open Bwd.Infix in
-      let fields = Snoc (linkage.fields, (name, element)) <@ more in
+      let fields = Snoc (linkage.fields, (name, element)) <@ fresh_elements in
       { linkage with fields }
 
 and inherit_elements ~(elements : (Names.Id.t * LinkageElem.t) list)
