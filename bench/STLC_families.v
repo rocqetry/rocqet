@@ -467,7 +467,7 @@ FLemma type_safety:
     self__STLC.steps t t' ->
     value t' \/ (exists t'', step t' t'').
 FProofLemma.
-unfold self__STLC.LemmaTy回257. intros.
+intros.
 eapply self__STLC.progress; eauto using self__STLC.preservation2.
 Qed. CloseFLemma.
 
