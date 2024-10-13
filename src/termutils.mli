@@ -124,3 +124,6 @@ val generate_one_prec_computational_axiom :
     prec_suffix: Names.Id.t ->    
     prefix:Libnames.qualid -> 
     (Names.Id.t * Constrexpr.constr_expr) list*)
+
+val is_indexed_inductive :
+  VernacInductive.t -> bool
