@@ -132,6 +132,7 @@ let linkages_concatenate linkages =
           linkage_concatenate ~derived:result_linkage ~base:linkage)
         linkage linkages
 
+(* Helper function for updating context during `inherit_one` *)
 let update_context context name elem = 
    match context with 
    | LinkageCtx.Toplevel linkage -> 
@@ -141,6 +142,8 @@ let update_context context name elem =
       let linkage = { linkage with fields = Bwd.Snoc(linkage.fields, (name, elem)) } in 
       LinkageCtx.Nested (c, linkage)       
 
+(* Generating fresh elements (new computational axioms) after
+   inheriting a partial recursor *)
 let generate_prec_handlers
       ~inductive_path 
       ~handlers ~inductive
@@ -183,6 +186,8 @@ let generate_prec_handlers
          context, ((axiom_name, elem) :: acc)) (context, []) new_handlers          
       |> function (_, l) -> List.rev l
 
+(* Updating a single partial recursor element that
+    is about to be inherited *)
 let inherit_one_partial_recursor ~elem ~new_handlers ~context ~inductive = 
    match elem with 
    | LinkageElem.PartialRecursor 
@@ -284,14 +289,14 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
            is not already. *)
         | PartialRecursor prec ->
 
+           (* List helper functions *)
            let get_portion_after sublist full_list =
              let rec take n lst =
                if n <= 0 then []
                else match lst with
                  | [] -> []
                  | h::t -> h :: take (n-1) t
-             in 
-
+             in
              let rec drop n lst =
                if n <= 0 then lst
                else match lst with
@@ -299,7 +304,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                  | _::t -> drop (n-1) t
              in 
              let rec find_sublist acc = function
-               | [] -> []  (* Sublist not found *)
+               | [] -> []
                | h :: t as l ->
                    if List.length l < List.length sublist then []
                    else if take (List.length sublist) l = sublist then
