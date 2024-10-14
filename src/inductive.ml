@@ -80,11 +80,11 @@ let add_new_inductive_definition ~inductive ~inductive_name =
     |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
   in
   
-  if not (Termutils.is_indexed_inductive inductive) then
-    let inductive_path = Libnames.qualid_of_ident inductive_name in
-    (* Would not work for mutually inductive *)
-    let handlers = constructors inductive |> List.map fst in
-    Partial_recursor.add ~inductive_path ~inherited_handlers:[] ~handlers
+  (* if not (Termutils.is_indexed_inductive inductive) then
+     let inductive_path = Libnames.qualid_of_ident inductive_name in
+     (* Would not work for mutually inductive *)
+     let handlers = constructors inductive |> List.map fst in
+     Partial_recursor.add ~inductive_path ~inherited_handlers:[] ~handlers *)
 
 let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
     =
@@ -167,16 +167,16 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
     new_constructors
     |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
   in
-
+  ()
   
   (* Partial Recursors *)
-  if not (Termutils.is_indexed_inductive inductive) then
+  (* if not (Termutils.is_indexed_inductive inductive) then
      let inductive_path = Libnames.qualid_of_ident inductive_name in
      (* Would not work for mutually inductive *)
      let handlers = new_constructors |> List.map fst in
      let inherited_handlers = inherited_constructors |> List.map fst in
      
-     Partial_recursor.extend ~inductive_path ~inherited_handlers ~handlers  
+     Partial_recursor.extend ~inductive_path ~inherited_handlers ~handlers *)  
 
 let add_inductive_definition inductive =
   let inductive_name = VernacInductive.extract_inductive_name inductive in
