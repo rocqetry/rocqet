@@ -16,12 +16,8 @@ Family STLCBase.
        about Ty
        motive (fun (t : Ty) => subst t = 1).
      FProof.          
-     + unfold self__STLCBase.__motiveTeasy_theorem.
-       rewrite self__STLCBase.subst_TUnit_eq.
-       unfold self__STLCBase.substTUnit. reflexivity.     
-     + intros. unfold self__STLCBase.__motiveTeasy_theorem.
-       rewrite self__STLCBase.subst_TArr_eq.
-       unfold self__STLCBase.substTArr. reflexivity.
+     + fsimpl. reflexivity.
+     + intros. fsimpl. reflexivity.
      Qed.
   FEnd easy_theorem.
 
@@ -29,15 +25,8 @@ Family STLCBase.
        about Ty
        motive (fun (t : Ty) => self__STLCBase.subst t = 1).
     FProof.
-      + unfold  self__STLCBase.__motiveTsubst_theorem.        
-        rewrite self__STLCBase.subst_TUnit_eq.
-        unfold self__STLCBase.substTUnit. 
-        reflexivity.
-      + intros.
-          unfold self__STLCBase.__motiveTsubst_theorem.
-          rewrite -> self__STLCBase.subst_TArr_eq.
-          unfold self__STLCBase.substTArr.
-          reflexivity.
+      + fsimpl. reflexivity.
+      + intros. fsimpl. reflexivity.          
     Qed.
   FEnd subst_theorem.  
   
@@ -60,19 +49,13 @@ Family IfExt.
 
        FInduction easy_theorem.
        FProof.
-        + unfold self__Base.__motiveTeasy_theorem. 
-          rewrite self__Base.subst_TBool_eq.
-          unfold self__Base.substTBool.
-          reflexivity.
+        + fsimpl. reflexivity. 
        Qed.
        FEnd easy_theorem.
 
        FInduction subst_theorem.
        FProof.
-        + unfold self__Base.__motiveTsubst_theorem. 
-          rewrite self__Base.subst_TBool_eq.
-          unfold self__Base.substTBool.
-          reflexivity.
+        + fsimpl. reflexivity.
        Qed.
        FEnd subst_theorem.
 
@@ -91,8 +74,20 @@ Family TempSTLC extends STLCBase.
     FInductive Ty : Set := TempExpr : Ty.
 
     FRecursion subst.
-        Case TempExpr := 10.
+        Case TempExpr := 1.
     FEnd subst.
+
+    FInduction easy_theorem.
+       FProof.
+        + fsimpl. reflexivity. 
+       Qed.
+    FEnd easy_theorem.
+
+    FInduction subst_theorem.
+      FProof.
+        + fsimpl. reflexivity.
+      Qed.
+     FEnd subst_theorem.
 FEnd TempSTLC.
 
 Family Temp extends IfExt.
@@ -110,6 +105,18 @@ Family ArithExt.
             Case TNat := 1.
         FEnd subst.
 
+        FInduction easy_theorem.
+       FProof.
+        + fsimpl. reflexivity. 
+       Qed.
+    FEnd easy_theorem.
+
+    FInduction subst_theorem.
+      FProof.
+        + fsimpl. reflexivity.
+      Qed.
+     FEnd subst_theorem.
+        
        FInductive Exp : Set :=
          | EAdd : Exp -> Exp -> Exp
        with Val : Set :=
@@ -121,13 +128,9 @@ Family ArithExt.
 FEnd ArithExt.
 
 Family IfExtBuild extends IfExt.
-    Family Base extends STLCBase.                    
-          (*FInductive B : Set := BB : Ty -> B.
-          FDefinition c := self__Base.B_rect.*)          
-          (* FInductive Ty : Set := Blah : Ty. *)
+    Family Base extends STLCBase.                              
           FRecursion subst.             
-          FEnd subst.
-          (* FDefinition A := Ty. *)
+          FEnd subst.          
     FEnd Base.
 FEnd IfExtBuild.
 
