@@ -79,7 +79,7 @@ let add_new_inductive_definition ~inductive ~inductive_name =
     constructors inductive
     |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
   in
-  
+  ()
   (* if not (Termutils.is_indexed_inductive inductive) then
      let inductive_path = Libnames.qualid_of_ident inductive_name in
      (* Would not work for mutually inductive *)
