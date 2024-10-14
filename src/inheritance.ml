@@ -25,10 +25,7 @@ let rec linkage_concatenate ~(derived : Linkage.t) ~(base : Linkage.t) =
       | Snoc (fields, _) -> find_field fields
     in
     match find_field linkage.fields with
-    | true ->
-        (* The field should not be present, since we're
-           building the linkage *)
-        assert false
+    | true -> linkage        
     | false ->
         (* Note that we're not doing anything with late binding *)
         let fields = Snoc (linkage.fields, (name, element)) in
@@ -47,9 +44,7 @@ let rec linkage_concatenate ~(derived : Linkage.t) ~(base : Linkage.t) =
     | [] -> inherit_elements ~elements:(Bwd.to_list base_fields) ~linkage
     | (name, element) :: derived_fields -> (
         match find_and_remove name base_fields with
-        | None, base_fields ->
-            let pred = Bwd.mem name (Bwd.map fst linkage.fields) in
-            assert (not pred);
+        | None, base_fields ->            
             let linkage = inherit_one ~name ~element ~linkage in
             loop linkage derived_fields base_fields
         | Some (base_element, dependencies), base_fields ->
@@ -58,9 +53,7 @@ let rec linkage_concatenate ~(derived : Linkage.t) ~(base : Linkage.t) =
             in
             let element =
               linkage_elem_concatenate ~name ~derived:element ~base:base_element
-            in
-            let pred = Bwd.mem name (Bwd.map fst linkage.fields) in
-            assert (not pred);
+            in            
             let linkage = inherit_one ~name ~element ~linkage in
             loop linkage derived_fields base_fields)
   in
