@@ -33,6 +33,18 @@ let computational_axiom_name ~recursor_name ~constructor_name =
   ^ "_eq"
   |> Names.Id.of_string
 
+let partial_recursor_name ~(inductive_name: Names.Id.t) ~(prec_suffix: Names.Id.t) = 
+  Names.Id.to_string inductive_name
+  ^ "_prect_"  
+  ^ Names.Id.to_string prec_suffix
+  |> Names.Id.of_string
+
+let prec_computational_axiom_name ~constructor_name ~prec_suffix = 
+  Names.Id.to_string constructor_name
+  ^ "_eq_"
+  ^ Names.Id.to_string prec_suffix
+  |> Names.Id.of_string
+
 let point_qualid (f : Names.Id.t) (path : Libnames.qualid) : Libnames.qualid =
   let path, base = Libnames.repr_qualid path in
   let newpath = List.append (Names.DirPath.repr path) [ f ] in

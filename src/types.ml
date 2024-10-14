@@ -236,7 +236,7 @@ module rec LinkageElem : sig
         recursors : Recursors.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;
+        compiled_impl : CompiledModule.t;        
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     (* All names bound by an inductive definition:
@@ -306,6 +306,23 @@ module rec LinkageElem : sig
         script: Ltac_plugin.Tacexpr.raw_tactic_expr;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
     }
+    | PartialRecursor of { 
+        name: Names.Id.t;
+        type_name: Names.Id.t;
+        inductive_path: Libnames.qualid;
+        (* Might include some handlers that are inherited, 
+           but needed to calculate the right arguments to the prect *)
+        handlers: Names.Id.t list;
+        (* The handlers actually defined with "some" in this extension
+           It is important for fdicriminate to know this. *)
+        defining_handlers : Names.Id.t list;
+        (* constructor name, computational axiom name *)
+        behaviour: (Names.Id.t * Names.Id.t) list;
+        prec_suffix : Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;        
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
 end =
   LinkageElem
 
@@ -313,11 +330,14 @@ and Linkage : sig
   type t = {
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
     default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+    (* TODO: This should be a Libnames.qualid *)
     name : Names.Id.t;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
+  (* TODO: Some of these are not needed and some should be moved to
+     inheritance.ml *)
   val context_parameters : t -> Libnames.qualid list
   val top_most_self_name : t -> Names.Id.t
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
@@ -357,6 +377,9 @@ end = struct
     | ClosingFact fact -> 
        let default_ctx_params = path_subst_ctx fact.default_ctx_params in
        ClosingFact { fact with default_ctx_params }
+    | PartialRecursor prec -> 
+       let default_ctx_params = path_subst_ctx prec.default_ctx_params in
+       PartialRecursor { prec with default_ctx_params }
     | InductiveAxiom axiom -> 
        let default_ctx_params = path_subst_ctx axiom.default_ctx_params in
        InductiveAxiom { axiom with default_ctx_params } 
@@ -417,9 +440,4 @@ end
 (* `close` is a generic handle that is called to close the scope *)
 module PluginCmdScope = struct
   type t = { command : PluginCmd.t; name : Names.Id.t; close : unit -> unit }
-end
-
-(* Does a field exends a field in the base family? *)
-module FieldInhKind = struct
-  type t = New | Extend of LinkageElem.t
 end

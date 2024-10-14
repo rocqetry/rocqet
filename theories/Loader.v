@@ -55,4 +55,7 @@ Ltac split_cases_into_goals :=
   | _ => auto
   end.
 
+Ltac prove_prec :=
+  intros x; induction x; eauto; eauto using None.
+
 Declare ML Module "nfpop:nfpop.plugin".

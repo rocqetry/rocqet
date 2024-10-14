@@ -13,6 +13,16 @@ val principle_name : inductive:Names.Id.t -> kind:string -> Names.Id.t
 val computational_axiom_name :
   recursor_name:Names.Id.t -> constructor_name:Names.Id.t -> Names.Id.t
 
+val partial_recursor_name : 
+  inductive_name:Names.Id.t -> 
+  prec_suffix:Names.Id.t -> 
+  Names.Id.t
+
+val prec_computational_axiom_name: 
+  constructor_name:Names.Id.t -> 
+  prec_suffix:Names.Id.t -> 
+  Names.Id.t
+
 val point_qualid : Names.Id.t -> Libnames.qualid -> Libnames.qualid
 val qualid_point : Libnames.qualid option -> Names.Id.t -> Libnames.qualid
 val path_to_prefix : Libnames.qualid -> Libnames.qualid option * Names.Id.t

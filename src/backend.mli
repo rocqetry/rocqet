@@ -55,6 +55,7 @@ module Vernac : sig
     name:Names.Id.t ->
     proof:Ltac_plugin.Tacexpr.raw_tactic_expr ->
     ty:Constrexpr.constr_expr ->
+    opaque:Vernacexpr.opacity_flag ->
     unit ->
     unit t
 end

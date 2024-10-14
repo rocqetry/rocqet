@@ -274,6 +274,8 @@ let generate_computational_axioms ~(inductive : VernacInductive.t) ~recursor
          generate_one_computational_axiom ~inductive ~recursor_name ~context
            ~recursor_path ~constructor_name ~constructor_path)
 
+
+
 (* Given a recursor name and a compiled recursor return the type
    each handler is supposed to be *)
 let handler_types_table inductive_path name (recursor : CompiledRecursor.t)
@@ -382,6 +384,16 @@ let calculate_inductive_proof_goal
     mkAppC (mkIdentC (Names.Id.of_string using_prod_or_conj), [ l; r ])
   in
   List.fold_right __prod handler_types __True
+
+let mk_prod arguments body = 
+  let open Constrexpr_ops in    
+  let arguments : Names.lname list = 
+    arguments 
+    |> List.map (fun name -> CAst.make @@ Names.Name.Name name) 
+  in 
+  let binder_kind = Constrexpr.Default Glob_term.Explicit in 
+  let hole = CAst.make @@ Constrexpr.CHole None in  
+  mkProdC  (arguments, binder_kind, hole, body)
 
 let mk_lambda arguments body =
   let f (n : Names.Id.t) =
@@ -537,3 +549,225 @@ let rec constants_in_econstr sigma e =
       in
       constants tl @ constants bl
   | Constr.Proj (_, _, c) -> constants c
+
+let compute_partial_recursor_signature 
+      ~context 
+      ~(inductive_path: Libnames.qualid) =   
+  let inductive, recursors, _ =
+    Env.Context.lookup_inductive_for_recursion ~name:inductive_path context
+  in
+  let suffix = RecKind.Rect in
+  let Recursor.{ recursor; _ } = RecursorStore.find suffix recursors in  
+  let open Constrexpr_ops in
+  
+  let is_P (c : Constrexpr.constr_expr) : bool = 
+    let all_params, _ = collect_argument_and_ret_of_type recursor in 
+    let (ps, _, _), _ = List.hd all_params in
+    let {CAst.v = p; _} = List.hd ps in     
+    let p =
+      match p with 
+      | Names.Name p -> p 
+      | _ -> Errors.fail ~info:"compute_partial_recursor_signature: expected Names.Name" 
+    in 
+    match c with 
+    | {CAst.v = CRef (c, _); _} when (Libnames.qualid_is_ident c) -> 
+      let c = Libnames.qualid_basename c in p = c
+    | _ -> false 
+  in  
+  
+  let _option_decoration = 
+    let _option = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "option" in
+    fun t -> mkAppC (_option, [t])
+  in
+
+  let flipped_indrec_type = 
+    let all_params, ret = collect_argument_and_ret_of_type recursor in 
+    (* make the last parameter into the front *)
+    let rec heads_tail (l) = 
+      match l with 
+      | [] -> Errors.fail ~info:"heads_tail: expected non empty list"
+      | h :: [] -> ([], h) 
+      | h :: t -> 
+         let th, tt = heads_tail t in 
+         (h::th, tt) 
+    in 
+    let heads_param, tail_param = heads_tail all_params in 
+    let all_params = List.map fst @@ tail_param :: heads_param in 
+    let res = List.fold_right (fun (a, b, c) body -> mkProdC (a,b,c, body)) all_params ret in 
+    res 
+  in 
+
+  let ind_rect_type = flipped_indrec_type in 
+  (* then we flip the argument order in ind_rect_type
+      s.t.  *)
+  (* we replace the P t into option (P t) *)
+  let replaced_ind_rect_type = 
+    let rec replace_helper _ r =
+      match r with
+      | { CAst.v = (Constrexpr.CApp (f, _)) ; _ } as original 
+          when (is_P f)  ->
+          (* rename the  *)
+        (_option_decoration original)
+      | cn -> map_constr_expr_with_binders (fun _ _ -> ()) replace_helper () cn 
+    in
+    replace_helper () ind_rect_type
+  in
+
+  (* Use the right self_qualification  *)
+  
+  let target =
+     match inductive_path |> Naming.path_to_list |> List.rev with
+     | [] | [ _ ] -> None
+      (* Remove the inductive name, leave the family *)
+     | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
+  in           
+  let ty = Naming.replace_self_qualification ~target replaced_ind_rect_type in 
+  let names = 
+    inductive 
+    |> VernacInductive.extract_all_names 
+    |> List.concat_map (fun (x, l) -> x :: l)
+    |> Names.Id.Set.of_list
+  in
+  let ty =
+    match target with
+    | None -> ty
+    | Some path -> Naming.add_prefix_path ~path ~names ~target:ty
+  in 
+  
+  Resolver.resolve_constrexpr ~context ~expression:ty
+
+(* (forall __i : self__Ix.ty,
+ forall P : self__Ix.ty -> Type, forall arg回9 : option (P self__Ix.ty_unit), option (P __i)) *)
+(* Should be called from inside a parameterized module *)
+let generate_one_prec_computational_axiom 
+      ~(inductive: VernacInductive.t)      
+      ~(recursor_path: Libnames.qualid)
+      ~(constructor_name: Names.Id.t)
+      ~(constructor_path: Libnames.qualid)
+      ~(handlers: Names.Id.t list)
+      ~(prec_suffix: Names.Id.t) =      
+  let open Constrexpr_ops in
+  let constructor_params, fully_applied_constr =
+    extract_variables_and_apply (mkRefC constructor_path)
+  in
+  let extract_name ({ CAst.v = n; _ } : Names.lname) : Names.Id.t =
+      match n with
+      | Names.Name n -> n
+      | _ -> Errors.fail ~info:"Expected non anonymous argument"
+  in
+  (* The arguments to the consructor *)
+  let c_arguments =
+      constructor_params
+      |> List.map (fun ((lnames, _, _), _) ->
+             lnames |> List.hd |> extract_name 
+             (*|> Libnames.qualid_of_ident
+             |> mkRefC*))
+  in
+  (* The P predicate *)
+  let p_argument = Names.Id.of_string "P" in  
+  let generate_h_strings n =
+     let rec aux i acc =
+       if i > n then
+         List.rev acc
+       else
+         aux (i + 1) (("H" ^ string_of_int i) :: acc)
+     in
+     aux 1 []
+  in
+  let find_position x lst =
+     let rec aux current_pos = function
+       | [] -> None
+       | hd :: tl -> 
+           if Names.Id.equal hd x then Some current_pos
+           else aux (current_pos + 1) tl
+     in
+     aux 1 lst
+  in 
+  let position = find_position constructor_name handlers in
+  (* The "H" function of the current handler *)
+  let h_target = 
+    position |> Option.map (fun position -> Names.Id.of_string (Printf.sprintf "H%d" position))
+  in
+  (* The H arguments *)
+  let h_arguments = 
+    handlers
+    |> List.length
+    |> generate_h_strings
+    |> List.map Names.Id.of_string
+  in
+  let partial_recursor_term arguments = 
+    let f = mkRefC recursor_path in 
+    mkAppC (f, arguments)
+  in
+  let equation_side arg = 
+    let p_and_hs = 
+      (p_argument :: h_arguments) 
+      |> List.map (fun n -> n |> Libnames.qualid_of_ident |> mkRefC) 
+    in
+    let arguments = arg :: p_and_hs in 
+    partial_recursor_term arguments
+  in
+  let left_hand_side = equation_side fully_applied_constr in
+  let right_hand_side = 
+    let types = 
+      flatten_inductive_constructor_type 
+        ~inductive ~constructor:constructor_name
+    in
+    let f ty arg =      
+      match ty with
+      | None -> [ arg |> Libnames.qualid_of_ident |> mkRefC ]
+      | Some _ ->          
+          let arg = arg |> Libnames.qualid_of_ident |> mkRefC in
+          let rec_arg = equation_side arg in
+          [ arg; rec_arg ]
+    in
+    let arguments = List.concat (List.map2 f types c_arguments) in
+    (* If we can't find the arg then it is the None equation kind *)
+    match h_target with 
+    | Some h_target -> 
+       let f = h_target |> Libnames.qualid_of_ident |> mkRefC in
+       mkAppC (f, arguments)
+    | None -> 
+       "None" |> Libnames.qualid_of_string |> mkRefC
+  in
+  let all_arguments = c_arguments @ [p_argument] @ h_arguments in
+  let equation = 
+    let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in
+    mkAppC (eq_cstr, [ left_hand_side; right_hand_side ])    
+  in   
+  (*let full_equation = lambda_to_prod @@ mk_lambda all_arguments equation in *)
+  let full_equation = mk_prod all_arguments equation in  
+  let name = Naming.prec_computational_axiom_name ~constructor_name ~prec_suffix in
+  (name, full_equation)
+
+(*
+(* Should be called from inside a parameterized module *)
+let generate_prec_computational_axioms 
+    ~(inductive : VernacInductive.t) 
+    ~recursor_name ~(prec_suffix: Names.Id.t)
+    ~prefix =   
+  let recursor_path = Libnames.qualid_of_ident recursor_name in
+  let constructors =
+    inductive |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs |> snd
+    |> List.map fst
+  in
+  let handlers = constructors in
+  let constructors =
+    constructors
+    |> List.map (fun name -> (name, Naming.qualid_point (Some prefix) name))
+  in
+  constructors
+  |> List.map (fun (constructor_name, constructor_path) ->
+         generate_one_prec_computational_axiom ~inductive ~prec_suffix
+           ~recursor_path ~constructor_name ~constructor_path ~handlers)*)
+
+let is_indexed_inductive (i: VernacInductive.t) =
+  let kind = 
+    i |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs |> fst |> snd
+  in
+  match kind with
+  | None -> false
+  | Some kind ->
+     match kind.v with
+     | Constrexpr.CNotation (_, (_, "_ -> _"), _) -> true
+     | _ -> false

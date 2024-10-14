@@ -103,3 +103,27 @@ val extract_handler_types_from_principle :
   Recursors.t
 
 val constants_in_econstr: Evd.evar_map -> Evd.econstr -> Libnames.qualid list
+
+val compute_partial_recursor_signature: 
+  context:LinkageCtx.t -> 
+  inductive_path:Libnames.qualid -> 
+  Constrexpr.constr_expr
+
+val generate_one_prec_computational_axiom :
+      inductive: VernacInductive.t -> 
+      recursor_path:Libnames.qualid -> 
+      constructor_name:Names.Id.t -> 
+      constructor_path:Libnames.qualid -> 
+      handlers:Names.Id.t list -> 
+      prec_suffix: Names.Id.t ->            
+      (Names.Id.t * Constrexpr.constr_expr)
+
+(*val generate_prec_computational_axioms : 
+    inductive:VernacInductive.t -> 
+    recursor_name:Names.Id.t ->
+    prec_suffix: Names.Id.t ->    
+    prefix:Libnames.qualid -> 
+    (Names.Id.t * Constrexpr.constr_expr) list*)
+
+val is_indexed_inductive :
+  VernacInductive.t -> bool

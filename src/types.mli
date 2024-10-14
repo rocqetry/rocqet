@@ -89,7 +89,7 @@ module rec LinkageElem : sig
         recursors : Recursors.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;
+        compiled_impl : CompiledModule.t;        
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | InductiveAxiom of {
@@ -155,6 +155,18 @@ module rec LinkageElem : sig
         script: Ltac_plugin.Tacexpr.raw_tactic_expr;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
     }
+    | PartialRecursor of { 
+        name: Names.Id.t;
+        type_name: Names.Id.t;
+        inductive_path: Libnames.qualid;
+        handlers: Names.Id.t list;
+        defining_handlers : Names.Id.t list;
+        behaviour: (Names.Id.t * Names.Id.t) list;
+        prec_suffix : Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;                
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
 end
 
 and Linkage : sig
@@ -177,8 +189,4 @@ end
 
 and LinkageCtx : sig
   type t = Toplevel of Linkage.t | Nested of t * Linkage.t
-end
-
-module FieldInhKind : sig
-  type t = New | Extend of LinkageElem.t
 end

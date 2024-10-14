@@ -74,6 +74,16 @@ val compile_computational_axiom_signature :
   prefix:Libnames.qualid option ->
   Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t
 
+val compile_prec_computational_axiom_signature :
+    ctx : (Names.Id.t * Constrexpr.module_ast) list ->
+    constructor_name : Names.Id.t ->
+    constructor_path : Libnames.qualid ->
+    handlers: Names.Id.t list ->
+    inductive : VernacInductive.t ->
+    prec_suffix: Names.Id.t ->                
+    recursor_path : Libnames.qualid  ->    
+    Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t 
+
 val compile_recursive_definition_signature :
   names:Names.Id.t list ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->

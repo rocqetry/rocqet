@@ -489,12 +489,27 @@ let compile_computational_axiom_implementation ~axiom_name ~axiom_expr =
             (CAst.make
                (Libnames.qualid_of_ident (Names.Id.of_string "eauto"), []))))
   in
-  let ty = Naming.replace_self_qualification ~target:None axiom_expr in
-  B.thunk (B.construct_term_using_proof ~name:axiom_name ~proof:auto_tactic ~ty)
+  let ty = Naming.replace_self_qualification ~target:None axiom_expr in  
+  B.thunk (B.construct_term_using_proof ~name:axiom_name ~proof:auto_tactic ~ty ~opaque:Vernacexpr.Opaque)
+
+let compile_partial_recursor_implementation ~name ~type_name = 
+  let prove_prec_tactic =      
+     let proof = 
+        let open Ltac_plugin in
+        CAst.make 
+          (Tacexpr.TacArg 
+             (Tacexpr.TacCall 
+                (CAst.make 
+                   (Libnames.qualid_of_ident (Names.Id.of_string "prove_prec") ,[]))) ) 
+      in      
+      proof
+  in  
+  let ty = Constrexpr_ops.mkIdentC type_name in
+  B.thunk (B.construct_term_using_proof ~name ~proof:prove_prec_tactic ~ty ~opaque:Vernacexpr.Transparent)
 
 let compile_closing_fact_implementation ~name ~type_name ~(script: Ltac_plugin.Tacexpr.raw_tactic_expr) =   
   let ty = Constrexpr_ops.mkIdentC type_name in  
-  B.thunk (B.construct_term_using_proof ~name ~proof:script ~ty)
+  B.thunk (B.construct_term_using_proof ~name ~proof:script ~ty ~opaque:Vernacexpr.Opaque)
 
 (* The name of the equation to generate axioms for *)
 let compile_computational_axiom_signature
@@ -522,6 +537,38 @@ let compile_computational_axiom_signature
                    Termutils.generate_one_computational_axiom ~inductive
                      ~recursor_name ~recursor_path ~constructor_name
                      ~constructor_path ~context
+                 in
+                 axiom_name := Some name;
+                 axiom_expr := Some axiom;
+                 postulate_axiom ~name ~ty:axiom)
+           in
+           return ())
+  in
+  (Option.get !axiom_name, Option.get !axiom_expr, compiled_signature)
+
+let compile_prec_computational_axiom_signature
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
+    ~(constructor_name : Names.Id.t)
+    ~(constructor_path : Libnames.qualid)
+    ~(handlers: Names.Id.t list)
+    ~(inductive : VernacInductive.t)
+    ~(prec_suffix: Names.Id.t)
+    ~(recursor_path : Libnames.qualid) :    
+    Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t =    
+  let module_name = Naming.fresh_name ~prefix:"ComputationalAxiom" in
+  let axiom_name = ref None in
+  let axiom_expr = ref None in
+  let compiled_signature =
+    B.run
+    @@ B.define_moduletype ~module_name ~parameters:ctx ~body:(fun _ctx ->
+           let open B in
+           let* _ =
+             thunk (fun () ->
+                 let name, axiom =
+                   Termutils.generate_one_prec_computational_axiom 
+                     ~inductive
+                     ~recursor_path ~constructor_name
+                     ~constructor_path ~prec_suffix ~handlers
                  in
                  axiom_name := Some name;
                  axiom_expr := Some axiom;
@@ -660,6 +707,16 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
   | Bwd.Snoc
       ( _,
         ( _,
+          PartialRecursor
+            {
+              default_ctx_params;
+              compiled_context;
+              compiled_signature;
+              _;
+            } ) )
+  | Bwd.Snoc
+      ( _,
+        ( _,
           InductiveDefinition
             { default_ctx_params; compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
@@ -763,6 +820,10 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
         let open B in
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
+    | Snoc (fields, (name, PartialRecursor _ )) ->
+        let open B in
+        let* _ = compile_fields fields in
+        B.define_term ~name (qualify name)
     | Snoc (fields, (_, InductiveAxiom _)) -> compile_fields fields
     | Snoc (fields, (_, InductiveDefinition { inductive; _ })) ->
         let open B in
@@ -863,6 +924,11 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         let open B in
         let* _ = compile_fields fields ctx in        
         compile_closing_fact_implementation ~name ~type_name ~script
+    | Snoc
+        (fields, (_, PartialRecursor { name; type_name; _ })) -> 
+        let open B in
+        let* _ = compile_fields fields ctx in        
+        compile_partial_recursor_implementation ~name ~type_name
     | Snoc (fields, (_, FamilyDefinition { linkage = nested_linkage; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in
@@ -881,7 +947,7 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
           (_, OpaqueFieldDefinition { default_ctx_params; compiled_impl; _ }) )
     | Snoc
         ( fields,
-          (_, InductiveDefinition { default_ctx_params; compiled_impl; _ }) )
+          (_, InductiveDefinition { default_ctx_params; compiled_impl; _ }) )    
     | Snoc
         (fields, (_, FieldDefinition { default_ctx_params; compiled_impl; _ }))
       ->
@@ -1002,6 +1068,12 @@ let compile_linkage_signature linkage =
         ( _,
           ( _,
             TheoremDefinition
+              { default_ctx_params; compiled_context; compiled_signature; _ } )
+        )
+    | Bwd.Snoc
+        ( _,
+          ( _,
+            PartialRecursor
               { default_ctx_params; compiled_context; compiled_signature; _ } )
         )
     | Bwd.Snoc
