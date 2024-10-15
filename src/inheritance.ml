@@ -100,7 +100,7 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t) ~(base : LinkageEl
   
   (* Overriding *)
   | FieldDefinition derived, OpaqueFieldDefinition _ -> FieldDefinition derived
-  | OpaqueFieldDefinition _, FieldDefinition override -> FieldDefinition override
+  | OpaqueFieldDefinition _, FieldDefinition base -> FieldDefinition base
 
   | RecursorDefinition derived, RecursorDefinition base ->
       let names = remove_duplicates (base.names @ derived.names) in
