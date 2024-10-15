@@ -312,11 +312,11 @@ Family BaseExt.
   Qed. CloseFLemma.
   FEnd Basetransl.
 
-  Family Imp extends Base.
-  FEnd Imp.
-
   Family Implight extends Base.
   FEnd Implight.
+
+  Family Imp extends Base.
+  FEnd Imp.
 
   Family Impsharpminor extends Base.
   FEnd Impsharpminor.
@@ -332,7 +332,7 @@ Family BaseExt.
     Family Target extends Implight. 
     FEnd Target.
   FEnd SimplExpr.
-  
+
   (* Implight -> Impsharpminor *)
   Family Impshmgen extends Basetransl. 
     Family Source extends Implight.
@@ -354,6 +354,8 @@ FEnd BaseExt.
 
 (* post/pre increment operators + assign ops *)
 Family ArithExt extends BaseExt.  
+  Inherit Implight.
+  
   Family ImpEpreincr extends Implight.
   FInductive stmt : Type :=
     | Spreincr : ident -> stmt.
@@ -362,20 +364,20 @@ Family ArithExt extends BaseExt.
     | step_preincr : forall ge f id k e le m v v',
         PTree.get id le = Some v -> (* Fetch the value of the variable *)
         v' = Val.add v (Vint Int.one) -> (* Increment the value by 1 *)
-        step ge (State f (Spreincr id) k e le m)
-             E0 (State f Sskip k e (PTree.set id v' le) m).      
+        step ge (self__ImpEpreincr.State f (Spreincr id) k e le m)
+             E0 (self__ImpEpreincr.State f Sskip k e (PTree.set id v' le) m).
   FEnd ImpEpreincr.
 
   Family ImpEpostincr extends ImpEpreincr. 
   FInductive stmt : Type :=    
-    | Epostincr : ident -> stmt.    
+    | Spostincr : ident -> stmt.
   
   FInductive step : genv -> state -> trace -> state -> Prop :=  
     | step_postincr : forall ge f id k e le m v v',
       PTree.get id le = Some v -> (* Fetch the value of the variable *)
       v' = Val.add v (Vint Int.one) -> (* Increment the value by 1 *)
-      step ge (State f (Spostincr id) k e le m)
-           E0 (State f Sskip k e (PTree.set id v' le) m).
+      step ge (self__ImpEpostincr.State f (Spostincr id) k e le m)
+           E0 (self__ImpEpostincr.State f Sskip k e (PTree.set id v' le) m).
   FEnd ImpEpostincr.
 
   Family ImpEpredecr extends ImpEpostincr.
@@ -386,8 +388,8 @@ Family ArithExt extends BaseExt.
     | step_predecr : forall ge f id k e le m v v',
         PTree.get id le = Some v -> (* Fetch the value of the variable *)
         v' = Val.sub v (Vint Int.one) -> (* Increment the value by 1 *)
-        step ge (State f (Spreincr id) k e le m)
-             E0 (State f Sskip k e (PTree.set id v' le) m).      
+        step ge (self__ImpEpredecr.State f (Spreincr id) k e le m)
+             E0 (self__ImpEpredecr.State f Sskip k e (PTree.set id v' le) m).      
   FEnd ImpEpredecr.
 
   Family ImpEpostdecr extends ImpEpredecr.
@@ -395,134 +397,147 @@ Family ArithExt extends BaseExt.
     | Spostdecr : ident -> stmt.    
   
   FInductive step : genv -> state -> trace -> state -> Prop :=  
-    | step_postincr : forall ge f id k e le m v v',
+    | step_postdecr : forall ge f id k e le m v v',
       PTree.get id le = Some v -> (* Fetch the value of the variable *)
       v' = Val.sub v (Vint Int.one) -> (* Increment the value by 1 *)
-      step ge (State f (Spostdecr id) k e le m)
-           E0 (State f Sskip k e (PTree.set id v' le) m).
-  FEnd ImpEpostdecr.  
+      step ge (self__ImpEpostdecr.State f (Spostdecr id) k e le m)
+           E0 (self__ImpEpostdecr.State f Sskip k e (PTree.set id v' le) m).
+  FEnd ImpEpostdecr.
 
-  Family Imp extends ImpEpostincr.
+  Family Imp extends ImpEpostdecr.
   FInductive stmt : Type := 
     | Sassignop : binary_operation -> ident -> expr -> stmt.
 
   FInductive step : genv -> state -> trace -> state -> Prop :=  
-  | step_assignop : forall ge f op id a k e le m v v1 v2 v',
+  | step_assignop : forall ge f op id a k e le m v1 v2 v',
       PTree.get id le = Some v1 -> (* Fetch the current value of the variable *)
       eval_expr e le a v2 -> (* Evaluate the expression a *)
       eval_binop op v1 v2 = Some v' -> (* Apply the binary operation op to v1 and v2 *)
-      step ge (State f (Sassignop op id a) k e le m)
-           E0 (State f Sskip k e (PTree.set id v' le) m).
-  FEnd ImpEassignop.  
+      step ge (self__Imp.State f (Sassignop op id a) k e le m)
+           E0 (self__Imp.State f Sskip k e (PTree.set id v' le) m).
+  FEnd Imp.
 
   (* Nanopass: Imp *remove-assign*-> 
                ImpEpostdecr *remove-postdecr*-> 
                ImpEpredecr *remove-predecr*-> 
                ImpEpostincr *remove-postincr*-> 
                ImpEpreincr *remove-preincr*->
-               Implight *)
+               Implight *)    
 
-  Family RemoveAssignop extends Basetransl.       
-    Family Soucre extends Imp.
+  (* Compose nanopasses *)
+  
+  Family RemovePreincr extends Basetransl.
+    Family Source extends ImpEpreincr.
     FEnd Source.
 
-    Family Target ImpEpostdecr.
+    Family Target extends Implight.
+    FEnd Target.
+
+    FRecursion transl_stmt.    
+    Case Spreincr := (fun id =>
+      OK (Target.Sset id 
+            (Target.Ebinop Oadd 
+               (Target.Evar id) 
+               (Target.Econst (Ointconst Int.one))))). (* id := id + 1 *)
+    FEnd transl_stmt.
+
+    FInduction transl_stmt_correct. 
+    FProof.
+    + apply cheat.
+    Qed. FEnd transl_stmt_correct.
+  FEnd RemovePreincr.
+
+  Family RemovePostincr extends RemovePreincr.
+    Family Source extends ImpEpostincr.
+    FEnd Source.
+
+    Family Target extends Implight.
+    FEnd Target.
+
+    FRecursion transl_stmt.    
+    Case Spostincr := (fun id =>
+      OK (Target.Sseq
+            (Target.Sset id 
+               (Target.Ebinop Oadd (Target.Evar id) 
+                  (Target.Econst (Ointconst Int.one)))) (* id := id + 1 *)
+            Target.Sskip)).
+    FEnd transl_stmt.
+
+    FInduction transl_stmt_correct. 
+    FProof.
+    + apply cheat.    
+    Qed. FEnd transl_stmt_correct.
+  FEnd RemovePostincr.
+
+  Family RemovePredecr extends RemovePostincr.
+    Family Source extends ImpEpredecr.
+    FEnd Source.
+
+    Family Target extends Implight.
+    FEnd Target.
+
+    FRecursion transl_stmt. 
+    Case Spredecr := (fun id =>
+      OK (Target.Sset id 
+            (Target.Ebinop Osub 
+               (Target.Evar id) 
+               (Target.Econst (Ointconst Int.one))))). (* id := id - 1 *)    
+    FEnd transl_stmt.
+    
+    FInduction transl_stmt_correct. 
+    FProof.
+    + apply cheat.    
+    Qed. FEnd transl_stmt_correct.
+  FEnd RemovePredecr.
+
+  Family RemovePostdecr extends RemovePredecr.
+    Family Source extends ImpEpostdecr.
+    FEnd Source.
+
+    Family Target extends Implight.
+    FEnd Target.
+  
+    FRecursion transl_stmt. 
+    Case Spostdecr := (fun id =>
+        OK (Target.Sset id 
+              (Target.Ebinop Osub 
+                 (Target.Evar id) 
+                 (Target.Econst (Ointconst Int.one))))). (* id := id - 1 *)    
+    FEnd transl_stmt.
+
+    FInduction transl_stmt_correct. 
+    FProof.
+    + apply cheat.    
+    Qed. FEnd transl_stmt_correct.
+  FEnd RemovePostdecr.  
+
+  Family RemoveAssignop extends RemovePostdecr.
+    Family Source extends Imp.
+    FEnd Source.
+
+    Family Target extends Implight.
     FEnd Target.
 
     FRecursion transl_stmt.
-    Case Sassignop := fun op id e =>
+    Case Sassignop := (fun op id e =>
       do te <- transl_expr e; (* Translate the expression e *)
       OK (Target.Sseq
             (Target.Sset id 
                (Target.Ebinop op 
                   (Target.Evar id) te)) (* id := id op te *)
-            Target.Sskip).
+            Target.Sskip)).
     FEnd transl_stmt.
 
     FInduction transl_stmt_correct. 
-    + apply cheat.
-    FEnd transl_stmt_correct.
-  FEnd RemoveAssign.
+    FProof.
+     + apply cheat.
+    Qed. FEnd transl_stmt_correct.
+  FEnd RemoveAssignop.
 
-  Family RemovePostdecr extends Basetransl.
-    Family Soucre extends ImpEpostdecr.
-    FEnd Source.
-
-    Family Target ImpEpredecr.
-    FEnd Target.
-  
-    Recursion transl_stmt. 
-    Case Spostdecr := fun id =>
-        OK (Target.Sset id 
-              (Target.Ebinop Osub 
-                 (Target.Evar id) 
-                 (Target.Econst 1))) (* id := id - 1 *)              
-    FEnd transl_stmt.
-
-    FInduction transl_stmt_correct. 
-    + apply cheat.
-    FEnd transl_stmt_correct.
-  FEnd RemovePostdecr.
-
-  Family RemovePredecr extends Basetransl.
-    Family Soucre extends ImpEpredecr.
-    FEnd Source.
-
-    Family Target ImpEpostincr.
-    FEnd Target.
-
-    Recursion transl_stmt. 
-    Case Spredecr := fun id =>
-      OK (Target.Sset id (Target.Ebinop Osub (Target.Evar id) (Target.Econst 1))). (* id := id - 1 *)
-    FEnd transl_stmt.
-    
-    FInduction transl_stmt_correct. 
-    + apply cheat.
-    FEnd transl_stmt_correct.
-  FEnd RemovePredecr.
-
-  Family RemovePostincr extends Basetransl.
-    Family Soucre extends ImpEpostincr.
-    FEnd Source.
-
-    Family Target ImpEpreincr.
-    FEnd Target.
-
-    Recursion transl_stmt.    
-    Case Spostincr := fun id =>
-      OK (Target.Sseq
-            (Target.Sset id (Target.Ebinop Oadd (Target.Evar id) (Target.Econst 1))) (* id := id + 1 *)
-            Target.Sskip). (* Skip as a no-op for the post-increment *)
-    FEnd transl_stmt.
-
-    FInduction transl_stmt_correct. 
-    + apply cheat.
-    FEnd transl_stmt_correct.
-  FEnd RemovePostincr.
-
-  Family RemovePreincr extends Basetransl.
-    Family Soucre extends ImpEpreincr.
-    FEnd Source.
-
-    Family Target Implight.
-    FEnd Target.
-
-    Recursion transl_stmt.    
-    Case Spreincr := fun id =>
-      OK (Target.Sset id (Target.Ebinop Oadd (Target.Evar id) (Target.Econst 1))). (* id := id + 1 *)
-    FEnd transl_stmt.
-
-    FInduction transl_stmt_correct. 
-    + apply cheat.
-    FEnd transl_stmt_correct.
-  FEnd RemovePreincr.    
-
-  (* Need to compose these new passes with the old passes
-     somehow with late binding? *)
-  (*Family CompilerPasses extends RemoveAssign, RemovePostincr, RemovePreincr.              
-  FEnd CompilerPasses. *)
+  Family SimplExpr extends RemoveAssignop.
+  FEnd SimplExpr.
 FEnd ArithExt.
-
+(*
 
 (* structured control flow *)
 Family Scf .
@@ -606,3 +621,4 @@ FEnd SwitchExt.
 (* Array programming extension *)
 Family ArrayExt extends Base.
 FEnd ArrayExt.
+*)
