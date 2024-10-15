@@ -481,16 +481,12 @@ Family ArithExt extends BaseExt.
       OK (Target.Sset id 
             (Target.Ebinop Osub 
                (Target.Evar id) 
-               (Target.Econst (Ointconst Int.one))))). (* id := id - 1 *)
-    Case Spreincr := (fun id => OK (Target.Spreincr id)).
-    Case Spostincr := (fun id => OK (Target.Spostincr id)).    
+               (Target.Econst (Ointconst Int.one))))). (* id := id - 1 *)    
     FEnd transl_stmt.
     
     FInduction transl_stmt_correct. 
     FProof.
-    + apply cheat.
-    + apply cheat.
-    + apply cheat.
+    + apply cheat.    
     Qed. FEnd transl_stmt_correct.
   FEnd RemovePredecr.
 
@@ -506,18 +502,12 @@ Family ArithExt extends BaseExt.
         OK (Target.Sset id 
               (Target.Ebinop Osub 
                  (Target.Evar id) 
-                 (Target.Econst (Ointconst Int.one))))). (* id := id - 1 *)              
-    Case Spreincr := (fun id => OK (Target.Spreincr id)).
-    Case Spostincr := (fun id => OK (Target.Spostincr id)).
-    Case Spredecr := (fun id => OK (Target.Spredecr id)).
+                 (Target.Econst (Ointconst Int.one))))). (* id := id - 1 *)    
     FEnd transl_stmt.
 
     FInduction transl_stmt_correct. 
     FProof.
-    + apply cheat.
-    + apply cheat.
-    + apply cheat.
-    + apply cheat.
+    + apply cheat.    
     Qed. FEnd transl_stmt_correct.
   FEnd RemovePostdecr.  
 
@@ -535,20 +525,12 @@ Family ArithExt extends BaseExt.
             (Target.Sset id 
                (Target.Ebinop op 
                   (Target.Evar id) te)) (* id := id op te *)
-            Target.Sskip)).
-    Case Spreincr := (fun id => OK (Target.Spreincr id)).
-    Case Spostincr := (fun id => OK (Target.Spostincr id)).
-    Case Spostdecr := (fun id => OK (Target.Spostdecr id)).
-    Case Spredecr := (fun id => OK (Target.Spredecr id)).
+            Target.Sskip)).    
     FEnd transl_stmt.
 
     FInduction transl_stmt_correct. 
     FProof. 
-     + apply cheat.
-     + apply cheat.
-     + apply cheat.
-     + apply cheat.
-     + apply cheat.
+     + apply cheat.     
     Qed. FEnd transl_stmt_correct.
   FEnd RemoveAssignop.
 
