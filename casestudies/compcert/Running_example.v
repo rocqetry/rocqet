@@ -422,9 +422,106 @@ Family ArithExt extends BaseExt.
                ImpEpredecr *remove-predecr*-> 
                ImpEpostincr *remove-postincr*-> 
                ImpEpreincr *remove-preincr*->
-               Implight *)
+               Implight *)    
 
-  Family RemoveAssignop extends Basetransl.
+  (* Compose nanopasses *)
+  
+  Family RemovePreincr extends Basetransl.
+    Family Source extends ImpEpreincr.
+    FEnd Source.
+
+    Family Target extends Implight.
+    FEnd Target.
+
+    FRecursion transl_stmt.    
+    Case Spreincr := (fun id =>
+      OK (Target.Sset id 
+            (Target.Ebinop Oadd 
+               (Target.Evar id) 
+               (Target.Econst (Ointconst Int.one))))). (* id := id + 1 *)
+    FEnd transl_stmt.
+
+    FInduction transl_stmt_correct. 
+    FProof.
+    + apply cheat.
+    Qed. FEnd transl_stmt_correct.
+  FEnd RemovePreincr.
+
+  Family RemovePostincr extends RemovePreincr.
+    Family Source extends ImpEpostincr.
+    FEnd Source.
+
+    Family Target extends ImpEpreincr.
+    FEnd Target.
+
+    FRecursion transl_stmt.    
+    Case Spostincr := (fun id =>
+      OK (Target.Sseq
+            (Target.Sset id 
+               (Target.Ebinop Oadd (Target.Evar id) 
+                  (Target.Econst (Ointconst Int.one)))) (* id := id + 1 *)
+            Target.Sskip)).    
+    FEnd transl_stmt.
+
+    FInduction transl_stmt_correct. 
+    FProof.
+    + apply cheat.    
+    Qed. FEnd transl_stmt_correct.
+  FEnd RemovePostincr.
+
+  Family RemovePredecr extends RemovePostincr.
+    Family Source extends ImpEpredecr.
+    FEnd Source.
+
+    Family Target extends ImpEpostincr.
+    FEnd Target.
+
+    FRecursion transl_stmt. 
+    Case Spredecr := (fun id =>
+      OK (Target.Sset id 
+            (Target.Ebinop Osub 
+               (Target.Evar id) 
+               (Target.Econst (Ointconst Int.one))))). (* id := id - 1 *)
+    Case Spreincr := (fun id => OK (Target.Spreincr id)).
+    Case Spostincr := (fun id => OK (Target.Spostincr id)).    
+    FEnd transl_stmt.
+    
+    FInduction transl_stmt_correct. 
+    FProof.
+    + apply cheat.
+    + apply cheat.
+    + apply cheat.
+    Qed. FEnd transl_stmt_correct.
+  FEnd RemovePredecr.
+
+  Family RemovePostdecr extends Removepredecr.
+    Family Source extends ImpEpostdecr.
+    FEnd Source.
+
+    Family Target extends ImpEpredecr.
+    FEnd Target.
+  
+    FRecursion transl_stmt. 
+    Case Spostdecr := (fun id =>
+        OK (Target.Sset id 
+              (Target.Ebinop Osub 
+                 (Target.Evar id) 
+                 (Target.Econst (Ointconst Int.one))))). (* id := id - 1 *)              
+    Case Spreincr := (fun id => OK (Target.Spreincr id)).
+    Case Spostincr := (fun id => OK (Target.Spostincr id)).
+    Case Spredecr := (fun id => OK (Target.Spredecr id)).
+    FEnd transl_stmt.
+
+    FInduction transl_stmt_correct. 
+    FProof.
+    + apply cheat.
+    + apply cheat.
+    + apply cheat.
+    + apply cheat.
+    Qed. FEnd transl_stmt_correct.
+  FEnd RemovePostdecr.  
+
+  Family RemoveAssignop extends RemovePostdecr.
     Family Source extends Imp.
     FEnd Source.
 
@@ -455,103 +552,8 @@ Family ArithExt extends BaseExt.
     Qed. FEnd transl_stmt_correct.
   FEnd RemoveAssignop.
 
-  Family RemovePostdecr extends Basetransl.
-    Family Source extends ImpEpostdecr.
-    FEnd Source.
-
-    Family Target extends ImpEpredecr.
-    FEnd Target.
-  
-    FRecursion transl_stmt. 
-    Case Spostdecr := (fun id =>
-        OK (Target.Sset id 
-              (Target.Ebinop Osub 
-                 (Target.Evar id) 
-                 (Target.Econst (Ointconst Int.one))))). (* id := id - 1 *)              
-    Case Spreincr := (fun id => OK (Target.Spreincr id)).
-    Case Spostincr := (fun id => OK (Target.Spostincr id)).
-    Case Spredecr := (fun id => OK (Target.Spredecr id)).
-    FEnd transl_stmt.
-
-    FInduction transl_stmt_correct. 
-    FProof.
-    + apply cheat.
-    + apply cheat.
-    + apply cheat.
-    + apply cheat.
-    Qed. FEnd transl_stmt_correct.
-  FEnd RemovePostdecr.
-
-  Family RemovePredecr extends Basetransl.
-    Family Source extends ImpEpredecr.
-    FEnd Source.
-
-    Family Target extends ImpEpostincr.
-    FEnd Target.
-
-    FRecursion transl_stmt. 
-    Case Spredecr := (fun id =>
-      OK (Target.Sset id 
-            (Target.Ebinop Osub 
-               (Target.Evar id) 
-               (Target.Econst (Ointconst Int.one))))). (* id := id - 1 *)
-    Case Spreincr := (fun id => OK (Target.Spreincr id)).
-    Case Spostincr := (fun id => OK (Target.Spostincr id)).    
-    FEnd transl_stmt.
-    
-    FInduction transl_stmt_correct. 
-    FProof.
-    + apply cheat.
-    + apply cheat.
-    + apply cheat.
-    Qed. FEnd transl_stmt_correct.
-  FEnd RemovePredecr.
-
-  Family RemovePostincr extends Basetransl.
-    Family Source extends ImpEpostincr.
-    FEnd Source.
-
-    Family Target extends ImpEpreincr.
-    FEnd Target.
-
-    FRecursion transl_stmt.    
-    Case Spostincr := (fun id =>
-      OK (Target.Sseq
-            (Target.Sset id 
-               (Target.Ebinop Oadd (Target.Evar id) 
-                  (Target.Econst (Ointconst Int.one)))) (* id := id + 1 *)
-            Target.Sskip)).
-    Case Spreincr := (fun id => OK (Target.Spreincr id)).
-    FEnd transl_stmt.
-
-    FInduction transl_stmt_correct. 
-    FProof.
-    + apply cheat.
-    + apply cheat.
-    Qed. FEnd transl_stmt_correct.
-  FEnd RemovePostincr.
-
-  Family RemovePreincr extends Basetransl.
-    Family Source extends ImpEpreincr.
-    FEnd Source.
-
-    Family Target extends Implight.
-    FEnd Target.
-
-    FRecursion transl_stmt.    
-    Case Spreincr := (fun id =>
-      OK (Target.Sset id 
-            (Target.Ebinop Oadd 
-               (Target.Evar id) 
-               (Target.Econst (Ointconst Int.one))))). (* id := id + 1 *)
-    FEnd transl_stmt.
-
-    FInduction transl_stmt_correct. 
-    FProof.
-    + apply cheat.
-    Qed. FEnd transl_stmt_correct.
-  FEnd RemovePreincr.    
-
+  (* Compose nanopasses *)  
+                                    
   (* Need to compose these new passes with the old passes
      somehow with late binding? *)
   (*Family CompilerPasses extends RemoveAssign, RemovePostincr, RemovePreincr.              
