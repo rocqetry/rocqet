@@ -962,12 +962,15 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
            In some sense, this is like shifting the parameters 
            one "unit" to the right. *)
         let shift_parameters linkage parameters = 
+          let current =
+             name |> Naming.self_version |> Libnames.qualid_of_ident
+          in
           let rec next (lst: Libnames.qualid list) (name: Libnames.qualid) = match lst with
-              | [] -> None 
+              | [] -> Some current
               | x :: rest -> 
                   if name.v = x.v then 
                     match rest with 
-                    | [] -> None 
+                    | [] -> Some current
                     | n :: _ -> Some n 
                   else next rest name
           in
@@ -975,11 +978,7 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
           | [] -> []
           | _ -> 
              let ctx_params = Linkage.context_parameters linkage in
-             let parameters = parameters |> List.filter_map (next ctx_params) in
-             let current =
-                name |> Naming.self_version |> Libnames.qualid_of_ident
-             in          
-             parameters @ [current]
+             parameters |> List.filter_map (next ctx_params)             
         in 
         let reparam, parameters =          
           let parameters = 
