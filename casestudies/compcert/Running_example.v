@@ -451,7 +451,7 @@ Family ArithExt extends BaseExt.
     Family Source extends ImpEpostincr.
     FEnd Source.
 
-    Family Target extends ImpEpreincr.
+    Family Target extends Implight.
     FEnd Target.
 
     FRecursion transl_stmt.    
@@ -460,7 +460,7 @@ Family ArithExt extends BaseExt.
             (Target.Sset id 
                (Target.Ebinop Oadd (Target.Evar id) 
                   (Target.Econst (Ointconst Int.one)))) (* id := id + 1 *)
-            Target.Sskip)).    
+            Target.Sskip)).
     FEnd transl_stmt.
 
     FInduction transl_stmt_correct. 
@@ -473,7 +473,7 @@ Family ArithExt extends BaseExt.
     Family Source extends ImpEpredecr.
     FEnd Source.
 
-    Family Target extends ImpEpostincr.
+    Family Target extends Implight.
     FEnd Target.
 
     FRecursion transl_stmt. 
@@ -490,11 +490,11 @@ Family ArithExt extends BaseExt.
     Qed. FEnd transl_stmt_correct.
   FEnd RemovePredecr.
 
-  Family RemovePostdecr extends Removepredecr.
+  Family RemovePostdecr extends RemovePredecr.
     Family Source extends ImpEpostdecr.
     FEnd Source.
 
-    Family Target extends ImpEpredecr.
+    Family Target extends Implight.
     FEnd Target.
   
     FRecursion transl_stmt. 
@@ -515,7 +515,7 @@ Family ArithExt extends BaseExt.
     Family Source extends Imp.
     FEnd Source.
 
-    Family Target extends ImpEpostdecr.
+    Family Target extends Implight.
     FEnd Target.
 
     FRecursion transl_stmt.
@@ -525,21 +525,18 @@ Family ArithExt extends BaseExt.
             (Target.Sset id 
                (Target.Ebinop op 
                   (Target.Evar id) te)) (* id := id op te *)
-            Target.Sskip)).    
+            Target.Sskip)).
     FEnd transl_stmt.
 
     FInduction transl_stmt_correct. 
-    FProof. 
-     + apply cheat.     
+    FProof.
+     + apply cheat.
     Qed. FEnd transl_stmt_correct.
   FEnd RemoveAssignop.
 
-  (* Compose nanopasses *)  
-                                    
-  (* Need to compose these new passes with the old passes
-     somehow with late binding? *)
-  (*Family CompilerPasses extends RemoveAssign, RemovePostincr, RemovePreincr.              
-  FEnd CompilerPasses. *)
+  Family SimplExpr extends RemoveAssignop.
+  FEnd SimplExpr.
+                                            
 FEnd ArithExt.
 (*
 
