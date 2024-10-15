@@ -25,7 +25,7 @@ let rec linkage_concatenate ~(derived : Linkage.t) ~(base : Linkage.t) =
       | Snoc (fields, _) -> find_field fields
     in
     match find_field linkage.fields with
-    | true -> linkage        
+    | true -> linkage
     | false ->
         (* Note that we're not doing anything with late binding *)
         let fields = Snoc (linkage.fields, (name, element)) in
@@ -97,6 +97,8 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t) ~(base : LinkageEl
   | FieldDefinition derived, FieldDefinition _ -> FieldDefinition derived
   | OpaqueFieldDefinition derived, OpaqueFieldDefinition _ ->
       OpaqueFieldDefinition derived
+  (* Overriding *)
+  | FieldDefinition derived, OpaqueFieldDefinition _ -> FieldDefinition derived
   | RecursorDefinition derived, RecursorDefinition base ->
       let names = remove_duplicates (base.names @ derived.names) in
       let handlers = remove_duplicates (base.handlers @ derived.handlers) in
