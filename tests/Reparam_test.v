@@ -1,6 +1,5 @@
 From NFPOP Require Import Loader.
 
-
 Family Imp. 
    MetaData intsize.
      Inductive intsize : Type :=
@@ -11,6 +10,10 @@ Family Imp.
    FEnd intsize.
 
   Family CminorVariant.
+    FDefinition Ofoo := 10.
+    (*FInductive constantk : Type :=
+       | Ointconstk: (*int ->*) constantk. *)
+
     FInductive constant : Type :=
        | Ointconst: (*int ->*) constant 
        | Ofloatconst: (*float ->*) constant 
