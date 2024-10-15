@@ -954,19 +954,39 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         let open B in
         let qualify name =
           [ name; Names.Id.of_string "Ctx" ] |> Naming.list_to_path
-        in
+        in        
         (* Adjust parameters. Basically we're removing the "first" self 
            because the context for a family will be nested as the 
            first thing itself, so we need to access it with the name 
            of the current family, not the upper family. 
            In some sense, this is like shifting the parameters 
            one "unit" to the right. *)
-        let reparam, parameters =
+        let shift_parameters linkage parameters = 
+          let rec next (lst: Libnames.qualid list) (name: Libnames.qualid) = match lst with
+              | [] -> None 
+              | x :: rest -> 
+                  if name.v = x.v then 
+                    match rest with 
+                    | [] -> None 
+                    | n :: _ -> Some n 
+                  else next rest name
+          in
+          match parameters with 
+          | [] -> []
+          | _ -> 
+             let ctx_params = Linkage.context_parameters linkage in
+             let parameters = parameters |> List.filter_map (next ctx_params) in
+             let current =
+                name |> Naming.self_version |> Libnames.qualid_of_ident
+             in          
+             parameters @ [current]
+        in 
+        let reparam, parameters =          
           let parameters = 
             normalize_parameters 
               ~default_ctx_params 
               ~parameters:(Linkage.context_parameters linkage) 
-          in          
+          in                    
           (* We shouldn't shift "Reparam" parameters *)
           (* REPARAM; REPARAM; self__Imp *)          
           let reparam, parameters = 
@@ -974,22 +994,17 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
             |> List.partition (fun id -> 
                  let n = id |> Naming.path_to_list |> List.hd |> Names.Id.to_string in 
                  String.starts_with n ~prefix:"Reparam")            
-          in
-          match parameters with
-          | [] -> [], []
-          | _ :: l ->              
-              let current =
-                name |> Naming.self_version |> Libnames.qualid_of_ident
-              in
-              reparam, l @ [ current ]
-        in        
+          in          
+          let parameters = shift_parameters linkage parameters in          
+          reparam, parameters          
+        in                
         let parameters =
           parameters
           |> List.map (fun parameter ->
                  parameter |> Naming.path_to_list |> List.hd
                  |> Naming.un_self_version |> qualify)
-        in
-        let parameters = reparam @ parameters in
+        in        
+        let parameters = reparam @ parameters in        
         let* _ = compile_fields fields ctx in
         let module_expr = Termutils.ident_to_module_expr compiled_impl in
         let module_expr =
