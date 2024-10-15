@@ -954,12 +954,7 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         let open B in
         let qualify name =
           [ name; Names.Id.of_string "Ctx" ] |> Naming.list_to_path
-        in
-        Printf.printf "Compiling: %s\n" (Pretty.pretty_qualid compiled_impl);
-        default_ctx_params 
-        |> List.iter (fun (n, t) -> 
-               Printf.printf "DCP: (%s, %s)\n" 
-                 (Names.Id.to_string n) (Pretty.pretty_qualid t) );
+        in        
         (* Adjust parameters. Basically we're removing the "first" self 
            because the context for a family will be nested as the 
            first thing itself, so we need to access it with the name 
@@ -986,14 +981,12 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
              in          
              parameters @ [current]
         in 
-        let reparam, parameters =
-          (Linkage.context_parameters linkage) |> List.iter (fun n -> Printf.printf "Before normalization: %s\n" (Pretty.pretty_qualid n) );
+        let reparam, parameters =          
           let parameters = 
             normalize_parameters 
               ~default_ctx_params 
               ~parameters:(Linkage.context_parameters linkage) 
-          in          
-          parameters |> List.iter (fun n -> Printf.printf "After normalization: %s\n" (Pretty.pretty_qualid n) );
+          in                    
           (* We shouldn't shift "Reparam" parameters *)
           (* REPARAM; REPARAM; self__Imp *)          
           let reparam, parameters = 
@@ -1001,40 +994,16 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
             |> List.partition (fun id -> 
                  let n = id |> Naming.path_to_list |> List.hd |> Names.Id.to_string in 
                  String.starts_with n ~prefix:"Reparam")            
-          in
-          parameters |> List.iter (fun n -> Printf.printf "Before shifting: %s\n" (Pretty.pretty_qualid n) );          
-          let parameters = shift_parameters linkage parameters in
-          parameters |> List.iter (fun n -> Printf.printf "After shifting: %s\n" (Pretty.pretty_qualid n) );
-          reparam, parameters
-          (*match parameters with
-          | [] -> [], []
-          (*| [x] ->
-             Printf.printf "Linkage Name: %s\n" (Names.Id.to_string linkage.name);
-             let ps = Linkage.context_parameters linkage in
-             ps |> List.iter (fun n -> Printf.printf "Param: %s\n" (Pretty.pretty_qualid n) );
-             (* failwith "" |> ignore;*)
-             reparam, [x]*)
-          | _ :: l ->              
-             Printf.printf "Linkage Name: %s\n" (Names.Id.to_string linkage.name);
-             let ps = Linkage.context_parameters linkage in
-             ps |> List.iter (fun n -> Printf.printf "Ps: %s\n" (Pretty.pretty_qualid n) );
-             
-             parameters |> List.iter (fun n -> Printf.printf "Parameters: %s\n" (Pretty.pretty_qualid n) );
-             l |> List.iter (fun n -> Printf.printf "L: %s\n" (Pretty.pretty_qualid n) );
-             reparam |> List.iter (fun n -> Printf.printf "Reparam: %s\n" (Pretty.pretty_qualid n) );
-             
-             let current =
-                name |> Naming.self_version |> Libnames.qualid_of_ident
-             in
-             reparam, l @ [ current ]*)
+          in          
+          let parameters = shift_parameters linkage parameters in          
+          reparam, parameters          
         in                
         let parameters =
           parameters
           |> List.map (fun parameter ->
                  parameter |> Naming.path_to_list |> List.hd
                  |> Naming.un_self_version |> qualify)
-        in
-        parameters |> List.iter (fun n -> Printf.printf "Final Parameters: %s\n" (Pretty.pretty_qualid n) );
+        in        
         let parameters = reparam @ parameters in        
         let* _ = compile_fields fields ctx in
         let module_expr = Termutils.ident_to_module_expr compiled_impl in
