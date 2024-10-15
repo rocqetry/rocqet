@@ -536,7 +536,6 @@ Family ArithExt extends BaseExt.
 
   Family SimplExpr extends RemoveAssignop.
   FEnd SimplExpr.
-                                            
 FEnd ArithExt.
 (*
 
