@@ -595,6 +595,8 @@ Family ArithExt extends BaseExt.
   (* We reap the benefit of a modular nanopass style compiler, but 
       also don't loose any performance overhead due to chaining
       compiler passes. This essentially fuses the nanopasses. *)
+  (* By fusing these passes together, we should be able to recover 
+     the compilation speed of CompCert while retaining modularity. *)
   (* I belive this is very similar to: https://dl.acm.org/doi/10.1145/3140587.3062346 *)
   Family SimplExpr extends RemoveAssignop.
   FEnd SimplExpr.
