@@ -263,13 +263,13 @@ Family BaseExt.
              Target.eval_expr te le ta v).
   FProof.
   (* Evar *)
-  + intros. fsimpl in TR. monadInv TR. eapply self__Basetransl.Target.eval_Evar; eauto.
+  + intros. fsimpl in TR. monadInv TR. fconstructor. 
   (* Econst *)
-  +  intros. fsimpl in TR. monadInv TR. eapply self__Basetransl.Target.eval_Econst; eauto.
+  +  intros. fsimpl in TR. monadInv TR. fconstructor.
   (* Eunop *)
-  + intros. fsimpl in TR.  monadInv TR.  eapply self__Basetransl.Target.eval_Eunop; eauto.
+  + intros. fsimpl in TR.  monadInv TR. fconstructor.
   (* Ebinop *)
-  + intros. fsimpl in TR.  monadInv TR.  eapply self__Basetransl.Target.eval_Ebinop; eauto.
+  + intros. fsimpl in TR.  monadInv TR. fconstructor.
   Qed. FEnd transl_expr_correct.
 
   FInduction match_cont_seq_commutes about match_cont motive 
