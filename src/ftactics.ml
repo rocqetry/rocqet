@@ -302,9 +302,10 @@ let fsimpl_in h =
     Tacticals.tclTHEN rewrites unfolds
   end
 
-(* fsimpl in H *)
-(* fsimpl in * *)
+let fconstructor () =
+  Proofview.Goal.enter begin fun _gl ->    
+    Tacticals.tclIDTAC
+  end 
 
 (* finjection *)
 (* fdiscriminate *)
-(* fconstructor *)
