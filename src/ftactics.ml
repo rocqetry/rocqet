@@ -302,9 +302,98 @@ let fsimpl_in h =
     Tacticals.tclTHEN rewrites unfolds
   end
 
+let extract_constructors names = 
+  let context = Env.Context.get () in
+  names  
+  |> List.filter_map (fun name -> 
+        if Naming.is_self_qualid name 
+        then
+           name 
+           |> Naming.remove_self_qualid
+           |> Env.Context.lookup_linkage_elem context 
+           |> Option.map fst
+           |> Option.map (function 
+              | LinkageElem.InductiveDefinition { inductive; _} -> 
+                 let constructors = 
+                    inductive
+                    |> List.hd
+                    |> fst
+                    |> VernacInductive.extract_type_and_cstrs
+                    |> snd 
+                    |> List.map fst
+                 in
+                 let prefix = 
+                   name 
+                   |> Naming.remove_self_qualid 
+                   |> Naming.path_to_list 
+                   |> List.rev 
+                   |> List.tl 
+                   |> List.rev 
+                   |> Naming.list_to_path
+                 in
+                 let qualify name = 
+                   let qualid = Naming.qualid_point (Some prefix) name in 
+                   Resolver.resolve_qualid ~context ~qualid
+                 in
+                 let constructors = constructors |> List.map qualify in 
+                 Some constructors
+              | _ -> None)                      
+           |> Option.flatten
+        else None)  
+
+let generate_apply apply_cases = 
+   let open Ltac_plugin in 
+   let apply = "__fconstructor" in
+   let each_rewrite_tactic (each_eq : Libnames.qualid) = 
+     let each_eq =
+       (Tacexpr.TacCall
+          (CAst.make
+             ( each_eq,
+               [] )))      
+     in
+     let tactic = 
+        CAst.make
+        (Tacexpr.TacArg
+           (Tacexpr.TacCall
+              (CAst.make
+                 ( Libnames.qualid_of_ident
+                     (Names.Id.of_string apply),
+                   [ each_eq ] ))))
+     in 
+     Tacinterp.interp tactic
+   in 
+   let all_apply_tactics = List.map each_rewrite_tactic apply_cases in       
+   let union = 
+     List.fold_right (fun l r -> Tacticals.tclOR l r) all_apply_tactics 
+       (Tacticals.tclFAIL (Pp.str "No constructor found"))
+   in
+   union
+
+(* eapply constructor; eauto; *)
 let fconstructor () =
-  Proofview.Goal.enter begin fun _gl ->    
-    Tacticals.tclIDTAC
+  Proofview.Goal.enter begin fun gl ->    
+    let goal = Proofview.Goal.concl gl in
+    let env = Proofview.Goal.env gl in     
+    let evar_map = Evd.from_env env in
+
+    let names = Termutils.constants_in_econstr evar_map goal in 
+    
+    let constructors = names |> extract_constructors |> List.concat in 
+    let tactics = generate_apply constructors in
+    
+    let feedback = 
+      constructors 
+      |> List.map Pretty.pretty_qualid
+      |> String.concat "\n"                             
+      |> Pp.str                              
+    in 
+        
+    let goal_string = Printer.pr_econstr_env env evar_map goal in 
+    Feedback.msg_info goal_string;
+
+    Feedback.msg_info feedback;
+    
+    tactics
   end 
 
 (* finjection *)
