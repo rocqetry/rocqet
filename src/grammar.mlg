@@ -173,3 +173,7 @@ TACTIC EXTEND fsimpl
 | [ "fsimpl" "in" "*" ] -> { Ftactics.fsimpl_star () }
 | [ "fsimpl" ] -> { Ftactics.fsimpl () }
 END
+
+TACTIC EXTEND fconstructor
+| [ "fconstructor" ] -> { Ftactics.fconstructor () }
+END
