@@ -48,6 +48,8 @@ Ltac __funfold_star f := unfold f in *.
 
 Ltac __frewrite_in f H := try (rewrite f in H).
 
+Ltac __fconstructor H := (eapply H; eauto).
+
 Ltac split_cases_into_goals :=
   match goal with
   | [ |- ?a /\ ?b ] => 
