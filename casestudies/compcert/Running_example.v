@@ -594,7 +594,7 @@ Family ArithExt extends BaseExt.
      in a single pass (as if they were defined at once).  *)
   (* We reap the benefit of a modular nanopass style compiler, but 
       also don't loose any performance overhead due to chaining
-      compiler passes *)
+      compiler passes. This essentially fuses the nanopasses. *)
   (* I belive this is very similar to: https://dl.acm.org/doi/10.1145/3140587.3062346 *)
   Family SimplExpr extends RemoveAssignop.
   FEnd SimplExpr.
