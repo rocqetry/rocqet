@@ -12,6 +12,7 @@ From NFPOP Require Import Smallstep.
 From NFPOP Require Import Events.
 From NFPOP Require Import Maps.
 From NFPOP Require Import Linking.
+From NFPOP Require Import Ctypes.
 Require Import FSets.
 Require Import FSetAVL.
 Require Import Orders.
@@ -39,52 +40,9 @@ End VarOrder.
 Module VarSort := Mergesort.Sort(VarOrder).
 
 
-Family Imp.     
-  MetaData type.
-  Inductive intsize : Type :=
-  | I8: intsize
-  | I16: intsize
-  | I32: intsize
-  | IBool: intsize.
+Family Base.
 
-  
-Inductive signedness : Type :=
-  | Signed: signedness
-  | Unsigned: signedness. 
-
-Inductive bitfield : Type :=
-  | Full
-  | Bits (sz: intsize) (sg: signedness) (pos: Z) (width: Z).
-
-
-   Record attr : Type := mk_attr {
-   attr_volatile: bool;
-   attr_alignas: option N(* log2 of required alignment *)
-   }.
-
-   Definition noattr := {| attr_volatile := false; attr_alignas := None |}.
-     
-  Inductive type : Type :=
-      | Tvoid: type(* the void type *)
-      | Tint: intsize -> signedness -> attr -> type(* integer types *)
-      | Tlong: signedness -> attr -> type(* 64-bit integer types *)      
-      | Tpointer: type -> attr -> type(* pointer types ty *)      
-      | Tfunction: typelist -> type -> calling_convention -> type(* function types *)      
-   with typelist : Type :=
-      | Tnil: typelist
-      | Tcons: type -> typelist -> typelist.  
-  
-  Definition type_int32s := Tint I32 Signed noattr.
-  Definition type_bool := Tint IBool Signed noattr.
-
-  Fixpoint type_of_params (params: list (ident * type)) : typelist :=
-  match params with
-  | nil => Tnil
-  | (id, ty) :: rem => Tcons ty (type_of_params rem)
-  end.
-  FEnd type.
-
-  (* C family languages *)
+  (* C family languages: Csharpminor, Cminor, CminorSel *)
   Family Cfam.
        FInductive constant : Type :=
            | Ointconst: int -> constant (* integer constant *)
@@ -98,16 +56,10 @@ Inductive bitfield : Type :=
 
        FDefinition label := ident.
        FInductive stmt : Type :=
-            | Sskip: stmt
-            | Sset : ident -> expr -> stmt            
-            | Sseq: stmt -> stmt -> stmt
-            | Sifthenelse: expr -> stmt -> stmt -> stmt
-            | Sloop: stmt -> stmt
-            | Sblock: stmt -> stmt
-            | Sexit: nat -> stmt            
-            | Sreturn: option expr -> stmt
-            | Slabel: label -> stmt -> stmt
-            | Sgoto: label -> stmt.
+          | Sskip: stmt
+          | Sset : ident -> expr -> stmt            
+          | Sseq: stmt -> stmt -> stmt                    
+          | Sreturn: option expr -> stmt.
        
        FOpaque Definition function : Type := cheat.
        FOpaque Definition function_body : function -> stmt := cheat.
@@ -121,7 +73,7 @@ Inductive bitfield : Type :=
        FDefinition funsig := fun (fd: fundef) =>
          match fd with
          | Internal f => function_sig f
-         | External ef => cheat (* No external functions *)
+         | _ => cheat (* No external functions *)
          end.
               
        FDefinition genv := Genv.t fundef unit.
@@ -177,8 +129,7 @@ Inductive bitfield : Type :=
             
        FInductive cont: Type :=
           | Kstop: cont
-          | Kseq: stmt -> cont -> cont
-          | Kblock: cont -> cont.
+          | Kseq: stmt -> cont -> cont.          
                    
        MetaData state.
        Inductive state: Type :=
@@ -191,37 +142,13 @@ Inductive bitfield : Type :=
             
        FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
              Case Kstop := Kstop.
-             Case Kseq := (fun s c call_cont_c => call_cont_c).
-             Case Kblock := (fun c call_cont_c => call_cont_c).
+             Case Kseq := (fun s c call_cont_c => call_cont_c).             
        FEnd call_cont.
                
        FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
            Case Kstop := True.                   
-           Case Kseq := (fun s c call_cont_c => False).
-           Case Kblock := (fun c call_cont_c => False).
+           Case Kseq := (fun s c call_cont_c => False).           
        FEnd is_call_cont.
-            
-       FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect. 
-           Case Sskip := (fun lbl k => None).
-           Case Sset := (fun id e lbl k => None).
-           Case Sseq := (fun s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
-                                    match find_label_s1 lbl (Kseq s2 k) with 
-                                    | Some sk => Some sk 
-                                    | None => find_label_s2 lbl k end).
-           Case Sifthenelse := (fun e s1 find_label_s1 s2 find_label_s2 => fun lbl k => 
-                                    match find_label_s1 lbl k with 
-                                    | Some sk => Some sk 
-                                    | None => find_label_s2 lbl k end).
-           Case Sloop := (fun s1 find_label_s1 => fun lbl k => 
-                                    find_label_s1 lbl (Kseq (Sloop s1) k)).                                         
-           Case Sblock := (fun s1 find_label_s1 => fun lbl k => find_label_s1 lbl (Kblock k)).
-           Case Sexit := (fun n lbl k => None).
-           Case Sreturn := (fun _ lbl k => None).
-           Case Slabel := (fun lbl' s find_label_s => fun lbl k => 
-                                  if ident_eq lbl lbl' then 
-                                  Some(s, k) else find_label_s lbl k).
-           Case Sgoto := (fun label lbl k => None).
-       FEnd find_label.
                
        FRecursion eval_constant about constant motive (fun (_ : constant) => option val) by _rect.
          Case Ointconst := (fun n => Some (Vint n)). 
@@ -241,10 +168,7 @@ Inductive bitfield : Type :=
        FInductive step : genv -> state -> trace -> state -> Prop :=
               | step_skip_seq: forall ge f s k e le m,
                   step ge (self__Cfam.State f Sskip (Kseq s k) e le m)
-                    E0 (self__Cfam.State f s k e le m)
-              | step_skip_block: forall ge f k e le m,
-                  step ge (self__Cfam.State f Sskip (Kblock k) e le m)
-                    E0 (self__Cfam.State f Sskip k e le m)
+                    E0 (self__Cfam.State f s k e le m)              
               | step_skip_call: forall ge f k e le m m',
                   is_call_cont k ->                       
                   free_fenv m e f = Some m' ->
@@ -256,18 +180,7 @@ Inductive bitfield : Type :=
                     E0 (self__Cfam.State f Sskip k e (PTree.set id v le) m)
               | step_seq: forall ge f s1 s2 k e le m,
                   step ge (self__Cfam.State f (Sseq s1 s2) k e le m)
-                    E0 (self__Cfam.State f s1 (Kseq s2 k) e le m)
-              | step_ifthenelse: forall ge f a s1 s2 k e le m v b,
-                  eval_expr e le m a v ->
-                  Val.bool_of_val v b ->
-                  step ge (self__Cfam.State f (Sifthenelse a s1 s2) k e le m)
-                    E0 (self__Cfam.State f (if b then s1 else s2) k e le m)
-              | step_loop: forall ge f s k e le m,
-                  step ge (self__Cfam.State f (Sloop s) k e le m)
-                    E0 (self__Cfam.State f s (Kseq (Sloop s) k) e le m)        
-              | step_block: forall ge f s k e le m,
-                  step ge (self__Cfam.State f (Sblock s) k e le m)
-                    E0 (self__Cfam.State f s (Kblock k) e le m)
+                    E0 (self__Cfam.State f s1 (Kseq s2 k) e le m)              
               | step_return_0: forall ge f k e le m m',                       
                   free_fenv m e f = Some m' ->
                   step ge (self__Cfam.State f (Sreturn None) k e le m)
@@ -276,14 +189,7 @@ Inductive bitfield : Type :=
                   eval_expr e le m a v ->
                   free_fenv m e f = Some m' ->
                   step ge (self__Cfam.State f (Sreturn (Some a)) k e le m)
-                    E0 (self__Cfam.Returnstate v (call_cont k) m')            
-              | step_label: forall ge f lbl s k e le m,
-                  step ge (self__Cfam.State f (Slabel lbl s) k e le m)
-                    E0 (self__Cfam.State f s k e le m)
-              | step_goto: forall ge f lbl k e le m s' k',
-                  find_label (function_body f) lbl (call_cont k) = Some(s', k') ->
-                  step ge (self__Cfam.State f (Sgoto lbl) k e le m)
-                    E0 (self__Cfam.State f s' k' e le m)
+                    E0 (self__Cfam.Returnstate v (call_cont k) m')
               | step_internal_function: forall ge f vargs k m m1 e le,                                               
                   alloc_fenv empty_fenv m f e m1 ->
                   init_env f vargs = le ->                        
@@ -336,14 +242,7 @@ Inductive bitfield : Type :=
                                    do te <- transl_expr e;
                                    do ts1 <- transl_stmt_s1;
                                    do ts2 <- transl_stmt_s2;
-                                   OK (Target.Sifthenelse te ts1 ts2)).
-          Case Sloop := (fun s1 transl_stmt_s1 =>
-                            do ts <- transl_stmt_s1;
-                            OK (Target.Sloop ts)).
-          Case Sblock := (fun s transl_stmt_s =>
-                             do ts <- transl_stmt_s;
-                             OK (Target.Sblock ts)).
-          Case Sexit := (fun n => OK (Target.Sexit n)).
+                                   OK (Target.Sifthenelse te ts1 ts2)).          
           Case Sreturn := (fun expr =>
                              match expr with
                              | None => OK (Target.Sreturn None)
@@ -351,10 +250,6 @@ Inductive bitfield : Type :=
                                   do te <- transl_expr expr;
                                   OK (Target.Sreturn (Some te))
                              end).
-          Case Slabel := (fun lbl s transl_stmt_s =>                          
-                            do ts <- transl_stmt_s;
-                            OK (Target.Slabel lbl ts)).
-          Case Sgoto := (fun lbl => OK (Target.Sgoto lbl)).
       FEnd transl_stmt.
       
       FOpaque Definition transl_function : Source.function -> res Target.function :=
@@ -512,55 +407,7 @@ Inductive bitfield : Type :=
 
       (* Kblock *)
       + apply cheat.
-      Qed. FEnd match_is_call_cont.                                 
-      
-      (* Find label *)
-      FInduction transl_find_label about Source.stmt motive
-         (fun (s : Source.stmt) => forall k ts tk lbl,
-              transl_stmt s = OK ts -> 
-              match_cont k tk -> 
-              match Source.find_label s lbl k with
-              | None => Target.find_label ts lbl tk = None
-              | Some(s', k') =>
-                  exists ts', exists tk',
-                    Target.find_label ts lbl tk = Some(ts', tk')
-                 /\ transl_stmt s' = OK ts'
-                 /\ match_cont k' tk'
-              end).
-      FProof.
-      (* Skip *)
-      + apply cheat.
-      (* Set *)
-      + apply cheat.
-      (* Seq *)
-      + apply cheat.
-      (* Sifthenelse *)
-      + apply cheat.
-      (* Sloop *)
-      + apply cheat.
-      (* Sblock *)
-      + apply cheat.
-      (* Sexit *)
-      + apply cheat.
-       (* Sreturn *)
-      + apply cheat.
-       (* Slabel *)
-      + apply cheat.
-       (* Sgoto *)
-      + apply cheat.
-      Qed. FEnd transl_find_label.
-       
-      FLemma transl_find_label_body:
-         forall f tf k tk lbl s' k',
-         transl_function f = OK tf ->
-         match_cont k tk ->
-         Source.find_label (Source.function_body f) lbl (Source.call_cont k) = Some (s', k') ->
-         exists ts', exists tk',
-            Target.find_label (Target.function_body tf) lbl (Target.call_cont tk) = Some(ts', tk')
-         /\ transl_stmt s' = OK ts'
-         /\ match_cont k' tk'.
-      FProofLemma.
-      Admitted. CloseFLemma.
+      Qed. FEnd match_is_call_cont.
 
       FLemma bool_of_val_match:
          forall f v tv b,
@@ -604,26 +451,7 @@ Inductive bitfield : Type :=
             apply cheat. (* prove TR again?? *)
             apply MINJ.
             apply MCS.
-            apply cheat. (* This is in a way a consequence of the call_cont theorem above *)
-            
-          (* skip block *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f k e le m prog tprog tge H G.
-            intros T1 MSTATE. inv MSTATE.
-            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSskip in TR.
-            monadInv TR.
-            left. econstructor. split. apply plus_one. 
-            (* Same as above, we need to show the cont is a Kblock *)
-            apply (*self__Cfamtransl.Target.step_skip_block*) cheat.
-            eapply self__Cfamtransl.match_state.
-            apply TRF.
-            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq.
-            unfold self__Cfamtransl.transl_stmtSskip.
-            reflexivity.
-            apply MINJ.
-            apply MCS.
-            apply cheat. (* call_cont *)
+            apply cheat. (* This is in a way a consequence of the call_cont theorem above *)                      
 
           (* skip call *)
           + unfold self__Cfamtransl.__motiveTtransl_step_correct.
@@ -683,37 +511,7 @@ Inductive bitfield : Type :=
             eapply self__Cfamtransl.Target.step_ifthenelse; eauto.
             eapply self__Cfamtransl.bool_of_val_match; eauto.
             eapply self__Cfamtransl.match_state; eauto.
-            destruct b; eauto.
-                        
-          (* loop *)
-          + 
-            unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f s k e le m prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.            
-            rewrite -> self__Cfamtransl.transl_stmt_Sloop_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSloop in TR.            
-            monadInv TR. 
-            left. econstructor. split. apply plus_one. 
-            apply self__Cfamtransl.Target.step_loop.            
-            eapply self__Cfamtransl.match_state; eauto.            
-            - apply self__Cfamtransl.match_Kseq.  
-           rewrite -> self__Cfamtransl.transl_stmt_Sloop_eq.
-            unfold self__Cfamtransl.transl_stmtSloop. 
-            (* (do ts <- self__Cfamtransl.transl_stmt s; OK (self__Cfamtransl.Target.Sloop ts)) =
-                OK (self__Cfamtransl.Target.Sloop x) *)
-            apply cheat. apply MK.     
-            
-          (* block *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f s k e le m prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE. 
-            rewrite -> self__Cfamtransl.transl_stmt_Sblock_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSblock in TR.
-            monadInv TR. 
-            left. econstructor. split. apply plus_one. 
-            apply self__Cfamtransl.Target.step_block.
-            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).
-            apply TRF. apply EQ. apply MINJ. apply MCS. apply self__Cfamtransl.match_Kblock.  apply MK.
+            destruct b; eauto.                                  
             
           (* return none *)
           + 
@@ -742,32 +540,6 @@ Inductive bitfield : Type :=
             eapply self__Cfamtransl.Target.step_return_1; eauto.
             eapply self__Cfamtransl.match_returnstate; eauto.
             eapply self__Cfamtransl.match_call_cont.
-
-          (* label *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f lbl s k e le m prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE. 
-            rewrite -> self__Cfamtransl.transl_stmt_Slabel_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSlabel in TR.
-            monadInv TR.
-            left. econstructor. split. apply plus_one. 
-            apply self__Cfamtransl.Target.step_label.
-            eapply self__Cfamtransl.match_state; eauto.            
-            
-          (* goto *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f lbl k e le m s' k' FL prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.
-            exploit self__Cfamtransl.transl_find_label; eauto. intros.
-            rewrite -> self__Cfamtransl.transl_stmt_Sgoto_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSgoto in TR.
-            monadInv TR.
-            exploit self__Cfamtransl.transl_find_label_body; eauto. intros [ts' [tk' [A [B C]]]].
-            (* exploit (self__Cfamtransl.transl_find_label (self__Cfamtransl.Source.function_body f)); eauto.*)            
-            left. econstructor. split. apply plus_one.
-            apply self__Cfamtransl.Target.step_goto.
-            exact A.            
-            eapply self__Cfamtransl.match_state; eauto.
                         
           (* internal function *)
           + unfold self__Cfamtransl.__motiveTtransl_step_correct.
@@ -794,7 +566,7 @@ Inductive bitfield : Type :=
      CloseFLemma.     
   FEnd Cfamtransl.
          
-  Family C extends Cfam.
+  Family C.
       
       FInductive expr : Type :=
         | Eval : val -> type -> expr (* constant *)
@@ -2109,16 +1881,7 @@ Inductive bitfield : Type :=
               eval_operation ge sp op (reglist rs args) m = Some v ->
               rs' = Locmap.set (R res) v (undef_regs (destroyed_by_op op) rs) ->
               step (State s f sp (Lop op args res :: b) rs m)
-                E0 (State s f sp b rs' m)          
-          | exec_Llabel:
-              forall s f sp lbl b rs m,
-              step (State s f sp (Llabel lbl :: b) rs m)
-                E0 (State s f sp b rs m)
-          | exec_Lgoto:
-              forall s f sp lbl b rs m b',
-              find_label lbl f.(fn_code) = Some b' ->
-              step (State s f sp (Lgoto lbl :: b) rs m)
-                E0 (State s f sp b' rs m)
+                E0 (State s f sp b rs' m)
           | exec_Lcond_true:
               forall s f sp cond args lbl b rs m rs' b',
               eval_condition cond (reglist rs args) m = Some true ->
@@ -4397,9 +4160,9 @@ Inductive bitfield : Type :=
        FDefinition add_branch (s: label) (k: code) : code :=
           if starts_with s k then k else Lgoto s :: k.
 
-       FRecursion translate_instr about LTL.instruction motive (fun (_ : LTL.instruction) -> Linear.code -> Linear.instruction).
+       FRecursion translate_instr about LTL.instruction motive (fun (_ : LTL.instruction) => Linear.code -> Linear.instruction).
           Case Lop := (fun op args res => fun k => Lop op args res).
-          Case Lgetstack := (fun sl ofs ty r => fun => Lgetstack sl ofs ty r).
+          Case Lgetstack := (fun sl ofs ty r => fun k => Lgetstack sl ofs ty r).
           Case Lsetstack := (fun r sl ofs ty => fun k => Lsetstack r sl ofs ty).
           Case Lbranch := (fun lbl => fun k => add_branch s k).
           Case Lcond := (fun cond args lbl => fun k => 
@@ -4627,4 +4390,5 @@ Inductive bitfield : Type :=
       Case Mreturn := (fun f ep k => make_epilogue f (Pj_r RA f.(Mach.fn_sig) :: k)).
     FEnd translate_instr.
    FEnd Asmgen.
-FEnd Imp.
+
+FEnd Base.

@@ -1,7 +1,6 @@
-Require Import Base.
 
-Family SwitchExt extends Base.   
-   Family C.
+Family Scfswitch extends Scfloop.
+    Family C.
       FInductive statement : Type := 
          | Sswitch : expr -> labeled_statements -> statement
       with labeled_statements : Type := (* cases of a switch *)
@@ -97,6 +96,16 @@ Family SwitchExt extends Base.
             step (State f (Sswitch a) k sp e m)
               E0 (State f (Sexit n) k sp e m)
    FEnd CminorSel.
+  
+  
+   Family SimplCswitch. 
+   FEnd SimplCswitch.
+
+   Family SimplCshmsiwtch. 
+   FEnd SimplCshmsiwtch.   
+
+   Family Selectswitch. 
+   FEnd Selectswitch.
 
    Family LTL. 
       FInductive instruction: Type :=
@@ -126,4 +135,4 @@ Family SwitchExt extends Base.
            step (State s fb sp (Ljumptable arg tbl :: c) rs m)
              E0 (State s fb sp c' rs' m).
    FEnd Lfam.
-FEnd SwitchExt.
+FEnd Scfswitch.
