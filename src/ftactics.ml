@@ -362,38 +362,22 @@ let generate_apply apply_cases =
      in 
      Tacinterp.interp tactic
    in 
-   let all_apply_tactics = List.map each_rewrite_tactic apply_cases in       
-   let union = 
-     List.fold_right (fun l r -> Tacticals.tclOR l r) all_apply_tactics 
-       (Tacticals.tclFAIL (Pp.str "No constructor found"))
-   in
-   union
+   let all_apply_tactics = List.map each_rewrite_tactic apply_cases in          
+   List.fold_right 
+     (fun l r -> Tacticals.tclOR l r) 
+     all_apply_tactics 
+     (Tacticals.tclFAIL @@ Pp.str "No constructor found")
 
-(* eapply constructor; eauto; *)
 let fconstructor () =
   Proofview.Goal.enter begin fun gl ->    
     let goal = Proofview.Goal.concl gl in
     let env = Proofview.Goal.env gl in     
     let evar_map = Evd.from_env env in
 
-    let names = Termutils.constants_in_econstr evar_map goal in 
+    let names = Termutils.constants_in_econstr evar_map goal in
     
     let constructors = names |> extract_constructors |> List.concat in 
-    let tactics = generate_apply constructors in
-    
-    let feedback = 
-      constructors 
-      |> List.map Pretty.pretty_qualid
-      |> String.concat "\n"                             
-      |> Pp.str                              
-    in 
-        
-    let goal_string = Printer.pr_econstr_env env evar_map goal in 
-    Feedback.msg_info goal_string;
-
-    Feedback.msg_info feedback;
-    
-    tactics
+    generate_apply constructors        
   end 
 
 (* finjection *)
