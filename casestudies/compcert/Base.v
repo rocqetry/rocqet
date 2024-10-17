@@ -96,6 +96,7 @@ Inductive bitfield : Type :=
           | Evar : ident -> expr (* reading a temporary variable *)            
           | Econst : constant -> expr. (* constants *)          
 
+       
        FDefinition label := ident.
        FInductive stmt : Type :=
             | Sskip: stmt
@@ -452,7 +453,13 @@ Inductive bitfield : Type :=
                  Target.eval_expr sp te tm ta tv
               /\ match_value f v tv).
       FProof.
-        + intros. apply cheat.
+        + intros. rewrite -> self__Cfamtransl.transl_expr_Evar_eq in TR.
+          unfold self__Cfamtransl.transl_exprEvar in TR.
+          monadInv TR. exists v. split.
+          ++ eapply self__Cfamtransl.Target.eval_Evar.
+             rewrite <- e0. exploit MATCH. INJ.
+             apply cheat.
+          ++ apply self__Cfamtransl.match_value_refl.
         + intros. apply cheat.
       Qed. FEnd transl_expr_correct.
       
@@ -594,8 +601,9 @@ Inductive bitfield : Type :=
             rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq in TR.
             unfold self__Cfamtransl.transl_stmtSskip in TR.
             monadInv TR. 
-            left. econstructor. split. apply plus_one. 
-            
+            left. econstructor. split.
+            apply plus_one. 
+            ++ 
             (* We need to somehow prove that *)
             (* match_cont (self__Cfamtransl.Source.Kseq s k) tk ==> tk = Kseq s' k' *)
             apply (* self__Cfamtransl.Target.step_skip_seq*) cheat.
