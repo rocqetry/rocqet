@@ -740,40 +740,366 @@ Inductive bitfield : Type :=
        Family Source extends Csharpminor.
        FEnd Source.
 
-       Family Target extends Cminor
+       Family Target extends Cminor.
        FEnd Target.
 
-       FOverride Definition transl_function := cheat.
+       FDefinition compilenv := PTree.t Z.
 
-       FOverride Definition transl_fundef := cheat.
+       FRecursion translate_constant about
+          Source.constant motive (fun (_ : Source.constant) => Target.constant) by _rect.
+            Case Ointconst := (fun n => Target.Ointconst n).
+            Case Ofloatconst := (fun n => Target.Ofloatconst n).
+            Case Osingleconst := (fun n => Target.Osingleconst n).
+            Case Olongconst := (fun n => Target.Olongconst n).
+       FEnd translate_constant.
 
-       FOverride Definition match_callstack := cheat.
+       (* FRecursion transl_expr. *)
+       (*      Case Econst := (fun cst => OK (Target.Econst (translate_constant cst))). *)
+       (* FEnd transl_expr. *)
 
-       FOverride Definition match_mem := cheat.
+       Inherit transl_expr.
 
-       FLemma match_callstack_set_temp:
-         FProofLemma.
-         apply cheat.
+
+       FDefinition exit_env := list bool.
+
+       MetaData shift_exit.
+       Fixpoint shift_exit (e: self__Cminorgen.exit_env) (n: nat) {struct e} : nat :=
+         match e, n with
+         | nil, _ => n
+         | false :: e', _ => S (shift_exit e' n)
+         | true :: e', O => O
+         | true :: e', S m => S (shift_exit e' m)
+         end.
+       FEnd shift_exit.
+
+       FRecursion _transl_stmt about Source.stmt motive (fun (_ : Source.stmt) => compilenv -> exit_env -> res Target.stmt) by _rect.
+            Case Sskip := (fun cenv xenv => OK (Target.Sskip)).
+            Case Sset := (fun id e => fun cenv xenv =>
+                         do te <- transl_expr e cenv;
+                         OK (Target.Sassign id te)).
+            Case Sseq := (fun s1 transl_stmt_s1 s2 transl_stmt_s2 =>
+                          fun cenv xenv =>
+                            do ts1 <- transl_stmt_s1 cenv xenv;
+                            do ts2 <- transl_stmt_s2 cenv xenv;
+                            OK (Cminor.Sseq ts1 ts2)).
+            Case Sifthenelse := (fun e s1 transl_stmt_s1 s2 transl_stmt_s2 =>
+                                 fun cenv xenv =>
+                                     do te <- transl_expr e cenv;
+                                     do ts1 <- transl_stmt_s1 cenv xenv;
+                                     do ts2 <- transl_stmt_s2 cenv xenv;
+                                     OK (Cminor.Sifthenelse te ts1 ts2)).
+            Case Sloop := (fun s1 transl_stmt_s1 =>
+                           fun cenv xenv =>
+                              do ts <- transl_stmt_s1 cenv xenv;
+                              OK (Cminor.Sloop ts)).
+            Case Sblock := (fun s transl_stmt_s =>
+                            fun cenv xenv =>
+                               do ts <- transl_stmt_s cenv (true :: xenv);
+                               OK (Cminor.Sblock ts)).
+            Case Sexit := (fun n => fun cenv xenv =>  OK (Cminor.Sexit (shift_exit xenv n))).
+            Case Sreturn := (fun expr => fun cenv xenv =>
+                               match expr with
+                               | None => OK (Cminor.Sreturn None)
+                               | Some expr =>
+                                    do te <- transl_expr expr cenv;
+                                    OK (Cminor.Sreturn (Some te))
+                               end).
+            Case Slabel := (fun lbl s transl_stmt_s =>
+                            fun cenv xenv =>
+                              do ts <- transl_stmt_s cenv xenv;
+                              OK (Cminor.Slabel lbl ts)).
+            Case Sgoto := (fun lbl => fun cenv xenv => OK (Cminor.Sgoto lbl)).
+       FEnd transl_stmt.
+
+       (* Stack layout *)
+       FDefinition block_alignment : Z -> Z := fun sz =>
+           if zlt sz 2 then 1
+           else if zlt sz 4 then 2
+           else if zlt sz 8 then 4 else 8.
+
+       FDefinition assign_variable : compilenv * Z -> ident * Z -> compilenv * Z := 
+           fun cenv_stacksize id_sz => 
+           let (id, sz) := id_sz in
+           let (cenv, stacksize) := cenv_stacksize in
+           let ofs := align stacksize (block_alignment sz) in
+           (PTree.set id ofs cenv, ofs + Z.max 0 sz).
+
+       FDefinition assign_variables : compilenv * Z -> list (ident * Z) -> compilenv * Z :=
+           fun cenv_stacksize vars => List.fold_left assign_variable vars cenv_stacksize.
+
+       FDefinition build_compilenv : Source.function -> compilenv * Z :=
+           fun f => assign_variables (PTree.empty Z, 0) (VarSort.sort (Source.fn_vars f)).
+
+       (* Translate Function, Fundef, Program *)
+       FDefinition transl_funbody := 
+       fun (cenv: compilenv) (stacksize: Z) (f: Source.function) =>
+         do tbody <- transl_stmt (Source.fn_body f) cenv nil ;
+         OK (Target.mkfunction
+               (Source.fn_sig f)
+               (Source.fn_params f)
+               (Source.fn_temps f)
+               stacksize
+               tbody).
+
+       FDefinition transl_function := fun (f: Csharpminor.function) => 
+         let (cenv, stacksize) := build_compilenv f in
+         if zle stacksize Ptrofs.max_unsigned
+         then transl_funbody cenv stacksize f
+         else Error(msg "Cminorgen: too many local variables, stack size exceeded").
+
+       FDefinition transl_fundef : Csharpminor.fundef -> res Cminor.fundef := fun f => 
+         transf_partial_fundef transl_function f.
+
+       FDefinition transl_program : Csharpminor.program -> res Cminor.program := fun p => 
+         transform_partial_program transl_fundef p.
+
+       Family Proof.
+         FDefinition match_prog : Csharpminor.program -> Cminor.program -> Prop :=
+           fun p tp =>
+           match_program (fun cu f tf => transl_fundef f = OK tf) eq p tp.
+
+         MetaData is_reachable_from_env.
+         Inductive is_reachable_from_env (f: meminj) (e: self__Imp.Csharpminor.Sem.env) (sp: block) (ofs: Z) : Prop :=
+           | is_reachable_intro: forall id b sz delta,
+               e!id = Some(b, sz) ->
+               f b = Some(sp, delta) ->
+               delta <= ofs < delta + sz ->
+               is_reachable_from_env f e sp ofs.
+         FEnd is_reachable_from_env.
+
+         FDefinition padding_freeable : meminj -> Csharpminor.Sem.env -> mem -> block -> Z -> Prop :=
+           fun f e tm sp sz =>
+           forall ofs,
+           0 <= ofs < sz -> Mem.perm tm sp ofs Cur Freeable \/ is_reachable_from_env f e sp ofs.
+
+         FDefinition match_temps : meminj -> Csharpminor.Sem.temp_env -> Cminor.Sem.env -> Prop :=
+             fun f le te =>
+             forall id v, le!id = Some v -> exists v', te!(id) = Some v' /\ Val.inject f v v'.
+
+         MetaData match_var.
+         Inductive match_var (f: meminj) (sp: block): option (block * Z) -> option Z -> Prop :=
+           | match_var_local: forall b sz ofs,
+               Val.inject f (Vptr b Ptrofs.zero) (Vptr sp (Ptrofs.repr ofs)) ->
+               match_var f sp (Some(b, sz)) (Some ofs)
+           | match_var_global:
+               match_var f sp None None.
+         FEnd match_var.
+
+         MetaData match_env.
+         Record match_env (f: meminj) (cenv: self__Cminorgen.compilenv)
+                         (e: self__Imp.Csharpminor.Sem.env) (sp: block)
+                         (lo hi: block) : Prop :=
+           mk_match_env {
+             me_vars:
+               forall id, self__Proof.match_var f sp (e!id) (cenv!id);
+
+             me_low_high:
+               Ple lo hi;
+
+             me_bounded:
+               forall id b sz, PTree.get id e = Some(b, sz) -> Ple lo b /\ Plt b hi;
+
+             me_inv:
+               forall b delta,
+               f b = Some(sp, delta) ->
+               exists id, exists sz, PTree.get id e = Some(b, sz);
+
+             me_incr:
+               forall b tb delta,
+               f b = Some(tb, delta) -> Plt b lo -> Plt tb sp
+         }.
+         FEnd match_env.
+
+         FDefinition match_bounds : Csharpminor.Sem.env -> mem -> Prop := 
+           fun e m => forall id b sz ofs p, 
+              PTree.get id e = Some(b, sz) -> Mem.perm m b ofs Max p -> 0 <= ofs < sz.  
+
+         MetaData frame.
+         Inductive frame : Type :=
+           Frame(cenv: self__Cminorgen.compilenv)
+               (tf: self__Imp.Cminor.function)
+               (e: self__Imp.Csharpminor.Sem.env)
+               (le: self__Imp.Csharpminor.Sem.temp_env)
+               (te: self__Imp.Cminor.Sem.env)
+               (sp: block)
+               (lo hi: block).
+         FEnd frame.
+
+         FDefinition callstack : Type := list frame.
+
+         MetaData match_globalenvs.
+         Inductive match_globalenvs (ge: self__Imp.Csharpminor.Sem.genv) (f: meminj) (bound: block): Prop :=
+         | mk_match_globalenvs
+             (DOMAIN: forall b, Plt b bound -> f b = Some(b, 0))
+             (IMAGE: forall b1 b2 delta, f b1 = Some(b2, delta) -> Plt b2 bound -> b1 = b2)
+             (SYMBOLS: forall id b, Genv.find_symbol ge id = Some b -> Plt b bound)
+             (FUNCTIONS: forall b fd, Genv.find_funct_ptr ge b = Some fd -> Plt b bound)
+             (VARINFOS: forall b gv, Genv.find_var_info ge b = Some gv -> Plt b bound).
+         FEnd match_globalenvs.
+
+         MetaData match_callstack.
+         Inductive match_callstack (ge: self__Imp.Csharpminor.Sem.genv) (f: meminj) (m: mem) (tm: mem):
+                           self__Proof.callstack -> block -> block -> Prop :=
+           | mcs_nil:
+               forall hi bound tbound,
+               self__Proof.match_globalenvs ge f hi ->
+               Ple hi bound -> Ple hi tbound ->
+               match_callstack ge f m tm nil bound tbound
+           | mcs_cons:
+               forall cenv tf e le te sp lo hi cs bound tbound
+                 (BOUND: Ple hi bound)
+                 (TBOUND: Plt sp tbound)
+                 (MTMP: self__Proof.match_temps f le te)
+                 (MENV: self__Proof.match_env f cenv e sp lo hi)
+                 (BOUND: self__Proof.match_bounds e m)
+                 (PERM: self__Proof.padding_freeable f e tm sp tf.(self__Imp.Cminor.fn_stackspace))
+                 (MCS: match_callstack ge f m tm cs lo sp),
+               match_callstack ge f m tm (self__Proof.Frame cenv tf e le te sp lo hi :: cs) bound tbound.
+         FEnd match_callstack.
+
+         FInductive match_cont: Csharpminor.Sem.cont -> Cminor.Sem.cont -> compilenv -> exit_env -> callstack -> Prop :=
+           | match_Kstop: forall cenv xenv,
+               match_cont Csharpminor.Sem.Kstop Cminor.Sem.Kstop cenv xenv nil
+           | match_Kseq: forall s k ts tk cenv xenv cs,
+               transl_stmt s cenv xenv = OK ts ->
+               match_cont k tk cenv xenv cs ->
+               match_cont (Csharpminor.Sem.Kseq s k) (Cminor.Sem.Kseq ts tk) cenv xenv cs
+           | match_Kseq2: forall s1 s2 k ts1 tk cenv xenv cs,
+               transl_stmt s1 cenv xenv = OK ts1 ->
+               match_cont (Csharpminor.Sem.Kseq s2 k) tk cenv xenv cs ->
+               match_cont (Csharpminor.Sem.Kseq (Csharpminor.Sseq s1 s2) k)
+                         (Cminor.Sem.Kseq ts1 tk) cenv xenv cs
+           | match_Kblock: forall k tk cenv xenv cs,
+               match_cont k tk cenv xenv cs ->
+               match_cont (Csharpminor.Sem.Kblock k) (Cminor.Sem.Kblock tk) cenv (true :: xenv) cs
+           | match_Kblock2: forall k tk cenv xenv cs,
+               match_cont k tk cenv xenv cs ->
+               match_cont k (Cminor.Sem.Kblock tk) cenv (false :: xenv) cs.
+
+           MetaData match_states.
+           Inductive match_states (ge: self__Imp.Csharpminor.Sem.genv) : self__Imp.Csharpminor.Sem.state -> self__Imp.Cminor.Sem.state -> Prop :=
+               | match_state:
+                   forall fn s k e le m tfn ts tk sp te tm cenv xenv f lo hi cs sz
+                   (TRF: self__Cminorgen.transl_funbody cenv sz fn = OK tfn)
+                   (TR: self__Cminorgen.transl_stmt s cenv xenv = OK ts)
+                   (MINJ: Mem.inject f m tm)
+                   (MCS: self__Proof.match_callstack ge f m tm
+                           (self__Proof.Frame cenv tfn e le te sp lo hi :: cs)
+                           (Mem.nextblock m) (Mem.nextblock tm))
+                   (MK: self__Proof.match_cont k tk cenv xenv cs),
+                   match_states ge (self__Imp.Csharpminor.Sem.State fn s k e le m)
+                               (self__Imp.Cminor.Sem.State tfn ts tk (Vptr sp Ptrofs.zero) te tm)
+               | match_state_seq:
+                   forall fn s1 s2 k e le m tfn ts1 tk sp te tm cenv xenv f lo hi cs sz
+                   (TRF: self__Cminorgen.transl_funbody cenv sz fn = OK tfn)
+                   (TR: self__Cminorgen.transl_stmt s1 cenv xenv = OK ts1)
+                   (MINJ: Mem.inject f m tm)
+                   (MCS: self__Proof.match_callstack ge f m tm
+                           (self__Proof.Frame cenv tfn e le te sp lo hi :: cs)
+                           (Mem.nextblock m) (Mem.nextblock tm))
+                   (MK: self__Proof.match_cont (self__Imp.Csharpminor.Sem.Kseq s2 k) tk cenv xenv cs),
+                   match_states ge (self__Imp.Csharpminor.Sem.State fn (self__Imp.Csharpminor.Sseq s1 s2) k e le m)
+                               (self__Imp.Cminor.Sem.State tfn ts1 tk (Vptr sp Ptrofs.zero) te tm)
+               | match_callstate:
+                   forall fd args k m tfd targs tk tm f cs cenv
+                   (TR: self__Cminorgen.transl_fundef fd = OK tfd)
+                   (MINJ: Mem.inject f m tm)
+                   (MCS: self__Proof.match_callstack ge f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
+                   (MK: self__Proof.match_cont k tk cenv nil cs)
+                   (ISCC: self__Imp.Csharpminor.Sem.is_call_cont k)
+                   (ARGSINJ: Val.inject_list f args targs),
+                   match_states ge (self__Imp.Csharpminor.Sem.Callstate fd args k m)
+                               (self__Imp.Cminor.Sem.Callstate tfd targs tk tm)
+               | match_returnstate:
+                   forall v k m tv tk tm f cs cenv
+                   (MINJ: Mem.inject f m tm)
+                   (MCS: self__Proof.match_callstack ge f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
+                   (MK: self__Proof.match_cont k tk cenv nil cs)
+                   (RESINJ: Val.inject f v tv),
+                   match_states ge (self__Imp.Csharpminor.Sem.Returnstate v k m)
+                               (self__Imp.Cminor.Sem.Returnstate tv tk tm).
+           FEnd match_states.
+         (*
+           Variable prog: Csharpminor.program.
+           Variable tprog: program.
+           Hypothesis TRANSL: match_prog prog tprog.
+           Let ge : Csharpminor.genv := Genv.globalenv prog.
+           Let tge: genv := Genv.globalenv tprog. 
+         *)
+
+         FRecursion seq_left_depth about Csharpminor.stmt motive (fun (_ : Csharpminor.stmt) => nat) by _rect.
+               Case Sskip := O.
+               Case Sset := (fun _ _ => O).
+               Case Sseq := (fun s1 seq_left_depth_s1 s2 _ => S (seq_left_depth_s1)).
+               Case Sifthenelse := (fun _ s1 _ s2 _ => O).
+               Case Sloop := (fun s _ => O).
+               Case Sblock := (fun s _ => O).
+               Case Sexit := (fun _ => O).
+               Case Sreturn := (fun e => O).
+               Case Slabel := (fun _ s _ => O).
+               Case Sgoto := (fun _ => O).
+         FEnd seq_left_depth.
+
+         FRecursion measure about Csharpminor.Sem.state motive (fun (_ : Csharpminor.Sem.state) => nat) by _rect.
+               Case State := (fun fn s k e le m => seq_left_depth s).
+               Case Callstate := (fun f args k m => O).
+               Case Returnstate := (fun res k m => O).
+         FEnd measure.
+
+         FInduction transl_step_correct about Csharpminor.Sem.step motive
+           (fun ge S1 t S2 (_ : Csharpminor.Sem.step ge S1 t S2) => 
+              forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->               
+           forall T1, match_states ge S1 T1 -> 
+           (exists T2, plus Cminor.Sem.step tge T1 t T2 /\ match_states ge S2 T2) 
+           \/ (measure S2 < measure S1 /\ t = E0 /\ match_states ge S2 T1)%nat).
+         FProof.
+           finduction.
+           (* skip seq *)
+           + intros. apply cheat.
+           (* skip block *)
+           + intros. apply cheat.
+           (* skip call *)
+           + intros. apply cheat.
+           (* set *)
+           + intros. apply cheat.
+           (* seq *)
+           + intros. apply cheat.
+           (* ifthenelse *)
+           + intros. apply cheat.
+           (* loop *)
+           + apply cheat.
+           (* block *)
+           + apply cheat.
+           (* return none *)
+           + apply cheat.
+           (* return some *)
+           + apply cheat.
+           (* label *)
+           + apply cheat.
+           (* goto *)
+           + apply cheat.
+           (* internal function *)
+           + intros. apply cheat.
+         Qed.
+         FEnd transl_step_correct.
+
+         FLemma transl_initial_states:
+           forall S prog tprog ge, Csharpminor.Sem.initial_state prog S ->
+           transl_program prog = OK tprog ->
+           exists R, Cminor.Sem.initial_state tprog R /\ match_states ge S R.
+             FProofLemma.
+               apply cheat.
+             Qed.
          CloseFLemma.
 
-       FLemma transl_find_label_body:
-         FProofLemma.
-         apply cheat.
-         Close FLemma.
-
-       FOverride Definition measure := cheat.
-
-       FLemma transl_initial_states:
-         FProofLemma.
-         apply cheat.
+         FLemma transl_final_states:
+           forall S R r ge,
+           match_states ge S R -> Csharpminor.Sem.final_state S r -> Cminor.Sem.final_state R r.
+             FProofLemma.
+               intros. inv H0. inv H. inv MK. inv RESINJ. constructor. Qed.            
          CloseFLemma.
-
-       FLemma transl_final_states:
-         FProofLemma.
-         apply cheat.
-         CloseFLemma.
-
-  FEnd Cminorgen.
+       FEnd Proof.
+  FEnd Cminorgen.     
 
   
   Family C extends Cfam.
