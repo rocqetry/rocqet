@@ -356,6 +356,17 @@ FEnd BaseExt.
 Family ArithExt extends BaseExt.  
   Inherit Implight.
   
+  (* We want this nanopass: *)  
+  (* Imp -> ImpEpostdecr -> ImpEpredecr -> ImpEpostincr -> ImpEpreincr -> Implight *)  
+
+  (* We define the IRs in reverser order to enable sharing *)  
+  (*      
+     FInductive stmt : Type :=
+       | Sskip: stmt
+       | Sset : ident -> expr -> stmt            
+       | Sseq: stmt -> stmt -> stmt.
+       | Spreincr : ident -> stmt.
+  *)
   Family ImpEpreincr extends Implight.
   FInductive stmt : Type :=
     | Spreincr : ident -> stmt.
@@ -368,6 +379,12 @@ Family ArithExt extends BaseExt.
              E0 (self__ImpEpreincr.State f Sskip k e (PTree.set id v' le) m).
   FEnd ImpEpreincr.
 
+  (* FInductive stmt : Type :=
+       | Sskip: stmt
+       | Sset : ident -> expr -> stmt            
+       | Sseq: stmt -> stmt -> stmt.
+       | Spreincr : ident -> stmt.
+       | Spostincr : ident -> stmt. *)
   Family ImpEpostincr extends ImpEpreincr. 
   FInductive stmt : Type :=    
     | Spostincr : ident -> stmt.
@@ -380,6 +397,14 @@ Family ArithExt extends BaseExt.
            E0 (self__ImpEpostincr.State f Sskip k e (PTree.set id v' le) m).
   FEnd ImpEpostincr.
 
+  (* FInductive stmt : Type :=
+       | Sskip: stmt
+       | Sset : ident -> expr -> stmt            
+       | Sseq: stmt -> stmt -> stmt.
+       | Spreincr : ident -> stmt.
+       | Spostincr : ident -> stmt. 
+       | Spredecr : ident -> stmt.
+   *)
   Family ImpEpredecr extends ImpEpostincr.
   FInductive stmt : Type :=
     | Spredecr : ident -> stmt.
@@ -392,6 +417,15 @@ Family ArithExt extends BaseExt.
              E0 (self__ImpEpredecr.State f Sskip k e (PTree.set id v' le) m).      
   FEnd ImpEpredecr.
 
+  (* FInductive stmt : Type :=
+       | Sskip: stmt
+       | Sset : ident -> expr -> stmt            
+       | Sseq: stmt -> stmt -> stmt.
+       | Spreincr : ident -> stmt.
+       | Spostincr : ident -> stmt. 
+       | Spredecr : ident -> stmt.
+       | Spostdecr : ident -> stmt.
+   *)
   Family ImpEpostdecr extends ImpEpredecr.
   FInductive stmt : Type :=    
     | Spostdecr : ident -> stmt.    
@@ -404,6 +438,17 @@ Family ArithExt extends BaseExt.
            E0 (self__ImpEpostdecr.State f Sskip k e (PTree.set id v' le) m).
   FEnd ImpEpostdecr.
 
+  (* Finally, Imp is the source language, with all the features *)
+  (* FInductive stmt : Type :=
+       | Sskip: stmt
+       | Sset : ident -> expr -> stmt            
+       | Sseq: stmt -> stmt -> stmt.
+       | Spreincr : ident -> stmt.
+       | Spostincr : ident -> stmt. 
+       | Spredecr : ident -> stmt.
+       | Spostdecr : ident -> stmt.
+       | Sassignop : binary_operation -> ident -> expr -> stmt.
+   *)
   Family Imp extends ImpEpostdecr.
   FInductive stmt : Type := 
     | Sassignop : binary_operation -> ident -> expr -> stmt.
@@ -416,7 +461,7 @@ Family ArithExt extends BaseExt.
       step ge (self__Imp.State f (Sassignop op id a) k e le m)
            E0 (self__Imp.State f Sskip k e (PTree.set id v' le) m).
   FEnd Imp.
-
+  
   (* Nanopass: Imp *remove-assign*-> 
                ImpEpostdecr *remove-postdecr*-> 
                ImpEpredecr *remove-predecr*-> 
@@ -424,8 +469,12 @@ Family ArithExt extends BaseExt.
                ImpEpreincr *remove-preincr*->
                Implight *)    
 
-  (* Compose nanopasses *)
+  (* We can also compose the passes in reverser order to 
+     enable sharing and also automatically "merging" all 
+     the nanopasses into one big pass *)
+
   
+  (* This is the last pass which goes to Implight *)
   Family RemovePreincr extends Basetransl.
     Family Source extends ImpEpreincr.
     FEnd Source.
@@ -446,7 +495,9 @@ Family ArithExt extends BaseExt.
     + apply cheat.
     Qed. FEnd transl_stmt_correct.
   FEnd RemovePreincr.
-
+  
+  (* The 2nd-to-the last pass can extend the last pass
+     and go directly to Implight. *)
   Family RemovePostincr extends RemovePreincr.
     Family Source extends ImpEpostincr.
     FEnd Source.
@@ -511,6 +562,8 @@ Family ArithExt extends BaseExt.
     Qed. FEnd transl_stmt_correct.
   FEnd RemovePostdecr.  
 
+  (* Finally, the first pass can go directly to Implight 
+     by extending the second pass (which also goes to Implight) *)
   Family RemoveAssignop extends RemovePostdecr.
     Family Source extends Imp.
     FEnd Source.
@@ -534,9 +587,22 @@ Family ArithExt extends BaseExt.
     Qed. FEnd transl_stmt_correct.
   FEnd RemoveAssignop.
 
+  (* Eventually, we can compose these series of nanopasses 
+     with the base pass. We don't have to describe a "pipeline" 
+     of passes becuase we just use late binding of nested families. 
+     The resulting pass is a composition of all the nanopasses together 
+     in a single pass (as if they were defined at once).  *)
+  (* We reap the benefit of a modular nanopass style compiler, but 
+      also don't loose any performance overhead due to chaining
+      compiler passes. This essentially fuses the nanopasses. *)
+  (* By fusing these passes together, we should be able to recover 
+     the compilation speed of CompCert while retaining modularity. *)
+  (* I belive this is very similar to: https://dl.acm.org/doi/10.1145/3140587.3062346 *)
   Family SimplExpr extends RemoveAssignop.
   FEnd SimplExpr.
 FEnd ArithExt.
+
+
 (*
 
 (* structured control flow *)
