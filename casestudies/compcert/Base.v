@@ -453,14 +453,15 @@ Inductive bitfield : Type :=
                  Target.eval_expr sp te tm ta tv
               /\ match_value f v tv).
       FProof.
-        + intros. rewrite -> self__Cfamtransl.transl_expr_Evar_eq in TR.
-          unfold self__Cfamtransl.transl_exprEvar in TR.
+        + intros. fsimpl in TR. 
           monadInv TR. exists v. split.
           ++ eapply self__Cfamtransl.Target.eval_Evar.
-             rewrite <- e0. exploit MATCH. INJ.
-             apply cheat.
+             rewrite <- e0. apply cheat.
           ++ apply self__Cfamtransl.match_value_refl.
-        + intros. apply cheat.
+        + intros. exists v.
+          fsimpl in TR. split.
+          ++ apply cheat.
+          ++ apply self__Cfamtransl.match_value_refl.
       Qed. FEnd transl_expr_correct.
       
       (* call stack match even with set *)
@@ -536,7 +537,7 @@ Inductive bitfield : Type :=
               end).
       FProof.
       (* Skip *)
-      + apply cheat.
+      + fsimpl. apply cheat.
       (* Set *)
       + apply cheat.
       (* Seq *)
@@ -598,11 +599,10 @@ Inductive bitfield : Type :=
           + unfold self__Cfamtransl.__motiveTtransl_step_correct.
             intros ge f s k e le m prog tprog tge H G. 
             intros T1 MSTATE. inv MSTATE.
-            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSskip in TR.
+            fsimpl in TR.
             monadInv TR. 
             left. econstructor. split.
-            apply plus_one. 
+            ++ apply plus_one. 
             ++ 
             (* We need to somehow prove that *)
             (* match_cont (self__Cfamtransl.Source.Kseq s k) tk ==> tk = Kseq s' k' *)
