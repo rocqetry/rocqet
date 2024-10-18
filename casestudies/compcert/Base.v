@@ -753,10 +753,6 @@ Inductive bitfield : Type :=
             Case Olongconst := (fun n => Target.Olongconst n).
        FEnd translate_constant.
 
-       (* FRecursion transl_expr. *)
-       (*      Case Econst := (fun cst => OK (Target.Econst (translate_constant cst))). *)
-       (* FEnd transl_expr. *)
-
        Inherit transl_expr.
 
 
@@ -772,44 +768,7 @@ Inductive bitfield : Type :=
          end.
        FEnd shift_exit.
 
-       FRecursion _transl_stmt about Source.stmt motive (fun (_ : Source.stmt) => compilenv -> exit_env -> res Target.stmt) by _rect.
-            Case Sskip := (fun cenv xenv => OK (Target.Sskip)).
-            Case Sset := (fun id e => fun cenv xenv =>
-                         do te <- transl_expr e cenv;
-                         OK (Target.Sassign id te)).
-            Case Sseq := (fun s1 transl_stmt_s1 s2 transl_stmt_s2 =>
-                          fun cenv xenv =>
-                            do ts1 <- transl_stmt_s1 cenv xenv;
-                            do ts2 <- transl_stmt_s2 cenv xenv;
-                            OK (Cminor.Sseq ts1 ts2)).
-            Case Sifthenelse := (fun e s1 transl_stmt_s1 s2 transl_stmt_s2 =>
-                                 fun cenv xenv =>
-                                     do te <- transl_expr e cenv;
-                                     do ts1 <- transl_stmt_s1 cenv xenv;
-                                     do ts2 <- transl_stmt_s2 cenv xenv;
-                                     OK (Cminor.Sifthenelse te ts1 ts2)).
-            Case Sloop := (fun s1 transl_stmt_s1 =>
-                           fun cenv xenv =>
-                              do ts <- transl_stmt_s1 cenv xenv;
-                              OK (Cminor.Sloop ts)).
-            Case Sblock := (fun s transl_stmt_s =>
-                            fun cenv xenv =>
-                               do ts <- transl_stmt_s cenv (true :: xenv);
-                               OK (Cminor.Sblock ts)).
-            Case Sexit := (fun n => fun cenv xenv =>  OK (Cminor.Sexit (shift_exit xenv n))).
-            Case Sreturn := (fun expr => fun cenv xenv =>
-                               match expr with
-                               | None => OK (Cminor.Sreturn None)
-                               | Some expr =>
-                                    do te <- transl_expr expr cenv;
-                                    OK (Cminor.Sreturn (Some te))
-                               end).
-            Case Slabel := (fun lbl s transl_stmt_s =>
-                            fun cenv xenv =>
-                              do ts <- transl_stmt_s cenv xenv;
-                              OK (Cminor.Slabel lbl ts)).
-            Case Sgoto := (fun lbl => fun cenv xenv => OK (Cminor.Sgoto lbl)).
-       FEnd transl_stmt.
+       Inherit transl_stmt.
 
        (* Stack layout *)
        FDefinition block_alignment : Z -> Z := fun sz =>
@@ -833,7 +792,7 @@ Inductive bitfield : Type :=
        (* Translate Function, Fundef, Program *)
        FDefinition transl_funbody := 
        fun (cenv: compilenv) (stacksize: Z) (f: Source.function) =>
-         do tbody <- transl_stmt (Source.fn_body f) cenv nil ;
+         do tbody <- transl_stmt (Source.fn_body f);
          OK (Target.mkfunction
                (Source.fn_sig f)
                (Source.fn_params f)
@@ -841,25 +800,25 @@ Inductive bitfield : Type :=
                stacksize
                tbody).
 
-       FDefinition transl_function := fun (f: Csharpminor.function) => 
+       FDefinition transl_function := fun (f: Source.function) => 
          let (cenv, stacksize) := build_compilenv f in
          if zle stacksize Ptrofs.max_unsigned
          then transl_funbody cenv stacksize f
          else Error(msg "Cminorgen: too many local variables, stack size exceeded").
 
-       FDefinition transl_fundef : Csharpminor.fundef -> res Cminor.fundef := fun f => 
+       FDefinition transl_fundef : Source.fundef -> res Target.fundef := fun f => 
          transf_partial_fundef transl_function f.
 
-       FDefinition transl_program : Csharpminor.program -> res Cminor.program := fun p => 
+       FDefinition transl_program : Source.program -> res Target.program := fun p => 
          transform_partial_program transl_fundef p.
 
        Family Proof.
-         FDefinition match_prog : Csharpminor.program -> Cminor.program -> Prop :=
+         FDefinition match_prog : Source.program -> Target.program -> Prop :=
            fun p tp =>
-           match_program (fun cu f tf => transl_fundef f = OK tf) eq p tp.
+             match_program (fun cu f tf => transl_fundef f = OK tf) eq p tp.
 
          MetaData is_reachable_from_env.
-         Inductive is_reachable_from_env (f: meminj) (e: self__Imp.Csharpminor.Sem.env) (sp: block) (ofs: Z) : Prop :=
+         FInductive is_reachable_from_env (f: meminj) (e: Source.env) (sp: block) (ofs: Z) : Prop :=
            | is_reachable_intro: forall id b sz delta,
                e!id = Some(b, sz) ->
                f b = Some(sp, delta) ->
