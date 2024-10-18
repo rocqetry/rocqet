@@ -818,20 +818,22 @@ Inductive bitfield : Type :=
              match_program (fun cu f tf => transl_fundef f = OK tf) eq p tp.
 
          MetaData is_reachable_from_env.
-         FInductive is_reachable_from_env (f: meminj) (e: Source.env) (sp: block) (ofs: Z) : Prop :=
-           | is_reachable_intro: forall id b sz delta,
-               e!id = Some(b, sz) ->
+         Inductive is_reachable_from_env (f: meminj) (e: self__Cminorgen.Source.env) (sp: block) (ofs: Z) : Prop :=
+         | is_reachable_intro: forall  b sz delta,
+             (* TODO: e!id is incorrect type, changed it to val *)
+               (* e!id = Some(b, sz) -> *)
                f b = Some(sp, delta) ->
                delta <= ofs < delta + sz ->
                is_reachable_from_env f e sp ofs.
          FEnd is_reachable_from_env.
 
-         FDefinition padding_freeable : meminj -> Csharpminor.Sem.env -> mem -> block -> Z -> Prop :=
+         FDefinition padding_freeable : meminj -> Source.env -> mem -> block -> Z -> Prop :=
            fun f e tm sp sz =>
            forall ofs,
            0 <= ofs < sz -> Mem.perm tm sp ofs Cur Freeable \/ is_reachable_from_env f e sp ofs.
 
-         FDefinition match_temps : meminj -> Csharpminor.Sem.temp_env -> Cminor.Sem.env -> Prop :=
+         (* TODO: Source.env was originally Source.tempenv *)
+         FDefinition match_temps : meminj -> Source.env -> Target.env -> Prop :=
              fun f le te =>
              forall id v, le!id = Some v -> exists v', te!(id) = Some v' /\ Val.inject f v v'.
 
@@ -846,7 +848,7 @@ Inductive bitfield : Type :=
 
          MetaData match_env.
          Record match_env (f: meminj) (cenv: self__Cminorgen.compilenv)
-                         (e: self__Imp.Csharpminor.Sem.env) (sp: block)
+                         (e: self__Cminorgen.Source.env) (sp: block)
                          (lo hi: block) : Prop :=
            mk_match_env {
              me_vars:
