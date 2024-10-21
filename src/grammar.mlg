@@ -99,7 +99,7 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "FEnd" ident(scope_name) ] -> { Entry.fend scope_name }
 
 | [ "FDefinition" ident(name) ":" llconstr_ip(body_type) ":=" llconstr_ip(body_expr)  ] ->
-   { Entry.definition ~name ~body_type body_expr}
+   { Entry.definition ~name ~body_type body_expr }
 
 | [ "FOpaque" "Definition" ident(name) ":" llconstr_ip(body_type) ":=" llconstr_ip(body_expr)  ] ->
    { Entry.opaque_definition ~name ~body_type ~body_expr }
@@ -118,6 +118,7 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "FRecursion" ident(name) ":" argument_flist(args) ] -> 
    { Entry.frecursion_elegant name args }
+
 (* Default case is by _rec *)
 | [ "FRecursion" ident(name) 
                "about" reference_ip(inductive)
