@@ -1401,8 +1401,7 @@ Qed. FEnd preservation.
 FEnd STLC_fix.
 
 
-Family STLC_all extends STLC
-    using STLC_prod, STLC_isorec, STLC_fix, STLC_sum.
+Family STLC_all extends STLC, STLC_prod, STLC_isorec, STLC_fix, STLC_sum.
 
    (* TODO: Requiring this for substT to work 
       is actually a bug with InductiveAxioms *)
