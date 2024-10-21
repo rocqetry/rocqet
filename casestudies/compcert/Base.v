@@ -537,7 +537,10 @@ Inductive bitfield : Type :=
               end).
       FProof.
       (* Skip *)
-      + fsimpl. apply cheat.
+      + intros. fsimpl in H. monadInv H.
+        destruct (self__Cfamtransl.Source.find_label self__Cfamtransl.Source.Sskip lbl k) as []eqn:?.
+        ++ destruct p. eexists. esplit.
+           split. fsimpl in Heqo.
       (* Set *)
       + apply cheat.
       (* Seq *)
