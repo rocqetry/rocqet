@@ -1426,7 +1426,7 @@ FEnd STLC_fix.
   In my machine I can run 4 statements together, 
     so I group them into three groups
  *)
-Family STLC_all extends STLC using STLC_bool, STLC_prod, STLC_fix.
+Family STLC_all extends STLC, STLC_bool, STLC_prod, STLC_fix.
 
 FEnd STLC_all.
 
