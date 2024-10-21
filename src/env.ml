@@ -13,7 +13,7 @@ module PluginScopes = struct
     | Some
         {
           command =
-            PluginCmd.(Family | Recursion | Induction | MetaData | Lemma);
+            PluginCmd.(Family | Recursion | Induction | MetaData | Lemma | Trait);
           _;
         } ->
         scopes := scope :: !scopes
@@ -36,6 +36,7 @@ module PluginScopes = struct
           | Induction -> "FInduction"
           | Recursion -> "FRecursion"
           | MetaData -> "MetaData"
+          | Trait -> "Trait"
         in
         let rest =
           rest
