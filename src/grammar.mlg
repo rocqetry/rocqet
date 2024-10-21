@@ -94,7 +94,7 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "FInductive" mutind_defs(inductive_definition) ] -> { Entry.finductive inductive_definition }
 
-| [ "Trait" ident(name) "extends" ident(base) ] -> { Trait.open_with_base ~name ~base }
+| [ "Trait" ident(name) "extends" ident(base) ] -> { Entry.open_trait_with_base ~name ~base }
 
 | [ "FEnd" ident(scope_name) ] -> { Entry.fend scope_name }
 
