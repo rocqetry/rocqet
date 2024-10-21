@@ -89,8 +89,8 @@ END
 VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "Family" ident(derived) "extends" reference(base) ] ->  { Entry.family_extends ~derived ~base }
 
-| [ "Family" ident(derived) "extends" reference(base) 
-    "using" reference_list_sep(arguments, ",") ] -> { Entry.family_compose ~derived ~base ~bases:arguments }
+| [ "Family" ident(derived) "extends"
+    reference_list_sep(arguments, ",") ] -> { Entry.family_extends_list ~derived ~bases:arguments }
 
 | [ "Family" ident(name) ] -> { Entry.family name }
 

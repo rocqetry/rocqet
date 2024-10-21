@@ -106,10 +106,10 @@ let open_family_with_base ~name ~base =
           let context = LinkageCtx.Toplevel linkage in
           Context.destructive_update (Some context))
 
-let open_family_mixin ~name ~base ~bases =
+let open_family_with_base_list ~name ~bases =
   let context = Context.get_store () in
   let base_linkage =
-    base :: bases
+    bases
     |> List.map (fun base ->
            match Context.lookup context base with
            | None -> Errors.fail ~info:"Unbound Family Name"
