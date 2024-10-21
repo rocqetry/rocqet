@@ -30,9 +30,9 @@ let family_extends ~derived ~base =
         close = Family.close_family;
       }
 
-let family_compose ~derived ~base ~bases =
+let family_extends_list ~derived ~bases =
   let name = derived in
-  Family.open_family_mixin ~name ~base ~bases;
+  Family.open_family_with_base_list ~name ~bases;
   PluginScopes.push
     PluginCmdScope.
       { name; command = PluginCmd.Family; close = Family.close_family }

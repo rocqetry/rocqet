@@ -7,9 +7,8 @@ val family : Names.Id.t -> unit
 val family_extends : derived:Names.Id.t -> base:Libnames.qualid -> unit
 
 (* Hanle a `Family ... extends ... using ...`  *)
-val family_compose :
-  derived:Names.Id.t ->
-  base:Libnames.qualid ->
+val family_extends_list :
+  derived:Names.Id.t ->  
   bases:Libnames.qualid list ->
   unit
 
