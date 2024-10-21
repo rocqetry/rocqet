@@ -75,7 +75,7 @@ module Recursors : sig
 end
 
 module PluginCmd : sig
-  type t = Family | Recursion | Induction | MetaData | Lemma
+  type t = Family | Recursion | Induction | MetaData | Lemma | Trait
 end
 
 module PluginCmdScope : sig
