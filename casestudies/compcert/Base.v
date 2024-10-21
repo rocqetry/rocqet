@@ -818,21 +818,19 @@ Inductive bitfield : Type :=
              match_program (fun cu f tf => transl_fundef f = OK tf) eq p tp.
 
          MetaData is_reachable_from_env.
-         Inductive is_reachable_from_env (f: meminj) (e: self__Cminorgen.Source.env) (sp: block) (ofs: Z) : Prop :=
-         | is_reachable_intro: forall  b sz delta,
-             (* TODO: e!id is incorrect type, changed it to val *)
-               (* e!id = Some(b, sz) -> *)
+         Inductive is_reachable_from_env (f: meminj) (e: self__Cminorgen.Source.fenv) (sp: block) (ofs: Z) : Prop :=
+         | is_reachable_intro: forall id  b sz delta,
+               e!id = Some(b, sz) ->
                f b = Some(sp, delta) ->
                delta <= ofs < delta + sz ->
                is_reachable_from_env f e sp ofs.
          FEnd is_reachable_from_env.
 
-         FDefinition padding_freeable : meminj -> Source.env -> mem -> block -> Z -> Prop :=
+         FDefinition padding_freeable : meminj -> Source.fenv -> mem -> block -> Z -> Prop :=
            fun f e tm sp sz =>
            forall ofs,
            0 <= ofs < sz -> Mem.perm tm sp ofs Cur Freeable \/ is_reachable_from_env f e sp ofs.
 
-         (* TODO: Source.env was originally Source.tempenv *)
          FDefinition match_temps : meminj -> Source.env -> Target.env -> Prop :=
              fun f le te =>
              forall id v, le!id = Some v -> exists v', te!(id) = Some v' /\ Val.inject f v v'.
@@ -846,11 +844,9 @@ Inductive bitfield : Type :=
                match_var f sp None None.
          FEnd match_var.
 
-
-         (* TODO: type of Csharpminor.env *)
          MetaData match_env.
          Record match_env (f: meminj) (cenv: self__Cminorgen.compilenv)
-                         (e: self__Cminorgen.Source.env) (sp: block)
+                         (e: self__Cminorgen.Source.fenv) (sp: block)
                          (lo hi: block) : Prop :=
            mk_match_env {
              me_vars:
@@ -873,23 +869,22 @@ Inductive bitfield : Type :=
          }.
          FEnd match_env.
 
-         (* TODO  *)
-         (* FDefinition match_bounds : Source.env -> mem -> Prop :=  *)
-         (*   fun e m => forall id b sz ofs p,  *)
-         (*      PTree.get id e = Some(b, sz) -> Mem.perm m b ofs Max p -> 0 <= ofs < sz.   *)
+         FDefinition match_bounds : Source.fenv -> mem -> Prop :=
+           fun e m => forall id b sz ofs p,
+              PTree.get id e = Some(b, sz) -> Mem.perm m b ofs Max p -> 0 <= ofs < sz.
 
-         (* MetaData frame. *)
-         (* Inductive frame : Type := *)
-         (*   Frame(cenv: self__Cminorgen.compilenv) *)
-         (*       (tf: self__Cminorgen.Target.function) *)
-         (*       (e: self__Cminorgen.Source.env) *)
-         (*       (le: self__Cminorgen.Source.temp_env) *)
-         (*       (te: self__Cminorgen.Target.env) *)
-         (*       (sp: block) *)
-         (*       (lo hi: block). *)
-         (* FEnd frame. *)
+         MetaData frame.
+         Inductive frame : Type :=
+           Frame(cenv: self__Cminorgen.compilenv)
+               (tf: self__Cminorgen.Target.function)
+               (e: self__Cminorgen.Source.fenv)
+               (le: self__Cminorgen.Source.env)
+               (te: self__Cminorgen.Target.env)
+               (sp: block)
+               (lo hi: block).
+         FEnd frame.
 
-         (* FDefinition callstack : Type := list frame. *)
+         FDefinition callstack : Type := list frame.
 
          MetaData match_globalenvs.
          Inductive match_globalenvs (ge: self__Cminorgen.Source.genv) (f: meminj) (bound: block): Prop :=
@@ -901,69 +896,60 @@ Inductive bitfield : Type :=
              (VARINFOS: forall b gv, Genv.find_var_info ge b = Some gv -> Plt b bound).
          FEnd match_globalenvs.
 
-         (* MetaData match_callstack. *)
-         (* Inductive match_callstack (ge: self__Cminorgen.Source.genv) (f: meminj) (m: mem) (tm: mem): *)
-         (*                   self__Proof.callstack -> block -> block -> Prop := *)
-         (*   | mcs_nil: *)
-         (*       forall hi bound tbound, *)
-         (*       self__Proof.match_globalenvs ge f hi -> *)
-         (*       Ple hi bound -> Ple hi tbound -> *)
-         (*       match_callstack ge f m tm nil bound tbound *)
-         (*   | mcs_cons: *)
-         (*       forall cenv tf e le te sp lo hi cs bound tbound *)
-         (*         (BOUND: Ple hi bound) *)
-         (*         (TBOUND: Plt sp tbound) *)
-         (*         (MTMP: self__Proof.match_temps f le te) *)
-         (*         (MENV: self__Proof.match_env f cenv e sp lo hi) *)
-         (*         (BOUND: self__Proof.match_bounds e m) *)
-         (*         (PERM: self__Proof.padding_freeable f e tm sp tf.(self__Cminorgen.Target.fn_stackspace)) *)
-         (*         (MCS: match_callstack ge f m tm cs lo sp), *)
-         (*       match_callstack ge f m tm (self__Proof.Frame cenv tf e le te sp lo hi :: cs) bound tbound. *)
-         (* FEnd match_callstack. *)
+         MetaData match_callstack.
+         Inductive match_callstack (ge: self__Cminorgen.Source.genv) (f: meminj) (m: mem) (tm: mem):
+                           self__Proof.callstack -> block -> block -> Prop :=
+           | mcs_nil:
+               forall hi bound tbound,
+               self__Proof.match_globalenvs ge f hi ->
+               Ple hi bound -> Ple hi tbound ->
+               match_callstack ge f m tm nil bound tbound
+           | mcs_cons:
+               forall cenv tf e le te sp lo hi cs bound tbound
+                 (BOUND: Ple hi bound)
+                 (TBOUND: Plt sp tbound)
+                 (MTMP: self__Proof.match_temps f le te)
+                 (MENV: self__Proof.match_env f cenv e sp lo hi)
+                 (BOUND: self__Proof.match_bounds e m)
+                 (PERM: self__Proof.padding_freeable f e tm sp tf.(self__Cminorgen.Target.fn_stackspace))
+                 (MCS: match_callstack ge f m tm cs lo sp),
+               match_callstack ge f m tm (self__Proof.Frame cenv tf e le te sp lo hi :: cs) bound tbound.
+         FEnd match_callstack.
 
-         (* FInductive match_cont: Source.cont -> Target.cont -> compilenv -> exit_env -> callstack -> Prop := *)
-         (*   | match_Kstop: forall cenv xenv, *)
-         (*       match_cont Source.Kstop Target.Kstop cenv xenv nil *)
-         (*   | match_Kseq: forall s k ts tk cenv xenv cs, *)
-         (*       transl_stmt s cenv xenv = OK ts -> *)
-         (*       match_cont k tk cenv xenv cs -> *)
-         (*       match_cont (Source.Kseq s k) (Target.Kseq ts tk) cenv xenv cs *)
-         (*   | match_Kseq2: forall s1 s2 k ts1 tk cenv xenv cs, *)
-         (*       transl_stmt s1 cenv xenv = OK ts1 -> *)
-         (*       match_cont (Source.Kseq s2 k) tk cenv xenv cs -> *)
-         (*       match_cont (Source.Kseq (Source.Sseq s1 s2) k) *)
-         (*                 (Target.Kseq ts1 tk) cenv xenv cs *)
-         (*   | match_Kblock: forall k tk cenv xenv cs, *)
-         (*       match_cont k tk cenv xenv cs -> *)
-         (*       match_cont (Source.Kblock k) (Target.Kblock tk) cenv (true :: xenv) cs *)
-         (*   | match_Kblock2: forall k tk cenv xenv cs, *)
-         (*       match_cont k tk cenv xenv cs -> *)
-         (*       match_cont k (Cminor.Sem.Kblock tk) cenv (false :: xenv) cs. *)
+         FInductive match_cont: Source.cont -> Target.cont -> compilenv -> exit_env -> callstack -> Prop :=
+           | match_Kseq2: forall s1 s2 k ts1 tk cenv xenv cs,
+               transl_stmt s1 = OK ts1 ->
+               match_cont (Source.Kseq s2 k) tk cenv xenv cs ->
+               match_cont (Source.Kseq (Source.Sseq s1 s2) k)
+                         (Target.Kseq ts1 tk) cenv xenv cs
+           | match_Kblock2: forall k tk cenv xenv cs,
+               match_cont k tk cenv xenv cs ->
+               match_cont k (Target.Kblock tk) cenv (false :: xenv) cs.
 
-           MetaData match_states.
+        MetaData match_states.
            Inductive match_states (ge: self__Cminorgen.Source.genv) : self__Cminorgen.Source.state -> self__Cminorgen.Target.state -> Prop :=
                | match_state:
                    forall fn s k e le m tfn ts tk sp te tm cenv xenv f lo hi cs sz
                    (TRF: self__Cminorgen.transl_funbody cenv sz fn = OK tfn)
-                   (TR: self__Cminorgen.transl_stmt s cenv xenv = OK ts)
+                   (TR: self__Cminorgen.transl_stmt s = OK ts)
                    (MINJ: Mem.inject f m tm)
                    (MCS: self__Proof.match_callstack ge f m tm
                            (self__Proof.Frame cenv tfn e le te sp lo hi :: cs)
                            (Mem.nextblock m) (Mem.nextblock tm))
                    (MK: self__Proof.match_cont k tk cenv xenv cs),
                    match_states ge (self__Cminorgen.Source.State fn s k e le m)
-                               (self__Cminorgen.Target.State tfn ts tk (Vptr sp Ptrofs.zero) te tm)
+                               (self__Cminorgen.Target.State tfn ts tk sp te tm)
                | match_state_seq:
                    forall fn s1 s2 k e le m tfn ts1 tk sp te tm cenv xenv f lo hi cs sz
                    (TRF: self__Cminorgen.transl_funbody cenv sz fn = OK tfn)
-                   (TR: self__Cminorgen.transl_stmt s1 cenv xenv = OK ts1)
+                   (TR: self__Cminorgen.transl_stmt s1 = OK ts1)
                    (MINJ: Mem.inject f m tm)
                    (MCS: self__Proof.match_callstack ge f m tm
                            (self__Proof.Frame cenv tfn e le te sp lo hi :: cs)
                            (Mem.nextblock m) (Mem.nextblock tm))
                    (MK: self__Proof.match_cont (self__Cminorgen.Source.Kseq s2 k) tk cenv xenv cs),
                    match_states ge (self__Cminorgen.Source.State fn (self__Cminorgen.Source.Sseq s1 s2) k e le m)
-                               (self__Cminorgen.Target.State tfn ts1 tk (Vptr sp Ptrofs.zero) te tm)
+                               (self__Cminorgen.Target.State tfn ts1 tk sp te tm)
                | match_callstate:
                    forall fd args k m tfd targs tk tm f cs cenv
                    (TR: self__Cminorgen.transl_fundef fd = OK tfd)
@@ -982,7 +968,7 @@ Inductive bitfield : Type :=
                    (RESINJ: Val.inject f v tv),
                    match_states ge (self__Cminorgen.Source.Returnstate v k m)
                                (self__Cminorgen.Target.Returnstate tv tk tm).
-           FEnd match_states.
+          FEnd match_states.
          (*
            Variable prog: Csharpminor.program.
            Variable tprog: program.
@@ -1004,20 +990,15 @@ Inductive bitfield : Type :=
                Case Sgoto := (fun _ => O).
          FEnd seq_left_depth.
 
-         FRecursion measure about Source.state motive (fun (_ : Source.state) => nat) by _rect.
-               Case State := (fun fn s k e le m => seq_left_depth s).
-               Case Callstate := (fun f args k m => O).
-               Case Returnstate := (fun res k m => O).
-         FEnd measure.
+         FDefinition measure := fun st =>
+            match st with
+               | self__Cminorgen.Source.State fn s k e le m => seq_left_depth s
+               | self__Cminorgen.Source.Callstate f args k m => O
+               | self__Cminorgen.Source.Returnstate res k m => O
+            end.                          
 
-         FInduction transl_step_correct about Source.step motive
-           (fun ge S1 t S2 (_ : Source.step ge S1 t S2) => 
-              forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->               
-           forall T1, match_states ge S1 T1 -> 
-           (exists T2, plus Target.step tge T1 t T2 /\ match_states ge S2 T2) 
-           \/ (measure S2 < measure S1 /\ t = E0 /\ match_states ge S2 T1)%nat).
+         FInduction transl_step_correct.
          FProof.
-           finduction.
            (* skip seq *)
            + intros. apply cheat.
            (* skip block *)
