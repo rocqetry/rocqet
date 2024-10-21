@@ -103,6 +103,12 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
+    | TraitDefinition of { 
+        linkage: Linkage.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
     | FieldDefinition of {
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModuleType.t;

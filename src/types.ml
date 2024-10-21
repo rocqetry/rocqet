@@ -253,6 +253,12 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
+    | TraitDefinition of { 
+        linkage: Linkage.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
     | FieldDefinition of {
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
@@ -397,6 +403,13 @@ end = struct
         in
         let default_ctx_params = path_subst_ctx family.default_ctx_params in
         FamilyDefinition { family with linkage; default_ctx_params }
+    | TraitDefinition trait -> 
+       let context = trait.linkage.context |> Bwd.map g in
+        let linkage =
+          { (path_subtitution trait.linkage ~source ~target) with context }
+        in
+        let default_ctx_params = path_subst_ctx trait.default_ctx_params in
+        TraitDefinition { trait with linkage; default_ctx_params }
     | InductiveDefinition definition ->
        let default_ctx_params = path_subst_ctx definition.default_ctx_params in
         InductiveDefinition

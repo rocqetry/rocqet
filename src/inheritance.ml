@@ -464,7 +464,11 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                         compiled_context;
                         compiled_signature;
                       }, []))        
-           
+        
+        (* late bound base? *)
+        | TraitDefinition trait ->
+            TraitDefinition { trait with compiled_context }, []
+
         | ComputationalAxiom comp ->
             ComputationalAxiom { comp with compiled_context }, []
         | InductiveAxiom axiom ->

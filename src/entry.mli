@@ -96,4 +96,4 @@ val closing_fact :
 
 val inherit_name : name:Names.Id.t -> unit
 
-val open_trait_with_base : name:Names.Id.t -> base:Libnames.qualid -> unit
+val open_trait_with_base : name:Names.Id.t -> base:Names.Id.t -> unit

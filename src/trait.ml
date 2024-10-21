@@ -1,2 +1,4 @@
+
 let open_with_base ~name ~base = 
-  Errors.fail ~info:"TODO"
+  Inheritance.inherit_dependencies ~prefix:base;  
+  ()
