@@ -162,7 +162,7 @@ module Context = struct
           linkage.fields
           |> Bwd.find_map (fun (field_name, elem) ->
                  match elem with
-                 | LinkageElem.FamilyDefinition { linkage; _ }
+                 | LinkageElem.FamilyDefinition { linkage; _ } | TraitDefinition { linkage; _ }
                    when Names.Id.equal name field_name ->
                      Some linkage
                  | _ -> None)
@@ -173,7 +173,7 @@ module Context = struct
           linkage.fields
           |> Bwd.find_map (fun (field_name, elem) ->
                  match elem with
-                 | LinkageElem.FamilyDefinition { linkage; _ }
+                 | LinkageElem.FamilyDefinition { linkage; _ } | TraitDefinition { linkage; _ }
                    when Names.Id.equal name field_name ->
                      Some linkage
                  | _ -> None)
