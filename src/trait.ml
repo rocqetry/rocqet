@@ -36,15 +36,7 @@ let close_trait () =
   let context = Context.get () in
   match context with
   | LinkageCtx.Toplevel _ -> Errors.fail ~info:"Toplevel traits not supported"     
-  | LinkageCtx.Nested (upper, linkage) ->
-      let linkage =
-        match linkage.base with
-        | None -> linkage
-        | Some base_linkage -> base_linkage 
-            (* no need to inherit elements *)
-            (* let elements = Bwd.to_list base_linkage.fields in
-            Inheritance.inherit_elements ~elements ~linkage ~context *)
-      in
+  | LinkageCtx.Nested (upper, linkage) ->      
       let signature = Codegen.compile_linkage_signature linkage in
       let elem =
         let compiled_context =
@@ -52,7 +44,7 @@ let close_trait () =
           | Bwd.Emp ->
               Errors.fail
                 ~info:
-                  "close_family: Couldn't get compiled context from parameters"
+                  "close_trait: Couldn't get compiled context from parameters"
           | Bwd.Snoc (_, (_, mapply)) -> Termutils.extract_functor_name mapply
         in
         let default_ctx_params =
