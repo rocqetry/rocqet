@@ -31,4 +31,5 @@
   ;STLC_prec
   ;Opaque_linkage_concat
   ;Nested_fsimpl
+  ;STLC_trait
   ))
