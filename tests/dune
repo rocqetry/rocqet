@@ -30,4 +30,5 @@
   ;Reparam_test
   ;STLC_prec
   ;Opaque_linkage_concat
+  ;Nested_fsimpl
   ))
