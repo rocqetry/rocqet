@@ -871,19 +871,6 @@ Inductive bitfield : Type :=
        FDefinition match_bounds : Source.fenv -> mem -> Prop :=
          fun e m => forall id b sz ofs p,
             PTree.get id e = Some(b, sz) -> Mem.perm m b ofs Max p -> 0 <= ofs < sz.
-
-       (* MetaData frame. *)
-       (* Inductive frame : Type := *)
-       (*   Frame(cenv: self__Cminorgen.compilenv) *)
-       (*       (tf: self__Cminorgen.Target.function) *)
-       (*       (e: self__Cminorgen.Source.fenv) *)
-       (*       (le: self__Cminorgen.Source.env) *)
-       (*       (te: self__Cminorgen.Target.env) *)
-       (*       (sp: block) *)
-       (*       (lo hi: block). *)
-       (* FEnd frame. *)
-
-       (* FDefinition callstack : Type := list frame. *)
        
        MetaData match_globalenvs.
        Inductive match_globalenvs (ge: self__Cminorgen.Source.genv) (f: meminj) (bound: block): Prop :=
@@ -969,25 +956,25 @@ Inductive bitfield : Type :=
          Let tge: genv := Genv.globalenv tprog. 
        *)
 
-       FRecursion seq_left_depth about Source.stmt motive (fun (_ : Source.stmt) => nat) by _rect.
-             Case Sskip := O.
-             Case Sset := (fun _ _ => O).
-             Case Sseq := (fun s1 seq_left_depth_s1 s2 _ => S (seq_left_depth_s1)).
-             Case Sifthenelse := (fun _ s1 _ s2 _ => O).
-             Case Sloop := (fun s _ => O).
-             Case Sblock := (fun s _ => O).
-             Case Sexit := (fun _ => O).
-             Case Sreturn := (fun e => O).
-             Case Slabel := (fun _ s _ => O).
-             Case Sgoto := (fun _ => O).
-       FEnd seq_left_depth.
+       (* FRecursion seq_left_depth about Source.stmt motive (fun (_ : Source.stmt) => nat) by _rect. *)
+       (*       Case Sskip := O. *)
+       (*       Case Sset := (fun _ _ => O). *)
+       (*       Case Sseq := (fun s1 seq_left_depth_s1 s2 _ => S (seq_left_depth_s1)). *)
+       (*       Case Sifthenelse := (fun _ s1 _ s2 _ => O). *)
+       (*       Case Sloop := (fun s _ => O). *)
+       (*       Case Sblock := (fun s _ => O). *)
+       (*       Case Sexit := (fun _ => O). *)
+       (*       Case Sreturn := (fun e => O). *)
+       (*       Case Slabel := (fun _ s _ => O). *)
+       (*       Case Sgoto := (fun _ => O). *)
+       (* FEnd seq_left_depth. *)
 
-       FOverride Definition measure := fun st =>
-          match st with
-             | self__Cminorgen.Source.State fn s k e le m => seq_left_depth s
-             | self__Cminorgen.Source.Callstate f args k m => O
-             | self__Cminorgen.Source.Returnstate res k m => O
-          end.                        
+       (* FOverride Definition measure := fun st => *)
+       (*    match st with *)
+       (*       | self__Cminorgen.Source.State fn s k e le m => seq_left_depth s *)
+       (*       | self__Cminorgen.Source.Callstate f args k m => O *)
+       (*       | self__Cminorgen.Source.Returnstate res k m => O *)
+       (*    end.      *)                   
 
        FInduction transl_step_correct.
        FProof.
@@ -998,7 +985,23 @@ Inductive bitfield : Type :=
          transl_program prog = OK tprog ->
          exists R, Target.initial_state tprog R /\ match_states S R.
            FProofLemma.
-             apply cheat.
+             induction 1.
+             exploit (function_ptr_translated b f); eauto. intros [tf [FIND TR]].
+             econstructor; split.
+             econstructor.
+             apply (Genv.init_mem_transf_partial TRANSL). eauto.
+             simpl. fold tge. rewrite symbols_preserved.
+             replace (prog_main tprog) with (prog_main prog). eexact H0.
+             symmetry. unfold transl_program in TRANSL.
+             eapply match_program_main; eauto.
+             eexact FIND.
+             rewrite <- H2. apply sig_preserved; auto.
+             eapply match_callstate with (f := Mem.flat_inj (Mem.nextblock m0)) (cs := @nil frame) (cenv := PTree.empty Z).
+             auto.
+             eapply Genv.initmem_inject; eauto.
+             apply mcs_nil with (Mem.nextblock m0). apply match_globalenvs_init; auto. extlia. extlia.
+             constructor. red; auto.
+             constructor.
            Qed.
        CloseFLemma.
 
