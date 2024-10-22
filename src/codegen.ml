@@ -635,7 +635,7 @@ let normalize_parameters
     default_ctx_params
     |> List.map (fun (self_name, _) -> Libnames.qualid_of_ident self_name)    
 
-let compile_linkage_context ~field_name (context : LinkageCtx.t) :
+let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
   let linkage =
     match context with
@@ -664,6 +664,13 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
       in
       ( signature_name,
         linkage.context @> [ (Naming.self_version linkage.name, signature) ] )
+  | Bwd.Snoc (fields, ( _, TraitDefinition _)) ->      
+     let context = 
+       match context with 
+       | LinkageCtx.Toplevel linkage -> LinkageCtx.Toplevel { linkage with fields }
+       | LinkageCtx.Nested (upper, linkage) -> LinkageCtx.Nested (upper, { linkage with fields })
+     in
+     compile_linkage_context ~field_name context
   | Bwd.Snoc
       ( _,
         ( _,
@@ -728,12 +735,7 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
       ( _,
         ( _,
           FamilyDefinition
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          TraitDefinition
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
+            { default_ctx_params; compiled_context; compiled_signature; _ } ) )  
   | Bwd.Snoc
       ( _,
         ( _,
