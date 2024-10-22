@@ -990,7 +990,7 @@ Inductive bitfield : Type :=
                Case Sgoto := (fun _ => O).
          FEnd seq_left_depth.
 
-         FDefinition measure := fun st =>
+         FOverride Definition measure := fun st =>
             match st with
                | self__Cminorgen.Source.State fn s k e le m => seq_left_depth s
                | self__Cminorgen.Source.Callstate f args k m => O
@@ -999,34 +999,7 @@ Inductive bitfield : Type :=
 
          FInduction transl_step_correct.
          FProof.
-           (* skip seq *)
-           + intros. apply cheat.
-           (* skip block *)
-           + intros. apply cheat.
-           (* skip call *)
-           + intros. apply cheat.
-           (* set *)
-           + intros. apply cheat.
-           (* seq *)
-           + intros. apply cheat.
-           (* ifthenelse *)
-           + intros. apply cheat.
-           (* loop *)
-           + apply cheat.
-           (* block *)
-           + apply cheat.
-           (* return none *)
-           + apply cheat.
-           (* return some *)
-           + apply cheat.
-           (* label *)
-           + apply cheat.
-           (* goto *)
-           + apply cheat.
-           (* internal function *)
-           + intros. apply cheat.
-         Qed.
-         FEnd transl_step_correct.
+         Qed. FEnd transl_step_correct.
 
          FLemma transl_initial_states:
            forall S prog tprog ge, Source.initial_state prog S ->
