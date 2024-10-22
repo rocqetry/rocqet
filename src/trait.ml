@@ -3,10 +3,11 @@ open Env
 open Bwd
 
 let open_with_base ~name ~base = 
+  (* We don't have to inherit depenencies, we just need the compiled context *)
   Inheritance.inherit_dependencies ~prefix:base;
   let context = Context.get () in
   let _, parameters =
-            Codegen.compile_linkage_context ~field_name:name context
+     Codegen.compile_linkage_context ~field_name:name context
   in
   let default_ctx_params =
     Codegen.compile_default_params ~context:parameters
