@@ -81,3 +81,5 @@ val is_self_name : Names.Id.t -> bool
 val is_self_qualid : Libnames.qualid -> bool
 
 val remove_self_qualid : Libnames.qualid -> Libnames.qualid
+
+val extract_prefix : Libnames.qualid -> Libnames.qualid option
