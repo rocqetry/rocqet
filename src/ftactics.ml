@@ -5,7 +5,7 @@ open Types
 let extract_handlers_names names = 
   let context = Env.Context.get () in
   names  
-  |> List.filter_map (fun name -> 
+  |> List.filter_map (fun name ->         
         if Naming.is_self_qualid name 
         then
            name 
@@ -14,8 +14,9 @@ let extract_handlers_names names =
            |> Option.map fst
            |> Option.map (function 
               | LinkageElem.RecursorDefinition { names; handlers; _} -> 
-                 let name = List.hd names in 
-                 Some (name, handlers)
+                 let prefix = Naming.extract_prefix name in
+                 let name = List.hd names in                  
+                 Some (prefix, name, handlers)
               | _ -> None)                      
            |> Option.flatten
         else None)  
@@ -23,7 +24,7 @@ let extract_handlers_names names =
 let handlers_to_computational_axiom handlers = 
   let context = Env.Context.get () in
   handlers       
-  |> List.concat_map (fun (recursor_name, handlers) ->        
+  |> List.concat_map (fun (prefix, recursor_name, handlers) ->        
        handlers 
        |> List.map (fun constructor_name -> 
               let name = 
@@ -31,24 +32,26 @@ let handlers_to_computational_axiom handlers =
                    ~recursor_name 
                    ~constructor_name
               in 
+              let qualid = Naming.qualid_point prefix name in
               Resolver.resolve_qualid 
                 ~context 
-                ~qualid:(Libnames.qualid_of_ident name)))
+                ~qualid))
 
 let handlers_to_case_definitions handlers = 
   let context = Env.Context.get () in
   handlers
-  |> List.concat_map (fun (recursor, handlers) ->        
+  |> List.concat_map (fun (prefix, recursor, handlers) ->        
        handlers 
        |> List.map (fun case -> 
               let name = 
                  Naming.handler_name 
                    ~recursor
                    ~case
-              in 
+              in
+              let qualid = Naming.qualid_point prefix name in
               Resolver.resolve_qualid 
                 ~context 
-                ~qualid:(Libnames.qualid_of_ident name))) 
+                ~qualid)) 
 
 let idtac =
   let open Ltac_plugin in
@@ -322,17 +325,9 @@ let extract_constructors names =
                     |> snd 
                     |> List.map fst
                  in
-                 let prefix = 
-                   name 
-                   |> Naming.remove_self_qualid 
-                   |> Naming.path_to_list 
-                   |> List.rev 
-                   |> List.tl 
-                   |> List.rev 
-                   |> Naming.list_to_path
-                 in
+                 let prefix = name |> Naming.extract_prefix in                 
                  let qualify name = 
-                   let qualid = Naming.qualid_point (Some prefix) name in 
+                   let qualid = Naming.qualid_point prefix name in 
                    Resolver.resolve_qualid ~context ~qualid
                  in
                  let constructors = constructors |> List.map qualify in 

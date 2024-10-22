@@ -314,3 +314,16 @@ let remove_self_qualid name =
         | _ :: path -> remove_self_qual path                             
     in 
     remove_self_qual (path_to_list name)
+
+let extract_prefix name = 
+  let prefix = 
+     name 
+     |> remove_self_qualid 
+     |> path_to_list 
+     |> List.rev 
+     |> List.tl 
+     |> List.rev
+  in 
+  match prefix with 
+  | [] -> None 
+  | prefix -> Some (list_to_path prefix)
