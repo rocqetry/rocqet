@@ -4,7 +4,7 @@ open Env
 (* The entry point to the language *)
 
 let finductive inductive_definitions =
-  PluginScopes.ensure_in_scope ~scope:PluginCmd.Family;
+  (* PluginScopes.ensure_in_scope ~scope:PluginCmd.Family;*)
   Inductive.add_inductive_definition inductive_definitions
 
 let fend scope_name =
