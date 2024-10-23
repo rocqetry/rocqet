@@ -15,7 +15,13 @@ let open_with_base ~name ~base =
   let elem = Inheritance.lookup_field_in_base ~field:base ~context in
   let base = 
      match elem with 
-     | Some (LinkageElem.FamilyDefinition { linkage; _ }) -> Some linkage
+     | Some (LinkageElem.FamilyDefinition { linkage; _ }) -> 
+        let linkage =
+           Linkage.path_subtitution linkage
+             ~source:(Naming.self_version linkage.name)
+             ~target:(Naming.self_version name)
+        in
+        Some linkage
      | _ -> Errors.fail ~info:"Unbound family name"
   in 
   let linkage =
