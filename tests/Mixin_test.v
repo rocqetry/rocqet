@@ -32,7 +32,7 @@ Family STLC_prod.
   FEnd X.  
 FEnd STLC_prod.
 
-Family Al extends STLC using STLC_unit, STLC_bool, STLC_prod.    
+Family Al extends STLC, STLC_unit, STLC_bool, STLC_prod.
 FEnd Al.
 
 Check Al.X.ty_arrow.

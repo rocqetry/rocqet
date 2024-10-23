@@ -635,7 +635,7 @@ let normalize_parameters
     default_ctx_params
     |> List.map (fun (self_name, _) -> Libnames.qualid_of_ident self_name)    
 
-let compile_linkage_context ~field_name (context : LinkageCtx.t) :
+let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
   let linkage =
     match context with
@@ -664,6 +664,13 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
       in
       ( signature_name,
         linkage.context @> [ (Naming.self_version linkage.name, signature) ] )
+  | Bwd.Snoc (fields, ( _, TraitDefinition _)) ->      
+     let context = 
+       match context with 
+       | LinkageCtx.Toplevel linkage -> LinkageCtx.Toplevel { linkage with fields }
+       | LinkageCtx.Nested (upper, linkage) -> LinkageCtx.Nested (upper, { linkage with fields })
+     in
+     compile_linkage_context ~field_name context
   | Bwd.Snoc
       ( _,
         ( _,
@@ -728,7 +735,7 @@ let compile_linkage_context ~field_name (context : LinkageCtx.t) :
       ( _,
         ( _,
           FamilyDefinition
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
+            { default_ctx_params; compiled_context; compiled_signature; _ } ) )  
   | Bwd.Snoc
       ( _,
         ( _,
@@ -792,6 +799,11 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
         let open B in
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
+
+    (* traits have no implmentation, so 
+       there's nothing to add in the context *)
+    | Snoc (fields, (_, TraitDefinition _)) ->  compile_fields fields    
+    
     | Snoc (fields, (name, FamilyDefinition _)) ->
         let open B in
         let* _ = compile_fields fields in
@@ -929,6 +941,10 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         let open B in
         let* _ = compile_fields fields ctx in        
         compile_partial_recursor_implementation ~name ~type_name
+
+    (* traits have no implementation *)
+    | Snoc (fields, (_, TraitDefinition _ )) -> compile_fields fields ctx
+
     | Snoc (fields, (_, FamilyDefinition { linkage = nested_linkage; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in
@@ -1044,6 +1060,12 @@ let compile_linkage_signature linkage =
         ( _,
           ( _,
             LinkageElem.FamilyDefinition
+              { default_ctx_params; compiled_context; compiled_signature; _ } )
+        )
+    | Snoc
+        ( _,
+          ( _,
+            LinkageElem.TraitDefinition
               { default_ctx_params; compiled_context; compiled_signature; _ } )
         )
     | Snoc

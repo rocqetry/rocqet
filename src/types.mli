@@ -75,7 +75,7 @@ module Recursors : sig
 end
 
 module PluginCmd : sig
-  type t = Family | Recursion | Induction | MetaData | Lemma
+  type t = Family | Recursion | Induction | MetaData | Lemma | Trait
 end
 
 module PluginCmdScope : sig
@@ -99,6 +99,12 @@ module rec LinkageElem : sig
       }
     | FamilyDefinition of {
         linkage : Linkage.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | TraitDefinition of { 
+        linkage: Linkage.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;

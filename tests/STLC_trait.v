@@ -2,15 +2,13 @@ From NFPOP Require Import Loader.
 
 Definition ident := nat.
 
-Axiom cheat : forall {X}, X.
-
-Family Ix.   
-   FInductive ty : Set :=
-     | ty_unit : ty.
-FEnd Ix.
-
 Family STLC.
-  Family X extends Ix.
+  Trait unit_mixin extends X.
+  FInductive ty : Set :=
+  | ty_unit : ty.
+  FEnd unit_mixin.
+  
+  Family X extends unit_mixin.
     FInductive ty : Set :=     
      | ty_arrow : ty -> ty -> ty.
   FEnd X.
@@ -22,27 +20,23 @@ Family STLC.
   
   FInduction subst_size
        about X.ty
-       motive (fun (t : X.ty) => subst t 0 = 1).
+       motive (fun (t : X.ty) => subst t 0 = 0).
      FProof.  
-     - apply cheat.
-     - intros. apply cheat.
-     Qed.
-  FEnd subst_size.  
-  
-  (*FInductive tm : Set :=
-  | tm_var : self__STLC.ident -> tm
-  | tm_app : tm -> tm -> tm
-  | tm_val : val -> tm
-  with val : Set :=
-  | val_abs : self__STLC.ident -> tm -> val
-  | val_unit: val. *)
+     - fsimpl. reflexivity. 
+     - intros. fsimpl in *. rewrite -> H. rewrite H0. 
+       reflexivity.
+     Qed. FEnd subst_size.  
 FEnd STLC.
 
 Family STLC_bool extends STLC.
-  Family X.
-    FInductive ty : Set :=
-      | ty_bool : ty.          
-  FEnd X.  
+  
+  Trait bool_mixin extends X.  
+  FInductive ty : Set :=
+  | ty_bool : ty.
+  FEnd bool_mixin.    
+
+  Family X extends bool_mixin.  
+  FEnd X.
 
   FRecursion subst.
       Case ty_bool := 1.
@@ -53,14 +47,6 @@ Family STLC_bool extends STLC.
       + apply cheat.
     Qed.
   FEnd subst_size.
-
-(*FInductive tm : Set :=
-    | tm_if : tm -> tm -> tm -> tm
-  with val : Set :=
-    | val_true : val
-    | val_false : val.
-
-  FDefinition check_handler_bool := subst.*)
 FEnd STLC_bool.
 
 Family STLC_prod extends STLC_bool.
@@ -77,14 +63,7 @@ Family STLC_prod extends STLC_bool.
     FProof.
     - intros. apply cheat.
     Qed.
-  FEnd subst_size.
-
-  (*FInductive tm : Set :=
-    | tm_prod : tm -> tm -> tm
-    | tm_pi1 : tm -> tm
-    | tm_pi2 : tm -> tm
-  with val : Set :=
-    | val_prod : val -> val -> val.*)
+  FEnd subst_size.  
 FEnd STLC_prod.
 
 Family STLC_nat. 

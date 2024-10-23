@@ -4,7 +4,7 @@ open Env
 (* The entry point to the language *)
 
 let finductive inductive_definitions =
-  PluginScopes.ensure_in_scope ~scope:PluginCmd.Family;
+  (* PluginScopes.ensure_in_scope ~scope:PluginCmd.Family;*)
   Inductive.add_inductive_definition inductive_definitions
 
 let fend scope_name =
@@ -30,9 +30,9 @@ let family_extends ~derived ~base =
         close = Family.close_family;
       }
 
-let family_compose ~derived ~base ~bases =
+let family_extends_list ~derived ~bases =
   let name = derived in
-  Family.open_family_mixin ~name ~base ~bases;
+  Family.open_family_with_base_list ~name ~bases;
   PluginScopes.push
     PluginCmdScope.
       { name; command = PluginCmd.Family; close = Family.close_family }
@@ -101,3 +101,13 @@ let display_plugin_scope = PluginScopes.display
 let closing_fact = Closing_fact.add
 
 let inherit_name = Inheritance.inherit_name
+
+let open_trait_with_base ~name ~base = 
+  Trait.open_with_base ~name ~base; 
+  PluginScopes.push
+    PluginCmdScope.
+      {
+        name;
+        command = PluginCmd.Trait;
+        close = Trait.close_trait;
+      }

@@ -103,7 +103,7 @@ Family Xo extends Xe.
     FEnd Language.
 FEnd Xo.
 
-Family m extends Xe using Xa, Xo.
+Family m extends Xe, Xa, Xo.
 FEnd m.
 
 Print m.Language.Expr.Ty.

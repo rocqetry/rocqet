@@ -13,7 +13,7 @@ module PluginScopes = struct
     | Some
         {
           command =
-            PluginCmd.(Family | Recursion | Induction | MetaData | Lemma);
+            PluginCmd.(Family | Recursion | Induction | MetaData | Lemma | Trait);
           _;
         } ->
         scopes := scope :: !scopes
@@ -36,6 +36,7 @@ module PluginScopes = struct
           | Induction -> "FInduction"
           | Recursion -> "FRecursion"
           | MetaData -> "MetaData"
+          | Trait -> "Trait"
         in
         let rest =
           rest
@@ -161,7 +162,7 @@ module Context = struct
           linkage.fields
           |> Bwd.find_map (fun (field_name, elem) ->
                  match elem with
-                 | LinkageElem.FamilyDefinition { linkage; _ }
+                 | LinkageElem.FamilyDefinition { linkage; _ } | TraitDefinition { linkage; _ }
                    when Names.Id.equal name field_name ->
                      Some linkage
                  | _ -> None)
@@ -172,7 +173,7 @@ module Context = struct
           linkage.fields
           |> Bwd.find_map (fun (field_name, elem) ->
                  match elem with
-                 | LinkageElem.FamilyDefinition { linkage; _ }
+                 | LinkageElem.FamilyDefinition { linkage; _ } | TraitDefinition { linkage; _ }
                    when Names.Id.equal name field_name ->
                      Some linkage
                  | _ -> None)

@@ -87,19 +87,19 @@ VERNAC ARGUMENT EXTEND argument_flist
 END
 
 VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
-| [ "Family" ident(derived) "extends" reference(base) ] ->  { Entry.family_extends ~derived ~base }
-
-| [ "Family" ident(derived) "extends" reference(base) 
-    "using" reference_list_sep(arguments, ",") ] -> { Entry.family_compose ~derived ~base ~bases:arguments }
+| [ "Family" ident(derived) "extends"
+    reference_list_sep(arguments, ",") ] -> { Entry.family_extends_list ~derived ~bases:arguments }
 
 | [ "Family" ident(name) ] -> { Entry.family name }
 
 | [ "FInductive" mutind_defs(inductive_definition) ] -> { Entry.finductive inductive_definition }
 
+| [ "Trait" ident(name) "extends" ident(base) ] -> { Entry.open_trait_with_base ~name ~base }
+
 | [ "FEnd" ident(scope_name) ] -> { Entry.fend scope_name }
 
 | [ "FDefinition" ident(name) ":" llconstr_ip(body_type) ":=" llconstr_ip(body_expr)  ] ->
-   { Entry.definition ~name ~body_type body_expr}
+   { Entry.definition ~name ~body_type body_expr }
 
 | [ "FOpaque" "Definition" ident(name) ":" llconstr_ip(body_type) ":=" llconstr_ip(body_expr)  ] ->
    { Entry.opaque_definition ~name ~body_type ~body_expr }
@@ -118,6 +118,7 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "FRecursion" ident(name) ":" argument_flist(args) ] -> 
    { Entry.frecursion_elegant name args }
+
 (* Default case is by _rec *)
 | [ "FRecursion" ident(name) 
                "about" reference_ip(inductive)
