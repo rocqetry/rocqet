@@ -980,16 +980,29 @@ Inductive bitfield : Type :=
        FProof.
        Qed. FEnd transl_step_correct.
 
+
+       FLemma function_ptr_translated:
+         forall (b: block) (f: Source.fundef) (prog: Source.program) (tprog: Target.program),
+         Genv.find_funct_ptr (Genv.globalenv prog) b = Some f ->
+         exists tf,
+         Genv.find_funct_ptr (Genv.globalenv tprog) b = Some tf /\ transl_fundef f = OK tf.
+           FProofLemma.
+             intros.
+             apply (Genv.find_funct_ptr_transf_partial (self__Cminorgen.match_prog prog tprog)).
+             apply cheat.
+           Qed.
+       CloseFLemma.
+
        FLemma transl_initial_states:
          forall S prog tprog, Source.initial_state prog S ->
          transl_program prog = OK tprog ->
          exists R, Target.initial_state tprog R /\ match_states S R.
            FProofLemma.
              induction 1.
-             exploit (function_ptr_translated b f); eauto. intros [tf [FIND TR]].
+             exploit (self__Cminorgen.function_ptr_translated b f); eauto. intros [tf [FIND TR]].
              econstructor; split.
              econstructor.
-             apply (Genv.init_mem_transf_partial TRANSL). eauto.
+             apply (Genv.init_mem_transf_partial (self__Cminorgen.match_prog prog tprog)). eauto.
              simpl. fold tge. rewrite symbols_preserved.
              replace (prog_main tprog) with (prog_main prog). eexact H0.
              symmetry. unfold transl_program in TRANSL.
