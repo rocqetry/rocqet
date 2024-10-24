@@ -115,11 +115,12 @@ let closing_fact = Closing_fact.add
 let inherit_name = Inheritance.inherit_name
 
 let open_trait_with_base ~name ~base = 
+  let names = [name] in 
   Trait.open_with_base ~name ~base; 
   PluginScopes.push
     PluginCmdScope.
       {
-        name;
+        names;
         command = PluginCmd.Trait;
         close = Trait.close_trait;
       }
