@@ -16,6 +16,11 @@ module Vernac : sig
   val define_inductive_scheme :
     (Names.Id.t * Names.Id.t * Sorts.family) list -> unit t
 
+  val define_mutual_inductive_scheme : 
+   inductives:Names.Id.t list -> 
+   suffix:RecKind.t -> 
+   unit t
+
   val define_term :
     ?ty:Constrexpr.constr_expr ->
     name:Names.Id.t ->
