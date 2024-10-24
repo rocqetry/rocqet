@@ -133,6 +133,14 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
                  type_names
              in
              let* () = flatmap all_ind_comp_schemes in
+             (* Mutual Inductive *)
+             let* () = 
+               match type_names with 
+               | [] | [_] -> return ()
+               | inductives -> 
+                  let suffix = RecKind.Rect in
+                  define_mutual_inductive_scheme ~inductives ~suffix
+             in
              (* Now, we read from the environment all defined recursors and get their types. *)
              let collect_thunks =
                type_names
