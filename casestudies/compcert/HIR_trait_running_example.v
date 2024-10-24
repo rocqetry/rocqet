@@ -473,7 +473,13 @@ FEnd Compiler.
 Family Compiler_loops extends Compiler.
 
 
-Trait HIR_while extends HIR.
+Trait HIR_loop_escape extends HIR.
+FInductive stmt : Set := 
+| Sbreak : stmt (* break statement *)
+| Scontinue : stmt. (* continue statement *)
+FEnd HIR_loop_escape.
+
+Trait HIR_while extends HIR_loop_escape, HIR.
 FInductive stmt : Set := 
 | Swhile : expr -> stmt -> stmt. (* while loop *)
 
@@ -481,8 +487,25 @@ FInductive cont: Type :=
 | Kwhile1: expr -> stmt -> cont -> cont (* Kwhile1 x s k = after x in while(x) s *)
 | Kwhile2: expr -> stmt -> cont -> cont. (* Kwhile x s k = after s in while (x) s *)
 
+
+FRecursion call_cont.
+Case Kwhile1 := (fun e s k call_cont_k => call_cont_k).
+Case Kwhile2 := (fun e s k call_cont_k => call_cont_k).
+FEnd call_cont.
+
+FRecursion is_call_cont.
+Case Kwhile1 := (fun e s k call_cont_k => False).
+Case Kwhile2 := (fun e s k call_cont_k => False). 
+FEnd is_call_cont.
+
 FInductive step : genv -> state -> trace -> state -> Prop := 
-| step_while.
+| step_while: forall ge s1 s2,
+     step ge s1 E0 s2
+| step_while_false: forall ge s1 s2,
+     step ge s1 E0 s2
+| step_while_true: forall ge s1 s2,
+     step ge s1 E0 s2.
+
 FEnd HIR_while.
 
 Trait HIR_for extends HIR.
