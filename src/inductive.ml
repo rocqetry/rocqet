@@ -1,7 +1,7 @@
 open Types
 open Env
 
-let add_inductive_constr ~name ~ty =
+let add_inductive_axiom ~name ~ty =
   Inheritance.inherit_dependencies ~prefix:name;
   let context = Context.get () in
   let default_ctx_params =
@@ -19,7 +19,7 @@ let add_inductive_constr ~name ~ty =
     LinkageElem.InductiveAxiom
       { compiled_context; compiled_signature; default_ctx_params }
   in
-  (* Fake names becuase the inductive will already
+  (* Fake names becuase the InductiveDefinition will already
      have the names and expose then to the resolver
      too *)
   let name = Naming.inductive_axiom_name name in
@@ -72,12 +72,12 @@ let add_new_inductive_definition ~inductive ~inductive_name =
 
   let _ =
     types inductive
-    |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
+    |> List.iter (fun (name, ty) -> add_inductive_axiom ~name ~ty)
   in
 
   let _ =
     constructors inductive
-    |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
+    |> List.iter (fun (name, ty) -> add_inductive_axiom ~name ~ty)
   in
   ()
   (* if not (Termutils.is_indexed_inductive inductive) then
@@ -148,7 +148,7 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
              Inheritance.inherit_name ~name:(Naming.inductive_axiom_name name))
     in
 
-    new_types |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
+    new_types |> List.iter (fun (name, ty) -> add_inductive_axiom ~name ~ty)
   in
   
   let inherited_constructors = constructors inherited_inductive in
@@ -165,7 +165,7 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
     in
 
     new_constructors
-    |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
+    |> List.iter (fun (name, ty) -> add_inductive_axiom ~name ~ty)
   in
   ()
   

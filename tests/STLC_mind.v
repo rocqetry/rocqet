@@ -13,6 +13,17 @@ with val : Set :=
 | val_abs : ident -> tm -> val
 | val_unit: val.
 
+FRecursion tm_size about tm motive (fun (_ : tm) => nat) by _rec.
+Case tm_var := cheat.
+Case tm_app := cheat.
+Case tm_val := cheat.
+FEnd tm_size.
+
+FRecursion val_size about val motive (fun (_ : val) => nat) by _rec.
+Case val_abs := cheat.
+Case val_unit := cheat.
+FEnd val_size.
+
 (*
   Scheme __internal_tm_tm_val_rect := Induction for __internal_tm 
   Sort Type

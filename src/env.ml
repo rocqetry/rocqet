@@ -181,12 +181,7 @@ module Context = struct
           | None -> walk context
           | linkage -> linkage)
     in
-    let rest = List.tl path in
-    (* let linkage =
-         match walk context with
-         | None -> Linkages.lookup name
-         | Some context -> Some context
-       in*)
+    let rest = List.tl path in    
     let linkage =
       match context with
       | None -> Linkages.lookup name
@@ -197,6 +192,13 @@ module Context = struct
     | path ->
         Option.bind linkage (fun linkage -> walk_down_linkage linkage path)
 
+  let linkage_elem_names elem : Names.Id.t list = match elem with
+    | (_, LinkageElem.InductiveDefinition { inductive; _ }) ->       
+         inductive |> VernacInductive.extract_all_names |> List.split |> fst       
+    | (_, RecursorDefinition { names; _ }) -> names
+    | (_, TheoremDefinition { names; _}) -> names
+    | (name, _) -> [name]
+  
   let lookup_linkage_elem context (path : Libnames.qualid) =
     let family, name = Naming.path_to_prefix path in
     let result =
@@ -208,17 +210,20 @@ module Context = struct
                  if Names.Id.equal name found_name then Some (elem, linkage)
                  else None)
     in
+    let found ~bound_names = bound_names |> List.exists (Names.Id.equal name) in 
     let rec go context =
       match context with
       | LinkageCtx.Toplevel linkage ->
           linkage.fields
           |> Bwd.find_map (fun (found_name, elem) ->
-                 if Names.Id.equal name found_name then Some (elem, linkage)
+                 let bound_names = linkage_elem_names (found_name, elem) in                 
+                 if found ~bound_names then Some (elem, linkage)
                  else None)
       | LinkageCtx.Nested (context, linkage) -> (
           linkage.fields
           |> Bwd.find_map (fun (found_name, elem) ->
-                 if Names.Id.equal name found_name then Some (elem, linkage)
+                 let bound_names = linkage_elem_names (found_name, elem) in 
+                 if found ~bound_names then Some (elem, linkage)
                  else None)
           |> function
           | None -> go context
