@@ -14,7 +14,7 @@ let add
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let prec_suffix = Naming.fresh_name ~prefix:"PrecSuffix" in
-  let inductive_name = inductive_path |> Naming.path_to_list |> List.rev |> List.hd in     
+  let inductive_name = inductive_path |> Naming.extract_path_base in
   let name = Naming.partial_recursor_name ~inductive_name ~prec_suffix in
   
   let type_name = Naming.fresh_name ~prefix:"PrecTy" in
@@ -78,7 +78,8 @@ let add
            let recursor_path = construct_path name in
            let axiom_name, axiom, compiled_signature =
              Codegen.compile_prec_computational_axiom_signature ~ctx:parameters
-               ~constructor_name ~constructor_path ~inductive ~recursor_path ~handlers ~prec_suffix                  
+               ~constructor_name ~constructor_path ~inductive_name
+               ~inductive ~recursor_path ~handlers ~prec_suffix                  
            in
            let elem =
              LinkageElem.ComputationalAxiom

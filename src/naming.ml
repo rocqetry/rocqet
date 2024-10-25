@@ -88,7 +88,7 @@ let _to_qualid_name (path : Libnames.qualid) :
     match Names.DirPath.repr prefix_path with
     | [] -> Errors.fail ~info:"Unexpected Error"
     | newbase :: remained ->
-        (Some (make_qualid (Names.DirPath.make remained) newbase), base)
+       (Some (make_qualid (Names.DirPath.make remained) newbase), base)
 
 let path_to_list (path : Libnames.qualid) : Names.Id.t list =
   let prefix, base = Libnames.repr_qualid path in
@@ -102,6 +102,8 @@ let path_to_prefix (path : Libnames.qualid) :
   match Names.DirPath.repr prefix with
   | [] -> (None, base)
   | _ -> (Some (Libnames.qualid_of_dirpath prefix), base)
+
+let extract_path_base path = path |> path_to_prefix |> snd
 
 let make_module_path head path =
   let head = Libnames.qualid_of_ident head in

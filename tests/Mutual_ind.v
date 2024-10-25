@@ -6,7 +6,7 @@ Inductive tm : Set :=
   | tm_var : ident -> tm
   | tm_app :  tm  -> tm -> tm 
   | tm_val : val -> tm 
-  with val :  Set :=
+with val :  Set :=
   | val_abs : ident -> tm -> val
   | val_unit: val.  
 

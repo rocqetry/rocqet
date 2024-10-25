@@ -9,7 +9,9 @@ module VernacInductive : sig
     (* inductive type name * sort/kind  *)
     (Names.Id.t * Constrexpr.constr_expr option)
     * (* constr name * constructor type *)
-    (Names.Id.t * Constrexpr.constr_expr) list
+      (Names.Id.t * Constrexpr.constr_expr) list
+  
+  val create_inductive_constructor_map : t -> Names.Id.t list Names.Id.Map.t
 
   val extract_all_names_with_type :
     t ->
@@ -46,27 +48,10 @@ end
 
 module RecursorStore : Map.S with type key = RecKind.t
 
-module CompiledRecursor : sig
-  type t = {
-    inductive_names : Names.Id.t list;
-    compiled_recursor : CompiledModuleType.t;
-    handlers : (Names.Id.t * Constrexpr.constr_expr) list;
-    compiled_handlers : (Names.Id.t * CompiledModuleType.t) list;
-  }
-end
-
-module CompiledRecursors : sig
-  type t = {
-    compiled_context : CompiledModuleType.t;
-    recursors : CompiledRecursor.t RecursorStore.t;
-  }
-end
-
 module Recursor : sig
   type t = {
-    inductive_names : Names.Id.t list;
-    recursor : Constrexpr.constr_expr;
-    handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+    recursors : Constrexpr.constr_expr Names.Id.Map.t;
+    handlers : (Names.Id.t * Constrexpr.constr_expr) list Names.Id.Map.t;
   }
 end
 
