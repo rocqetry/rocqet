@@ -259,7 +259,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
       let element, fresh_elements =
         match element with
         | LinkageElem.InductiveDefinition inductive ->
-            let compiled_impl, principles, _mutual_principle =
+            let compiled_impl, principles, mutual_principle =
               Codegen.compile_inductive_implementation
                 ~ind_def:inductive.inductive ~ctx:parameters ~family_name:name
             in
@@ -269,7 +269,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
             in
             let recursors =
               Termutils.extract_handler_types_from_principle
-                ~inductive:inductive.inductive ~principles
+                ~inductive:inductive.inductive ~principles ~mutual_principle
             in
             let default_ctx_params =
               context |> Context.family_linkage |> function

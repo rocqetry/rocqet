@@ -21,12 +21,17 @@ module VernacInductive : sig
 
   val extract_all_names : t -> (Names.Id.t * Names.Id.t list) list
   val extract_inductive_name : t -> Names.Id.t
+  val extract_all_inductive_names : t -> Names.Id.t list
+
+  val extract_all_constructors : t -> Names.Id.t list
 
   val definition_mapping :
     t -> t * (Names.Id.t * Constrexpr.constr_expr * Constrexpr.constr_expr) list
 
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
   val concatenate : base:t -> derived:t -> t
+
+  val lookup_inductive_name: constructor:Names.Id.t -> inductive:t -> Names.Id.t
 end
 
 module CompiledModule : sig
@@ -48,10 +53,18 @@ end
 
 module RecursorStore : Map.S with type key = RecKind.t
 
+module MutualRecursor : sig
+  type t = {
+    mutual_recursor : Constrexpr.constr_expr;
+    mutual_handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+    }
+end
+
 module Recursor : sig
   type t = {
     recursors : Constrexpr.constr_expr Names.Id.Map.t;
     handlers : (Names.Id.t * Constrexpr.constr_expr) list Names.Id.Map.t;
+    mutual : MutualRecursor.t option;
   }
 end
 

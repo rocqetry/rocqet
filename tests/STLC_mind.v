@@ -24,6 +24,11 @@ Case val_abs := cheat.
 Case val_unit := cheat.
 FEnd val_size.
 
+FRecursion comb_size_tm about tm motive (fun (_ : tm) => nat)
+      with comb_size_val about val motive (fun (_ : val) => nat) by _rect.
+
+
+
 (*
   Scheme __internal_tm_tm_val_rect := Induction for __internal_tm 
   Sort Type

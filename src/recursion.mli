@@ -8,7 +8,7 @@ val open_recursion :
   arguments:Names.Id.t list ->
   unit
 
-val open_recursion_extension : name:Names.Id.t -> unit
+val open_recursion_extension : names:Names.Id.t list -> unit
 
 val add_handler :
   name:Names.Id.t ->

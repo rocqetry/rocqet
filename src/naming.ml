@@ -21,13 +21,14 @@ let recursion_handler_type ~function_name ~case_name =
   in
   Names.Id.of_string name
 
-let handler_name ~recursor ~case =
-  Names.Id.to_string recursor ^ Names.Id.to_string case |> Names.Id.of_string
-
 let concat_names names =
   names
   |> List.map Names.Id.to_string
   |> List.sort String.compare |> String.concat "_" |> Names.Id.of_string
+
+let handler_name ~recursors ~case =
+  let recursors = concat_names recursors in 
+  Names.Id.to_string recursors ^ Names.Id.to_string case |> Names.Id.of_string
 
 let principle_name ~inductive ~kind = Nameops.add_suffix inductive kind
 
@@ -35,8 +36,9 @@ let mutual_principle_name ~inductives ~kind =
   let joined_indnames = concat_names inductives in
   Nameops.add_suffix joined_indnames kind
 
-let computational_axiom_name ~recursor_name ~constructor_name =
-  Names.Id.to_string recursor_name
+let computational_axiom_name ~recursor_names ~constructor_name =
+  let recursor_names = concat_names recursor_names in 
+  Names.Id.to_string recursor_names
   ^ "_"
   ^ Names.Id.to_string constructor_name
   ^ "_eq"
