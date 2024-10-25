@@ -31,6 +31,11 @@ module VernacInductive = struct
     |> List.map (fun ((inductive_name, _), constructors) -> inductive_name, List.map fst constructors)
     |> Names.Id.Map.of_list
 
+  let extract_all_constructors inductive =
+    inductive       
+       |> create_inductive_constructor_map
+       |> Names.Id.Map.bindings |> List.concat_map snd 
+
   let extract_all_names_with_type ind_def =
     ind_def
     |> List.map (fun (ind, _) -> ind |> extract_type_and_cstrs)
@@ -51,6 +56,9 @@ module VernacInductive = struct
 
   let extract_inductive_name ind_def =
     ind_def |> extract_all_names |> List.hd |> fst
+
+  let extract_all_inductive_names inductive =
+    inductive |> extract_all_names |> List.map fst 
 
   (* Create a "definition mapping" *)
   let definition_mapping ind_def =
@@ -155,6 +163,22 @@ module VernacInductive = struct
     if List.length base <> List.length derived then
       Errors.fail ~info:"All inductive types must be specified when extending.";
     List.combine base derived |> List.map check_one_type
+
+  let lookup_inductive_name ~constructor ~inductive =
+    let result = 
+      inductive
+      |> List.map fst
+      |> List.map extract_type_and_cstrs
+      |> List.find_map (fun ((inductive_name, _), constructors) ->
+             let constructors = List.map fst constructors in
+             if List.exists (Names.Id.equal constructor) constructors then
+               Some inductive_name
+             else None)
+    in
+    match result with
+    | None -> Errors.fail ~info:"constructor not bound in any inductive"
+    | Some result -> result
+    
 end
 
 (* Module naming *)
@@ -201,12 +225,19 @@ end
 
 module RecursorStore = Map.Make (RecKind)
 
-(* TODO: Keep only the big principle and 
-   compute the handler types on demand *)
+(* TODO: rethink keeping the big recursor *)
+module MutualRecursor = struct
+  type t = {
+    mutual_recursor : Constrexpr.constr_expr;
+    mutual_handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+    }
+end
+
 module Recursor = struct
   type t = {    
     recursors : Constrexpr.constr_expr Names.Id.Map.t;
-    handlers : (Names.Id.t * Constrexpr.constr_expr) list Names.Id.Map.t;
+    handlers : (Names.Id.t * Constrexpr.constr_expr) list Names.Id.Map.t;    
+    mutual : MutualRecursor.t option;
   }
 end
 

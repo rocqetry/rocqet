@@ -15,7 +15,9 @@ val mutual_principle_name :
   Names.Id.t
 
 val computational_axiom_name :
-  recursor_name:Names.Id.t -> constructor_name:Names.Id.t -> Names.Id.t
+  recursor_names:Names.Id.t list ->
+  constructor_name:Names.Id.t ->
+  Names.Id.t
 
 val partial_recursor_name : 
   inductive_name:Names.Id.t -> 
@@ -31,7 +33,7 @@ val point_qualid : Names.Id.t -> Libnames.qualid -> Libnames.qualid
 val qualid_point : Libnames.qualid option -> Names.Id.t -> Libnames.qualid
 val path_to_prefix : Libnames.qualid -> Libnames.qualid option * Names.Id.t
 val extract_path_base : Libnames.qualid -> Names.Id.t
-val handler_name : recursor:Names.Id.t -> case:Names.Id.t -> Names.Id.t
+val handler_name : recursors:Names.Id.t list -> case:Names.Id.t -> Names.Id.t
 
 val replace_qualid_root :
   source:Names.Id.t ->

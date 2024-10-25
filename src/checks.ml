@@ -2,13 +2,24 @@ open Env
 open Types
 
 (* Exhaustiveness checking *)
-let check_exhaustive ~name ~inductive ~inductive_path ~handlers =  
+let check_exhaustive ~names ~inductive ~inductive_path ~handlers =  
   let inductive_name = Naming.extract_path_base inductive_path in
   let constructors =
-    inductive
-    |> VernacInductive.create_inductive_constructor_map
-    |> Names.Id.Map.find inductive_name
+    match names with
+    | [] -> assert false
+    | [_] -> 
+       inductive
+       |> VernacInductive.create_inductive_constructor_map
+       |> Names.Id.Map.find inductive_name
+    | _ ->
+       inductive       
+       |> VernacInductive.extract_all_constructors
   in
+  let names_pretty =
+    names
+    |> List.map Names.Id.to_string
+    |> String.concat " and "
+  in 
   constructors
   |> List.iter (fun constructor ->
          match List.find_opt (Names.Id.equal constructor) handlers with
@@ -18,7 +29,7 @@ let check_exhaustive ~name ~inductive ~inductive_path ~handlers =
                Printf.sprintf
                  "The pattern matching in %s is not exhaustive. Here is an \
                   example of a case that has no handler: %s"
-                 (Names.Id.to_string name)
+                 names_pretty
                  (Names.Id.to_string constructor)
              in
              Errors.fail ~info)

@@ -72,8 +72,8 @@ val compile_computational_axiom_signature :
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
   constructor_name:Names.Id.t ->
   inductive_name:Names.Id.t ->
-  inductive:VernacInductive.t ->
-  recursor_name:Names.Id.t ->
+  inductive:VernacInductive.t ->  
+  recursor_names: Names.Id.t Names.Id.Map.t ->
   prefix:Libnames.qualid option ->
   Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t
 

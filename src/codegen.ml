@@ -563,19 +563,26 @@ let compile_closing_fact_implementation ~name ~type_name ~(script: Ltac_plugin.T
 (* The name of the equation to generate axioms for *)
 let compile_computational_axiom_signature
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
-    ~(constructor_name : Names.Id.t) ~inductive_name ~(inductive : VernacInductive.t)
-    ~(recursor_name : Names.Id.t) ~(prefix : Libnames.qualid option) :
-    Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t =
-  (* Actually will actually be self qualified *)
+    ~(constructor_name : Names.Id.t) ~(inductive : VernacInductive.t)
+    (* Ind name -> Recursor Name *)
+    ~(recursor_names : Names.Id.t Names.Id.Map.t)
+    ~(prefix : Libnames.qualid option) :
+      Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t =
+  let inductive_names = inductive |> VernacInductive.extract_all_inductive_names in   
   let self__ =
     Naming.self_version (Env.Context.family_name (Env.Context.get ()))
   in  
-  let recursor_path = Naming.list_to_path [ self__; recursor_name ] in
+  let recursor_paths =
+    recursor_names
+    |> Names.Id.Map.map (fun recursor_name -> Naming.list_to_path [ self__; recursor_name ])
+  in
   let constructor_path = Naming.qualid_point prefix constructor_name in
   let context = Some (Env.Context.get ()) in
   let module_name = Naming.fresh_name ~prefix:"ComputationalAxiom" in
   let axiom_name = ref None in
   let axiom_expr = ref None in
+  (* recursor_names: Names.Id.t Names.Id.Map.t ->
+  recursor_paths: Libnames.qualid Names.Id.Map.t -> *)
   let compiled_signature =
     B.run
     @@ B.define_moduletype ~module_name ~parameters:ctx ~body:(fun _ctx ->
@@ -583,8 +590,8 @@ let compile_computational_axiom_signature
            let* _ =
              thunk (fun () ->
                  let name, axiom =
-                   Termutils.generate_one_computational_axiom ~inductive_name ~inductive
-                     ~recursor_name ~recursor_path ~constructor_name
+                   Termutils.generate_one_computational_axiom ~inductive_names ~inductive
+                     ~recursor_names ~recursor_paths ~constructor_name
                      ~constructor_path ~context
                  in
                  axiom_name := Some name;
