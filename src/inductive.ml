@@ -34,6 +34,53 @@ let constructors inductive =
 let types inductive =
   inductive |> VernacInductive.extract_all_names_with_type |> List.split |> fst
 
+let extract_mutual relevant_cstrs recursor =
+    (* Future-proofing for mutually inductive types *)    
+    let handlers =
+      (* Copied from FPOP almost verbatim: *)
+      let from_recursor_type_to_subcase_handlers_constructor
+          (cstname : Names.Id.t list) (recursor : Constrexpr.constr_expr) :
+          (Names.Id.t * Constrexpr.constr_expr) list =
+        let open Constrexpr in
+        let open Constrexpr_ops in
+        let isArrow { CAst.v = t; _ } =
+          match t with CNotation (_, (_, "_ -> _"), _) -> true | _ -> false
+        in
+        let destDepProd { CAst.v = t; _ } =
+          match t with
+          | CProdN (al, b) -> (al, b)
+          | _ -> Errors.fail ~info:"unexpected"
+        in
+        let destArrow { CAst.v = t; _ } =
+          match t with
+          | CNotation (_, (_, "_ -> _"), ([ domain; codomain ], _, _, _)) ->
+              (domain, codomain)
+          | _ -> Errors.fail ~info:"unreachable"
+        in
+        let _inputP, _body = destDepProd recursor in
+        let rec collect_handler cstname f =
+          match (cstname, f) with
+          | _ :: t, f when isArrow f ->
+              let currentT, remained_f = destArrow f in
+              let ret, otherparts = collect_handler t remained_f in
+              (ret, currentT :: otherparts)
+          | [], f -> (f, [])
+          | _, _ -> Errors.fail ~info:"unexpected"
+        in
+        let _, all_recursor_handlers = collect_handler cstname _body in
+        let cst_name_corresponding_recursor_handlers_sig =
+          List.combine cstname
+            (* decorate each ai case with a _inputP *)
+            (List.map
+               (fun body -> mkLambdaCN _inputP body)
+               all_recursor_handlers)
+        in
+        cst_name_corresponding_recursor_handlers_sig
+      in
+      from_recursor_type_to_subcase_handlers_constructor relevant_cstrs recursor
+    in    
+    handlers
+
 let add_new_inductive_definition ~inductive ~inductive_name =
   Inheritance.inherit_dependencies ~prefix:inductive_name;
   let context = Context.get () in
@@ -50,10 +97,28 @@ let add_new_inductive_definition ~inductive ~inductive_name =
     Codegen.compile_inductive_signature ~ind_def:inductive ~ctx:parameters
       ~family_name
   in
-  let compiled_impl, principles =
+  let compiled_impl, principles, mutual_principle =
     Codegen.compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
       ~family_name
   in
+
+  let ctrs =                     
+     inductive
+     |> List.map fst
+     |> List.map VernacInductive.extract_type_and_cstrs
+     |> List.concat_map (fun (_, constructors) -> List.map fst constructors)
+  in
+  mutual_principle
+  |> RecursorStore.iter (fun _ e ->
+         let _handlers = extract_mutual ctrs e in 
+         let sigma, env = Termutils.global_env () in
+         _handlers
+         |> List.iter
+              (fun (n, e) ->
+                let s = Ppconstr.pr_constr_expr env sigma e in
+                Feedback.msg_info (Pp.str @@ Names.Id.to_string n);
+                Feedback.msg_info s)
+         );
   let recursors =
     Termutils.extract_handler_types_from_principle ~inductive ~principles
   in  
@@ -106,7 +171,7 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
     Codegen.compile_inductive_signature ~ind_def:inductive ~ctx:parameters
       ~family_name
   in
-  let compiled_impl, principles =
+  let compiled_impl, principles, _mutual_principle =
     Codegen.compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
       ~family_name
   in

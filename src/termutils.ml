@@ -791,3 +791,5 @@ let is_indexed_inductive (i: VernacInductive.t) =
      match kind.v with
      | Constrexpr.CNotation (_, (_, "_ -> _"), _) -> true
      | _ -> false
+
+  

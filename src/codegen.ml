@@ -55,7 +55,8 @@ let compile_inductive_constr ~(name : Names.Id.t) ~(ty : Constrexpr.constr_expr)
 let compile_inductive_implementation ~(ind_def : VernacInductive.t)
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
     CompiledModule.t
-    * ((Names.Id.t * Constrexpr.constr_expr) list) RecursorStore.t =
+    * ((Names.Id.t * Constrexpr.constr_expr) list) RecursorStore.t
+    * Constrexpr.constr_expr RecursorStore.t =
   (* Generate a definition mapping of the inductive type and
      return the new inductive definition and the export of the correct names *)
   let modified_indcstrs, alias_all_name_term_type_decl =
@@ -73,6 +74,9 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
   let possible_suffixes = RecKind.[ Ind; IndComplete; Rec; Rect ] in
   let defined_recursors :
       (Names.Id.t * Constrexpr.constr_expr) list RecursorStore.t ref =
+    ref RecursorStore.empty
+  in
+  let defined_mutual_recursor : Constrexpr.constr_expr RecursorStore.t ref =
     ref RecursorStore.empty
   in
   let remove_internal_prefix_map =
@@ -113,6 +117,37 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
              defined_recursors := RecursorStore.update suffix updater !defined_recursors);
     B.return ()
   in
+  let collect_mutual_recursor () : unit B.t =
+    (* Only support rect for now *)
+    let possible_suffixes = RecKind.[ Rect ] in
+    possible_suffixes
+    |> List.iter (fun suffix ->
+       let principle =
+         Naming.mutual_principle_name ~inductives:type_names ~kind:(RecKind.to_string suffix)         
+         |> Constrexpr_ops.mkIdentC
+       in
+       let mutual_suffix = RecKind.Rect in
+       let mutual_principle =
+          Naming.mutual_principle_name
+            ~inductives:type_names
+            ~kind:(RecKind.to_string mutual_suffix)
+      in
+      let _ =
+        B.run @@
+          B.define_term
+            ~name:mutual_principle
+            (mutual_principle |> Naming.internal_name |> Constrexpr_ops.mkIdentC)
+      in
+             
+       let recursor_type =
+         principle |> Termutils.checked_type_of
+         |> Termutils.reflect_checked_term
+         |> Constrexpr_ops.replace_vars_constr_expr
+              remove_internal_prefix_map
+       in
+       defined_mutual_recursor := RecursorStore.add suffix recursor_type !defined_mutual_recursor);
+    B.return ()
+  in 
   let compiled_impl =
     B.(
       run
@@ -136,13 +171,14 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
              in
              let* () = flatmap all_ind_comp_schemes in
              (* Mutual Inductive *)
+             let mutual_suffix = RecKind.Rect in
              let* () = 
                match type_names with 
                | [] | [_] -> return ()
-               | inductives -> 
-                  let suffix = RecKind.Rect in
-                  define_mutual_inductive_scheme ~inductives ~suffix
-             in
+               | inductives ->                   
+                  define_mutual_inductive_scheme ~inductives ~suffix:mutual_suffix
+             in             
+             
              (* Now, we read from the environment all defined recursors and get their types. *)
              let collect_thunks =
                type_names
@@ -150,6 +186,7 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
                       thunk (collect_recursors_for ind_name))
              in
              let* () = flatmap collect_thunks in
+             let* () = thunk collect_mutual_recursor in 
 
              let alias_all =
                List.map
@@ -160,7 +197,7 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
              let* () = flatmap alias_all in
              return ()))
   in
-  (compiled_impl, !defined_recursors)
+  (compiled_impl, !defined_recursors, !defined_mutual_recursor)
 
 (* let compile_recursors ~(ind_def : VernacInductive.t)
     ~(recursors : (Names.Id.t list * Constrexpr.constr_expr) RecursorStore.t)

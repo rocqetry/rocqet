@@ -27,7 +27,9 @@ val compile_inductive_implementation :
   ind_def:VernacInductive.t ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
   family_name:Names.Id.t ->
-  CompiledModule.t * ((Names.Id.t * Constrexpr.constr_expr) list) RecursorStore.t
+  CompiledModule.t *
+  ((Names.Id.t * Constrexpr.constr_expr) list) RecursorStore.t *
+   Constrexpr.constr_expr RecursorStore.t
 
 (* Compiling recursors *)
 (* val compile_recursors :

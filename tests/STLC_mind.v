@@ -37,25 +37,7 @@ FEnd val_size.
 *)
 FEnd STLC.
 
-Check STLC.__internal_tm_tm_val_rect.
-(* STLC.__internal_tm_tm_val_rect
-     : forall (P : STLC.__internal_tm -> Type) (P0 : STLC.__internal_val -> Type),
-       (forall i : ident, P (STLC.__internal_tm_var i)) ->
-       (forall __i : STLC.__internal_tm,
-        P __i -> forall __i0 : STLC.__internal_tm, P __i0 -> P (STLC.__internal_tm_app __i __i0)) ->
-       (forall __i : STLC.__internal_val, P0 __i -> P (STLC.__internal_tm_val __i)) ->
-       (forall (i : ident) (__i : STLC.__internal_tm), P __i -> P0 (STLC.__internal_val_abs i __i)) ->
-       P0 STLC.__internal_val_unit -> forall __i : STLC.__internal_tm, P __i *)
-Check STLC.__internal_val_tm_val_rect.
-(* STLC.__internal_val_tm_val_rect
-     : forall (P : STLC.__internal_tm -> Type) (P0 : STLC.__internal_val -> Type),
-       (forall i : ident, P (STLC.__internal_tm_var i)) ->
-       (forall __i : STLC.__internal_tm,
-        P __i -> forall __i0 : STLC.__internal_tm, P __i0 -> P (STLC.__internal_tm_app __i __i0)) ->
-       (forall __i : STLC.__internal_val, P0 __i -> P (STLC.__internal_tm_val __i)) ->
-       (forall (i : ident) (__i : STLC.__internal_tm), P __i -> P0 (STLC.__internal_val_abs i __i)) ->
-       P0 STLC.__internal_val_unit -> forall __i : STLC.__internal_val, P0 __i *)
-Check STLC.__internal_tm_val_rect.
+Check STLC.tm_val_rect.
 (* STLC.__internal_tm_val_rect
      : forall (P : STLC.__internal_tm -> Type) (P0 : STLC.__internal_val -> Type),
        (forall i : ident, P (STLC.__internal_tm_var i)) ->
