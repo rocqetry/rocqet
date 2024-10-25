@@ -317,13 +317,11 @@ let extract_constructors names =
            |> Option.map fst
            |> Option.map (function 
               | LinkageElem.InductiveDefinition { inductive; _} -> 
-                 let constructors = 
+                 let constructors =                     
                     inductive
-                    |> List.hd
-                    |> fst
-                    |> VernacInductive.extract_type_and_cstrs
-                    |> snd 
                     |> List.map fst
+                    |> List.map VernacInductive.extract_type_and_cstrs
+                    |> List.concat_map (fun (_, constructors) -> List.map fst constructors)
                  in
                  let prefix = name |> Naming.extract_prefix in                 
                  let qualify name = 
