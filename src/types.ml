@@ -22,6 +22,15 @@ module VernacInductive = struct
         ((ind_type_name.v, ind_type), List.map each_constr cstrlist)
     | Vernacexpr.RecordDecl _ -> Errors.fail ~info:"Records not yet supported"
 
+  (* name -> name list *)
+  (* inductive name -> constructors *)
+  let create_inductive_constructor_map (inductive : t) =
+    inductive
+    |> List.map fst
+    |> List.map extract_type_and_cstrs
+    |> List.map (fun ((inductive_name, _), constructors) -> inductive_name, List.map fst constructors)
+    |> Names.Id.Map.of_list
+
   let extract_all_names_with_type ind_def =
     ind_def
     |> List.map (fun (ind, _) -> ind |> extract_type_and_cstrs)
@@ -192,30 +201,12 @@ end
 
 module RecursorStore = Map.Make (RecKind)
 
-module CompiledRecursor = struct
-  type t = {
-    inductive_names : Names.Id.t list;
-    compiled_recursor : CompiledModuleType.t;
-    handlers : (Names.Id.t * Constrexpr.constr_expr) list;
-    compiled_handlers : (Names.Id.t * CompiledModuleType.t) list;
-  }
-end
-
-module CompiledRecursors = struct
-  type t = {
-    (* TODO: do we need to keep track of the context? *)
-    compiled_context : CompiledModuleType.t;
-    recursors : CompiledRecursor.t RecursorStore.t;
-  }
-end
-
 (* TODO: Keep only the big principle and 
    compute the handler types on demand *)
 module Recursor = struct
-  type t = {
-    inductive_names : Names.Id.t list;
-    recursor : Constrexpr.constr_expr;
-    handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+  type t = {    
+    recursors : Constrexpr.constr_expr Names.Id.Map.t;
+    handlers : (Names.Id.t * Constrexpr.constr_expr) list Names.Id.Map.t;
   }
 end
 

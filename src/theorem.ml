@@ -119,7 +119,8 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
   let handler_types =
     Termutils.handler_type_for_recursion ~name ~inductive_path ~recursor
   in
-  let handler_names = recursor.handlers |> List.map fst in
+  let inductive_name = inductive_path |> Naming.extract_path_base in
+  let handler_names = recursor.handlers |> Names.Id.Map.find inductive_name |> List.map fst in
   let implementing_handler_names = handler_names in
   let goal =
     Termutils.calculate_inductive_proof_goal
@@ -171,7 +172,8 @@ let open_theorem_extension ~name =
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let recursor = RecursorStore.find suffix recursors in
-  let handler_names = recursor.handlers |> List.map fst in
+  let inductive_name = inductive_path |> Naming.extract_path_base in
+  let handler_names = recursor.handlers |> Names.Id.Map.find inductive_name |> List.map fst in
   let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
   let implementing_handler_names =
     handler_names |> List.filter (fun x -> not (inside x inherited_handlers))

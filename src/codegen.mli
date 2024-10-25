@@ -27,15 +27,15 @@ val compile_inductive_implementation :
   ind_def:VernacInductive.t ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
   family_name:Names.Id.t ->
-  CompiledModule.t * (Names.Id.t list * Constrexpr.constr_expr) RecursorStore.t
+  CompiledModule.t * ((Names.Id.t * Constrexpr.constr_expr) list) RecursorStore.t
 
 (* Compiling recursors *)
-val compile_recursors :
+(* val compile_recursors :
   ind_def:VernacInductive.t ->
   recursors:(Names.Id.t list * Constrexpr.constr_expr) RecursorStore.t ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
   family_name:Names.Id.t ->
-  CompiledRecursor.t RecursorStore.t
+  CompiledRecursor.t RecursorStore.t *)
 
 (* Compiling recursive definitions *)
 val compile_motives :
@@ -45,13 +45,13 @@ val compile_motives :
   family_name:Names.Id.t ->
   CompiledModule.t
 
-val compile_handler_types :
+(*val compile_handler_types :
   names:Names.Id.t list ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
   recursor:CompiledRecursor.t ->
   inductive_path:Libnames.qualid ->
   cases:Names.Id.t list ->
-  CompiledModule.t
+  CompiledModule.t*)
 
 val compile_handler_case :
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
@@ -69,6 +69,7 @@ val compile_theorem_definition_signature :
 val compile_computational_axiom_signature :
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
   constructor_name:Names.Id.t ->
+  inductive_name:Names.Id.t ->
   inductive:VernacInductive.t ->
   recursor_name:Names.Id.t ->
   prefix:Libnames.qualid option ->
@@ -79,6 +80,7 @@ val compile_prec_computational_axiom_signature :
     constructor_name : Names.Id.t ->
     constructor_path : Libnames.qualid ->
     handlers: Names.Id.t list ->
+    inductive_name: Names.Id.t ->
     inductive : VernacInductive.t ->
     prec_suffix: Names.Id.t ->                
     recursor_path : Libnames.qualid  ->    

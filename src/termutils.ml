@@ -149,12 +149,14 @@ let apply_module ~(functor_expr : Constrexpr.module_ast)
     (fun op x -> CAst.make (CMapply (op, x)))
     functor_expr arguments
 
-let flatten_inductive_constructor_type ~(inductive : VernacInductive.t)
+let flatten_inductive_constructor_type
+    ~(inductive_name: Names.Id.t)
+    ~(inductive : VernacInductive.t)
     ~(constructor : Names.Id.t) =
   (* TODO: We will need all the names for the case of
      mutual recursion *)
   let ind_name =
-    VernacInductive.extract_inductive_name inductive |> Libnames.qualid_of_ident
+    inductive_name |> Libnames.qualid_of_ident
   in
   let constructor_type =
     inductive
@@ -181,7 +183,7 @@ let flatten_inductive_constructor_type ~(inductive : VernacInductive.t)
 (* This has to be called with recursor_path and constructor_path exposed *)
 (* i.e is must be called inside a parameterized module *)
 (* it must almost be called when there is LinkageCtx present *)
-let generate_one_computational_axiom ~inductive ~recursor_name ~recursor_path
+let generate_one_computational_axiom ~inductive_name ~inductive ~recursor_name ~recursor_path
     ~constructor_name ~constructor_path ~context =
   let open Constrexpr_ops in
   let constructor_params, fully_applied_constr =
@@ -205,7 +207,7 @@ let generate_one_computational_axiom ~inductive ~recursor_name ~recursor_path
       | _ -> Errors.fail ~info:"Expected non anonymous argument"
     in
     let types =
-      flatten_inductive_constructor_type ~inductive
+      flatten_inductive_constructor_type ~inductive_name ~inductive
         ~constructor:constructor_name 
     in
     let arguments =
@@ -256,7 +258,7 @@ let generate_one_computational_axiom ~inductive ~recursor_name ~recursor_path
   in
   (equation_name, equation)
 
-let generate_computational_axioms ~(inductive : VernacInductive.t) ~recursor
+let generate_computational_axioms ~inductive_name ~(inductive : VernacInductive.t) ~recursor
     ~context ~prefix =
   (* let prefix = Libnames.qualid_of_ident (Naming.self_version provenance) in*)
   let recursor_name = recursor in
@@ -271,11 +273,12 @@ let generate_computational_axioms ~(inductive : VernacInductive.t) ~recursor
   in
   constructors
   |> List.map (fun (constructor_name, constructor_path) ->
-         generate_one_computational_axiom ~inductive ~recursor_name ~context
+         generate_one_computational_axiom ~inductive_name ~inductive ~recursor_name ~context
            ~recursor_path ~constructor_name ~constructor_path)
 
 
 
+(*
 (* Given a recursor name and a compiled recursor return the type
    each handler is supposed to be *)
 let handler_types_table inductive_path name (recursor : CompiledRecursor.t)
@@ -301,7 +304,7 @@ let handler_types_table inductive_path name (recursor : CompiledRecursor.t)
          let handler_type =
            Constrexpr_ops.mkAppC (handler_type, [ motive_term ])
          in
-         (handler_name, handler_type))
+         (handler_name, handler_type)) *)
 
 let handler_type_for_recursion ~(name : Names.Id.t)
     ~(inductive_path : Libnames.qualid) ~(recursor : Recursor.t) :
@@ -314,7 +317,9 @@ let handler_type_for_recursion ~(name : Names.Id.t)
     let motive = Naming.list_to_path [ self; motive ] in
     Constrexpr_ops.mkRefC motive
   in
-  recursor.handlers
+  let inductive_name = inductive_path |> Naming.extract_path_base in
+  let handlers = recursor.handlers |> Names.Id.Map.find inductive_name in 
+  handlers
   |> List.map (fun (case_name, handler) ->
          let target =
            match inductive_path |> Naming.path_to_list |> List.rev with
@@ -328,7 +333,7 @@ let handler_type_for_recursion ~(name : Names.Id.t)
            | None -> handler
            | Some path ->
                let inductive_name =
-                 inductive_path |> Naming.path_to_list |> List.rev |> List.hd
+                 inductive_path |> Naming.extract_path_base
                in
                let names =
                  [ inductive_name; case_name ] |> Names.Id.Set.of_list
@@ -431,14 +436,17 @@ let rec extract_functor_name (name : Constrexpr.module_ast) =
   | CMapply (name, _) -> extract_functor_name name
   | CMwith (name, _) -> extract_functor_name name
 
-let extract_handler_types_from_principle ~(inductive : VernacInductive.t)
-    ~(principles : (Names.Id.t list * Constrexpr.constr_expr) RecursorStore.t) :
-    Recursors.t =
-  let all_names = inductive |> VernacInductive.extract_all_names in
-  let compile_one_recursor _suffix (inductive_names, recursor) =
+let extract_handler_types_from_principle
+    ~(inductive : VernacInductive.t)
+    ~(principles : ((Names.Id.t * Constrexpr.constr_expr) list) RecursorStore.t) :
+      Recursors.t =
+  let inductive_constructor = VernacInductive.create_inductive_constructor_map inductive in
+  (* let all_names = inductive |> VernacInductive.extract_all_names in*)
+  let compile_one_recursor (inductive_name, recursor) =
     (* Future-proofing for mutually inductive types *)
     let relevant_cstrs =
-      inductive_names |> List.concat_map (fun n -> List.assoc n all_names)
+      (* inductive_names |> List.concat_map (fun n -> List.assoc n all_names)*)
+       inductive_constructor |> Names.Id.Map.find inductive_name
     in
     let handlers =
       (* Copied from FPOP almost verbatim: *)
@@ -483,9 +491,18 @@ let extract_handler_types_from_principle ~(inductive : VernacInductive.t)
       in
       from_recursor_type_to_subcase_handlers_constructor relevant_cstrs recursor
     in
-    Recursor.{ inductive_names; recursor; handlers }
+    (* Recursor.{ inductive_names; recursor; handlers } *)
+    handlers
   in
-  principles |> RecursorStore.mapi compile_one_recursor
+  principles
+  |> RecursorStore.mapi (fun _suffix principles ->
+         let handlers =
+           principles
+           |> List.map (fun (i, r) -> i, compile_one_recursor (i, r))
+           |> Names.Id.Map.of_list
+         in
+         let recursors = principles |> Names.Id.Map.of_list in 
+         Recursor.{ handlers; recursors; })
 
 let rec constants_in_econstr sigma e = 
   let constants = constants_in_econstr sigma in 
@@ -557,7 +574,9 @@ let compute_partial_recursor_signature
     Env.Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let suffix = RecKind.Rect in
-  let Recursor.{ recursor; _ } = RecursorStore.find suffix recursors in  
+  let Recursor.{ recursors; _ } = RecursorStore.find suffix recursors in
+  let inductive_name = inductive_path |> Naming.extract_path_base in
+  let recursor = recursors |> Names.Id.Map.find inductive_name in 
   let open Constrexpr_ops in
   
   let is_P (c : Constrexpr.constr_expr) : bool = 
@@ -639,7 +658,8 @@ let compute_partial_recursor_signature
 (* (forall __i : self__Ix.ty,
  forall P : self__Ix.ty -> Type, forall arg回9 : option (P self__Ix.ty_unit), option (P __i)) *)
 (* Should be called from inside a parameterized module *)
-let generate_one_prec_computational_axiom 
+let generate_one_prec_computational_axiom
+      ~(inductive_name: Names.Id.t)
       ~(inductive: VernacInductive.t)      
       ~(recursor_path: Libnames.qualid)
       ~(constructor_name: Names.Id.t)
@@ -710,7 +730,7 @@ let generate_one_prec_computational_axiom
   let left_hand_side = equation_side fully_applied_constr in
   let right_hand_side = 
     let types = 
-      flatten_inductive_constructor_type 
+      flatten_inductive_constructor_type ~inductive_name
         ~inductive ~constructor:constructor_name
     in
     let f ty arg =      

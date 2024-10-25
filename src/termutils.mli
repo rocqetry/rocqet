@@ -32,6 +32,7 @@ val apply_module :
   Constrexpr.module_ast
 
 val flatten_inductive_constructor_type :
+  inductive_name:Names.Id.t ->
   inductive:VernacInductive.t ->
   constructor:Names.Id.t ->
   Libnames.qualid_r option list
@@ -46,6 +47,7 @@ val flatten_inductive_constructor_type :
    recursively. *)
 
 val generate_one_computational_axiom :
+  inductive_name:Names.Id.t ->
   inductive:VernacInductive.t ->
   recursor_name:Names.Id.t ->
   recursor_path:Libnames.qualid ->
@@ -55,18 +57,19 @@ val generate_one_computational_axiom :
   Names.Id.t * Constrexpr.constr_expr
 
 val generate_computational_axioms :
+  inductive_name:Names.Id.t ->
   inductive:VernacInductive.t ->
   recursor:Names.Id.t ->
   context:LinkageCtx.t option ->
   prefix:Libnames.qualid option ->
   (Names.Id.t * Constrexpr.constr_expr) list
 
-val handler_types_table :
+(*val handler_types_table :
   Libnames.qualid ->
   Names.Id.t ->
   CompiledRecursor.t ->
   RecKind.t ->
-  (Names.Id.t * Constrexpr.constr_expr) list
+  (Names.Id.t * Constrexpr.constr_expr) list*)
 
 val handler_type_for_recursion :
   name:Names.Id.t ->
@@ -99,7 +102,7 @@ val extract_functor_name : Constrexpr.module_ast -> CompiledModuleType.t
 
 val extract_handler_types_from_principle :
   inductive:VernacInductive.t ->
-  principles:(Names.Id.t list * Constrexpr.constr_expr) RecursorStore.t ->
+  principles:((Names.Id.t * Constrexpr.constr_expr) list) RecursorStore.t ->
   Recursors.t
 
 val constants_in_econstr: Evd.evar_map -> Evd.econstr -> Libnames.qualid list
@@ -110,6 +113,7 @@ val compute_partial_recursor_signature:
   Constrexpr.constr_expr
 
 val generate_one_prec_computational_axiom :
+      inductive_name:Names.Id.t -> 
       inductive: VernacInductive.t -> 
       recursor_path:Libnames.qualid -> 
       constructor_name:Names.Id.t -> 

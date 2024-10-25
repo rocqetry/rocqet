@@ -2,12 +2,12 @@ open Env
 open Types
 
 (* Exhaustiveness checking *)
-let check_exhaustive ~name ~inductive ~handlers =
+let check_exhaustive ~name ~inductive ~inductive_path ~handlers =  
+  let inductive_name = Naming.extract_path_base inductive_path in
   let constructors =
-    let _, constructors =
-      inductive |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs
-    in
-    constructors |> List.map fst
+    inductive
+    |> VernacInductive.create_inductive_constructor_map
+    |> Names.Id.Map.find inductive_name
   in
   constructors
   |> List.iter (fun constructor ->

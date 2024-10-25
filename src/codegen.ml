@@ -55,7 +55,7 @@ let compile_inductive_constr ~(name : Names.Id.t) ~(ty : Constrexpr.constr_expr)
 let compile_inductive_implementation ~(ind_def : VernacInductive.t)
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
     CompiledModule.t
-    * (Names.Id.t list * Constrexpr.constr_expr) RecursorStore.t =
+    * ((Names.Id.t * Constrexpr.constr_expr) list) RecursorStore.t =
   (* Generate a definition mapping of the inductive type and
      return the new inductive definition and the export of the correct names *)
   let modified_indcstrs, alias_all_name_term_type_decl =
@@ -72,7 +72,7 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
   (* Stuff for collecting recursors *)
   let possible_suffixes = RecKind.[ Ind; IndComplete; Rec; Rect ] in
   let defined_recursors :
-      (Names.Id.t list * Constrexpr.constr_expr) RecursorStore.t ref =
+      (Names.Id.t * Constrexpr.constr_expr) list RecursorStore.t ref =
     ref RecursorStore.empty
   in
   let remove_internal_prefix_map =
@@ -84,7 +84,7 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
     possible_suffixes
     |> List.iter (fun suffix ->
            (* This is only a potential recursor name, since _rec and _rect may not exist.
-              For instance, if the type is Prop, _rec and _rect are impossible to derive. *)
+              For instance, if the type is Prop, _rec and _rect are impossible to derive. *)           
            let potential_recursor =
              Nameops.add_suffix internal_name (RecKind.to_string suffix)
            in           
@@ -104,11 +104,13 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
                |> Termutils.reflect_checked_term
                |> Constrexpr_ops.replace_vars_constr_expr
                     remove_internal_prefix_map
-             in
-             defined_recursors :=
-               RecursorStore.add suffix
-                 ([ ind_name ], recursor_type)
-                 !defined_recursors);
+             in             
+             let updater principle_store =
+               match principle_store with
+               | None -> Some [(ind_name, recursor_type)]
+               | Some principle_store -> Some ((ind_name, recursor_type) :: principle_store)
+             in 
+             defined_recursors := RecursorStore.update suffix updater !defined_recursors);
     B.return ()
   in
   let compiled_impl =
@@ -160,7 +162,7 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
   in
   (compiled_impl, !defined_recursors)
 
-let compile_recursors ~(ind_def : VernacInductive.t)
+(* let compile_recursors ~(ind_def : VernacInductive.t)
     ~(recursors : (Names.Id.t list * Constrexpr.constr_expr) RecursorStore.t)
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name =
   let all_names = ind_def |> VernacInductive.extract_all_names in
@@ -258,7 +260,7 @@ let compile_recursors ~(ind_def : VernacInductive.t)
     CompiledRecursor.
       { inductive_names; compiled_recursor; handlers; compiled_handlers }
   in
-  recursors |> RecursorStore.mapi compile_one_recursor
+  recursors |> RecursorStore.mapi compile_one_recursor *)
 
 let compile_motives ~(names : Names.Id.t list)
     ~(motives : Constrexpr.constr_expr list)
@@ -278,6 +280,7 @@ let compile_motives ~(names : Names.Id.t list)
                 return ())
          |> B.flatmap)
 
+(*
 (* Return the compiled handler type for each case *)
 let compile_handler_types ~(names : Names.Id.t list)
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
@@ -319,6 +322,7 @@ let compile_handler_types ~(names : Names.Id.t list)
            |> flatmap
          in
          return ())
+*)
 
 let compile_handler_case ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
     ~(name : Names.Id.t) ~(body : Constrexpr.constr_expr)
@@ -522,13 +526,13 @@ let compile_closing_fact_implementation ~name ~type_name ~(script: Ltac_plugin.T
 (* The name of the equation to generate axioms for *)
 let compile_computational_axiom_signature
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
-    ~(constructor_name : Names.Id.t) ~(inductive : VernacInductive.t)
+    ~(constructor_name : Names.Id.t) ~inductive_name ~(inductive : VernacInductive.t)
     ~(recursor_name : Names.Id.t) ~(prefix : Libnames.qualid option) :
     Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t =
   (* Actually will actually be self qualified *)
   let self__ =
     Naming.self_version (Env.Context.family_name (Env.Context.get ()))
-  in
+  in  
   let recursor_path = Naming.list_to_path [ self__; recursor_name ] in
   let constructor_path = Naming.qualid_point prefix constructor_name in
   let context = Some (Env.Context.get ()) in
@@ -542,7 +546,7 @@ let compile_computational_axiom_signature
            let* _ =
              thunk (fun () ->
                  let name, axiom =
-                   Termutils.generate_one_computational_axiom ~inductive
+                   Termutils.generate_one_computational_axiom ~inductive_name ~inductive
                      ~recursor_name ~recursor_path ~constructor_name
                      ~constructor_path ~context
                  in
@@ -559,6 +563,7 @@ let compile_prec_computational_axiom_signature
     ~(constructor_name : Names.Id.t)
     ~(constructor_path : Libnames.qualid)
     ~(handlers: Names.Id.t list)
+    ~(inductive_name: Names.Id.t)
     ~(inductive : VernacInductive.t)
     ~(prec_suffix: Names.Id.t)
     ~(recursor_path : Libnames.qualid) :    
@@ -573,7 +578,8 @@ let compile_prec_computational_axiom_signature
            let* _ =
              thunk (fun () ->
                  let name, axiom =
-                   Termutils.generate_one_prec_computational_axiom 
+                   Termutils.generate_one_prec_computational_axiom
+                     ~inductive_name
                      ~inductive
                      ~recursor_path ~constructor_name
                      ~constructor_path ~prec_suffix ~handlers

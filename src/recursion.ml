@@ -49,13 +49,13 @@ let close_recursion () =
         } =
     Ctx.get ()
   in
-  Checks.check_exhaustive ~name ~inductive ~handlers:defined_handlers;
+  let inductive_name = inductive_path |> Naming.extract_path_base in
+  Checks.check_exhaustive ~name ~inductive ~inductive_path ~handlers:defined_handlers;
   (* We use this becuase the handlers have to be in the right order *)
-  let handlers =
-    let _, constructors =
-      inductive |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs
-    in
-    constructors |> List.map fst
+  let handlers =    
+    inductive
+    |> VernacInductive.create_inductive_constructor_map
+    |> Names.Id.Map.find inductive_name
   in
   let context = Context.get () in
   let default_ctx_params =
@@ -90,6 +90,7 @@ let close_recursion () =
       }
   in
   Context.add_field ~name ~elem;
+  let inductive_name = inductive_path |> Naming.extract_path_base in  
   let _ =
     implementing_handlers
     |> List.iter (fun constructor_name ->
@@ -99,7 +100,7 @@ let close_recursion () =
            in
            let axiom_name, axiom, compiled_signature =
              Codegen.compile_computational_axiom_signature ~ctx:parameters
-               ~constructor_name ~inductive ~recursor_name:name
+               ~constructor_name ~inductive_name ~inductive ~recursor_name:name
                ~prefix:(Some rec_principle_prefix)
            in
            let elem =
@@ -120,7 +121,7 @@ let close_recursion () =
       List.filter (fun x -> not (List.mem x list2)) list1
     in
     list_difference handlers implementing_handlers
-  in
+  in  
   (* Force the inheritance of computational axioms *)
   let _ =
     let recursor_name = name in
@@ -219,10 +220,10 @@ let open_recursion_extension ~name =
   Ctx.update recursion_ctx
 
 let extend_argumets_with_inductive_case ~(recursor : Names.Id.t)
-    ~(constructor : Names.Id.t) ~(arguments : Names.Id.t list)
+    ~(constructor : Names.Id.t) ~(arguments : Names.Id.t list) ~inductive_name
     ~(inductive : VernacInductive.t) =
   let types =
-    Termutils.flatten_inductive_constructor_type ~inductive ~constructor
+    Termutils.flatten_inductive_constructor_type ~inductive_name ~inductive ~constructor
   in
   (* Give a good error message for this, e.g as user to fallback
       to the regular syntax if we cannot infer handlers *)
@@ -306,9 +307,10 @@ let add_handler ~name ~arguments ~handler =
             let handler = Termutils.mk_lambda recursion_ctx.arguments handler in
             handler
         | Some arguments ->
+            let inductive_name = recursion_ctx.inductive_path |> Naming.extract_path_base in
             let arguments =
               extend_argumets_with_inductive_case ~recursor:recursion_ctx.name
-                ~constructor:name ~arguments ~inductive:recursion_ctx.inductive
+                ~constructor:name ~arguments ~inductive_name ~inductive:recursion_ctx.inductive
             in
             let handler =
               replace_recursor ~recursor:recursion_ctx.name handler

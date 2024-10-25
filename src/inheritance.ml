@@ -151,8 +151,9 @@ let generate_prec_handlers
   let default_ctx_params =
     context |> Context.family_linkage |> function
     | { default_ctx_params; _ } -> default_ctx_params
-  in  
-  let prefix = Codegen.calculate_rec_principle_prefix ~inductive_path ~context in
+  in
+  let inductive_name = Naming.extract_path_base inductive_path in
+  let prefix = Codegen.calculate_rec_principle_prefix ~inductive_path ~context in  
   let construct_path name = Naming.qualid_point (Some prefix) name in    
   List.fold_left (fun (context, acc) constructor_name ->          
          let module_name = Naming.fresh_name ~prefix:"PrecCtx" in
@@ -166,7 +167,8 @@ let generate_prec_handlers
              ~ctx:parameters
              ~constructor_name 
              ~constructor_path 
-             ~inductive 
+             ~inductive
+             ~inductive_name
              ~recursor_path 
              ~handlers
              ~prec_suffix:prec_suffix               
@@ -488,7 +490,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                 ~name:recursive.inductive_path context
             in
             let name = List.hd recursive.names in
-            Checks.check_exhaustive ~name ~inductive
+            Checks.check_exhaustive ~name ~inductive ~inductive_path:recursive.inductive_path
               ~handlers:recursive.handlers;
             RecursorDefinition { recursive with compiled_context }, []
         | TheoremDefinition theorem ->
@@ -497,7 +499,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                 ~name:theorem.inductive_path context
             in
             let name = List.hd theorem.names in
-            Checks.check_exhaustive ~name ~inductive ~handlers:theorem.handlers;
+            Checks.check_exhaustive ~name ~inductive ~handlers:theorem.handlers ~inductive_path:theorem.inductive_path;
             TheoremDefinition { theorem with compiled_context }, []
       in      
       let open Bwd.Infix in
