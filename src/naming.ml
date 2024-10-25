@@ -24,7 +24,16 @@ let recursion_handler_type ~function_name ~case_name =
 let handler_name ~recursor ~case =
   Names.Id.to_string recursor ^ Names.Id.to_string case |> Names.Id.of_string
 
+let concat_names names =
+  names
+  |> List.map Names.Id.to_string
+  |> List.sort String.compare |> String.concat "_" |> Names.Id.of_string
+
 let principle_name ~inductive ~kind = Nameops.add_suffix inductive kind
+
+let mutual_principle_name ~inductives ~kind =
+  let joined_indnames = concat_names inductives in
+  Nameops.add_suffix joined_indnames kind
 
 let computational_axiom_name ~recursor_name ~constructor_name =
   Names.Id.to_string recursor_name
@@ -297,11 +306,6 @@ let inv_name_map_with f =
   List.fold_left
     (fun acc name -> Names.Id.Map.add (f name) name acc)
     Names.Id.Map.empty
-
-let concat_names names =
-  names
-  |> List.map Names.Id.to_string
-  |> List.sort String.compare |> String.concat "_" |> Names.Id.of_string
 
 let is_self_name name = 
     name |> Names.Id.to_string |> String.starts_with ~prefix:"self__"

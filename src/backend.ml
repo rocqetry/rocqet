@@ -104,9 +104,8 @@ module Vernac = struct
       | RecKind.Ind | RecKind.IndComplete -> Sorts.InProp
       | RecKind.Rec -> Sorts.InSet
       | RecKind.Rect -> Sorts.InType
-    in 
-    let joined_indnames = Naming.concat_names inductives in
-    let indp_name = Nameops.add_suffix joined_indnames (RecKind.to_string suffix) in
+    in    
+    let indp_name = Naming.mutual_principle_name ~inductives ~kind:(RecKind.to_string suffix) in
     let internal_indp_name = Naming.internal_name indp_name in
     let names = 
       inductives

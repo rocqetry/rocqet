@@ -259,7 +259,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
       let element, fresh_elements =
         match element with
         | LinkageElem.InductiveDefinition inductive ->
-            let compiled_impl, principles =
+            let compiled_impl, principles, _mutual_principle =
               Codegen.compile_inductive_implementation
                 ~ind_def:inductive.inductive ~ctx:parameters ~family_name:name
             in
