@@ -70,8 +70,7 @@ val compile_theorem_definition_signature :
 
 val compile_computational_axiom_signature :
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-  constructor_name:Names.Id.t ->
-  inductive_name:Names.Id.t ->
+  constructor_name:Names.Id.t ->  
   inductive:VernacInductive.t ->  
   recursor_names: Names.Id.t Names.Id.Map.t ->
   prefix:Libnames.qualid option ->
@@ -81,8 +80,7 @@ val compile_prec_computational_axiom_signature :
     ctx : (Names.Id.t * Constrexpr.module_ast) list ->
     constructor_name : Names.Id.t ->
     constructor_path : Libnames.qualid ->
-    handlers: Names.Id.t list ->
-    inductive_name: Names.Id.t ->
+    handlers: Names.Id.t list ->    
     inductive : VernacInductive.t ->
     prec_suffix: Names.Id.t ->                
     recursor_path : Libnames.qualid  ->    

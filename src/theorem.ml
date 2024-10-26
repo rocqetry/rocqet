@@ -17,7 +17,7 @@ module Ctx = struct
     goal_name : Names.Id.t;
     module_name : Names.Id.t;
     rec_principle_prefix : Libnames.qualid;
-    inductive_path : Libnames.qualid;
+    inductive_paths : Libnames.qualid list;
     suffix : RecKind.t;
   }
 
@@ -117,7 +117,7 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
     Codegen.compile_linkage_context ~field_name:name context
   in
   let handler_types =
-    Termutils.handler_type_for_recursion ~name ~inductive_path ~recursor
+    Termutils.handler_type_for_recursion ~names:[name] ~inductive_paths:[inductive_path] ~recursor
   in
   let inductive_name = inductive_path |> Naming.extract_path_base in
   let handler_names = recursor.handlers |> Names.Id.Map.find inductive_name |> List.map fst in
@@ -144,7 +144,7 @@ let open_theorem ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
         goal_name;
         compiled_context;
         rec_principle_prefix;
-        inductive_path;
+        inductive_paths = [inductive_path];
         parameters;
         suffix;
       }
@@ -159,33 +159,38 @@ let open_theorem_extension ~name =
     Codegen.compile_linkage_context ~field_name:name context
   in
   let elem = Inheritance.lookup_field_in_base ~field:name ~context in
-  let inductive_path, inherited_handlers, suffix =
+  let inductive_paths, inherited_handlers, suffix =
     match elem with
     | None -> Errors.fail ~info:"There is no such FInduction in a base family"
     | Some
-        (LinkageElem.TheoremDefinition { inductive_path; handlers; suffix; _ })
+        (LinkageElem.TheoremDefinition { inductive_paths; handlers; suffix; _ })
       ->
-        (inductive_path, handlers, suffix)
+        (inductive_paths, handlers, suffix)
     | _ -> Errors.fail ~info:"Expected to inherit an FInduction"
   in
   let _inductive, recursors, _ =
+    let inductive_path = List.hd inductive_paths in 
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let recursor = RecursorStore.find suffix recursors in
-  let inductive_name = inductive_path |> Naming.extract_path_base in
+  let inductive_name =
+    let inductive_path = List.hd inductive_paths in
+    inductive_path |> Naming.extract_path_base
+  in
   let handler_names = recursor.handlers |> Names.Id.Map.find inductive_name |> List.map fst in
   let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
   let implementing_handler_names =
     handler_names |> List.filter (fun x -> not (inside x inherited_handlers))
   in
   let handler_types =
-    Termutils.handler_type_for_recursion ~name ~inductive_path ~recursor
+    Termutils.handler_type_for_recursion ~names:[name] ~inductive_paths ~recursor
     |> List.filter_map (fun (name, handler_type) ->
            if inside name implementing_handler_names then Some handler_type
            else None)
   in
   let goal = Termutils.calculate_inductive_proof_goal ~handler_types ~suffix in
   let rec_principle_prefix =
+    let inductive_path = List.hd inductive_paths in
     Codegen.calculate_rec_principle_prefix ~inductive_path ~context
   in
   let goal_name = Naming.fresh_name ~prefix:"Goal" in
@@ -201,7 +206,7 @@ let open_theorem_extension ~name =
         goal_name;
         compiled_context;
         rec_principle_prefix;
-        inductive_path;
+        inductive_paths;
         parameters;
         suffix;
       }
@@ -219,7 +224,7 @@ let close_theorem () =
           compiled_context;
           suffix;
           rec_principle_prefix;
-          inductive_path;
+          inductive_paths;
           _;
         } =
     Ctx.get ()
@@ -251,7 +256,7 @@ let close_theorem () =
     implemented_handlers
     |> List.iter (fun (constructor_name, handler) ->
            let name =
-             Naming.handler_name ~recursor:name ~case:constructor_name
+             Naming.handler_name ~recursors:[name] ~case:constructor_name
            in
            Definition.add_definition ~name handler)
   in
@@ -271,7 +276,7 @@ let close_theorem () =
         compiled_signature;
         compiled_context;
         handlers = all_handlers;
-        inductive_path;
+        inductive_paths;
         suffix;
         default_ctx_params;
       }

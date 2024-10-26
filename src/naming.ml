@@ -30,9 +30,7 @@ let handler_name ~recursors ~case =
   let recursors = concat_names recursors in 
   Names.Id.to_string recursors ^ Names.Id.to_string case |> Names.Id.of_string
 
-let principle_name ~inductive ~kind = Nameops.add_suffix inductive kind
-
-let mutual_principle_name ~inductives ~kind =
+let principle_name ~inductives ~kind =
   let joined_indnames = concat_names inductives in
   Nameops.add_suffix joined_indnames kind
 

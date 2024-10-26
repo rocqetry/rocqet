@@ -151,8 +151,7 @@ let generate_prec_handlers
   let default_ctx_params =
     context |> Context.family_linkage |> function
     | { default_ctx_params; _ } -> default_ctx_params
-  in
-  let inductive_name = Naming.extract_path_base inductive_path in
+  in  
   let prefix = Codegen.calculate_rec_principle_prefix ~inductive_path ~context in  
   let construct_path name = Naming.qualid_point (Some prefix) name in    
   List.fold_left (fun (context, acc) constructor_name ->          
@@ -167,8 +166,7 @@ let generate_prec_handlers
              ~ctx:parameters
              ~constructor_name 
              ~constructor_path 
-             ~inductive
-             ~inductive_name
+             ~inductive           
              ~recursor_path 
              ~handlers
              ~prec_suffix:prec_suffix               
@@ -485,21 +483,24 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
         | ClosingFact fact -> ClosingFact { fact with compiled_context }, []
         (* Exhaustiveness checks *)
         | RecursorDefinition recursive ->
-            let inductive, _, _ =
+           let inductive, _, _ =
+             let name = List.hd recursive.inductive_paths in 
               Context.lookup_inductive_for_recursion
-                ~name:recursive.inductive_path context
-            in
-            let name = List.hd recursive.names in
-            Checks.check_exhaustive ~name ~inductive ~inductive_path:recursive.inductive_path
+                ~name context
+            in            
+            Checks.check_exhaustive ~names:recursive.names ~inductive ~inductive_paths:recursive.inductive_paths
               ~handlers:recursive.handlers;
             RecursorDefinition { recursive with compiled_context }, []
         | TheoremDefinition theorem ->
-            let inductive, _, _ =
+           let inductive, _, _ =
+              let name = List.hd theorem.inductive_paths in
               Context.lookup_inductive_for_recursion
-                ~name:theorem.inductive_path context
-            in
-            let name = List.hd theorem.names in
-            Checks.check_exhaustive ~name ~inductive ~handlers:theorem.handlers ~inductive_path:theorem.inductive_path;
+                ~name context
+            in            
+            Checks.check_exhaustive
+              ~names:theorem.names
+              ~inductive ~handlers:theorem.handlers
+              ~inductive_paths:theorem.inductive_paths;
             TheoremDefinition { theorem with compiled_context }, []
       in      
       let open Bwd.Infix in

@@ -193,7 +193,7 @@ let generate_one_computational_axiom
     ~context =
   let inductive_for_constructor = VernacInductive.lookup_inductive_name ~constructor:constructor_name ~inductive in
   let recursor_path = Names.Id.Map.find inductive_for_constructor recursor_paths in
-  let recursor_name = Names.Id.Map.find inductive_for_constructor recursor_names in
+  let _recursor_name = Names.Id.Map.find inductive_for_constructor recursor_names in
   let open Constrexpr_ops in
   let constructor_params, fully_applied_constr =
     extract_variables_and_apply (mkRefC constructor_path)
@@ -234,8 +234,8 @@ let generate_one_computational_axiom
           [ arg; hypothesis ]
     in
     let arguments = List.concat (List.map2 f types arguments) in
-    let handler =
-      let recursors = recursor_names |> Names.Id.Map.bindings |> List.map snd  in 
+    let recursors = recursor_names |> Names.Id.Map.bindings |> List.map snd  in 
+    let handler =      
       let handler_name =
         match context with
         | None ->
@@ -265,7 +265,8 @@ let generate_one_computational_axiom
   (* The final axiom is an equation *)
   let equation = closed_recursor_applied in
   let equation_name =
-    Naming.computational_axiom_name ~recursor_name ~constructor_name
+    let recursor_names = recursor_names |> Names.Id.Map.bindings |> List.map snd  in 
+    Naming.computational_axiom_name ~recursor_names ~constructor_name
   in
   (equation_name, equation)
 
@@ -320,7 +321,7 @@ let handler_types_table inductive_path name (recursor : CompiledRecursor.t)
 
 let handler_type_for_recursion
     ~(names : Names.Id.t list)
-    ~(inductive_path : Libnames.qualid)
+    ~(inductive_paths : Libnames.qualid list)
     ~(recursor : Recursor.t) :
     (Names.Id.t * Constrexpr.constr_expr) list =
   let motive_terms =
@@ -335,9 +336,9 @@ let handler_type_for_recursion
   in    
 
   let handlers =
-    match names with
+    match inductive_paths with
     | [] -> assert false 
-    | [_] ->
+    | [ inductive_path ] ->
        let inductive_name = inductive_path |> Naming.extract_path_base in
        recursor.handlers |> Names.Id.Map.find inductive_name
     | _ ->
@@ -349,6 +350,7 @@ let handler_type_for_recursion
   handlers
   |> List.map (fun (case_name, handler) ->
          let target =
+           let inductive_path = List.hd inductive_paths in
            match inductive_path |> Naming.path_to_list |> List.rev with
            | [] | [ _ ] -> None
             (* Remove the inductive name, leave the family *)
@@ -359,11 +361,11 @@ let handler_type_for_recursion
            match target with
            | None -> handler
            | Some path ->
-               let inductive_name =
-                 inductive_path |> Naming.extract_path_base
+               let inductive_names =
+                 inductive_paths |> List.map Naming.extract_path_base
                in
                let names =
-                 [ inductive_name; case_name ] |> Names.Id.Set.of_list
+                 case_name :: inductive_names |> Names.Id.Set.of_list
                in               
                Naming.add_prefix_path ~path ~names ~target:handler
          in         
