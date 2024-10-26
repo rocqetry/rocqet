@@ -13,7 +13,7 @@ let add_inductive_axiom ~name ~ty =
   in
   let ty = Resolver.resolve_constrexpr ~context ~expression:ty in
   let compiled_signature =
-    Codegen.compile_inductive_constr ~name ~ty ~ctx:parameters
+    Codegen.compile_inductive_axiom ~name ~ty ~ctx:parameters
   in
   let elem =
     LinkageElem.InductiveAxiom
