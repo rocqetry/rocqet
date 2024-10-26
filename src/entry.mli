@@ -58,7 +58,7 @@ val frecursion :
   unit
 
 (* Handle an `FRecursion ...` extension *)
-val frecursion_extension : name:Names.Id.t -> unit
+val frecursion_extension : names:Names.Id.t list -> unit
 
 (* Handle a `Case ... := ...` *)
 val frecursion_handler :

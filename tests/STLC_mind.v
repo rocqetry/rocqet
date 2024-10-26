@@ -32,7 +32,8 @@ Case tm_val := cheat.
 
 Case val_abs := cheat.
 Case val_unit := cheat.
-FEnd comb_size_tm with comb_size_val.
+FEnd comb_size_tm
+with comb_size_val.
 
 FEnd STLC.
 
@@ -63,14 +64,35 @@ Check STLC.tm_val_rect.
 
 (*Print STLC.*)
 
-(*Family STLC_bool extends STLC.  
+
+Family STLC_bool extends STLC.  
 FInductive tm : Set :=
 | tm_if : tm -> tm -> tm -> tm
 with val : Set :=
 | val_true : val
 | val_false : val.  
+
+FRecursion tm_size.
+Case tm_if := cheat.
+FEnd tm_size.
+
+FRecursion val_size.
+Case val_true := cheat.
+Case val_false := cheat.
+FEnd val_size.
+
+FRecursion comb_size_tm
+     with comb_size_val.
+Case tm_if := cheat.
+
+Case val_true := cheat.
+Case val_false := cheat.
+FEnd comb_size_tm
+with comb_size_val.
+
 FEnd STLC_bool.
 
+(*
 Family STLC_prod extends STLC_bool.
 FInductive tm : Set :=
 | tm_prod : tm -> tm -> tm
