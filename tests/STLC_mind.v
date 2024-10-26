@@ -92,7 +92,7 @@ with comb_size_val.
 
 FEnd STLC_bool.
 
-(*
+
 Family STLC_prod extends STLC_bool.
 FInductive tm : Set :=
 | tm_prod : tm -> tm -> tm
@@ -100,8 +100,28 @@ FInductive tm : Set :=
 | tm_pi2 : tm -> tm
 with val : Set :=
 | val_prod : val -> val -> val.
+
+FRecursion tm_size.
+Case tm_prod := cheat.
+Case tm_pi1 := cheat.
+Case tm_pi2 := cheat.
+FEnd tm_size.
+
+FRecursion val_size.
+Case val_prod := cheat.
+FEnd val_size.
+
+FRecursion comb_size_tm
+  with comb_size_val.
+Case tm_prod := cheat.
+Case tm_pi1 := cheat.
+Case tm_pi2 := cheat.
+
+Case val_prod := cheat.
+FEnd comb_size_tm
+with comb_size_val.
+
 FEnd STLC_prod.
 
 Family all extends STLC, STLC_bool, STLC_prod.
 FEnd all.
-*)
