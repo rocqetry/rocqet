@@ -72,14 +72,10 @@ val frecursion_elegant :
   Names.Id.t -> (Names.Id.t * Constrexpr.constr_expr) list -> unit
 
 (* Handle an `FInduction ...` *)
-val finduction :
-  name:Names.Id.t ->
-  inductive:Libnames.qualid ->
-  motive:Constrexpr.constr_expr ->
-  unit
+val finduction : Frec_arg.t list -> unit
 
 (* Handle a `FInduction ...` extension *)
-val finduction_extension : name:Names.Id.t -> unit
+val finduction_extension : names:Names.Id.t list -> unit
 val fproof : unit -> Declare.Proof.t
 val fproof_lemma : unit -> Declare.Proof.t
 
