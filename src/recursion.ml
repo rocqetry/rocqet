@@ -109,7 +109,7 @@ let close_recursion () =
            in
            let axiom_name, axiom, compiled_signature =
              Codegen.compile_computational_axiom_signature ~ctx:parameters
-               ~constructor_name ~inductive ~recursor_names
+               ~constructor_name ~inductive ~inductive_paths ~recursor_names
                ~prefix:(Some rec_principle_prefix)
            in
            let elem =
