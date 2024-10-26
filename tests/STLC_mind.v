@@ -25,9 +25,16 @@ Case val_unit := cheat.
 FEnd val_size.
 
 FRecursion comb_size_tm about tm motive (fun (_ : tm) => nat)
-      with comb_size_val about val motive (fun (_ : val) => nat) by _rect.
+  with comb_size_val about val motive (fun (_ : val) => nat) by _rect.
+Case tm_var := cheat.
+Case tm_app := cheat.
+Case tm_val := cheat.
 
+Case val_abs := cheat.
+Case val_unit := cheat.
+FEnd comb_size_tm with comb_size_val.
 
+FEnd STLC.
 
 (*
   Scheme __internal_tm_tm_val_rect := Induction for __internal_tm 
@@ -40,7 +47,6 @@ FRecursion comb_size_tm about tm motive (fun (_ : tm) => nat)
   , __internal_val_tm_val_rect.
 
 *)
-FEnd STLC.
 
 Check STLC.tm_val_rect.
 (* STLC.__internal_tm_val_rect
