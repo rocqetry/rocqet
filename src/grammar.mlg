@@ -113,25 +113,13 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "FDefinition" ident(name) ":=" llconstr_ip(body_expr)  ] ->
    { Entry.definition ~name body_expr }
 
-(*| [ "FRecursion" ident(name) 
-               "about" reference_ip(inductive)
-               "motive" llconstr_ip(motive)
-               "by" ident(reckind)  ] ->  
-   { Entry.frecursion ~name ~inductive ~motive ~suffix:(Types.RecKind.of_name reckind) }*)
-
-| [ "FRecursion" ident(name) ] -> { Entry.frecursion_extension ~name } 
-
-| [ "FRecursion" induction_decls(ind_decls) "by" ident(reckind) ] -> 
-   { Entry.frecursion ind_decls (RecKind.of_name reckind) }
-
 | [ "FRecursion" ident(name) ":" argument_flist(args) ] -> 
    { Entry.frecursion_elegant name args }
 
-(* Default case is by _rec *)
-(* | [ "FRecursion" ident(name) 
-               "about" reference_ip(inductive)
-               "motive" llconstr_ip(motive) ] ->  
-   { Entry.frecursion ~name ~inductive ~motive ~suffix:Types.RecKind.Rec }*)
+| [ "FRecursion" ne_ident_list_sep(names, "with") ] -> { Entry.frecursion_extension ~names }
+
+| [ "FRecursion" induction_decls(ind_decls) "by" ident(reckind) ] -> 
+   { Entry.frecursion ind_decls (RecKind.of_name reckind) }
 
 | [ "Case" ident(name) list1ident(arguments) ":=" constr(handler) ] -> 
    {  Entry.frecursion_handler ~name ~arguments:(Some arguments) ~handler }
