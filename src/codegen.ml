@@ -41,6 +41,7 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
 
   (* Stuff for collecting recursors *)
   let possible_suffixes = RecKind.[ Ind; IndComplete; Rec; Rect ] in
+  let possible_mutual_suffixes = RecKind.[ Rect; IndComplete ] in
   let defined_recursors :
       (Names.Id.t * Constrexpr.constr_expr) list RecursorStore.t ref =
     ref RecursorStore.empty
@@ -86,20 +87,17 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
              defined_recursors := RecursorStore.update suffix updater !defined_recursors);
     B.return ()
   in
-  let collect_mutual_recursor () : unit B.t =
-    (* Only support rect for now *)
-    let possible_suffixes = RecKind.[ Rect ] in
-    possible_suffixes
+  let collect_mutual_recursor () : unit B.t =    
+    possible_mutual_suffixes
     |> List.iter (fun suffix ->
        let principle =
          Naming.principle_name ~inductives:type_names ~kind:(RecKind.to_string suffix)         
          |> Constrexpr_ops.mkIdentC
-       in
-       let mutual_suffix = RecKind.Rect in
+       in       
        let mutual_principle =
           Naming.principle_name
             ~inductives:type_names
-            ~kind:(RecKind.to_string mutual_suffix)
+            ~kind:(RecKind.to_string suffix)
       in
       let _ =
         B.run @@
@@ -139,13 +137,14 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
                  type_names
              in
              let* () = flatmap all_ind_comp_schemes in
-             (* Mutual Inductive *)
-             let mutual_suffix = RecKind.Rect in
+             (* Mutual Inductive *)             
              let* () = 
                match type_names with 
                | [] | [_] -> return ()
                | inductives ->                   
-                  define_mutual_inductive_scheme ~inductives ~suffix:mutual_suffix
+                  possible_mutual_suffixes
+                  |> List.map (fun suffix -> define_mutual_inductive_scheme ~inductives ~suffix)
+                  |> flatmap
              in             
              
              (* Now, we read from the environment all defined recursors and get their types. *)
