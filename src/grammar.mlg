@@ -127,13 +127,11 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "Case" ident(name) ":=" constr(handler) ] -> 
    {  Entry.frecursion_handler ~name ~arguments:None ~handler }
 
-| [ "FInduction" ident(name) 
-                "about" reference_ip(inductive) 
-                "motive"  llconstr_ip(motive) ] ->
-   {  Entry.finduction ~name ~inductive ~motive }
+| [ "FInduction" induction_decls(ind_decls) ] ->
+   {  Entry.finduction ind_decls }
 
-| [ "FInduction" ident(name)] ->
-   { Entry.finduction_extension ~name }
+| [ "FInduction" ne_ident_list_sep(names, "with") ] ->
+   { Entry.finduction_extension ~names }
 
 | [ "FLemma" ident(name) ":" llconstr_ip(t) ] -> { Entry.flemma name t }
 

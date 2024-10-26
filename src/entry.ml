@@ -82,17 +82,15 @@ let frecursion_elegant name args =
     PluginCmdScope.
       { names; command = PluginCmd.Recursion; close = Recursion.close_recursion }
 
-let finduction ~(name : Names.Id.t) ~(inductive : Libnames.qualid)
-    ~(motive : Constrexpr.constr_expr) =
-  let names = [name] in
-  Theorem.open_theorem ~name ~inductive ~motive;
+let finduction (args : Frec_arg.t list) =      
+  let names = args |> List.map (fun Frec_arg.{ name; _ } -> name) in 
+  Theorem.open_theorem ~args;
   PluginScopes.push
     PluginCmdScope.
       { names; command = PluginCmd.Induction; close = Theorem.close_theorem }
 
-let finduction_extension ~(name : Names.Id.t) =
-  let names = [name] in
-  Theorem.open_theorem_extension ~name;
+let finduction_extension ~(names : Names.Id.t list) =  
+  Theorem.open_theorem_extension ~names;
   PluginScopes.push
     PluginCmdScope.
       { names; command = PluginCmd.Induction; close = Theorem.close_theorem }
