@@ -78,7 +78,7 @@ let add
            let recursor_path = construct_path name in
            let axiom_name, axiom, compiled_signature =
              Codegen.compile_prec_computational_axiom_signature ~ctx:parameters
-               ~constructor_name ~constructor_path ~inductive_name
+               ~constructor_name ~constructor_path
                ~inductive ~recursor_path ~handlers ~prec_suffix                  
            in
            let elem =

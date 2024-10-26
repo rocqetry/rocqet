@@ -123,12 +123,12 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
     possible_suffixes
     |> List.iter (fun suffix ->
        let principle =
-         Naming.mutual_principle_name ~inductives:type_names ~kind:(RecKind.to_string suffix)         
+         Naming.principle_name ~inductives:type_names ~kind:(RecKind.to_string suffix)         
          |> Constrexpr_ops.mkIdentC
        in
        let mutual_suffix = RecKind.Rect in
        let mutual_principle =
-          Naming.mutual_principle_name
+          Naming.principle_name
             ~inductives:type_names
             ~kind:(RecKind.to_string mutual_suffix)
       in
@@ -496,9 +496,11 @@ let compile_recursive_definition_signature ~(names : Names.Id.t list)
   return_module
 
 (* Return the compiled module and the generated computational behaviour *)
-let compile_recursive_definition_implementation ~inductive_name ~recursor_name
-    ~handlers ~(inductive_path : Libnames.qualid) ~suffix : unit B.t =
+let compile_recursive_definition_implementation
+    ~(recursor_names: Names.Id.t list)
+    ~handlers ~(inductive_paths : Libnames.qualid list) ~suffix : unit B.t =
   let prefix =
+    let inductive_path = List.hd inductive_paths in
     match inductive_path |> Naming.path_to_list |> List.rev with
     | [] | [ _ ] -> None
     | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
@@ -506,26 +508,49 @@ let compile_recursive_definition_implementation ~inductive_name ~recursor_name
   let computation =
     let handlers =
       handlers
-      |> List.map (fun handler ->
-             Naming.handler_name ~recursor:recursor_name ~case:handler)
+      |> List.map (fun handler -> Naming.handler_name ~recursors:recursor_names ~case:handler)
       |> List.map Libnames.qualid_of_ident
       |> List.map Constrexpr_ops.mkRefC
     in
     let recursor =
-      let recursor =
+      (*let recursor =
         Nameops.add_suffix inductive_name (RecKind.to_string suffix)
-      in
+      in*)
+      let inductives = inductive_paths |> List.map Naming.extract_path_base in 
+      let recursor = Naming.principle_name ~inductives ~kind:(RecKind.to_string suffix) in
       let recursor_path = Naming.qualid_point prefix recursor in
-      let motive =
-        recursor_name |> Naming.motive_of |> Libnames.qualid_of_ident
-        |> Constrexpr_ops.mkRefC
+      let motives =
+        recursor_names
+        |> List.map (fun recursor_name ->
+           recursor_name
+           |> Naming.motive_of
+           |> Libnames.qualid_of_ident
+           |> Constrexpr_ops.mkRefC)
       in
       Constrexpr_ops.mkAppC
-        (Constrexpr_ops.mkRefC recursor_path, motive :: handlers)
+        (Constrexpr_ops.mkRefC recursor_path, motives @ handlers)
     in
     let open B in
-    let* _ = define_term ~name:recursor_name recursor in
-    return ()
+    match recursor_names with
+    | [] -> assert false
+    | [ recursor_name ] ->       
+       let* _ = define_term ~name:recursor_name recursor in
+       return ()
+    | _ -> 
+       let open B in
+       let combined_definition = Naming.fresh_name ~prefix:"CombinedRec" in
+       let* _ = define_term ~name:combined_definition recursor in
+       let extract_from_combined index = match index with
+         | 0 -> Constrexpr_ops.(mkAppC (mkIdentC (Names.Id.of_string "fst"), [mkIdentC combined_definition]))
+         | 1 -> Constrexpr_ops.(mkAppC (mkIdentC (Names.Id.of_string "snd"), [mkIdentC combined_definition]))
+         | _ -> Errors.fail ~info:"Not supported"
+       in
+       let* _ =
+         recursor_names
+         |> List.mapi (fun index name -> define_term ~name (extract_from_combined index))
+         |> flatmap
+       in 
+       return ()
   in
   computation
 
@@ -607,7 +632,6 @@ let compile_prec_computational_axiom_signature
     ~(constructor_name : Names.Id.t)
     ~(constructor_path : Libnames.qualid)
     ~(handlers: Names.Id.t list)
-    ~(inductive_name: Names.Id.t)
     ~(inductive : VernacInductive.t)
     ~(prec_suffix: Names.Id.t)
     ~(recursor_path : Libnames.qualid) :    
@@ -622,8 +646,7 @@ let compile_prec_computational_axiom_signature
            let* _ =
              thunk (fun () ->
                  let name, axiom =
-                   Termutils.generate_one_prec_computational_axiom
-                     ~inductive_name
+                   Termutils.generate_one_prec_computational_axiom                     
                      ~inductive
                      ~recursor_path ~constructor_name
                      ~constructor_path ~prec_suffix ~handlers
@@ -636,10 +659,11 @@ let compile_prec_computational_axiom_signature
   in
   (Option.get !axiom_name, Option.get !axiom_expr, compiled_signature)
 
-let compile_theorem_implementation ~(name : Names.Id.t)
-    ~(inductive_name : Names.Id.t) ~(suffix : RecKind.t)
-    ~(handler_names : Names.Id.t list) ~inductive_path =
+let compile_theorem_implementation ~(names : Names.Id.t list)
+    ~(suffix : RecKind.t)
+    ~(handler_names : Names.Id.t list) ~(inductive_paths: Libnames.qualid list) =
   let prefix =
+    let inductive_path = List.hd inductive_paths in
     match inductive_path |> Naming.path_to_list |> List.rev with
     | [] | [ _ ] -> None
     | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
@@ -649,24 +673,26 @@ let compile_theorem_implementation ~(name : Names.Id.t)
   let handler_names =
     handler_names
     |> List.map (fun handler ->
-           Naming.handler_name ~recursor:name ~case:handler)
+           Naming.handler_name ~recursors:names ~case:handler)
   in
   let handler_names =
     handler_names |> List.map Libnames.qualid_of_ident |> List.map mkRefC
   in
   let recursor =
+    let inductives = inductive_paths |> List.map Naming.extract_path_base in 
     let recursor =
-      Nameops.add_suffix inductive_name (RecKind.to_string suffix)
-    in
+      (* Nameops.add_suffix inductive_name (RecKind.to_string suffix)*)
+      Naming.principle_name ~inductives ~kind:(RecKind.to_string suffix)
+    in    
     let recursor_path = Naming.qualid_point prefix recursor in
-    let motive =
-      name |> Naming.motive_of |> Libnames.qualid_of_ident
-      |> Constrexpr_ops.mkRefC
+    let motives =
+      names |> List.map (fun name -> name |> Naming.motive_of |> Libnames.qualid_of_ident |> Constrexpr_ops.mkRefC)
     in
     Constrexpr_ops.mkAppC
-      (Constrexpr_ops.mkRefC recursor_path, motive :: handler_names)
+      (Constrexpr_ops.mkRefC recursor_path, motives @  handler_names)
   in
-  let* _ = define_term ~name recursor in
+  (* TODO: *)
+  let* _ = define_term ~name:(List.hd names) recursor in
   return ()
 
 let normalize_parameters 
@@ -964,26 +990,19 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         ( fields,
           ( _,
             LinkageElem.RecursorDefinition
-              { inductive_path; handlers; names; suffix; _ } ) ) ->
+              { inductive_paths; handlers; names; suffix; _ } ) ) ->
         let open B in
-        let* _ = compile_fields fields ctx in
-        let recursor_name = List.hd names in
-        let inductive_name =
-          inductive_path |> Naming.path_to_list |> List.rev |> List.hd
-        in
-        compile_recursive_definition_implementation ~inductive_name
-          ~recursor_name ~handlers ~inductive_path ~suffix
+        let* _ = compile_fields fields ctx in                
+        compile_recursive_definition_implementation          
+          ~recursor_names:names
+          ~handlers ~inductive_paths ~suffix
     | Snoc
         ( fields,
-          (_, TheoremDefinition { inductive_path; handlers; names; suffix; _ })
+          (_, TheoremDefinition { inductive_paths; handlers; names; suffix; _ })
         ) ->
         let open B in
-        let* _ = compile_fields fields ctx in
-        let name = List.hd names in
-        let inductive_name =
-          inductive_path |> Naming.path_to_list |> List.rev |> List.hd
-        in
-        compile_theorem_implementation ~name ~inductive_name ~inductive_path
+        let* _ = compile_fields fields ctx in                
+        compile_theorem_implementation ~names ~inductive_paths
           ~suffix ~handler_names:handlers
     | Snoc (fields, (_, ComputationalAxiom { name; axiom; _ })) ->
         let open B in

@@ -73,7 +73,7 @@ val generate_one_computational_axiom :
 
 val handler_type_for_recursion :
   names:Names.Id.t list ->
-  inductive_path:Libnames.qualid ->
+  inductive_paths:Libnames.qualid list ->
   recursor:Recursor.t ->
   (Names.Id.t * Constrexpr.constr_expr) list
 

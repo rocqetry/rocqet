@@ -69,7 +69,7 @@ let frecursion
 
 let frecursion_extension ~(name : Names.Id.t) =
   let names = [name] in
-  Recursion.open_recursion_extension ~name;
+  Recursion.open_recursion_extension ~names;
   PluginScopes.push
     PluginCmdScope.
       { names; command = PluginCmd.Recursion; close = Recursion.close_recursion }

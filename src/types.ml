@@ -300,7 +300,7 @@ module rec LinkageElem : sig
     | RecursorDefinition of {
         names : Names.Id.t list;
         handlers : Names.Id.t list;
-        inductive_path : Libnames.qualid;
+        inductive_paths : Libnames.qualid list;
         suffix : RecKind.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
@@ -311,7 +311,7 @@ module rec LinkageElem : sig
     | TheoremDefinition of {
         names : Names.Id.t list;
         suffix : RecKind.t;
-        inductive_path : Libnames.qualid;
+        inductive_paths : Libnames.qualid list;
         handlers : Names.Id.t list;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;

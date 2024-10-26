@@ -8,8 +8,7 @@ val inductive_axiom_name : Names.Id.t -> Names.Id.t
 val recursion_handler_type :
   function_name:Names.Id.t -> case_name:Names.Id.t -> Names.Id.t
 
-val principle_name : inductive:Names.Id.t -> kind:string -> Names.Id.t
-val mutual_principle_name :
+val principle_name :
   inductives:Names.Id.t list ->
   kind:string ->
   Names.Id.t

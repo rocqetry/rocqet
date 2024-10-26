@@ -2,19 +2,18 @@ open Env
 open Types
 
 (* Exhaustiveness checking *)
-let check_exhaustive ~names ~inductive ~inductive_path ~handlers =  
-  let inductive_name = Naming.extract_path_base inductive_path in
+let check_exhaustive ~names ~inductive ~inductive_paths ~handlers =    
+  let inductive_names =
+    inductive_paths
+    |> List.map Naming.extract_path_base
+  in
   let constructors =
-    match names with
-    | [] -> assert false
-    | [_] -> 
+    inductive_names
+    |> List.concat_map (fun inductive_name ->
        inductive
        |> VernacInductive.create_inductive_constructor_map
-       |> Names.Id.Map.find inductive_name
-    | _ ->
-       inductive       
-       |> VernacInductive.extract_all_constructors
-  in
+       |> Names.Id.Map.find inductive_name)
+  in  
   let names_pretty =
     names
     |> List.map Names.Id.to_string
