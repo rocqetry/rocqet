@@ -588,12 +588,14 @@ let compile_closing_fact_implementation ~name ~type_name ~(script: Ltac_plugin.T
 (* The name of the equation to generate axioms for *)
 let compile_computational_axiom_signature
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
-    ~(constructor_name : Names.Id.t) ~(inductive : VernacInductive.t)
+    ~(constructor_name : Names.Id.t)
+    ~(inductive : VernacInductive.t)
+    ~(inductive_paths : Libnames.qualid list)
     (* Ind name -> Recursor Name *)
     ~(recursor_names : Names.Id.t Names.Id.Map.t)
     ~(prefix : Libnames.qualid option) :
       Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t =
-  let inductive_names = inductive |> VernacInductive.extract_all_inductive_names in   
+  let inductive_names = inductive_paths |> List.map Naming.extract_path_base in
   let self__ =
     Naming.self_version (Env.Context.family_name (Env.Context.get ()))
   in  
