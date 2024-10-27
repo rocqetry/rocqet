@@ -299,6 +299,7 @@ let compile_recursive_definition_implementation
            |> Constrexpr_ops.mkRefC)
     in
     let handlers =
+      (* What if the handler names are not in the right order? *)      
       handlers
       |> List.map (fun handler -> Naming.handler_name ~recursors:recursor_names ~case:handler)
       |> List.map Libnames.qualid_of_ident

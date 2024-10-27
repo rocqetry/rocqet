@@ -102,13 +102,26 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t) ~(base : LinkageEl
   | FieldDefinition derived, OpaqueFieldDefinition _ -> FieldDefinition derived
   | OpaqueFieldDefinition _, FieldDefinition base -> FieldDefinition base
 
+  (* We can't just concatenate like this *)
+  (* They have to be in the order of the handlers *)
+  (* FIX: Keep a mapping from inductive_name to handlers *)
   | RecursorDefinition derived, RecursorDefinition base ->
+      let combine_mapping m0 m1 =
+        m0
+        |> List.map (fun (s, t) -> s, remove_duplicates (t @ List.assoc s m1))
+      in  
       let names = remove_duplicates (base.names @ derived.names) in
-      let handlers = remove_duplicates (base.handlers @ derived.handlers) in
+      (* let handlers = remove_duplicates (base.handlers @ derived.handlers) in *)
+      let handlers  = combine_mapping base.handlers derived.handlers in
       RecursorDefinition { derived with names; handlers }
   | TheoremDefinition derived, TheoremDefinition base ->
+      let combine_mapping m0 m1 =
+        m0
+        |> List.map (fun (s, t) -> s, remove_duplicates (t @ List.assoc s m1))
+      in  
       let names = remove_duplicates (base.names @ derived.names) in
-      let handlers = remove_duplicates (base.handlers @ derived.handlers) in
+      (* let handlers = remove_duplicates (base.handlers @ derived.handlers) in *)
+      let handlers  = combine_mapping base.handlers derived.handlers in
       TheoremDefinition { derived with names; handlers }
   | MetaDataSection derived, MetaDataSection _ -> MetaDataSection derived
   | ClosingFact fact, ClosingFact _ -> ClosingFact fact
