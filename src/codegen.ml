@@ -94,19 +94,7 @@ let compile_inductive_implementation
        let principle =
          Naming.principle_name ~inductives:type_names ~kind:(RecKind.to_string suffix)         
          |> Constrexpr_ops.mkIdentC
-       in       
-       (*let mutual_principle =
-          Naming.principle_name
-            ~inductives:type_names
-            ~kind:(RecKind.to_string suffix)
-       in*)
-      (*let _ =
-        B.run @@
-          B.define_term
-            ~name:mutual_principle
-            (mutual_principle |> Naming.internal_name |> Constrexpr_ops.mkIdentC)
-      in*)
-             
+       in             
        let recursor_type =
          principle |> Termutils.checked_type_of
          |> Termutils.reflect_checked_term
@@ -387,9 +375,7 @@ let compile_computational_axiom_signature
   let context = Some (Env.Context.get ()) in
   let module_name = Naming.fresh_name ~prefix:"ComputationalAxiom" in
   let axiom_name = ref None in
-  let axiom_expr = ref None in
-  (* recursor_names: Names.Id.t Names.Id.Map.t ->
-  recursor_paths: Libnames.qualid Names.Id.Map.t -> *)
+  let axiom_expr = ref None in  
   let compiled_signature =
     B.run
     @@ B.define_moduletype ~module_name ~parameters:ctx ~body:(fun _ctx ->
@@ -440,44 +426,6 @@ let compile_prec_computational_axiom_signature
            return ())
   in
   (Option.get !axiom_name, Option.get !axiom_expr, compiled_signature)
-
-(*
-let compile_theorem_implementation
-    ~(names : Names.Id.t list)
-    ~(suffix : RecKind.t)
-    ~(handler_names : Names.Id.t list) ~(inductive_paths: Libnames.qualid list) =
-  let prefix =
-    let inductive_path = List.hd inductive_paths in
-    match inductive_path |> Naming.path_to_list |> List.rev with
-    | [] | [ _ ] -> None
-    | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
-  in
-  let open Constrexpr_ops in
-  let open B in
-  let handler_names =
-    handler_names
-    |> List.map (fun handler ->
-           Naming.handler_name ~recursors:names ~case:handler)
-  in
-  let handler_names =
-    handler_names |> List.map Libnames.qualid_of_ident |> List.map mkRefC
-  in
-  let recursor =
-    let inductives = inductive_paths |> List.map Naming.extract_path_base in 
-    let recursor =
-      (* Nameops.add_suffix inductive_name (RecKind.to_string suffix)*)
-      Naming.principle_name ~inductives ~kind:(RecKind.to_string suffix)
-    in    
-    let recursor_path = Naming.qualid_point prefix recursor in
-    let motives =
-      names |> List.map (fun name -> name |> Naming.motive_of |> Libnames.qualid_of_ident |> Constrexpr_ops.mkRefC)
-    in
-    Constrexpr_ops.mkAppC
-      (Constrexpr_ops.mkRefC recursor_path, motives @  handler_names)
-  in
-  (* TODO: *)
-  let* _ = define_term ~name:(List.hd names) recursor in
-  return ()*)
 
 let normalize_parameters 
     ~(default_ctx_params : (Names.Id.t * CompiledModule.t) list)
