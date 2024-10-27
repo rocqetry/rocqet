@@ -19,10 +19,23 @@ Case tm_app := cheat.
 Case tm_val := cheat.
 FEnd tm_size.
 
+FInduction tm_size_tm about tm motive (fun (t : tm) => tm_size t = 0).
+FProof.
++ apply cheat.
++ apply cheat.
++ apply cheat.
+Qed. FEnd tm_size_tm.
+
 FRecursion val_size about val motive (fun (_ : val) => nat) by _rec.
 Case val_abs := cheat.
 Case val_unit := cheat.
 FEnd val_size.
+
+FInduction val_size_tm about val motive (fun (v : val) => val_size v = 0).
+FProof.
++ apply cheat.
++ apply cheat.
+Qed. FEnd val_size_tm.
 
 FRecursion comb_size_tm about tm motive (fun (_ : tm) => nat)
   with comb_size_val about val motive (fun (_ : val) => nat) by _rect.
@@ -34,6 +47,17 @@ Case val_abs := cheat.
 Case val_unit := cheat.
 FEnd comb_size_tm
 with comb_size_val.
+
+FInduction comb_tm_size_tm about tm motive (fun (t : tm) => comb_size_tm t = 0)
+  with comb_val_size_tm about val motive (fun (v : val) => comb_size_val v = 0).
+FProof.
++ apply cheat.
++ apply cheat.
++ apply cheat.
+
++ apply cheat.
++ apply cheat.
+Qed. FEnd comb_tm_size_tm with comb_val_size_tm.
 
 FEnd STLC.
 
@@ -81,10 +105,21 @@ FRecursion tm_size.
 Case tm_if := cheat.
 FEnd tm_size.
 
+FInduction tm_size_tm.
+FProof.
++ apply cheat.
+Qed.  FEnd tm_size_tm.
+
 FRecursion val_size.
 Case val_true := cheat.
 Case val_false := cheat.
 FEnd val_size.
+
+FInduction val_size_tm.
+FProof.
++ apply cheat.
++ apply cheat.
+Qed. FEnd val_size_tm.
 
 FRecursion comb_size_tm
      with comb_size_val.
@@ -92,8 +127,16 @@ Case tm_if := cheat.
 
 Case val_true := cheat.
 Case val_false := cheat.
-FEnd comb_size_tm
-with comb_size_val.
+FEnd comb_size_tm with comb_size_val.
+
+FInduction comb_tm_size_tm 
+  with comb_val_size_tm.
+FProof. 
++ apply cheat.
+
++ apply cheat.
++ apply cheat.  
+Qed. FEnd comb_tm_size_tm with comb_val_size_tm.
 
 FEnd STLC_bool.
 
@@ -112,9 +155,21 @@ Case tm_pi1 := cheat.
 Case tm_pi2 := cheat.
 FEnd tm_size.
 
+FInduction tm_size_tm.
+FProof.
++ apply cheat.
++ apply cheat.
++ apply cheat.
+Qed.  FEnd tm_size_tm.
+
 FRecursion val_size.
 Case val_prod := cheat.
 FEnd val_size.
+
+FInduction val_size_tm.
+FProof.
++ apply cheat.
+Qed. FEnd val_size_tm.
 
 FRecursion comb_size_tm
   with comb_size_val.
@@ -124,7 +179,17 @@ Case tm_pi2 := cheat.
 
 Case val_prod := cheat.
 FEnd comb_size_tm
-with comb_size_val.
+  with comb_size_val.
+
+FInduction comb_tm_size_tm 
+  with comb_val_size_tm.
+FProof. 
++ apply cheat.
++ apply cheat.  
++ apply cheat.
+
++ apply cheat.  
+Qed. FEnd comb_tm_size_tm with comb_val_size_tm.
 
 FEnd STLC_prod.
 
