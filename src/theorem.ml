@@ -19,6 +19,7 @@ module Ctx = struct
     rec_principle_prefix : Libnames.qualid;
     inductive_paths : Libnames.qualid list;
     suffix : RecKind.t;
+    inductive : VernacInductive.t;
   }
 
   let store = Summary.ref ~name:"TheoremCtx" (None : t option)
@@ -183,6 +184,7 @@ let open_theorem ~(args : Frec_arg.t list) =
         inductive_paths;
         parameters;
         suffix;
+        inductive;
       }
   in
   Ctx.update ctx;
@@ -208,12 +210,7 @@ let open_theorem_extension ~(names : Names.Id.t list) =
     let inductive_path = List.hd inductive_paths in 
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
-  let recursor = RecursorStore.find suffix recursors in
-  (*let inductive_name =
-    let inductive_path = List.hd inductive_paths in
-    inductive_path |> Naming.extract_path_base
-  in*)
-  (* let handler_names = recursor.handlers |> Names.Id.Map.find inductive_name |> List.map fst in*)
+  let recursor = RecursorStore.find suffix recursors in  
   let handler_names =
     inductive_paths
     |> List.map Naming.extract_path_base
@@ -253,6 +250,7 @@ let open_theorem_extension ~(names : Names.Id.t list) =
         inductive_paths;
         parameters;
         suffix;
+        inductive;
       }
   in
   Ctx.update ctx;
@@ -262,6 +260,7 @@ let close_theorem () =
   let Ctx.
         {
           names;
+          inductive;
           implementing_handler_names;
           inherited_handlers;
           goal_name;
@@ -274,6 +273,7 @@ let close_theorem () =
     Ctx.get ()
   in
   rec_principle_prefix |> ignore;
+  inherited_handlers |> ignore;
   let compiled_impl = DB.end_module () in
   let default_ctx_params =
     let context = Context.get () in
@@ -291,7 +291,16 @@ let close_theorem () =
     Termutils.extract_handlers_from_inductive_proof implementing_handler_names
       (mkIdentC goal_name) suffix
   in
-  let all_handlers = inherited_handlers @ List.map fst implemented_handlers in
+  (* let all_handlers = inherited_handlers @ List.map fst implemented_handlers in*)
+  let inductive_names = inductive_paths |> List.map Naming.extract_path_base in
+  (* We want the names to be in the right order *)
+  let handlers =     
+    inductive_names
+    |> List.concat_map (fun inductive_name ->
+       inductive
+       |> VernacInductive.create_inductive_constructor_map
+       |> Names.Id.Map.find inductive_name)
+  in
   let implemented_handlers =
     List.map (fun (name, expr) -> (name, expr)) implemented_handlers
   in
@@ -319,7 +328,7 @@ let close_theorem () =
         names;
         compiled_signature;
         compiled_context;
-        handlers = all_handlers;
+        handlers;
         inductive_paths;
         suffix;
         default_ctx_params;
