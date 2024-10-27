@@ -141,7 +141,7 @@ Qed. FEnd comb_tm_size_tm with comb_val_size_tm.
 FEnd STLC_bool.
 
 
-Family STLC_prod extends STLC_bool.
+Family STLC_prod extends STLC.
 FInductive tm : Set :=
 | tm_prod : tm -> tm -> tm
 | tm_pi1 : tm -> tm

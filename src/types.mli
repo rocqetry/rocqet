@@ -120,8 +120,8 @@ module rec LinkageElem : sig
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | RecursorDefinition of {
-        names : Names.Id.t list;
-        handlers : Names.Id.t list;
+        names : Names.Id.t list;        
+        handlers : (Names.Id.t * Names.Id.t list) list;
         inductive_paths : Libnames.qualid list;
         suffix : RecKind.t;
         compiled_context : CompiledModuleType.t;
@@ -134,7 +134,7 @@ module rec LinkageElem : sig
         names : Names.Id.t list;
         suffix : RecKind.t;
         inductive_paths : Libnames.qualid list;
-        handlers : Names.Id.t list;
+        handlers : (Names.Id.t * Names.Id.t list) list;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
