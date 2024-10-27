@@ -204,16 +204,24 @@ let open_theorem_extension ~(names : Names.Id.t list) =
         (inductive_paths, handlers, suffix)
     | _ -> Errors.fail ~info:"Expected to inherit an FInduction"
   in
-  let _inductive, recursors, _ =
+  let inductive, recursors, _ =
     let inductive_path = List.hd inductive_paths in 
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let recursor = RecursorStore.find suffix recursors in
-  let inductive_name =
+  (*let inductive_name =
     let inductive_path = List.hd inductive_paths in
     inductive_path |> Naming.extract_path_base
-  in
-  let handler_names = recursor.handlers |> Names.Id.Map.find inductive_name |> List.map fst in
+  in*)
+  (* let handler_names = recursor.handlers |> Names.Id.Map.find inductive_name |> List.map fst in*)
+  let handler_names =
+    inductive_paths
+    |> List.map Naming.extract_path_base
+    |> List.concat_map (fun inductive_name ->
+       inductive
+       |> VernacInductive.create_inductive_constructor_map
+       |> Names.Id.Map.find inductive_name)
+  in 
   let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
   let implementing_handler_names =
     handler_names |> List.filter (fun x -> not (inside x inherited_handlers))
