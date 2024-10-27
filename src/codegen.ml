@@ -441,7 +441,9 @@ let compile_prec_computational_axiom_signature
   in
   (Option.get !axiom_name, Option.get !axiom_expr, compiled_signature)
 
-let compile_theorem_implementation ~(names : Names.Id.t list)
+(*
+let compile_theorem_implementation
+    ~(names : Names.Id.t list)
     ~(suffix : RecKind.t)
     ~(handler_names : Names.Id.t list) ~(inductive_paths: Libnames.qualid list) =
   let prefix =
@@ -475,7 +477,7 @@ let compile_theorem_implementation ~(names : Names.Id.t list)
   in
   (* TODO: *)
   let* _ = define_term ~name:(List.hd names) recursor in
-  return ()
+  return ()*)
 
 let normalize_parameters 
     ~(default_ctx_params : (Names.Id.t * CompiledModule.t) list)
@@ -776,8 +778,9 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         ) ->
         let open B in
         let* _ = compile_fields fields ctx in                
-        compile_theorem_implementation ~names ~inductive_paths
-          ~suffix ~handler_names:handlers
+        compile_recursive_definition_implementation
+          ~recursor_names:names ~inductive_paths
+          ~suffix ~handlers
     | Snoc (fields, (_, ComputationalAxiom { name; axiom; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in
