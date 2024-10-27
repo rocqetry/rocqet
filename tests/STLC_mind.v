@@ -37,6 +37,11 @@ with comb_size_val.
 
 FEnd STLC.
 
+(* Print STLC.*)
+
+        
+(* __internal_tm_tm_val_rect  *)
+  
 (*
   Scheme __internal_tm_tm_val_rect := Induction for __internal_tm 
   Sort Type
@@ -49,7 +54,7 @@ FEnd STLC.
 
 *)
 
-Check STLC.tm_val_rect.
+(* Check STLC.tm_val_rect.*)
 (* STLC.__internal_tm_val_rect
      : forall (P : STLC.__internal_tm -> Type) (P0 : STLC.__internal_val -> Type),
        (forall i : ident, P (STLC.__internal_tm_var i)) ->

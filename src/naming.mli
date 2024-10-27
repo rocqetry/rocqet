@@ -13,6 +13,12 @@ val principle_name :
   kind:string ->
   Names.Id.t
 
+val mutual_principle_name :
+  inductive:Names.Id.t ->
+  inductives:Names.Id.t list ->
+  kind:string ->
+  Names.Id.t
+
 val computational_axiom_name :
   recursor_names:Names.Id.t list ->
   constructor_name:Names.Id.t ->
