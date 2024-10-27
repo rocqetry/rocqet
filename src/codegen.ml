@@ -21,8 +21,10 @@ let compile_inductive_axiom ~(name : Names.Id.t) ~(ty : Constrexpr.constr_expr)
   @@ B.define_moduletype ~module_name ~parameters:ctx ~body:(fun _ ->
          B.postulate_axiom ~name ~ty)
 
-let compile_inductive_implementation ~(ind_def : VernacInductive.t)
-    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
+let compile_inductive_implementation
+    ~(ind_def : VernacInductive.t)
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
+    ~family_name :
     CompiledModule.t
     * ((Names.Id.t * Constrexpr.constr_expr) list) RecursorStore.t
     * Constrexpr.constr_expr RecursorStore.t =
@@ -38,7 +40,6 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
     let original_ind_name = List.hd type_names in
     Naming.module_name_of ~family_name original_ind_name
   in
-
   (* Stuff for collecting recursors *)
   let possible_suffixes = RecKind.[ Ind; IndComplete; Rec; Rect ] in
   let possible_mutual_suffixes = RecKind.[ Rect; IndComplete ] in
@@ -66,7 +67,7 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
              let recursor_name =
                potential_recursor |> Constrexpr_ops.mkIdentC
              in
-             let _ =
+             let _ =               
                B.run
                @@ B.define_term
                     ~name:
@@ -94,17 +95,17 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
          Naming.principle_name ~inductives:type_names ~kind:(RecKind.to_string suffix)         
          |> Constrexpr_ops.mkIdentC
        in       
-       let mutual_principle =
+       (*let mutual_principle =
           Naming.principle_name
             ~inductives:type_names
             ~kind:(RecKind.to_string suffix)
-      in
-      let _ =
+       in*)
+      (*let _ =
         B.run @@
           B.define_term
             ~name:mutual_principle
             (mutual_principle |> Naming.internal_name |> Constrexpr_ops.mkIdentC)
-      in
+      in*)
              
        let recursor_type =
          principle |> Termutils.checked_type_of
@@ -299,53 +300,37 @@ let compile_recursive_definition_implementation
     match inductive_path |> Naming.path_to_list |> List.rev with
     | [] | [ _ ] -> None
     | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
-  in
+  in  
   let computation =
-    let handlers =
-      handlers
-      |> List.map (fun handler -> Naming.handler_name ~recursors:recursor_names ~case:handler)
-      |> List.map Libnames.qualid_of_ident
-      |> List.map Constrexpr_ops.mkRefC
-    in
-    let recursor =
-      (*let recursor =
-        Nameops.add_suffix inductive_name (RecKind.to_string suffix)
-      in*)
-      let inductives = inductive_paths |> List.map Naming.extract_path_base in 
-      let recursor = Naming.principle_name ~inductives ~kind:(RecKind.to_string suffix) in
-      let recursor_path = Naming.qualid_point prefix recursor in
-      let motives =
+    let motives =
         recursor_names
         |> List.map (fun recursor_name ->
            recursor_name
            |> Naming.motive_of
            |> Libnames.qualid_of_ident
            |> Constrexpr_ops.mkRefC)
-      in
-      Constrexpr_ops.mkAppC
-        (Constrexpr_ops.mkRefC recursor_path, motives @ handlers)
     in
+    let handlers =
+      handlers
+      |> List.map (fun handler -> Naming.handler_name ~recursors:recursor_names ~case:handler)
+      |> List.map Libnames.qualid_of_ident
+      |> List.map Constrexpr_ops.mkRefC
+    in    
     let open B in
-    match recursor_names with
-    | [] -> assert false
-    | [ recursor_name ] ->       
-       let* _ = define_term ~name:recursor_name recursor in
-       return ()
-    | _ -> 
-       let open B in
-       let combined_definition = Naming.fresh_name ~prefix:"CombinedRec" in
-       let* _ = define_term ~name:combined_definition recursor in
-       let extract_from_combined index = match index with
-         | 0 -> Constrexpr_ops.(mkAppC (mkIdentC (Names.Id.of_string "fst"), [mkIdentC combined_definition]))
-         | 1 -> Constrexpr_ops.(mkAppC (mkIdentC (Names.Id.of_string "snd"), [mkIdentC combined_definition]))
-         | _ -> Errors.fail ~info:"Not supported"
-       in
-       let* _ =
-         recursor_names
-         |> List.mapi (fun index name -> define_term ~name (extract_from_combined index))
-         |> flatmap
-       in 
-       return ()
+    let inductives = inductive_paths |> List.map Naming.extract_path_base in
+    let* _ =
+      List.combine recursor_names inductives
+      |> List.map (fun (name, inductive) ->
+             let recursor = Naming.mutual_principle_name ~inductive ~inductives ~kind:(RecKind.to_string suffix) in
+             let recursor_path = Naming.qualid_point prefix recursor in
+             let body =
+               Constrexpr_ops.mkAppC
+                 (Constrexpr_ops.mkRefC recursor_path, motives @ handlers)
+             in
+             define_term ~name body)
+      |> flatmap
+    in
+    return ()    
   in
   computation
 

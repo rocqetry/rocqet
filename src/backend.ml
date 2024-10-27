@@ -106,13 +106,14 @@ module Vernac = struct
       | RecKind.Rect -> Sorts.InType
     in    
     let indp_name = Naming.principle_name ~inductives ~kind:(RecKind.to_string suffix) in
-    let internal_indp_name = Naming.internal_name indp_name in
-    let names = 
+    let internal_indp_name = (*Naming.internal_name*) indp_name in
+    let names =
       inductives
       |> List.map (fun inductive ->
-         let defined_typename = Naming.internal_name inductive in
-         let decorated_typename = CAst.make @@ Constrexpr.AN (Libnames.qualid_of_ident defined_typename) in
-         let defining_ind_name = CAst.make @@ Nameops.add_prefix ((Names.Id.to_string defined_typename) ^ "_") indp_name in
+         let internal_inductive = Naming.internal_name inductive in
+         let decorated_typename = CAst.make @@ Constrexpr.AN (Libnames.qualid_of_ident internal_inductive) in
+         (*let defining_ind_name = CAst.make @@ Nameops.add_prefix ((Names.Id.to_string defined_typename) ^ "_") indp_name in*)
+         let defining_ind_name = CAst.make @@ Naming.mutual_principle_name ~inductive ~inductives ~kind:(RecKind.to_string suffix) in 
          (defining_ind_name, decorated_typename)) 
     in
     let open Vernacexpr in
@@ -128,7 +129,7 @@ module Vernac = struct
         )
     in 
     let* _ = vernac_ (VernacSynPure (VernacScheme scheme)) in
-    let* _ = vernac_ (VernacSynPure (VernacCombinedScheme (CAst.make internal_indp_name, List.map fst names))) in
+    let* _ = vernac_ (VernacSynPure (VernacCombinedScheme (CAst.make internal_indp_name, List.map fst names))) in 
     return ()
 
   let define_term ?(ty : Constrexpr.constr_expr option) ~(name : Names.Id.t)

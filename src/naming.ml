@@ -34,6 +34,19 @@ let principle_name ~inductives ~kind =
   let joined_indnames = concat_names inductives in
   Nameops.add_suffix joined_indnames kind
 
+(* mutual inductive principle
+   inductive is the inductive type the recursion/induction is about
+   inductives is the list of all the inductives present
+ *)
+let mutual_principle_name ~inductive ~inductives ~kind =
+  (* forward non mutual to regular principle *)
+  if List.length inductives < 2 then principle_name ~inductives ~kind
+  else 
+    let principle = principle_name ~inductives ~kind in
+    let inductive = Names.Id.to_string inductive ^ "_" in 
+    Nameops.add_prefix inductive principle
+    
+
 let computational_axiom_name ~recursor_names ~constructor_name =
   let recursor_names = concat_names recursor_names in 
   Names.Id.to_string recursor_names
