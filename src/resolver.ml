@@ -19,6 +19,7 @@ let rec linear_ctx_mapping context =
         let recursors = names |> List.map (fun rec_name -> (rec_name, Naming.self_version linkage.name)) in
         let handlers =
           handlers
+          |> List.concat_map snd
           |> List.map (fun case -> Naming.handler_name ~recursors:names ~case)
           |> List.map (fun name -> (name, Naming.self_version linkage.name))
         in

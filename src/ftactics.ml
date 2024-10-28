@@ -14,7 +14,8 @@ let extract_handlers_names names =
            |> Option.map fst
            |> Option.map (function 
               | LinkageElem.RecursorDefinition { names; handlers; _} -> 
-                 let prefix = Naming.extract_prefix name in                 
+                 let prefix = Naming.extract_prefix name in
+                 let handlers = handlers |> List.concat_map snd in 
                  Some (prefix, names, handlers)
               | _ -> None)                      
            |> Option.flatten
