@@ -140,8 +140,8 @@ Family A10.
       FInductive basic : Set := car : basic.
 
       Family A2.
-           FInductive step : Set := exec_assign : N -> step
-           with person : Set := Faya : person.
+           FInductive step : Set := exec_assign : person -> step
+           with person : Set := Faya : step -> person.
            Family A3.
               FInductive eval_expr : Set :=
                 | eval_unop : basic -> step -> eval_expr.
@@ -172,8 +172,8 @@ Family Semantics.
    FInductive basic : Set := car : basic.
 
     FInductive step : Set :=
-     | exec_skip : step
-    with person : Set := GG : person.     
+     | exec_skip : person -> step
+    with person : Set := GG : step -> person.     
 
    FInductive eval_expr : Set := eval_binary : basic -> eval_expr | eval_const : eval_expr.
 

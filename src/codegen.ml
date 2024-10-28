@@ -92,16 +92,16 @@ let compile_inductive_implementation
     possible_mutual_suffixes
     |> List.iter (fun suffix ->
        let principle =
-         Naming.principle_name ~inductives:type_names ~kind:(RecKind.to_string suffix)         
-         |> Constrexpr_ops.mkIdentC
-       in             
-       let recursor_type =
-         principle |> Termutils.checked_type_of
-         |> Termutils.reflect_checked_term
-         |> Constrexpr_ops.replace_vars_constr_expr
-              remove_internal_prefix_map
+         Naming.principle_name ~inductives:type_names ~kind:(RecKind.to_string suffix)                  
        in
-       defined_mutual_recursor := RecursorStore.add suffix recursor_type !defined_mutual_recursor);
+       if Constrintern.is_global principle then
+         let recursor_type =
+           principle |> Constrexpr_ops.mkIdentC |> Termutils.checked_type_of
+           |> Termutils.reflect_checked_term
+           |> Constrexpr_ops.replace_vars_constr_expr
+                remove_internal_prefix_map
+         in
+         defined_mutual_recursor := RecursorStore.add suffix recursor_type !defined_mutual_recursor);
     B.return ()
   in 
   let compiled_impl =
