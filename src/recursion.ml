@@ -58,10 +58,13 @@ let close_recursion () =
   in
   let handlers =     
     inductive_names
-    |> List.concat_map (fun inductive_name ->
-       inductive
-       |> VernacInductive.create_inductive_constructor_map
-       |> Names.Id.Map.find inductive_name)
+    |> List.map (fun inductive_name ->
+       let handlers = 
+         inductive
+         |> VernacInductive.create_inductive_constructor_map
+         |> Names.Id.Map.find inductive_name
+       in
+       (inductive_name, handlers))
   in
   let context = Context.get () in
   let default_ctx_params =
@@ -125,6 +128,7 @@ let close_recursion () =
            Context.add_field ~name:axiom_name ~elem)
   in
   (* inherited_handlers = handlers - implementing_handlers *)
+  let handlers = handlers |> List.concat_map snd in 
   let inherited_handlers =
     let list_difference list1 list2 =
       List.filter (fun x -> not (List.mem x list2)) list1
@@ -225,6 +229,7 @@ let open_recursion_extension ~names =
   let handler_types =
     Termutils.handler_type_for_recursion ~names ~inductive_paths ~recursor
   in
+  let inherited_handlers = inherited_handlers |> List.concat_map snd in
   let implementing_handlers =
     let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
     handler_types

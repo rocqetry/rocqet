@@ -500,9 +500,15 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
              let name = List.hd recursive.inductive_paths in 
               Context.lookup_inductive_for_recursion
                 ~name context
-            in            
-            Checks.check_exhaustive ~names:recursive.names ~inductive ~inductive_paths:recursive.inductive_paths
-              ~handlers:recursive.handlers;
+           in
+           let handlers =
+             recursive.handlers |> List.concat_map snd 
+           in 
+            Checks.check_exhaustive
+              ~names:recursive.names
+              ~inductive
+              ~inductive_paths:recursive.inductive_paths
+              ~handlers;
             RecursorDefinition { recursive with compiled_context }, []
         | TheoremDefinition theorem ->
            let inductive, _, _ =
@@ -510,10 +516,14 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
               Context.lookup_inductive_for_recursion
                 ~name context
             in            
+            let handlers =
+             theorem.handlers |> List.concat_map snd 
+           in 
             Checks.check_exhaustive
               ~names:theorem.names
-              ~inductive ~handlers:theorem.handlers
-              ~inductive_paths:theorem.inductive_paths;
+              ~inductive
+              ~inductive_paths:theorem.inductive_paths
+              ~handlers;
             TheoremDefinition { theorem with compiled_context }, []
       in      
       let open Bwd.Infix in

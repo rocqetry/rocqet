@@ -220,6 +220,7 @@ let open_theorem_extension ~(names : Names.Id.t list) =
        |> Names.Id.Map.find inductive_name)
   in 
   let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
+  let inherited_handlers = inherited_handlers |> List.concat_map snd in
   let implementing_handler_names =
     handler_names |> List.filter (fun x -> not (inside x inherited_handlers))
   in
@@ -294,12 +295,22 @@ let close_theorem () =
   (* let all_handlers = inherited_handlers @ List.map fst implemented_handlers in*)
   let inductive_names = inductive_paths |> List.map Naming.extract_path_base in
   (* We want the names to be in the right order *)
-  let handlers =     
+  (*let handlers =     
     inductive_names
     |> List.concat_map (fun inductive_name ->
        inductive
        |> VernacInductive.create_inductive_constructor_map
        |> Names.Id.Map.find inductive_name)
+  in*)
+  let handlers =     
+    inductive_names
+    |> List.map (fun inductive_name ->
+       let handlers = 
+         inductive
+         |> VernacInductive.create_inductive_constructor_map
+         |> Names.Id.Map.find inductive_name
+       in
+       (inductive_name, handlers))
   in
   let implemented_handlers =
     List.map (fun (name, expr) -> (name, expr)) implemented_handlers

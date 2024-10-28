@@ -717,7 +717,8 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
             LinkageElem.RecursorDefinition
               { inductive_paths; handlers; names; suffix; _ } ) ) ->
         let open B in
-        let* _ = compile_fields fields ctx in                
+        let* _ = compile_fields fields ctx in
+        let handlers = handlers |> List.concat_map snd in
         compile_recursive_definition_implementation          
           ~recursor_names:names
           ~handlers ~inductive_paths ~suffix
@@ -726,7 +727,8 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
           (_, TheoremDefinition { inductive_paths; handlers; names; suffix; _ })
         ) ->
         let open B in
-        let* _ = compile_fields fields ctx in                
+        let* _ = compile_fields fields ctx in
+        let handlers = handlers |> List.concat_map snd in
         compile_recursive_definition_implementation
           ~recursor_names:names ~inductive_paths
           ~suffix ~handlers
