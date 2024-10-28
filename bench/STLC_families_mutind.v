@@ -78,12 +78,12 @@ with val : Set :=
   | val_abs : ident -> tm -> val
   | val_unit : val.
 
-FScheme tm_prec PRecT about tm.
-FScheme val_prec PRecT about val.
+(*FScheme tm_prec PRecT about tm.
+FScheme val_prec PRecT about val.*)
 
 FRecursion subst_tm about tm motive (fun (_ : tm) => (ident -> tm -> tm))
   with subst_val about val motive (fun (_ : val) => (ident -> tm -> val))
-  by _rec.
+  by _rect.
 
 Case tm_var :=
   (fun y x t =>
@@ -107,7 +107,7 @@ Case val_unit :=
 
 FEnd subst_tm with subst_val.
 
-Field context : Type := partial_map ty.
+FDefinition context : Type := partial_map ty.
 
 FInductive step : self__STLC.tm -> self__STLC.tm -> Prop :=
   | st_app0 : forall a a' b,
@@ -228,21 +228,20 @@ FInduction
     (forall G', has_type_tm G' k T1) ->
     has_type_val G (subst_val v x k) T2).
 FProof.
-- intros. frec_eval self__STLC.subst_tm. unfold self__STLC.subst_tm_handler.tm_var.
+- intros. fsimpl.
   destruct (PeanoNat.Nat.eqb_spec x0 x); subst.
   + rewrite update_eq in e. injection e as e. subst. apply H0.
   + rewrite update_neq in e.
     * apply self__STLC.ht_var. assumption.
     * assumption.
-- intros. frec_eval self__STLC.subst_tm. unfold self__STLC.subst_tm_handler.tm_app.
-  eapply self__STLC.ht_app; eauto.
-- intros. frec_eval self__STLC.subst_tm. unfold self__STLC.subst_tm_handler.tm_val.
+- intros. fsimpl. fconstructor. 
+- intros. fsimpl. 
   apply self__STLC.ht_val. eapply H; eauto.
-- intros. frec_eval self__STLC.subst_val. unfold self__STLC.subst_tm_handler.val_abs.
+- intros. fsimpl. 
   destruct (PeanoNat.Nat.eqb_spec x0 x); subst; eapply self__STLC.ht_abs.
   + rewrite update_shadow in __i. assumption.
   + eapply H; eauto. apply update_permute; assumption.
-- intros. frec_eval self__STLC.subst_val. unfold self__STLC.subst_tm_handler.val_unit.
+- intros. fsimpl. 
   apply self__STLC.ht_unit.
 Qed. FEnd subst_tm_lemma with subst_val_lemma.
 
@@ -338,23 +337,23 @@ FLemma weakening_lemma_tm :
   forall k T,
   has_type_tm empty k T ->
   (forall G, has_type_tm G k T).
-FProof.
+FProofLemma.
 intros. eapply self__STLC.free_var_tm_matters.
 - eassumption.
 - intros. destruct (self__STLC.free_var_tm_in_ctx _ _ _ H _ H0).
   unfold empty in H1. discriminate.
-Qed. FEnd weakening_lemma_tm.
+Qed. CloseFLemma. (* weakening_lemma_tm.*)
 
 FLemma weakening_lemma_val :
   forall k T,
   has_type_val empty k T ->
   (forall G, has_type_val G k T).
-FProof.
+FProofLemma.
 intros. eapply self__STLC.free_var_val_matters.
 - eassumption.
 - intros. destruct (self__STLC.free_var_val_in_ctx _ _ _ H _ H0).
   unfold empty in H1. discriminate.
-Qed. FEnd weakening_lemma_val.
+Qed. CloseFLemma. (* FEnd weakening_lemma_val.*)
 
 FInduction preservation
   about has_type_tm
@@ -380,26 +379,26 @@ FProof.
 Qed. FEnd preservation.
 
 
-Field preservation2 :
+FLemma preservation2 :
   forall t t',
     self__STLC.steps t t' ->
     forall T,
     has_type_tm empty t T ->
     has_type_tm empty t' T.
-FProof.
+FProofLemma.
 intros t t' h. induction h; intros; subst; eauto using self__STLC.preservation.
 eapply IHh; eauto. eapply self__STLC.preservation; eauto.
-Qed. FEnd preservation2.
+Qed. CloseFLemma. (* FEnd preservation2.*)
 
 
-Field type_safety:
+FLemma type_safety:
   forall t t' T,
     has_type_tm empty t T ->
     self__STLC.steps t t' ->
     (exists v, t' = tm_val v) \/ (exists t'', step t' t'').
-FProof.
+FProofLemma.
 intros. eapply self__STLC.progress; eauto using self__STLC.preservation2.
-Qed. FEnd type_safety.
+Qed. CloseFLemma. (* FEnd type_safety.*)
 
 FEnd STLC.
 
@@ -473,15 +472,9 @@ Qed. FEnd progress.
 
 FInduction subst_tm_lemma with subst_val_lemma.
 FProof.
-- intros. frec_eval self__STLC_bool.subst_tm.
-  unfold self__STLC_bool.subst_tm_handler.tm_if.
-  apply self__STLC_bool.ht_if; eauto.
-- intros. frec_eval self__STLC_bool.subst_val.
-  unfold self__STLC_bool.subst_tm_handler.val_true.
-  apply self__STLC_bool.ht_true.
-- intros. frec_eval self__STLC_bool.subst_val.
-  unfold self__STLC_bool.subst_tm_handler.val_false.
-  apply self__STLC_bool.ht_false.
+- intros. fsimpl. fconstructor.
+- intros. fsimpl. fconstructor. 
+- intros. fsimpl. fconstructor. 
 Qed. FEnd subst_tm_lemma with subst_val_lemma.
 
 FInductive fv_tm : ident -> self__STLC_bool.tm -> Prop :=
@@ -649,13 +642,11 @@ Qed. FEnd progress.
 
 
 FInduction subst_tm_lemma with subst_val_lemma.
-StartFProofAll.
-repeat split; intros; subst;
-frec_eval self__STLC_prod.subst_tm;
-frec_eval self__STLC_prod.subst_val;
-eauto using
-  self__STLC_prod.ht_pi1, self__STLC_prod.ht_pi2,
-  self__STLC_prod.ht_tm_prod, self__STLC_prod.ht_val_prod.
+FProof.
++ intros. fsimpl. fconstructor.
++ intros. fsimpl. fconstructor.
++ intros. fsimpl. fconstructor.
++ intros. fsimpl. fconstructor.  
 Qed. FEnd subst_tm_lemma with subst_val_lemma.
 
 FInductive fv_tm : ident -> self__STLC_prod.tm -> Prop :=
@@ -830,7 +821,7 @@ by { intros; eauto }. *)
 
 
 
-Inherit Field context.
+(* Inherit Field context.*)
 
 FInductive step : self__STLC_sum.tm -> self__STLC_sum.tm -> Prop :=
   | st_inl0 : forall a a',
@@ -873,7 +864,7 @@ with has_type_val : self__STLC_sum.context -> self__STLC_sum.val -> self__STLC_s
       has_type_val G v R ->
       has_type_val G (self__STLC_sum.val_inr v) (self__STLC_sum.ty_sum L R).
 
-Inherit Until Field progress.
+(* Inherit Until Field progress.*)
 
 Closing Fact value_sum_type_inv:
   forall c L R,
@@ -899,15 +890,14 @@ Qed. FEnd progress.
 
 
 FInduction subst_tm_lemma with subst_val_lemma.
-StartFProofAll.
-repeat split; intros; subst;
-  frec_eval self__STLC_sum.subst_tm; frec_eval self__STLC_sum.subst_val;
-  eauto using self__STLC_sum.ht_sum0, self__STLC_sum.ht_sum1, self__STLC_sum.ht_case, self__STLC_sum.ht_val_sum0, self__STLC_sum.ht_val_sum1.
-(* ht_case *)
-unfold self__STLC_sum.subst_tm_handler.tm_case.
-destruct (PeanoNat.Nat.eqb_spec i x); subst.
-- rewrite update_shadow in *. eauto using self__STLC_sum.ht_case.
-- eapply self__STLC_sum.ht_case; eauto using update_permute.
+FProof.
++ intros. fsimpl. fconstructor.
++ intros. fsimpl. fconstructor.
++ intros. fsimpl. destruct (PeanoNat.Nat.eqb_spec i x); subst.
+  - rewrite update_shadow in *. eauto using self__STLC_sum.ht_case.
+  - eapply self__STLC_sum.ht_case; eauto using update_permute.
++ intros. fsimpl. fconstructor.
++ intros. fsimpl. fconstructor. 
 Qed. FEnd subst_tm_lemma with subst_val_lemma.
 
 FInductive fv_tm : ident -> self__STLC_sum.tm -> Prop :=
@@ -962,38 +952,64 @@ by { inversion 1; auto }.
 
 
 FInduction free_var_tm_in_ctx with free_var_val_in_ctx.
-StartFProofAll.
-repeat split; intros;
-  auto using self__STLC_sum.fv_inv_tm_inl,
+FProof.
++ intros. auto using self__STLC_sum.fv_inv_tm_inl,
     self__STLC_sum.fv_inv_tm_inr,
     self__STLC_sum.fv_inv_val_inl,
     self__STLC_sum.fv_inv_val_inr.
-apply self__STLC_sum.fv_inv_tm_case in H2 as [|[[]|[]]];
++   intros. auto using self__STLC_sum.fv_inv_tm_inl,
+    self__STLC_sum.fv_inv_tm_inr,
+    self__STLC_sum.fv_inv_val_inl,
+      self__STLC_sum.fv_inv_val_inr.
++ intros. auto using self__STLC_sum.fv_inv_tm_inl,
+    self__STLC_sum.fv_inv_tm_inr,
+    self__STLC_sum.fv_inv_val_inl,
+    self__STLC_sum.fv_inv_val_inr.
+   apply self__STLC_sum.fv_inv_tm_case in H2 as [|[[]|[]]];
   auto; try erewrite <- update_neq; eauto.
++ intros. auto using self__STLC_sum.fv_inv_tm_inl,
+    self__STLC_sum.fv_inv_tm_inr,
+    self__STLC_sum.fv_inv_val_inl,
+    self__STLC_sum.fv_inv_val_inr.
++ intros. auto using self__STLC_sum.fv_inv_tm_inl,
+    self__STLC_sum.fv_inv_tm_inr,
+    self__STLC_sum.fv_inv_val_inl,
+    self__STLC_sum.fv_inv_val_inr.
 Qed. FEnd free_var_tm_in_ctx with free_var_val_in_ctx.
 
 
 FInduction free_var_tm_matters with free_var_val_matters.
-StartFProofAll.
-repeat split; intros;
-  eauto using self__STLC_sum.ht_sum0, self__STLC_sum.ht_sum1,
+FProof.
++ intros. eauto using self__STLC_sum.ht_sum0, self__STLC_sum.ht_sum1,
     self__STLC_sum.ht_val_sum0, self__STLC_sum.ht_val_sum1,
     self__STLC_sum.fv_tm_inl, self__STLC_sum.fv_tm_inr,
     self__STLC_sum.fv_val_inl, self__STLC_sum.fv_val_inr.
-eapply self__STLC_sum.ht_case.
-- eauto using self__STLC_sum.fv_case.
-- apply H0. intros x ?. destruct (PeanoNat.Nat.eqb_spec i x).
-  + subst. repeat rewrite update_eq. reflexivity.
-  + repeat rewrite update_neq; eauto using self__STLC_sum.fv_case1.
-- apply H1. intros x ?. destruct (PeanoNat.Nat.eqb_spec i x).
-  + subst. repeat rewrite update_eq. reflexivity.
-  + repeat rewrite update_neq; eauto using self__STLC_sum.fv_case2.
++   intros. eauto using self__STLC_sum.ht_sum0, self__STLC_sum.ht_sum1,
+    self__STLC_sum.ht_val_sum0, self__STLC_sum.ht_val_sum1,
+    self__STLC_sum.fv_tm_inl, self__STLC_sum.fv_tm_inr,
+      self__STLC_sum.fv_val_inl, self__STLC_sum.fv_val_inr.
++  intros. eapply self__STLC_sum.ht_case.
+    - eauto using self__STLC_sum.fv_case.
+    -  apply H0. intros x ?. destruct (PeanoNat.Nat.eqb_spec i x).
+       ++ subst. repeat rewrite update_eq. reflexivity.
+       ++ repeat rewrite update_neq; eauto using self__STLC_sum.fv_case1.
+    - apply H1. intros x ?. destruct (PeanoNat.Nat.eqb_spec i x).
+  ++ subst. repeat rewrite update_eq. reflexivity.
+  ++ repeat rewrite update_neq; eauto using self__STLC_sum.fv_case2.
++   intros. eauto using self__STLC_sum.ht_sum0, self__STLC_sum.ht_sum1,
+    self__STLC_sum.ht_val_sum0, self__STLC_sum.ht_val_sum1,
+    self__STLC_sum.fv_tm_inl, self__STLC_sum.fv_tm_inr,
+      self__STLC_sum.fv_val_inl, self__STLC_sum.fv_val_inr.
++   intros. eauto using self__STLC_sum.ht_sum0, self__STLC_sum.ht_sum1,
+    self__STLC_sum.ht_val_sum0, self__STLC_sum.ht_val_sum1,
+    self__STLC_sum.fv_tm_inl, self__STLC_sum.fv_tm_inr,
+      self__STLC_sum.fv_val_inl, self__STLC_sum.fv_val_inr.        
 Qed. FEnd free_var_tm_matters with free_var_val_matters.
 
 
 
 
-Inherit Until Field preservation.
+(*Inherit Until Field preservation.*)
 
 Closing Fact step_tm_inl_inv:
   forall x y,
@@ -1106,8 +1122,7 @@ Qed. FEnd progress.
 
 FInduction subst_tm_lemma with subst_val_lemma.
 FProof.
-intros. frec_eval self__STLC_fix.subst_tm.
-unfold self__STLC_fix.subst_tm_handler.tm_fix.
+intros. fsimpl. 
 destruct (PeanoNat.Nat.eqb_spec x0 x);
   subst; eapply self__STLC_fix.ht_fix.
 - rewrite update_shadow in *. eauto.
@@ -1183,8 +1198,12 @@ FEnd STLC_fix.
     so I cannot just run all 12 statements together
   In my machine I can run 4 statements together,
     so I group them into three groups
-    *)
+ *)
 
+Family STLC_all extends STLC, STLC_bool, STLC_prod, STLC_fix, STLC_sum.
+FEnd STLC_all.
+
+(*
 Family STLC_bool_prod extends STLC
     using STLC_bool using STLC_prod.
 
@@ -1196,7 +1215,7 @@ Family STLC_bool_prod_sum_fix extends STLC
 
 
 Family STLC_bool_prod_fix extends STLC
-    using STLC_bool_prod using STLC_fix.
+    using STLC_bool_prod using STLC_fix.*)
 
 (* Family STLC_bool_sum extends STLC
     using STLC_bool using STLC_sum.
@@ -1224,6 +1243,6 @@ Family STLC_sum_fix extends STLC
     using STLC_sum using STLC_fix.  *)
 
 
-Print STLC_bool_prod_sum_fix.
+(* Print STLC_bool_prod_sum_fix.*)
 
 End STLC_Families_MutInd.
