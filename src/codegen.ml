@@ -88,13 +88,18 @@ let compile_inductive_implementation
              defined_recursors := RecursorStore.update suffix updater !defined_recursors);
     B.return ()
   in
+  (* Filter principles not defined on this inductive *)
+  let filter_mutual_principle suffixes =
+    suffixes
+    |> List.filter_map (fun suffix -> RecursorStore.find_opt suffix !defined_recursors |> Option.map (Fun.const suffix))
+  in 
   let collect_mutual_recursor () : unit B.t =    
     possible_mutual_suffixes
+    |> filter_mutual_principle
     |> List.iter (fun suffix ->
        let principle =
          Naming.principle_name ~inductives:type_names ~kind:(RecKind.to_string suffix)                  
-       in
-       if Constrintern.is_global principle then
+       in       
          let recursor_type =
            principle |> Constrexpr_ops.mkIdentC |> Termutils.checked_type_of
            |> Termutils.reflect_checked_term
@@ -125,16 +130,7 @@ let compile_inductive_implementation
                      ])
                  type_names
              in
-             let* () = flatmap all_ind_comp_schemes in
-             (* Mutual Inductive *)             
-             let* () = 
-               match type_names with 
-               | [] | [_] -> return ()
-               | inductives ->                   
-                  possible_mutual_suffixes
-                  |> List.map (fun suffix -> define_mutual_inductive_scheme ~inductives ~suffix)
-                  |> flatmap
-             in             
+             let* () = flatmap all_ind_comp_schemes in             
              
              (* Now, we read from the environment all defined recursors and get their types. *)
              let collect_thunks =
@@ -143,8 +139,22 @@ let compile_inductive_implementation
                       thunk (collect_recursors_for ind_name))
              in
              let* () = flatmap collect_thunks in
-             let* () = thunk collect_mutual_recursor in 
 
+             (* Mutual Inductive *)             
+             let define_mutual_inductive = fun () -> 
+               match type_names with 
+               | [] | [_] -> return ()
+               | inductives ->                   
+                  possible_mutual_suffixes
+                  |> filter_mutual_principle
+                  |> List.map (fun suffix -> define_mutual_inductive_scheme ~inductives ~suffix)
+                  |> flatmap
+             in
+
+             (* We thunk becuase we want to be aware of the defined principles *)
+             let* () = thunk define_mutual_inductive in 
+             let* () = thunk collect_mutual_recursor in
+             
              let alias_all =
                List.map
                  (fun (original_name, new_name, ty) ->
