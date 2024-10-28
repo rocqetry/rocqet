@@ -43,15 +43,9 @@ let handlers_to_case_definitions handlers =
   |> List.concat_map (fun (prefix, recursors, handlers) ->        
        handlers 
        |> List.map (fun case -> 
-              let name = 
-                 Naming.handler_name 
-                   ~recursors
-                   ~case
-              in
+              let name = Naming.handler_name ~recursors ~case in              
               let qualid = Naming.qualid_point prefix name in
-              Resolver.resolve_qualid 
-                ~context 
-                ~qualid)) 
+              Resolver.resolve_qualid ~context ~qualid))
 
 let idtac =
   let open Ltac_plugin in
