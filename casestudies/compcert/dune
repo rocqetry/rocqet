@@ -33,26 +33,6 @@
    lib/Integers
    lib/Memtype
    lib/Cop
-   lib/Mon
-   lib/Prelude
-   lib/Registers
-   lib/Decidableplus
-   lib/Machregs
-   lib/Locations
-   lib/Conventions1
-   lib/Mregisters
-   lib/RTLmonad
-   lib/Heaps
-   lib/Kildall
-   lib/Lattice
-   lib/Iteration
-   lib/Wfsimpl   
-   lib/Bounds
-   lib/Separation
-   lib/Stacklayout
-   lib/Switch
-   lib/Op
-   lib/BoolEqual
   ))
 
 
