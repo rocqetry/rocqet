@@ -2,29 +2,27 @@ From NFPOP Require Import Loader.
 
 Definition ident := nat.
 
-Family STLC.
-  Trait unit_mixin extends X.
-  FInductive ty : Set :=
-  | ty_unit : ty.
-  FEnd unit_mixin.
+Axiom cheat : forall {X}, X.
+
+Family STLC.  
   
-  Family X extends unit_mixin.
+  Family X.
     FInductive ty : Set :=     
-     | ty_arrow : ty -> ty -> ty.
+      | ty_arrow : ty -> ty -> ty
+      | ty_unit : ty.
   FEnd X.
          
-  FRecursion subst : (t : X.ty) -> (k : nat) -> nat.  
-     Case ty_arrow n m := (subst m k + subst n k).
-     Case ty_unit := k.
+  FRecursion subst about X.ty motive (fun (_ : X.ty) => nat -> nat) by _rec.  
+     Case ty_arrow n m := (fun k => subst m k + subst n k).
+     Case ty_unit := (fun k => k).
   FEnd subst.  
   
   FInduction subst_size
        about X.ty
        motive (fun (t : X.ty) => subst t 0 = 0).
      FProof.  
-     - fsimpl. reflexivity. 
-     - intros. fsimpl in *. rewrite -> H. rewrite H0. 
-       reflexivity.
+     - intros. fsimpl in *. rewrite -> H. rewrite H0. reflexivity. 
+     - intros. fsimpl in *. reflexivity. 
      Qed. FEnd subst_size.  
 FEnd STLC.
 
@@ -39,7 +37,7 @@ Family STLC_bool extends STLC.
   FEnd X.
 
   FRecursion subst.
-      Case ty_bool := 1.
+      Case ty_bool := (fun k => 1).
   FEnd subst.  
 
   FInduction subst_size.    
@@ -56,14 +54,13 @@ Family STLC_prod extends STLC_bool.
   FEnd X.
 
   FRecursion subst.  
-     Case ty_prod n m := (subst m k + subst n k).
+     Case ty_prod n m := (fun k => subst m k + subst n k).
   FEnd subst.
 
   FInduction subst_size.     
     FProof.
     - intros. apply cheat.
-    Qed.
-  FEnd subst_size.  
+    Qed. FEnd subst_size.  
 FEnd STLC_prod.
 
 Family STLC_nat. 

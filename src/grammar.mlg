@@ -113,8 +113,8 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "FDefinition" ident(name) ":=" llconstr_ip(body_expr)  ] ->
    { Entry.definition ~name body_expr }
 
-| [ "FRecursion" ident(name) ":" argument_flist(args) ] -> 
-   { Entry.frecursion_elegant name args }
+(*| [ "FRecursion" ident(name) ":" argument_flist(args) ] -> 
+   { Entry.frecursion_elegant name args } *)
 
 | [ "FRecursion" ne_ident_list_sep(names, "with") ] -> { Entry.frecursion_extension ~names }
 

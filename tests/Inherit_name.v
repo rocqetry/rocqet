@@ -8,9 +8,9 @@ Family STLC.
      | ty_arrow : ty -> ty -> ty.
   FEnd X.
          
-  FRecursion subst : (t : X.ty) -> (k : nat) -> nat.  
-     Case ty_arrow n m := (subst m k + subst n k).     
-  FEnd subst.    
+  FRecursion subst about X.ty motive (fun (_ : X.ty) => nat -> nat) by _rec.  
+     Case ty_arrow n m := (fun k => subst m k + subst n k).     
+  FEnd subst.
 FEnd STLC.
 
 Family Y extends STLC.   

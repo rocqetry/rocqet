@@ -18,7 +18,7 @@ Family Imp.
         | Ecomma : expr -> expr -> type -> expr (* sequence expression r1, r2 *)                
         | Eparen : expr -> type -> type -> expr. 
         
-        FRecursion typeof : (e : expr) -> type.
+        FRecursion typeof about expr motive (fun (_ : expr) => type) by _rect.
           Case Eval v ty := ty.
           Case Evar x ty := ty.          
           Case Ecast r ty := ty. 

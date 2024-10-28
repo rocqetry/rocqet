@@ -12,9 +12,9 @@ Family STLCBase.
   FEnd X.
 
   Family Y.
-     FRecursion subst : (t : X.X0.Ty) -> nat. 
-        Case TUnit := 1.
-        Case TArr domain codomain := (subst domain + subst codomain).
+     FRecursion subst about X.X0.Ty motive (fun (_ : X.X0.Ty) => nat) by _rec. 
+     Case TUnit := 1.
+     Case TArr := (fun _ subst_domain _ subst_codomain => subst_domain + subst_codomain).     
      FEnd subst.
   FEnd Y.
 FEnd STLCBase.
@@ -85,7 +85,7 @@ Family ArithExt.
        FInductive Exp : Set :=
          | EAdd : Exp -> Exp -> Exp
        with Val : Set :=
-         | VNat : nat -> Val.
+         | VNat : Exp -> nat -> Val.
    FEnd Base.
    
    Family Derived extends Base. 
