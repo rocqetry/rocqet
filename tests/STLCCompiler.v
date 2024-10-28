@@ -37,7 +37,7 @@ Family BaseComp.
       FInductive Exp : Set :=
         | ELet : ident -> Val -> Exp
         | EApp : Val -> list Val -> Exp
-      with Val : Set := VUnit : Val | VVar : ident -> Val.
+      with Val : Set := VUnit : Exp -> Val | VVar : ident -> Val.
    FEnd IL.
 
    Family ILK extends IL.

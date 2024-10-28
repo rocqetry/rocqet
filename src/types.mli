@@ -9,7 +9,9 @@ module VernacInductive : sig
     (* inductive type name * sort/kind  *)
     (Names.Id.t * Constrexpr.constr_expr option)
     * (* constr name * constructor type *)
-    (Names.Id.t * Constrexpr.constr_expr) list
+      (Names.Id.t * Constrexpr.constr_expr) list
+  
+  val create_inductive_constructor_map : t -> Names.Id.t list Names.Id.Map.t
 
   val extract_all_names_with_type :
     t ->
@@ -19,12 +21,17 @@ module VernacInductive : sig
 
   val extract_all_names : t -> (Names.Id.t * Names.Id.t list) list
   val extract_inductive_name : t -> Names.Id.t
+  val extract_all_inductive_names : t -> Names.Id.t list
+
+  val extract_all_constructors : t -> Names.Id.t list
 
   val definition_mapping :
     t -> t * (Names.Id.t * Constrexpr.constr_expr * Constrexpr.constr_expr) list
 
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
   val concatenate : base:t -> derived:t -> t
+
+  val lookup_inductive_name: constructor:Names.Id.t -> inductive:t -> Names.Id.t
 end
 
 module CompiledModule : sig
@@ -46,27 +53,18 @@ end
 
 module RecursorStore : Map.S with type key = RecKind.t
 
-module CompiledRecursor : sig
+module MutualRecursor : sig
   type t = {
-    inductive_names : Names.Id.t list;
-    compiled_recursor : CompiledModuleType.t;
-    handlers : (Names.Id.t * Constrexpr.constr_expr) list;
-    compiled_handlers : (Names.Id.t * CompiledModuleType.t) list;
-  }
-end
-
-module CompiledRecursors : sig
-  type t = {
-    compiled_context : CompiledModuleType.t;
-    recursors : CompiledRecursor.t RecursorStore.t;
-  }
+    mutual_recursor : Constrexpr.constr_expr;
+    mutual_handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+    }
 end
 
 module Recursor : sig
   type t = {
-    inductive_names : Names.Id.t list;
-    recursor : Constrexpr.constr_expr;
-    handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+    recursors : Constrexpr.constr_expr Names.Id.Map.t;
+    handlers : (Names.Id.t * Constrexpr.constr_expr) list Names.Id.Map.t;
+    mutual : MutualRecursor.t option;
   }
 end
 
@@ -79,7 +77,7 @@ module PluginCmd : sig
 end
 
 module PluginCmdScope : sig
-  type t = { command : PluginCmd.t; name : Names.Id.t; close : unit -> unit }
+  type t = { command : PluginCmd.t; names : Names.Id.t list; close : unit -> unit }
 end
 
 module rec LinkageElem : sig
@@ -122,9 +120,9 @@ module rec LinkageElem : sig
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | RecursorDefinition of {
-        names : Names.Id.t list;
-        handlers : Names.Id.t list;
-        inductive_path : Libnames.qualid;
+        names : Names.Id.t list;        
+        handlers : (Names.Id.t * Names.Id.t list) list;
+        inductive_paths : Libnames.qualid list;
         suffix : RecKind.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
@@ -135,8 +133,8 @@ module rec LinkageElem : sig
     | TheoremDefinition of {
         names : Names.Id.t list;
         suffix : RecKind.t;
-        inductive_path : Libnames.qualid;
-        handlers : Names.Id.t list;
+        inductive_paths : Libnames.qualid list;
+        handlers : (Names.Id.t * Names.Id.t list) list;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
@@ -196,3 +194,10 @@ end
 and LinkageCtx : sig
   type t = Toplevel of Linkage.t | Nested of t * Linkage.t
 end
+
+module Frec_arg : sig 
+   type t = 
+     { name: Names.Id.t; 
+       inductive: Libnames.qualid;
+       motive: Constrexpr.constr_expr }
+end 

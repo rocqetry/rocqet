@@ -1,7 +1,7 @@
 open Types
 open Env
 
-let add_inductive_constr ~name ~ty =
+let add_inductive_axiom ~name ~ty =
   Inheritance.inherit_dependencies ~prefix:name;
   let context = Context.get () in
   let default_ctx_params =
@@ -13,13 +13,13 @@ let add_inductive_constr ~name ~ty =
   in
   let ty = Resolver.resolve_constrexpr ~context ~expression:ty in
   let compiled_signature =
-    Codegen.compile_inductive_constr ~name ~ty ~ctx:parameters
+    Codegen.compile_inductive_axiom ~name ~ty ~ctx:parameters
   in
   let elem =
     LinkageElem.InductiveAxiom
       { compiled_context; compiled_signature; default_ctx_params }
   in
-  (* Fake names becuase the inductive will already
+  (* Fake names becuase the InductiveDefinition will already
      have the names and expose then to the resolver
      too *)
   let name = Naming.inductive_axiom_name name in
@@ -50,12 +50,16 @@ let add_new_inductive_definition ~inductive ~inductive_name =
     Codegen.compile_inductive_signature ~ind_def:inductive ~ctx:parameters
       ~family_name
   in
-  let compiled_impl, principles =
+  let compiled_impl, principles, mutual_principle =
     Codegen.compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
       ~family_name
   in
+  
   let recursors =
-    Termutils.extract_handler_types_from_principle ~inductive ~principles
+    Termutils.extract_handler_types_from_principle
+      ~inductive
+      ~principles
+      ~mutual_principle
   in  
   let elem =
     LinkageElem.InductiveDefinition
@@ -72,12 +76,12 @@ let add_new_inductive_definition ~inductive ~inductive_name =
 
   let _ =
     types inductive
-    |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
+    |> List.iter (fun (name, ty) -> add_inductive_axiom ~name ~ty)
   in
 
   let _ =
     constructors inductive
-    |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
+    |> List.iter (fun (name, ty) -> add_inductive_axiom ~name ~ty)
   in
   ()
   (* if not (Termutils.is_indexed_inductive inductive) then
@@ -106,12 +110,12 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
     Codegen.compile_inductive_signature ~ind_def:inductive ~ctx:parameters
       ~family_name
   in
-  let compiled_impl, principles =
+  let compiled_impl, principles, mutual_principle =
     Codegen.compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
       ~family_name
   in
   let recursors =
-    Termutils.extract_handler_types_from_principle ~inductive ~principles
+    Termutils.extract_handler_types_from_principle ~inductive ~principles ~mutual_principle
   in 
   let elem =
     LinkageElem.InductiveDefinition
@@ -148,7 +152,7 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
              Inheritance.inherit_name ~name:(Naming.inductive_axiom_name name))
     in
 
-    new_types |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
+    new_types |> List.iter (fun (name, ty) -> add_inductive_axiom ~name ~ty)
   in
   
   let inherited_constructors = constructors inherited_inductive in
@@ -165,7 +169,7 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
     in
 
     new_constructors
-    |> List.iter (fun (name, ty) -> add_inductive_constr ~name ~ty)
+    |> List.iter (fun (name, ty) -> add_inductive_axiom ~name ~ty)
   in
   ()
   

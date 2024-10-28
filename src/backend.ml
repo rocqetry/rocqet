@@ -99,6 +99,37 @@ module Vernac = struct
     in
     vernac_ (VernacSynPure (VernacScheme scheme))
 
+  let define_mutual_inductive_scheme ~(inductives: Names.Id.t list) ~(suffix: RecKind.t) : unit t =
+    let sort = match suffix with 
+      | RecKind.Ind | RecKind.IndComplete -> Sorts.InProp
+      | RecKind.Rec -> Sorts.InSet
+      | RecKind.Rect -> Sorts.InType
+    in    
+    let internal_indp_name = Naming.principle_name ~inductives ~kind:(RecKind.to_string suffix) in    
+    let names =
+      inductives
+      |> List.map (fun inductive ->
+         let internal_inductive = Naming.internal_name inductive in
+         let decorated_typename = CAst.make @@ Constrexpr.AN (Libnames.qualid_of_ident internal_inductive) in         
+         let defining_ind_name = CAst.make @@ Naming.mutual_principle_name ~inductive ~inductives ~kind:(RecKind.to_string suffix) in 
+         (defining_ind_name, decorated_typename)) 
+    in
+    let open Vernacexpr in
+    let scheme =       
+      names 
+      |> List.map (fun (defining_ind_name, decorated_typename) ->            
+           Some defining_ind_name,
+             {
+               sch_type = SchemeInduction;
+               sch_qualid = decorated_typename;
+               sch_sort = sort;
+             }    
+        )
+    in 
+    let* _ = vernac_ (VernacSynPure (VernacScheme scheme)) in
+    let* _ = vernac_ (VernacSynPure (VernacCombinedScheme (CAst.make internal_indp_name, List.map fst names))) in 
+    return ()
+
   let define_term ?(ty : Constrexpr.constr_expr option) ~(name : Names.Id.t)
       (expr : Constrexpr.constr_expr) : unit t =
     let open Vernacexpr in

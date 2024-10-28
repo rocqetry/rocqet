@@ -102,13 +102,26 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t) ~(base : LinkageEl
   | FieldDefinition derived, OpaqueFieldDefinition _ -> FieldDefinition derived
   | OpaqueFieldDefinition _, FieldDefinition base -> FieldDefinition base
 
+  (* We can't just concatenate like this *)
+  (* They have to be in the order of the handlers *)
+  (* FIX: Keep a mapping from inductive_name to handlers *)
   | RecursorDefinition derived, RecursorDefinition base ->
+      let combine_mapping m0 m1 =
+        m0
+        |> List.map (fun (s, t) -> s, remove_duplicates (t @ List.assoc s m1))
+      in  
       let names = remove_duplicates (base.names @ derived.names) in
-      let handlers = remove_duplicates (base.handlers @ derived.handlers) in
+      (* let handlers = remove_duplicates (base.handlers @ derived.handlers) in *)
+      let handlers  = combine_mapping base.handlers derived.handlers in
       RecursorDefinition { derived with names; handlers }
   | TheoremDefinition derived, TheoremDefinition base ->
+      let combine_mapping m0 m1 =
+        m0
+        |> List.map (fun (s, t) -> s, remove_duplicates (t @ List.assoc s m1))
+      in  
       let names = remove_duplicates (base.names @ derived.names) in
-      let handlers = remove_duplicates (base.handlers @ derived.handlers) in
+      (* let handlers = remove_duplicates (base.handlers @ derived.handlers) in *)
+      let handlers  = combine_mapping base.handlers derived.handlers in
       TheoremDefinition { derived with names; handlers }
   | MetaDataSection derived, MetaDataSection _ -> MetaDataSection derived
   | ClosingFact fact, ClosingFact _ -> ClosingFact fact
@@ -152,7 +165,7 @@ let generate_prec_handlers
     context |> Context.family_linkage |> function
     | { default_ctx_params; _ } -> default_ctx_params
   in  
-  let prefix = Codegen.calculate_rec_principle_prefix ~inductive_path ~context in
+  let prefix = Codegen.calculate_rec_principle_prefix ~inductive_path ~context in  
   let construct_path name = Naming.qualid_point (Some prefix) name in    
   List.fold_left (fun (context, acc) constructor_name ->          
          let module_name = Naming.fresh_name ~prefix:"PrecCtx" in
@@ -166,7 +179,7 @@ let generate_prec_handlers
              ~ctx:parameters
              ~constructor_name 
              ~constructor_path 
-             ~inductive 
+             ~inductive           
              ~recursor_path 
              ~handlers
              ~prec_suffix:prec_suffix               
@@ -257,7 +270,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
       let element, fresh_elements =
         match element with
         | LinkageElem.InductiveDefinition inductive ->
-            let compiled_impl, principles =
+            let compiled_impl, principles, mutual_principle =
               Codegen.compile_inductive_implementation
                 ~ind_def:inductive.inductive ~ctx:parameters ~family_name:name
             in
@@ -267,7 +280,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
             in
             let recursors =
               Termutils.extract_handler_types_from_principle
-                ~inductive:inductive.inductive ~principles
+                ~inductive:inductive.inductive ~principles ~mutual_principle
             in
             let default_ctx_params =
               context |> Context.family_linkage |> function
@@ -483,21 +496,34 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
         | ClosingFact fact -> ClosingFact { fact with compiled_context }, []
         (* Exhaustiveness checks *)
         | RecursorDefinition recursive ->
-            let inductive, _, _ =
+           let inductive, _, _ =
+             let name = List.hd recursive.inductive_paths in 
               Context.lookup_inductive_for_recursion
-                ~name:recursive.inductive_path context
-            in
-            let name = List.hd recursive.names in
-            Checks.check_exhaustive ~name ~inductive
-              ~handlers:recursive.handlers;
+                ~name context
+           in
+           let handlers =
+             recursive.handlers |> List.concat_map snd 
+           in 
+            Checks.check_exhaustive
+              ~names:recursive.names
+              ~inductive
+              ~inductive_paths:recursive.inductive_paths
+              ~handlers;
             RecursorDefinition { recursive with compiled_context }, []
         | TheoremDefinition theorem ->
-            let inductive, _, _ =
+           let inductive, _, _ =
+              let name = List.hd theorem.inductive_paths in
               Context.lookup_inductive_for_recursion
-                ~name:theorem.inductive_path context
-            in
-            let name = List.hd theorem.names in
-            Checks.check_exhaustive ~name ~inductive ~handlers:theorem.handlers;
+                ~name context
+            in            
+            let handlers =
+             theorem.handlers |> List.concat_map snd 
+           in 
+            Checks.check_exhaustive
+              ~names:theorem.names
+              ~inductive
+              ~inductive_paths:theorem.inductive_paths
+              ~handlers;
             TheoremDefinition { theorem with compiled_context }, []
       in      
       let open Bwd.Infix in

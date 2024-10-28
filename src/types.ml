@@ -22,6 +22,20 @@ module VernacInductive = struct
         ((ind_type_name.v, ind_type), List.map each_constr cstrlist)
     | Vernacexpr.RecordDecl _ -> Errors.fail ~info:"Records not yet supported"
 
+  (* name -> name list *)
+  (* inductive name -> constructors *)
+  let create_inductive_constructor_map (inductive : t) =
+    inductive
+    |> List.map fst
+    |> List.map extract_type_and_cstrs
+    |> List.map (fun ((inductive_name, _), constructors) -> inductive_name, List.map fst constructors)
+    |> Names.Id.Map.of_list
+
+  let extract_all_constructors inductive =
+    inductive       
+       |> create_inductive_constructor_map
+       |> Names.Id.Map.bindings |> List.concat_map snd 
+
   let extract_all_names_with_type ind_def =
     ind_def
     |> List.map (fun (ind, _) -> ind |> extract_type_and_cstrs)
@@ -42,6 +56,9 @@ module VernacInductive = struct
 
   let extract_inductive_name ind_def =
     ind_def |> extract_all_names |> List.hd |> fst
+
+  let extract_all_inductive_names inductive =
+    inductive |> extract_all_names |> List.map fst 
 
   (* Create a "definition mapping" *)
   let definition_mapping ind_def =
@@ -146,6 +163,22 @@ module VernacInductive = struct
     if List.length base <> List.length derived then
       Errors.fail ~info:"All inductive types must be specified when extending.";
     List.combine base derived |> List.map check_one_type
+
+  let lookup_inductive_name ~constructor ~inductive =
+    let result = 
+      inductive
+      |> List.map fst
+      |> List.map extract_type_and_cstrs
+      |> List.find_map (fun ((inductive_name, _), constructors) ->
+             let constructors = List.map fst constructors in
+             if List.exists (Names.Id.equal constructor) constructors then
+               Some inductive_name
+             else None)
+    in
+    match result with
+    | None -> Errors.fail ~info:"constructor not bound in any inductive"
+    | Some result -> result
+    
 end
 
 (* Module naming *)
@@ -192,34 +225,26 @@ end
 
 module RecursorStore = Map.Make (RecKind)
 
-module CompiledRecursor = struct
+(* TODO: rethink keeping the big recursor *)
+module MutualRecursor = struct
   type t = {
-    inductive_names : Names.Id.t list;
-    compiled_recursor : CompiledModuleType.t;
-    handlers : (Names.Id.t * Constrexpr.constr_expr) list;
-    compiled_handlers : (Names.Id.t * CompiledModuleType.t) list;
-  }
-end
-
-module CompiledRecursors = struct
-  type t = {
-    (* TODO: do we need to keep track of the context? *)
-    compiled_context : CompiledModuleType.t;
-    recursors : CompiledRecursor.t RecursorStore.t;
-  }
+    mutual_recursor : Constrexpr.constr_expr;
+    mutual_handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+    }
 end
 
 module Recursor = struct
-  type t = {
-    inductive_names : Names.Id.t list;
-    recursor : Constrexpr.constr_expr;
-    handlers : (Names.Id.t * Constrexpr.constr_expr) list;
+  type t = {    
+    recursors : Constrexpr.constr_expr Names.Id.Map.t;
+    handlers : (Names.Id.t * Constrexpr.constr_expr) list Names.Id.Map.t;    
+    mutual : MutualRecursor.t option;
   }
 end
 
 (* Contains the type of the
    "rec" principle and the types
    of each handler for that particular "rec" *)
+(* map from inductive to the "separate big" principle *)
 module Recursors = struct
   type t = Recursor.t RecursorStore.t
 end
@@ -274,8 +299,9 @@ module rec LinkageElem : sig
       }
     | RecursorDefinition of {
         names : Names.Id.t list;
-        handlers : Names.Id.t list;
-        inductive_path : Libnames.qualid;
+        (* inductive_name to handlers *)
+        handlers : (Names.Id.t * Names.Id.t list) list;
+        inductive_paths : Libnames.qualid list;
         suffix : RecKind.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
@@ -286,8 +312,8 @@ module rec LinkageElem : sig
     | TheoremDefinition of {
         names : Names.Id.t list;
         suffix : RecKind.t;
-        inductive_path : Libnames.qualid;
-        handlers : Names.Id.t list;
+        inductive_paths : Libnames.qualid list;
+        handlers : (Names.Id.t * Names.Id.t list) list;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
@@ -452,5 +478,12 @@ end
 (* A scope is a plugin command enriched with a name and a "closing" handler *)
 (* `close` is a generic handle that is called to close the scope *)
 module PluginCmdScope = struct
-  type t = { command : PluginCmd.t; name : Names.Id.t; close : unit -> unit }
+  type t = { command : PluginCmd.t; names : Names.Id.t list; close : unit -> unit }
+end
+
+module Frec_arg = struct  
+   type t = 
+     { name: Names.Id.t; 
+       inductive: Libnames.qualid;
+       motive: Constrexpr.constr_expr }
 end

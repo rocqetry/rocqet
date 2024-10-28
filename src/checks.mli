@@ -1,8 +1,9 @@
 open Types
 
 val check_exhaustive :
-  name:Names.Id.t ->
+  names:Names.Id.t list ->
   inductive:VernacInductive.t ->
+  inductive_paths:Libnames.qualid list ->
   handlers:Names.Id.t list ->
   unit
 

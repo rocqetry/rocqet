@@ -10,6 +10,7 @@ DECLARE PLUGIN "nfpop.plugin"
   open Pcoq.Constr
   open Pcoq.Prim
   open Ltac_plugin  
+  open Types
 
   let wit_mutind_defs : (Types.VernacInductive.t, Util.Empty.t, Util.Empty.t) Genarg.genarg_type =
     Genarg.create_arg "coq_ind_sig"
@@ -59,8 +60,8 @@ GLOBAL: mutind_defs llconstr_ip gallina_ext list1ident reference_ip;
 END
 
 ARGUMENT EXTEND induction_decl
-| [ ident(name) "about" reference_ip(indref) "motive" llconstr_ip(motive) ] ->
-  { name, indref, motive }
+| [ ident(name) "about" reference_ip(inductive) "motive" llconstr_ip(motive) ] ->
+  { Frec_arg.{ name; inductive; motive }  }
 END
 
 ARGUMENT EXTEND induction_decls
@@ -98,6 +99,8 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "FEnd" ident(scope_name) ] -> { Entry.fend scope_name }
 
+| [ "FEnd" ne_ident_list_sep(scope_names, "with") ] -> { Entry.fend_with scope_names }
+
 | [ "FDefinition" ident(name) ":" llconstr_ip(body_type) ":=" llconstr_ip(body_expr)  ] ->
    { Entry.definition ~name ~body_type body_expr }
 
@@ -110,23 +113,13 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "FDefinition" ident(name) ":=" llconstr_ip(body_expr)  ] ->
    { Entry.definition ~name body_expr }
 
-| [ "FRecursion" ident(name) 
-               "about" reference_ip(inductive)
-               "motive" llconstr_ip(motive)
-               "by" ident(reckind)  ] ->  
-   { Entry.frecursion ~name ~inductive ~motive ~suffix:(Types.RecKind.of_name reckind) }
+(*| [ "FRecursion" ident(name) ":" argument_flist(args) ] -> 
+   { Entry.frecursion_elegant name args } *)
 
-| [ "FRecursion" ident(name) ":" argument_flist(args) ] -> 
-   { Entry.frecursion_elegant name args }
+| [ "FRecursion" ne_ident_list_sep(names, "with") ] -> { Entry.frecursion_extension ~names }
 
-(* Default case is by _rec *)
-| [ "FRecursion" ident(name) 
-               "about" reference_ip(inductive)
-               "motive" llconstr_ip(motive) ] ->  
-   { Entry.frecursion ~name ~inductive ~motive ~suffix:Types.RecKind.Rec }
-
-| [ "FRecursion" ident(name) ] -> 
-   { Entry.frecursion_extension ~name } 
+| [ "FRecursion" induction_decls(ind_decls) "by" ident(reckind) ] -> 
+   { Entry.frecursion ind_decls (RecKind.of_name reckind) }
 
 | [ "Case" ident(name) list1ident(arguments) ":=" constr(handler) ] -> 
    {  Entry.frecursion_handler ~name ~arguments:(Some arguments) ~handler }
@@ -134,13 +127,11 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "Case" ident(name) ":=" constr(handler) ] -> 
    {  Entry.frecursion_handler ~name ~arguments:None ~handler }
 
-| [ "FInduction" ident(name) 
-                "about" reference_ip(inductive) 
-                "motive"  llconstr_ip(motive) ] ->
-   {  Entry.finduction ~name ~inductive ~motive }
+| [ "FInduction" ne_ident_list_sep(names, "with") ] ->
+   { Entry.finduction_extension ~names }
 
-| [ "FInduction" ident(name)] ->
-   { Entry.finduction_extension ~name }
+| [ "FInduction" induction_decls(ind_decls) ] ->
+   {  Entry.finduction ind_decls }
 
 | [ "FLemma" ident(name) ":" llconstr_ip(t) ] -> { Entry.flemma name t }
 

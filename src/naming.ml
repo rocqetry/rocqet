@@ -21,13 +21,35 @@ let recursion_handler_type ~function_name ~case_name =
   in
   Names.Id.of_string name
 
-let handler_name ~recursor ~case =
-  Names.Id.to_string recursor ^ Names.Id.to_string case |> Names.Id.of_string
+let concat_names names =
+  names
+  |> List.map Names.Id.to_string
+  |> List.sort String.compare |> String.concat "_" |> Names.Id.of_string
 
-let principle_name ~inductive ~kind = Nameops.add_suffix inductive kind
+let handler_name ~recursors ~case =
+  let recursors = concat_names recursors in 
+  Names.Id.to_string recursors ^ Names.Id.to_string case |> Names.Id.of_string
 
-let computational_axiom_name ~recursor_name ~constructor_name =
-  Names.Id.to_string recursor_name
+let principle_name ~inductives ~kind =
+  let joined_indnames = concat_names inductives in
+  Nameops.add_suffix joined_indnames kind
+
+(* mutual inductive principle
+   inductive is the inductive type the recursion/induction is about
+   inductives is the list of all the inductives present
+ *)
+let mutual_principle_name ~inductive ~inductives ~kind =
+  (* forward non mutual to regular principle *)
+  if List.length inductives < 2 then principle_name ~inductives ~kind
+  else 
+    let principle = principle_name ~inductives ~kind in
+    let inductive = Names.Id.to_string inductive ^ "_" in 
+    Nameops.add_prefix inductive principle
+    
+
+let computational_axiom_name ~recursor_names ~constructor_name =
+  let recursor_names = concat_names recursor_names in 
+  Names.Id.to_string recursor_names
   ^ "_"
   ^ Names.Id.to_string constructor_name
   ^ "_eq"
@@ -88,7 +110,7 @@ let _to_qualid_name (path : Libnames.qualid) :
     match Names.DirPath.repr prefix_path with
     | [] -> Errors.fail ~info:"Unexpected Error"
     | newbase :: remained ->
-        (Some (make_qualid (Names.DirPath.make remained) newbase), base)
+       (Some (make_qualid (Names.DirPath.make remained) newbase), base)
 
 let path_to_list (path : Libnames.qualid) : Names.Id.t list =
   let prefix, base = Libnames.repr_qualid path in
@@ -102,6 +124,8 @@ let path_to_prefix (path : Libnames.qualid) :
   match Names.DirPath.repr prefix with
   | [] -> (None, base)
   | _ -> (Some (Libnames.qualid_of_dirpath prefix), base)
+
+let extract_path_base path = path |> path_to_prefix |> snd
 
 let make_module_path head path =
   let head = Libnames.qualid_of_ident head in
@@ -295,11 +319,6 @@ let inv_name_map_with f =
   List.fold_left
     (fun acc name -> Names.Id.Map.add (f name) name acc)
     Names.Id.Map.empty
-
-let concat_names names =
-  names
-  |> List.map Names.Id.to_string
-  |> List.sort String.compare |> String.concat "_" |> Names.Id.of_string
 
 let is_self_name name = 
     name |> Names.Id.to_string |> String.starts_with ~prefix:"self__"

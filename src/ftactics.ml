@@ -15,8 +15,8 @@ let extract_handlers_names names =
            |> Option.map (function 
               | LinkageElem.RecursorDefinition { names; handlers; _} -> 
                  let prefix = Naming.extract_prefix name in
-                 let name = List.hd names in                  
-                 Some (prefix, name, handlers)
+                 let handlers = handlers |> List.concat_map snd in 
+                 Some (prefix, names, handlers)
               | _ -> None)                      
            |> Option.flatten
         else None)  
@@ -24,12 +24,12 @@ let extract_handlers_names names =
 let handlers_to_computational_axiom handlers = 
   let context = Env.Context.get () in
   handlers       
-  |> List.concat_map (fun (prefix, recursor_name, handlers) ->        
+  |> List.concat_map (fun (prefix, recursor_names, handlers) ->        
        handlers 
        |> List.map (fun constructor_name -> 
               let name = 
                  Naming.computational_axiom_name 
-                   ~recursor_name 
+                   ~recursor_names 
                    ~constructor_name
               in 
               let qualid = Naming.qualid_point prefix name in
@@ -40,18 +40,12 @@ let handlers_to_computational_axiom handlers =
 let handlers_to_case_definitions handlers = 
   let context = Env.Context.get () in
   handlers
-  |> List.concat_map (fun (prefix, recursor, handlers) ->        
+  |> List.concat_map (fun (prefix, recursors, handlers) ->        
        handlers 
        |> List.map (fun case -> 
-              let name = 
-                 Naming.handler_name 
-                   ~recursor
-                   ~case
-              in
+              let name = Naming.handler_name ~recursors ~case in              
               let qualid = Naming.qualid_point prefix name in
-              Resolver.resolve_qualid 
-                ~context 
-                ~qualid)) 
+              Resolver.resolve_qualid ~context ~qualid))
 
 let idtac =
   let open Ltac_plugin in
@@ -317,13 +311,11 @@ let extract_constructors names =
            |> Option.map fst
            |> Option.map (function 
               | LinkageElem.InductiveDefinition { inductive; _} -> 
-                 let constructors = 
+                 let constructors =                     
                     inductive
-                    |> List.hd
-                    |> fst
-                    |> VernacInductive.extract_type_and_cstrs
-                    |> snd 
                     |> List.map fst
+                    |> List.map VernacInductive.extract_type_and_cstrs
+                    |> List.concat_map (fun (_, constructors) -> List.map fst constructors)
                  in
                  let prefix = name |> Naming.extract_prefix in                 
                  let qualify name = 

@@ -15,9 +15,9 @@ Family STLC.
      | ty_arrow : ty -> ty -> ty.
   FEnd X.
          
-  FRecursion subst : (t : X.ty) -> (k : nat) -> nat.  
-     Case ty_arrow n m := (subst m k + subst n k).
-     Case ty_unit := k.
+  FRecursion subst about X.ty motive (fun (_: X.ty) => nat -> nat) by _rect.  
+     Case ty_arrow := (fun _ subst_m _ subst_n k => subst_m k + subst_n k).
+     Case ty_unit := (fun k => k).
   FEnd subst.  
   
   FInduction subst_size
@@ -27,15 +27,7 @@ Family STLC.
      - apply cheat.
      - intros. apply cheat.
      Qed.
-  FEnd subst_size.  
-  
-  (*FInductive tm : Set :=
-  | tm_var : self__STLC.ident -> tm
-  | tm_app : tm -> tm -> tm
-  | tm_val : val -> tm
-  with val : Set :=
-  | val_abs : self__STLC.ident -> tm -> val
-  | val_unit: val. *)
+  FEnd subst_size.     
 FEnd STLC.
 
 Family STLC_bool extends STLC.
@@ -45,7 +37,7 @@ Family STLC_bool extends STLC.
   FEnd X.  
 
   FRecursion subst.
-      Case ty_bool := 1.
+      Case ty_bool := (fun k => 1).
   FEnd subst.  
 
   FInduction subst_size.    
@@ -53,14 +45,6 @@ Family STLC_bool extends STLC.
       + apply cheat.
     Qed.
   FEnd subst_size.
-
-(*FInductive tm : Set :=
-    | tm_if : tm -> tm -> tm -> tm
-  with val : Set :=
-    | val_true : val
-    | val_false : val.
-
-  FDefinition check_handler_bool := subst.*)
 FEnd STLC_bool.
 
 Family STLC_prod extends STLC_bool.
@@ -70,21 +54,14 @@ Family STLC_prod extends STLC_bool.
   FEnd X.
 
   FRecursion subst.  
-     Case ty_prod n m := (subst m k + subst n k).
+     Case ty_prod := (fun _ subst_n _ subst_m k => subst_m k + subst_n k).
   FEnd subst.
 
   FInduction subst_size.     
     FProof.
     - intros. apply cheat.
     Qed.
-  FEnd subst_size.
-
-  (*FInductive tm : Set :=
-    | tm_prod : tm -> tm -> tm
-    | tm_pi1 : tm -> tm
-    | tm_pi2 : tm -> tm
-  with val : Set :=
-    | val_prod : val -> val -> val.*)
+  FEnd subst_size.  
 FEnd STLC_prod.
 
 Family STLC_nat. 
