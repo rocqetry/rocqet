@@ -261,7 +261,9 @@ module Vernac = struct
               Declaremods.NoInline,
               [ (NoCoercion, ([ fname_ ], ty)) ] )))
 
-  let construct_term_using_proof ~(name : Names.Id.t)
+  let construct_term_using_proof 
+      ~(name : Names.Id.t)
+      ~(is_starting_plain : bool)
       ~(proof : Ltac_plugin.Tacexpr.raw_tactic_expr)
       ~(ty : Constrexpr.constr_expr) ~(opaque: Vernacexpr.opacity_flag) () : unit t =
     let open Ltac_plugin in
@@ -272,12 +274,13 @@ module Vernac = struct
     let evd, type_checked_goal = Constrintern.interp_constr_evars env evd ty in
     let info = Declare.Info.make () in
     let cinfo = Declare.CInfo.make ~name ~typ:type_checked_goal () in
-    let is_starting_plain = false in
+    (*let is_starting_plain = true in*)
     let proof = Declare.Proof.start ~info ~cinfo evd in
     let proof =
       (* apply unfold if not starting_plain  *)
       if is_starting_plain then proof
       else
+        (* Somehow this can lead to stuck proofs? *)
         let unfold_all_definition =
           let open Tacexpr in
           let open Genredexpr in
@@ -290,11 +293,11 @@ module Vernac = struct
           in
           let intp_tac = Tacinterp.interp (CAst.make tac) in
           intp_tac
-        in
-        let unfolded_proof, _ = Declare.Proof.by unfold_all_definition proof in
+        in        
+        let unfolded_proof, _ = Declare.Proof.by unfold_all_definition proof in        
         unfolded_proof
-    in
-    let proof, _ = Declare.Proof.by interppfs proof in
+    in    
+    let proof, _ = Declare.Proof.by interppfs proof in    
     (*let opaque = Vernacexpr.Opaque in*)
     let _ = Declare.Proof.save_regular ~proof ~opaque ~idopt:None in
     return ()

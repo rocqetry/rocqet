@@ -58,6 +58,7 @@ module Vernac : sig
 
   val construct_term_using_proof :
     name:Names.Id.t ->
+    is_starting_plain: bool ->
     proof:Ltac_plugin.Tacexpr.raw_tactic_expr ->
     ty:Constrexpr.constr_expr ->
     opaque:Vernacexpr.opacity_flag ->

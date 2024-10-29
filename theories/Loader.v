@@ -57,6 +57,9 @@ Ltac split_cases_into_goals :=
   | _ => auto
   end.
 
+(* apply @eq_refl; fail. (* intros; simple apply @eq_refl. (*debug eauto 15.*)*) *)
+Ltac prove_comp_axiom := eauto. 
+
 Ltac prove_prec :=
   intros x; induction x; eauto; eauto using None.
 
