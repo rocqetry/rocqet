@@ -33,6 +33,7 @@
    lib/Integers
    lib/Memtype
    lib/Cop
+   lib/Mon
   ))
 
 
