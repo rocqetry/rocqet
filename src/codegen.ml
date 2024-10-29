@@ -340,10 +340,13 @@ let compile_computational_axiom_implementation ~axiom_name ~axiom_expr =
       (Tacexpr.TacArg
          (Tacexpr.TacCall
             (CAst.make
-               (Libnames.qualid_of_ident (Names.Id.of_string "eauto"), []))))
+               (Libnames.qualid_of_ident (Names.Id.of_string "prove_comp_axiom"), []))))
   in
   let ty = Naming.replace_self_qualification ~target:None axiom_expr in  
-  B.thunk (B.construct_term_using_proof ~name:axiom_name ~proof:auto_tactic ~ty ~opaque:Vernacexpr.Opaque)
+  B.thunk (      
+      B.construct_term_using_proof
+        ~is_starting_plain:true
+        ~name:axiom_name ~proof:auto_tactic ~ty ~opaque:Vernacexpr.Opaque)
 
 let compile_partial_recursor_implementation ~name ~type_name = 
   let prove_prec_tactic =      
@@ -358,11 +361,14 @@ let compile_partial_recursor_implementation ~name ~type_name =
       proof
   in  
   let ty = Constrexpr_ops.mkIdentC type_name in
-  B.thunk (B.construct_term_using_proof ~name ~proof:prove_prec_tactic ~ty ~opaque:Vernacexpr.Transparent)
+  B.thunk (B.construct_term_using_proof 
+             ~is_starting_plain:true
+             ~name ~proof:prove_prec_tactic 
+             ~ty ~opaque:Vernacexpr.Transparent)
 
 let compile_closing_fact_implementation ~name ~type_name ~(script: Ltac_plugin.Tacexpr.raw_tactic_expr) =   
   let ty = Constrexpr_ops.mkIdentC type_name in  
-  B.thunk (B.construct_term_using_proof ~name ~proof:script ~ty ~opaque:Vernacexpr.Opaque)
+  B.thunk (B.construct_term_using_proof ~is_starting_plain:false ~name ~proof:script ~ty ~opaque:Vernacexpr.Opaque)
 
 (* The name of the equation to generate axioms for *)
 let compile_computational_axiom_signature
