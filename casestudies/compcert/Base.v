@@ -24,10 +24,7 @@ Require Import Coq.ZArith.ZArith.
 
 Axiom cheat : forall {X}, X.
 Local Open Scope string_scope.
-Local Open Scope error_monad_scope.
-Local Open Scope string_scope.
 Local Open Scope list_scope.
-Local Open Scope gensym_monad_scope.
 
 Module VarOrder <: TotalLeBool.
   Definition t := (ident * Z)%type.
@@ -605,6 +602,9 @@ FEnd Clight.
 
 (* C -> Clight *)
 Family SimplExpr.
+
+Local Open Scope gensym_monad_scope.
+
 MetaData makeseq_rec.
 Fixpoint makeseq_rec (s: self__Base.Clight.stmt) (l: list self__Base.Clight.stmt) : self__Base.Clight.stmt :=
    match l with
@@ -691,7 +691,7 @@ Case Eval v ty :=
     | Vfloat n => ret (finish dst nil (Clight.Econst_float n ty))
     | Vsingle n => ret (finish dst nil (Clight.Econst_single n ty))
     | _ => error (msg "SimplExpr.transl_expr: Eval") end).
-Case Ecast r1 ty := 
+Case Ecast r1 ty :=
   (fun dst => 
       match dst with
       | self__SimplExpr.For_val | self__SimplExpr.For_set _ =>
@@ -771,8 +771,8 @@ Case Eseqand r1 r2 ty :=
           ret (sl1 ++
                makeif a1 (makeseq sl2) (makeseq (do_set sd (Clight.Econst_int Int.zero ty))) :: nil,
                dummy_expr)
-      end).                           
-Case Esizeof ty' ty := (fun dst => ret (finish dst nil (Clight.Esizeof ty' ty))). (* Doesn't prove? *)
+      end).                          
+Case Esizeof ty' ty := (fun dst => ret (finish dst nil (Clight.Esizeof ty' ty))).
 Case Ealignof ty' ty := (fun dst => ret (finish dst nil (Clight.Ealignof ty' ty))).
 Case Eparen e tycast ty := (fun dst => error (msg "SimplExpr.transl_expr: paren")).
 FEnd transl_expr.
@@ -781,7 +781,7 @@ FDefinition transl_expression : C.expr -> mon (Clight.stmt * Clight.expr) := fun
   do (sl, a) <- transl_expr r self__SimplExpr.For_val; ret (makeseq sl, a).
 
 FDefinition transl_expr_stmt : C.expr -> mon Clight.stmt := fun r =>
-  do (sl, a) <- transl_expr r self__SimplExpr.For_effects; ret (makeseq sl).  
+  do (sl, a) <- transl_expr r self__SimplExpr.For_effects; ret (makeseq sl).
 
 FDefinition transl_if : C.expr -> Clight.stmt -> Clight.stmt -> mon Clight.stmt  := fun r s1 s2 => 
   do (sl, a) <- transl_expr r self__SimplExpr.For_val;
@@ -789,7 +789,7 @@ FDefinition transl_if : C.expr -> Clight.stmt -> Clight.stmt -> mon Clight.stmt 
 
 Closing Fact is_Sskip:
   forall s, {s = C.Sskip} + {s <> C.Sskip} by {  destruct s; ((left; reflexivity) || (right; congruence)) }.
-      
+
 FRecursion transl_stmt about C.stmt motive (fun (_ : C.stmt) => mon Clight.stmt) by _rect.
 Case Sskip := (ret Clight.Sskip).
 Case Sdo e := (transl_expr_stmt e).
