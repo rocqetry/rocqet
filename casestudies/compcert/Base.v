@@ -1098,119 +1098,77 @@ FEnd tr_fundef.
    transl_fundef p.(prog_comp_env) fd = OK tfd ->
    tr_fundef p fd tfd.*)
           
-          (* Correctness of the pass *)
-          Family Proof.
-              FDefinition match_prog : C.program -> Clight.program -> Prop := fun p tp => cheat.
-              
-              FInductive match_cont : (* composite_env ->*) C.Sem.cont -> Clight.Sem.cont -> Prop :=
-                   | match_Kstop: 
-                       match_cont C.Sem.Kstop Clight.Sem.Kstop
-                   | match_Kseq: forall s k ts tk,
-                       Spec.tr_stmt s ts ->
-                       match_cont k tk ->
-                       match_cont (C.Sem.Kseq s k) (Clight.Sem.Kseq ts tk)
-                   | match_Kwhile2: forall r s k s' ts tk,
-                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
-                       Spec.tr_stmt s ts ->
-                       match_cont k tk ->
-                       match_cont (C.Sem.Kwhile2 r s k)
-                                  (Clight.Sem.Kloop1 (Clight.Sseq s' ts) Clight.Sskip tk)
-                   | match_Kdowhile1: forall r s k s' ts tk,
-                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
-                       Spec.tr_stmt s ts ->
-                       match_cont k tk ->
-                       match_cont (C.Sem.Kdowhile1 r s k)
-                                  (Clight.Sem.Kloop1 ts s' tk)
-                   | match_Kfor3: forall r s3 s k ts3 s' ts tk,
-                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
-                       Spec.tr_stmt s3 ts3 ->
-                       Spec.tr_stmt s ts ->
-                       match_cont k tk ->
-                       match_cont (C.Sem.Kfor3 r s3 s k)
-                                  (Clight.Sem.Kloop1 (Clight.Sseq s' ts) ts3 tk)
-                   | match_Kfor4: forall r s3 s k ts3 s' ts tk,
-                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
-                       Spec.tr_stmt s3 ts3 ->
-                       Spec.tr_stmt s ts ->
-                       match_cont k tk ->
-                       match_cont (C.Sem.Kfor4 r s3 s k)
-                                  (Clight.Sem.Kloop2 (Clight.Sseq s' ts) ts3 tk)                   
-              with match_cont_exp : (* composite_env*) destination -> Clight.expr -> C.Sem.cont -> Clight.Sem.cont -> Prop :=
-                   | match_Kdo: forall k a tk,
-                       match_cont k tk ->
-                       match_cont_exp self__SimplExpr.For_effects a (C.Sem.Kdo k) tk
-                   | match_Kifthenelse_empty: forall a k tk,
-                       match_cont k tk ->
-                       match_cont_exp self__SimplExpr.For_val a (C.Sem.Kifthenelse C.Sskip C.Sskip k) (Clight.Sem.Kseq Clight.Sskip tk)
-                   | match_Kifthenelse_1: forall a s1 s2 k ts1 ts2 tk,
-                       Spec.tr_stmt s1 ts1 -> Spec.tr_stmt s2 ts2 ->
-                       match_cont k tk ->
-                       match_cont_exp self__SimplExpr.For_val a (C.Sem.Kifthenelse s1 s2 k) (Clight.Sem.Kseq (Clight.Sifthenelse a ts1 ts2) tk)
-                   | match_Kwhile1: forall r s k s' a ts tk,
-                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
-                       Spec.tr_stmt s ts ->
-                       match_cont k tk ->
-                       match_cont_exp self__SimplExpr.For_val a
-                          (C.Sem.Kwhile1 r s k)
-                          (Clight.Sem.Kseq (makeif a Clight.Sskip Clight.Sbreak)
-                            (Clight.Sem.Kseq ts (Clight.Sem.Kloop1 (Clight.Sseq s' ts) Clight.Sskip tk)))
-                   | match_Kdowhile2: forall r s k s' a ts tk,
-                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
-                       Spec.tr_stmt s ts ->
-                        match_cont k tk ->
-                        match_cont_exp self__SimplExpr.For_val a
-                          (C.Sem.Kdowhile2 r s k)
-                          (Clight.Sem.Kseq (makeif a Clight.Sskip Clight.Sbreak) (Clight.Sem.Kloop2 ts s' tk))
-                   | match_Kfor2: forall r s3 s k s' a ts3 ts tk,
-                       Spec.tr_if r Clight.Sskip Clight.Sbreak s' ->
-                       Spec.tr_stmt s3 ts3 ->
-                       Spec.tr_stmt s ts ->
-                       match_cont k tk ->
-                       match_cont_exp self__SimplExpr.For_val a
-                         (C.Sem.Kfor2 r s3 s k)
-                         (Clight.Sem.Kseq (makeif a Clight.Sskip Clight.Sbreak)
-                           (Clight.Sem.Kseq ts (Clight.Sem.Kloop1 (Clight.Sseq s' ts) ts3 tk)))
-                   | match_Kreturn: forall k a tk,
-                       match_cont k tk ->
-                       match_cont_exp self__SimplExpr.For_val a (C.Sem.Kreturn k) (Clight.Sem.Kseq (Clight.Sreturn (Some a)) tk).
+(* correctness of the pass *)
+FDefinition match_prog := fun (p: C.program) (tp: Clight.program) =>
+    match_program_gen tr_fundef eq p p tp
+ /\ prog_types tp = prog_types p.
 
-              MetaData Kseqlist.
-                 Fixpoint Kseqlist (sl: list self__Imp.Clight.stmt) (k: self__Imp.Clight.Sem.cont) :=
-                 match sl with
-                 | nil => k
-                 | s :: l => self__Imp.Clight.Sem.Kseq s (Kseqlist l k)
-                 end.
-              FEnd Kseqlist.
+(* Variable prog: C.program.
+Variable tprog: Clight.program.
+Hypothesis TRANSL: match_prog prog tprog.
+
+Let ge := C.globalenv prog.
+Let tge := Clight.globalenv tprog. *)
               
-              MetaData match_states.
-              Inductive match_states: self__Imp.C.Sem.state -> self__Imp.Clight.Sem.state -> Prop :=
-                  | match_exprstates: forall tge f r k e m tf sl tk le dest a tmps (* cu *)
-                      (* (LINK: linkorder cu prog)*)
-                      (TRF: self__SimplExpr.Spec.tr_function (* cu.(prog_comp_env) *) f tf)
-                      (TR: self__SimplExpr.Spec.tr_top (* cu.(prog_comp_env)*) tge e le m dest r sl a tmps)
-                      (MK: self__Proof.match_cont_exp (* cu.(prog_comp_env)*) dest a k tk),
-                      match_states (self__Imp.C.Sem.ExprState f r k e m)
-                                   (self__Imp.Clight.Sem.State tf self__Imp.Clight.Sskip (self__Proof.Kseqlist sl tk) e le m)
-                  | match_regularstates: forall f s k e m tf ts tk le (* cu*)
-                      (* (LINK: linkorder cu prog) *)
-                      (TRF: self__SimplExpr.Spec.tr_function (* cu.(prog_comp_env)*) f tf)
-                      (TR: self__SimplExpr.Spec.tr_stmt (* cu.(prog_comp_env)*) s ts)
-                      (MK: self__Proof.match_cont (* cu.(prog_comp_env)*) k tk),
-                      match_states (self__Imp.C.Sem.State f s k e m)
-                                   (self__Imp.Clight.Sem.State tf ts tk e le m)
-                  | match_callstates: forall fd args k m tfd tk cu
-                      (* (LINK: linkorder cu prog)*)
-                      (TR: self__SimplExpr.Spec.tr_fundef cu fd tfd)
-                      (MK: (* forall ce,*) self__Proof.match_cont (* ce*) k tk),
-                      match_states (self__Imp.C.Sem.Callstate fd args k m)
-                                   (self__Imp.Clight.Sem.Callstate tfd args tk m)
-                  | match_returnstates: forall res k m tk
-                      (MK: (* forall ce,*) self__Proof.match_cont (* ce*) k tk),
-                      match_states (self__Imp.C.Sem.Returnstate res k m)
-                                   (self__Imp.Clight.Sem.Returnstate res tk m)
-                  | match_stuckstate: forall S,
-                      match_states self__Imp.C.Sem.Stuckstate S.
-              FEnd match_states.
+FInductive match_cont : composite_env -> C.cont -> Clight.cont -> Prop :=
+| match_Kstop: forall ce, 
+    match_cont ce C.Sem.Kstop Clight.Sem.Kstop
+| match_Kseq: forall ce s k ts tk,
+    Spec.tr_stmt s ts ->
+    match_cont ce k tk ->
+    match_cont ce (C.Sem.Kseq s k) (Clight.Sem.Kseq ts tk)              
+with match_cont_exp : composite_env -> destination -> Clight.expr -> C.cont -> Clight.cont -> Prop :=
+| match_Kdo: forall ce k a tk,
+    match_cont k tk ->
+    match_cont_exp ce self__SimplExpr.For_effects a (C.Sem.Kdo k) tk
+| match_Kifthenelse_empty: forall ce a k tk,
+    match_cont k tk ->
+    match_cont_exp ce self__SimplExpr.For_val a (C.Kifthenelse C.Sskip C.Sskip k) (Clight.Kseq Clight.Sskip tk)
+| match_Kifthenelse_1: forall ce a s1 s2 k ts1 ts2 tk,
+    tr_stmt s1 ts1 -> tr_stmt s2 ts2 ->
+    match_cont ce k tk ->
+    match_cont_exp ce self__SimplExpr.For_val a (C.Kifthenelse s1 s2 k) (Clight.Kseq (Clight.Sifthenelse a ts1 ts2) tk)
+| match_Kreturn: forall ce k a tk,
+    match_cont k tk ->
+    match_cont_exp ce self__SimplExpr.For_val a (C.Kreturn k) (Clight.Kseq (Clight.Sreturn (Some a)) tk).
+
+MetaData Kseqlist.
+Fixpoint Kseqlist (sl: list self__Base.Clight.stmt) (k: self__Base.Clight.Sem.cont) :=
+match sl with
+| nil => k
+| s :: l => self__Base.Clight.Sem.Kseq s (Kseqlist l k)
+end.
+FEnd Kseqlist.
+      
+MetaData match_states.
+Inductive match_states: self__Imp.C.Sem.state -> self__Imp.Clight.Sem.state -> Prop :=
+    | match_exprstates: forall tge f r k e m tf sl tk le dest a tmps (* cu *)
+        (* (LINK: linkorder cu prog)*)
+        (TRF: self__SimplExpr.Spec.tr_function (* cu.(prog_comp_env) *) f tf)
+        (TR: self__SimplExpr.Spec.tr_top (* cu.(prog_comp_env)*) tge e le m dest r sl a tmps)
+        (MK: self__Proof.match_cont_exp (* cu.(prog_comp_env)*) dest a k tk),
+        match_states (self__Imp.C.Sem.ExprState f r k e m)
+                      (self__Imp.Clight.Sem.State tf self__Imp.Clight.Sskip (self__Proof.Kseqlist sl tk) e le m)
+    | match_regularstates: forall f s k e m tf ts tk le (* cu*)
+        (* (LINK: linkorder cu prog) *)
+        (TRF: self__SimplExpr.Spec.tr_function (* cu.(prog_comp_env)*) f tf)
+        (TR: self__SimplExpr.Spec.tr_stmt (* cu.(prog_comp_env)*) s ts)
+        (MK: self__Proof.match_cont (* cu.(prog_comp_env)*) k tk),
+        match_states (self__Imp.C.Sem.State f s k e m)
+                      (self__Imp.Clight.Sem.State tf ts tk e le m)
+    | match_callstates: forall fd args k m tfd tk cu
+        (* (LINK: linkorder cu prog)*)
+        (TR: self__SimplExpr.Spec.tr_fundef cu fd tfd)
+        (MK: (* forall ce,*) self__Proof.match_cont (* ce*) k tk),
+        match_states (self__Imp.C.Sem.Callstate fd args k m)
+                      (self__Imp.Clight.Sem.Callstate tfd args tk m)
+    | match_returnstates: forall res k m tk
+        (MK: (* forall ce,*) self__Proof.match_cont (* ce*) k tk),
+        match_states (self__Imp.C.Sem.Returnstate res k m)
+                      (self__Imp.Clight.Sem.Returnstate res tk m)
+    | match_stuckstate: forall S,
+        match_states self__Imp.C.Sem.Stuckstate S.
+FEnd match_states.
 
               (* Write esize as an FRecursion *)
               FRecursion esize about C.expr motive (fun (_ : C.expr) => nat) by _rect.                  
