@@ -126,7 +126,11 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t) ~(base : LinkageEl
   | MetaDataSection derived, MetaDataSection _ -> MetaDataSection derived
   | ClosingFact fact, ClosingFact _ -> ClosingFact fact
   | PartialRecursor derived, PartialRecursor _ -> PartialRecursor derived
-  | TraitDefinition _, TraitDefinition _ -> Errors.fail ~info:"TODO"
+  | TraitDefinition base, TraitDefinition derived -> 
+     let linkage =
+       linkage_concatenate ~derived:derived.linkage ~base:base.linkage
+     in
+     TraitDefinition { derived with linkage }     
   | _, _ ->
       let info = 
         Printf.sprintf 
