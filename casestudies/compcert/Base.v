@@ -21,24 +21,10 @@ Require Import Orders.
 Require Import Mergesort.
 Require Import Ordered.
 Require Import Coq.ZArith.ZArith.
+From NFPOP Require Import Prelude.
 
-Axiom cheat : forall {X}, X.
 Local Open Scope string_scope.
 Local Open Scope list_scope.
-
-Module VarOrder <: TotalLeBool.
-  Definition t := (ident * Z)%type.
-  Definition leb (v1 v2: t) : bool := zle (snd v1) (snd v2).
-  Theorem leb_total: forall v1 v2, leb v1 v2 = true \/ leb v2 v1 = true.
-  Proof.
-    unfold leb; intros.
-    assert (snd v1 <= snd v2 \/ snd v2 <= snd v1) by lia.
-    unfold proj_sumbool. destruct H; [left|right]; apply zle_true; auto.
-  Qed.
-End VarOrder.
-
-Module VarSort := Mergesort.Sort(VarOrder).
-
 
 Family Base.
 
@@ -618,8 +604,8 @@ FDefinition makeseq : list self__Base.Clight.stmt -> self__Base.Clight.stmt := f
 
 MetaData set_destination.
 Inductive set_destination : Type :=
-    | SDbase (tycast ty: type) (tmp: ident)
-    | SDcons (tycast ty: type) (tmp: ident) (sd: set_destination).
+| SDbase (tycast ty: type) (tmp: ident)
+| SDcons (tycast ty: type) (tmp: ident) (sd: set_destination).
 FEnd set_destination.
 
 MetaData destination.
@@ -851,8 +837,7 @@ FDefinition transl_program : C.program -> res Clight.program := fun p =>
         prog_comp_env := prog_comp_env p;
         prog_comp_env_eq := prog_comp_env_eq p |}.
 
-     (* Relational specification of translation *)
-     Family Spec.
+(* Relational specification of translation *)     
           FDefinition final : self__SimplExpr.destination -> Clight.expr -> list Clight.stmt := fun dst a => 
               match dst with
               | self__SimplExpr.For_val => nil
