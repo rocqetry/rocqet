@@ -1323,615 +1323,285 @@ FEnd SimplExpr.
 
 (* C family languages: Csharpminor, Cminor, CminorSel *)
 Family Cfam.
-       FInductive constant : Type :=
-           | Ointconst: int -> constant (* integer constant *)
-           | Ofloatconst: float -> constant (* double-precision floating-point constant *)
-           | Osingleconst: float32 -> constant (* single-precision floating-point constant *)
-           | Olongconst: int64 -> constant.
+FInductive constant : Type :=
+| Ointconst: int -> constant (* integer constant *)
+| Ofloatconst: float -> constant (* double-precision floating-point constant *)
+| Osingleconst: float32 -> constant (* single-precision floating-point constant *)
+| Olongconst: int64 -> constant.
 
-       FInductive expr : Type :=
-          | Evar : ident -> expr (* reading a temporary variable *)            
-          | Econst : constant -> expr. (* constants *)          
+FInductive expr : Type :=
+| Evar : ident -> expr (* reading a temporary variable *)            
+| Econst : constant -> expr. (* constants *)
 
-       FDefinition label := ident.
-       FInductive stmt : Type :=
-          | Sskip: stmt
-          | Sset : ident -> expr -> stmt            
-          | Sseq: stmt -> stmt -> stmt                    
-          | Sreturn: option expr -> stmt.
+FDefinition label := ident.
+FInductive stmt : Type :=
+| Sskip: stmt
+| Sassign : ident -> expr -> stmt
+| Sset : ident -> expr -> stmt            
+| Sseq: stmt -> stmt -> stmt                    
+| Sreturn: option expr -> stmt
+| Sifthenelse: expr -> stmt -> stmt -> stmt
+| Slabel: label -> stmt -> stmt
+| Sgoto: label -> stmt.
        
-       FOpaque Definition function : Type := cheat.
-       FOpaque Definition function_body : function -> stmt := cheat.
-       FOpaque Definition function_locals : function -> list ident := cheat.
-       FOpaque Definition function_params : function -> list ident := cheat.       
-       FOpaque Definition function_sig : function -> signature := cheat. 
+FOpaque Definition function : Type := cheat.
+FOpaque Definition function_body : function -> stmt := cheat.
+FOpaque Definition function_locals : function -> list ident := cheat.
+FOpaque Definition function_params : function -> list ident := cheat.       
+FOpaque Definition function_sig : function -> signature := cheat.
        
-       FDefinition fundef := AST.fundef function.       
-       FDefinition program : Type := AST.program fundef unit.              
-       
-       FDefinition funsig := fun (fd: fundef) =>
-         match fd with
-         | Internal f => function_sig f
-         | _ => cheat (* No external functions *)
-         end.
+FDefinition fundef := AST.fundef function.
+FDefinition program := AST.program fundef unit.
+
+FDefinition funsig := fun (fd: fundef) => 
+  match fd with
+  | AST.Internal f => function_sig f
+  | AST.External ef => ef_sig ef
+  end.
               
-       FDefinition genv := Genv.t fundef unit.
+FDefinition genv := Genv.t fundef unit.
        
-       (* Function env/stack space *)
-       FOpaque Definition fenv : Type := cheat.
-       FOpaque Definition empty_fenv : fenv := cheat.
+(* Function env/stack space *)
+FOpaque Definition fenv : Type := cheat.
+FOpaque Definition empty_fenv : fenv := cheat.
        
-       FDefinition env := PTree.t val.            
-       FDefinition empty_env : env := PTree.empty val.
+FDefinition env := PTree.t val.            
+FDefinition empty_env : env := PTree.empty val.
        
-       MetaData set_params.
-       Fixpoint set_params (vl: list val) (il: list ident) {struct il} : self__Cfam.env :=
-          match il, vl with
-          | i1 :: is, v1 :: vs => PTree.set i1 v1 (set_params vs is)
-          | i1 :: is, nil => PTree.set i1 Vundef (set_params nil is)
-          | _, _ => PTree.empty val
-          end.
-       FEnd set_params.
+MetaData set_params.
+Fixpoint set_params (vl: list val) (il: list ident) {struct il} : self__Cfam.env :=
+ match il, vl with
+ | i1 :: is, v1 :: vs => PTree.set i1 v1 (set_params vs is)
+ | i1 :: is, nil => PTree.set i1 Vundef (set_params nil is)
+ | _, _ => PTree.empty val
+ end.
+FEnd set_params.
 
-       MetaData set_locals.
-       Fixpoint set_locals (il: list ident) (e: self__Cfam.env) {struct il} : self__Cfam.env :=
-         match il with
-         | nil => e
-         | i1 :: is => PTree.set i1 Vundef (set_locals is e)
-         end.
-       FEnd set_locals.
+MetaData set_locals.
+Fixpoint set_locals (il: list ident) (e: self__Cfam.env) {struct il} : self__Cfam.env :=
+  match il with
+  | nil => e
+  | i1 :: is => PTree.set i1 Vundef (set_locals is e)
+  end.
+FEnd set_locals.
        
-       FDefinition init_env : function -> list val -> env := fun f vargs => 
-         set_locals (function_locals f) (set_params vargs (function_params f)).            
+FDefinition init_env : function -> list val -> env := fun f vargs => 
+  set_locals (function_locals f) (set_params vargs (function_params f)).            
 
-       (* Semantics for allocation of variables and binding of parameters at function entry. *)
-       FOpaque Definition free_fenv : mem -> fenv -> function -> option mem := cheat.            
-       FOpaque Definition alloc_fenv : fenv -> mem -> function -> fenv -> mem -> Prop := cheat.
+(* Semantics for allocation of variables and binding of parameters at function entry. *)
+FOpaque Definition free_fenv : mem -> fenv -> function -> option mem := cheat.            
+FOpaque Definition alloc_fenv : fenv -> mem -> function -> fenv -> mem -> Prop := cheat.
        
-       MetaData create_undef_temps.
-       Fixpoint create_undef_temps (temps: list ident) : self__Cfam.env :=
-        match temps with
-        | nil => PTree.empty val
-        | id :: temps' => PTree.set id Vundef (create_undef_temps temps')
-       end.
-       FEnd create_undef_temps.
+MetaData create_undef_temps.
+Fixpoint create_undef_temps (temps: list ident) : self__Cfam.env :=
+ match temps with
+ | nil => PTree.empty val
+ | id :: temps' => PTree.set id Vundef (create_undef_temps temps')
+end.
+FEnd create_undef_temps.
 
-       MetaData bind_parameters.
-       Fixpoint bind_parameters (formals: list ident) (args: list val)
-                    (le: self__Cfam.env) : option self__Cfam.env :=
-           match formals, args with
-           | nil, nil => Some le
-           | id :: xl, v :: vl => bind_parameters xl vl (PTree.set id v le)
-           | _, _ => None
-           end.
-       FEnd bind_parameters.
+MetaData bind_parameters.
+Fixpoint bind_parameters (formals: list ident) (args: list val)
+             (le: self__Cfam.env) : option self__Cfam.env :=
+ match formals, args with
+ | nil, nil => Some le
+ | id :: xl, v :: vl => bind_parameters xl vl (PTree.set id v le)
+ | _, _ => None
+ end.
+FEnd bind_parameters.
             
-       FInductive cont: Type :=
-          | Kstop: cont
-          | Kseq: stmt -> cont -> cont.          
+FInductive cont: Type :=
+| Kstop: cont
+| Kseq: stmt -> cont -> cont.
                    
-       MetaData state.
-       Inductive state: Type :=
-         | State :
-             self__Cfam.function -> self__Cfam.stmt -> self__Cfam.cont ->
-             self__Cfam.fenv -> self__Cfam.env -> mem -> state                 
-         | Callstate: self__Cfam.fundef -> list val -> self__Cfam.cont -> mem -> state                    
-         | Returnstate : val -> self__Cfam.cont -> mem -> state.
-       FEnd state.
+MetaData state.
+Inductive state: Type :=
+  | State:(* Execution within a function *)
+      forall (f: self__Cfam.function)(* currently executing function *)
+             (s: self__Cfam.stmt)(* statement under consideration *)
+             (k: self__Cfam.cont)(* its continuation -- what to do next *)
+             (sp: self__Cfam.fenv) (* current "function" environment: i.e stackspace, ... *)
+             (e: self__Cfam.env)(* current local environment *)
+             (m: mem),(* current memory state *)
+      state
+  | Callstate:(* Invocation of a function *)
+      forall (f: self__Cfam.fundef)(* function to invoke *)
+             (args: list val)(* arguments provided by caller *)
+             (k: self__Cfam.cont)(* what to do next *)
+             (m: mem),(* memory state *)
+      state
+  | Returnstate:(* Return from a function *)
+      forall (v: val)(* Return value *)
+             (k: self__Cfam.cont)(* what to do next *)
+             (m: mem),(* memory state *)
+      state.
+FEnd state.
             
-       FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
-             Case Kstop := Kstop.
-             Case Kseq := (fun s c call_cont_c => call_cont_c).             
-       FEnd call_cont.
+FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
+Case Kstop := Kstop.
+Case Kseq := (fun s c call_cont_c => call_cont_c).             
+FEnd call_cont.
                
-       FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
-           Case Kstop := True.                   
-           Case Kseq := (fun s c call_cont_c => False).           
-       FEnd is_call_cont.
+FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
+Case Kstop := True.                   
+Case Kseq := (fun s c call_cont_c => False).
+FEnd is_call_cont.
                
-       FRecursion eval_constant about constant motive (fun (_ : constant) => option val) by _rect.
-         Case Ointconst := (fun n => Some (Vint n)). 
-         Case Ofloatconst := (fun n => Some (Vfloat n)).
-         Case Osingleconst := (fun n => Some (Vsingle n)).
-         Case Olongconst := (fun n => Some (Vlong n)).
-       FEnd eval_constant.
+FRecursion eval_constant about constant motive (fun (_ : constant) => option val) by _rect.
+Case Ointconst := (fun n => Some (Vint n)). 
+Case Ofloatconst := (fun n => Some (Vfloat n)).
+Case Osingleconst := (fun n => Some (Vsingle n)).
+Case Olongconst := (fun n => Some (Vlong n)).
+FEnd eval_constant.
                
-       FInductive eval_expr : fenv -> env -> mem -> expr -> val -> Prop :=
-           | eval_Evar: forall e le m id v,
-               PTree.get id le = Some v ->
-               eval_expr e le m (Evar id) v                  
-           | eval_Econst: forall e le m cst v,
-               eval_constant cst = Some v ->
-               eval_expr e le m (Econst cst) v.
+FInductive eval_expr : fenv -> env -> mem -> expr -> val -> Prop :=
+| eval_Evar: forall e le m id v,
+    PTree.get id le = Some v ->
+    eval_expr e le m (Evar id) v                  
+| eval_Econst: forall e le m cst v,
+    eval_constant cst = Some v ->
+    eval_expr e le m (Econst cst) v.
                            
-       FInductive step : genv -> state -> trace -> state -> Prop :=
-              | step_skip_seq: forall ge f s k e le m,
-                  step ge (self__Cfam.State f Sskip (Kseq s k) e le m)
-                    E0 (self__Cfam.State f s k e le m)              
-              | step_skip_call: forall ge f k e le m m',
-                  is_call_cont k ->                       
-                  free_fenv m e f = Some m' ->
-                  step ge (self__Cfam.State f Sskip k e le m)
-                    E0 (self__Cfam.Returnstate Vundef k m')
-              | step_set: forall ge f id a k e le m v,
-                  eval_expr e le m a v ->
-                  step ge (self__Cfam.State f (Sset id a) k e le m)
-                    E0 (self__Cfam.State f Sskip k e (PTree.set id v le) m)
-              | step_seq: forall ge f s1 s2 k e le m,
-                  step ge (self__Cfam.State f (Sseq s1 s2) k e le m)
-                    E0 (self__Cfam.State f s1 (Kseq s2 k) e le m)              
-              | step_return_0: forall ge f k e le m m',                       
-                  free_fenv m e f = Some m' ->
-                  step ge (self__Cfam.State f (Sreturn None) k e le m)
-                    E0 (self__Cfam.Returnstate Vundef (call_cont k) m')            
-              | step_return_1: forall ge f a k e le m v m',
-                  eval_expr e le m a v ->
-                  free_fenv m e f = Some m' ->
-                  step ge (self__Cfam.State f (Sreturn (Some a)) k e le m)
-                    E0 (self__Cfam.Returnstate v (call_cont k) m')
-              | step_internal_function: forall ge f vargs k m m1 e le,                                               
-                  alloc_fenv empty_fenv m f e m1 ->
-                  init_env f vargs = le ->                        
-                   step ge (self__Cfam.Callstate (Internal f) vargs k m)
-                     E0 (self__Cfam.State f (function_body f) k e le m1).
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_skip_seq: forall ge f s k e le m,
+    step ge (self__Cfam.State f Sskip (Kseq s k) e le m)
+      E0 (self__Cfam.State f s k e le m)              
+| step_skip_call: forall ge f k e le m m',
+    is_call_cont k ->                       
+    free_fenv m e f = Some m' ->
+    step ge (self__Cfam.State f Sskip k e le m)
+      E0 (self__Cfam.Returnstate Vundef k m')
+| step_set: forall ge f id a k e le m v,
+    eval_expr e le m a v ->
+    step ge (self__Cfam.State f (Sset id a) k e le m)
+      E0 (self__Cfam.State f Sskip k e (PTree.set id v le) m)
+| step_seq: forall ge f s1 s2 k e le m,
+    step ge (self__Cfam.State f (Sseq s1 s2) k e le m)
+      E0 (self__Cfam.State f s1 (Kseq s2 k) e le m)              
+| step_return_0: forall ge f k e le m m',                       
+    free_fenv m e f = Some m' ->
+    step ge (self__Cfam.State f (Sreturn None) k e le m)
+      E0 (self__Cfam.Returnstate Vundef (call_cont k) m')            
+| step_return_1: forall ge f a k e le m v m',
+    eval_expr e le m a v ->
+    free_fenv m e f = Some m' ->
+    step ge (self__Cfam.State f (Sreturn (Some a)) k e le m)
+      E0 (self__Cfam.Returnstate v (call_cont k) m')
+| step_ifthenelse: forall ge f a s1 s2 k sp e m v b,
+      eval_expr sp e m a v ->
+      Val.bool_of_val v b ->
+      step ge (self__Cfam.State f (Sifthenelse a s1 s2) k sp e m)
+        E0 (self__Cfam.State f (if b then s1 else s2) k sp e m)
+| step_internal_function: forall ge f vargs k m m1 e le,                                               
+    alloc_fenv empty_fenv m f e m1 ->
+    init_env f vargs = le ->                        
+     step ge (self__Cfam.Callstate (AST.Internal f) vargs k m)
+       E0 (self__Cfam.State f (function_body f) k e le m1).              
+            
+MetaData initial_state.
+Inductive initial_state (p: self__Cfam.program): self__Cfam.state -> Prop :=
+| initial_state_intro: forall b f m0,
+    let ge := Genv.globalenv p in
+    Genv.init_mem p = Some m0 ->
+    Genv.find_symbol ge p.(AST.prog_main) = Some b ->
+    Genv.find_funct_ptr ge b = Some f ->
+    self__Cfam.funsig f = signature_main ->               
+    initial_state p (self__Cfam.Callstate f nil self__Cfam.Kstop m0).
+FEnd initial_state.
+            
+MetaData final_state.
+Inductive final_state: self__Cfam.state -> int -> Prop :=
+| final_state_intro: forall r m,
+   final_state (self__Cfam.Returnstate (Vint r) self__Cfam.Kstop m) r.
+FEnd final_state.
+
+FEnd Cfam.
+
+Family Csharpminor extends Cfam.
        
-       FOpaque Definition is_main_function : fundef -> Prop := cheat.
-            
-       MetaData initial_state.
-       Inductive initial_state (p: self__Cfam.program): self__Cfam.state -> Prop :=
-           | initial_state_intro: forall b f m0,
-               let ge := Genv.globalenv p in
-               Genv.init_mem p = Some m0 ->
-               Genv.find_symbol ge p.(prog_main) = Some b ->
-               Genv.find_funct_ptr ge b = Some f ->
-               self__Cfam.is_main_function f ->
-               initial_state p (self__Cfam.Callstate f nil self__Cfam.Kstop m0).
-       FEnd initial_state.
-            
-       MetaData final_state.
-       Inductive final_state: self__Cfam.state -> int -> Prop :=
-           | final_state_intro: forall r m,
-               final_state (self__Cfam.Returnstate (Vint r) self__Cfam.Kstop m) r.
-       FEnd final_state.
-  FEnd Cfam.  
+Inherit stmt.
+       
+(* function *)
+MetaData fn.
+Record fn : Type := mkfunction {
+  fn_sig: signature;
+  fn_params: list ident;
+  fn_vars: list (ident * Z);
+  fn_temps: list ident;
+  fn_body: self__Csharpminor.stmt
+}.
+FEnd fn.       
+FOverride Definition function := fn.
+FOverride Definition function_body := self__Csharpminor.fn_body.
+FOverride Definition function_locals := self__Csharpminor.fn_temps.
+FOverride Definition function_params := self__Csharpminor.fn_params.
+FOverride Definition function_sig := self__Csharpminor.fn_sig.
 
-  (* A translation between C family languages *)
-Family Cfamtransl.
-      Family Source extends Cfam.
-      FEnd Source.
+(* function stack environment *)       
+FOverride Definition fenv := PTree.t (block * Z).
+FOverride Definition empty_fenv := PTree.empty (block * Z).
 
-      Family Target extends Cfam.
-      FEnd Target.
+FDefinition block_of_binding := fun (id_b_sz: ident * (block * Z)) => 
+ match id_b_sz with (id, (b, sz)) => (b, 0, sz) end.
+
+FDefinition blocks_of_env : fenv -> list (block * Z * Z) := fun e => 
+  List.map block_of_binding (PTree.elements e).
+
+FOverride Definition free_fenv := fun m e f => Mem.free_list m (blocks_of_env e).
    
-      FRecursion transl_expr about Source.expr motive (fun (_ : Source.expr) => res Target.expr) by _rect.
-         Case Evar := (fun id => OK (Target.Evar id)).
-         Case Econst := cheat.
-      FEnd transl_expr.
-
-      FRecursion transl_stmt about Source.stmt motive (fun (_ : Source.stmt) => res Target.stmt) by _rect.
-          Case Sskip := (OK (Target.Sskip)).
-          Case Sset := (fun id e =>
-                       do te <- transl_expr e;
-                       OK (Target.Sset id te)).
-          Case Sseq := (fun s1 transl_stmt_s1 s2 transl_stmt_s2 =>                        
-                          do ts1 <- transl_stmt_s1; 
-                          do ts2 <- transl_stmt_s2; 
-                          OK (Target.Sseq ts1 ts2)).
-          Case Sifthenelse := (fun e s1 transl_stmt_s1 s2 transl_stmt_s2 =>                               
-                                   do te <- transl_expr e;
-                                   do ts1 <- transl_stmt_s1;
-                                   do ts2 <- transl_stmt_s2;
-                                   OK (Target.Sifthenelse te ts1 ts2)).          
-          Case Sreturn := (fun expr =>
-                             match expr with
-                             | None => OK (Target.Sreturn None)
-                             | Some expr =>
-                                  do te <- transl_expr expr;
-                                  OK (Target.Sreturn (Some te))
-                             end).
-      FEnd transl_stmt.
-      
-      FOpaque Definition transl_function : Source.function -> res Target.function :=
-        cheat.
-      FOpaque Definition transl_fundef : Source.fundef -> res Target.fundef := 
-        cheat.
-
-      (* Simulation Proof *)      
-      (* Invariant on abstract call stack *)
-      MetaData frame.
-      Inductive frame : Type :=
-          Frame(tf: self__Cfamtransl.Target.function)
-               (e: self__Cfamtransl.Source.fenv)
-               (le: self__Cfamtransl.Source.env)
-               (te: self__Cfamtransl.Target.env)
-               (sp: self__Cfamtransl.Target.fenv)
-               (lo hi: block).
-      FEnd frame.
-
-      FDefinition callstack : Type := list frame.
-          
-      (* This subsumes "match_env" for the C family lanauges *)
-      FOpaque Definition match_callstack : 
-         meminj -> mem -> mem ->
-         callstack -> block -> block -> Prop := cheat.
-          
-      FOpaque Definition match_mem : meminj -> mem -> mem -> Prop := cheat.
-      
-      FInductive match_value : meminj -> val -> val -> Prop := 
-        | match_value_refl : forall f v, match_value f v v
-        | match_value_undef : forall f v, match_value f Vundef v.                                                     
-        
-      FInductive match_values : meminj -> list val -> list val -> Prop :=
-        | match_values_nil : forall mi,
-          match_values mi nil nil
-        | match_values_cons : forall mi v v' vl vl' ,
-            match_value mi v v' -> match_values mi vl vl'->
-            match_values mi (v :: vl) (v' :: vl').
-          
-      FInductive match_cont: Source.cont -> Target.cont -> Prop :=
-         | match_Kstop:
-             match_cont Source.Kstop Target.Kstop
-         | match_Kseq: forall s k ts tk,
-             transl_stmt s = OK ts ->
-             match_cont k tk ->
-             match_cont (Source.Kseq s k) (Target.Kseq ts tk)
-         | match_Kblock: forall k tk,
-             match_cont k tk ->
-             match_cont (Source.Kblock k) (Target.Kblock tk).
-      
-      MetaData match_states.
-      Inductive match_states: 
-         self__Cfamtransl.Source.state -> self__Cfamtransl.Target.state -> Prop :=
-          | match_state:
-              forall fn s k e le m tfn ts tk sp te tm f lo hi cs
-              (TRF: self__Cfamtransl.transl_function fn = OK tfn)
-              (TR: self__Cfamtransl.transl_stmt s = OK ts)
-              (MINJ: self__Cfamtransl.match_mem f m tm)
-              (MCS: self__Cfamtransl.match_callstack f m tm
-                       (self__Cfamtransl.Frame tfn e le te sp lo hi :: cs)
-                       (Mem.nextblock m) (Mem.nextblock tm))
-              (MK: self__Cfamtransl.match_cont k tk),
-              match_states (self__Cfamtransl.Source.State fn s k e le m)
-                           (self__Cfamtransl.Target.State tfn ts tk sp te tm)
-         | match_callstate:
-              forall fd args k m tfd targs tk tm f cs
-              (TR: self__Cfamtransl.transl_fundef fd = OK tfd)
-              (MINJ: self__Cfamtransl.match_mem f m tm)
-              (MCS: self__Cfamtransl.match_callstack f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
-              (MK: self__Cfamtransl.match_cont k tk)
-              (ISCC: self__Cfamtransl.Source.is_call_cont k)
-              (ARGSINJ: self__Cfamtransl.match_values f args targs),
-              match_states (self__Cfamtransl.Source.Callstate fd args k m)
-                           (self__Cfamtransl.Target.Callstate tfd targs tk tm)
-          | match_returnstate:
-              forall v k m tv tk tm f cs
-              (MINJ: self__Cfamtransl.match_mem f m tm)
-              (MCS: self__Cfamtransl.match_callstack f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
-              (MK: self__Cfamtransl.match_cont k tk)
-              (RESINJ: self__Cfamtransl.match_value f v tv),
-              match_states (self__Cfamtransl.Source.Returnstate v k m)
-                           (self__Cfamtransl.Target.Returnstate tv tk tm).
-      FEnd match_states.
-             
-      FInduction transl_expr_correct about Source.eval_expr motive 
-         (fun  e le m a v (_ : Source.eval_expr e le m a v) => 
-            forall f m tm tf te sp lo hi cs
-                (MINJ: match_mem f m tm)
-                (MATCH: match_callstack f m tm
-                         (self__Cfamtransl.Frame tf e le te sp lo hi :: cs)
-                         (Mem.nextblock m) (Mem.nextblock tm)),                
-                    forall ta
-                (TR: transl_expr a = OK ta),
-              exists tv,
-                 Target.eval_expr sp te tm ta tv
-              /\ match_value f v tv).
-      FProof.
-        + intros. apply cheat.
-        + intros. apply cheat.
-      Qed. FEnd transl_expr_correct.
-      
-      (* call stack match even with set *)
-      FLemma match_callstack_set_temp:
-           forall f e le te sp lo hi cs bound tbound m tm tf id v tv,
-           match_value f v tv ->
-           match_callstack f m tm (self__Cfamtransl.Frame tf e le te sp lo hi :: cs) bound tbound ->
-           match_callstack f m tm (self__Cfamtransl.Frame tf e (PTree.set id v le) (PTree.set id tv te) sp lo hi :: cs) bound tbound.
-      FProofLemma.
-      Admitted.
-      CloseFLemma.      
-
-      (* Preservation of match_callstack by freeing  function env allocated at function entry *)      
-      FLemma match_callstack_freelist:
-        forall f sf tf e le te sp lo hi cs m m' tm,
-          match_mem f m tm ->          
-          Source.free_fenv m e sf = Some m' -> 
-          match_callstack f m tm (self__Cfamtransl.Frame tf e le te sp lo hi :: cs) (Mem.nextblock m) (Mem.nextblock tm) ->
-          exists tm',            
-            Target.free_fenv tm sp tf = Some tm' 
-          /\ match_callstack f m' tm' cs (Mem.nextblock m') (Mem.nextblock tm')
-          /\  match_mem f m' tm'.
-      FProofLemma.
-        Admitted.
-      CloseFLemma.
-
-      FInduction match_call_cont about match_cont motive
-          (fun k tk (_ : match_cont k tk) => match_cont (Source.call_cont k) (Target.call_cont tk)).
-      FProof.
-
-      (* Kstop *)
-      + apply cheat.
-      
-      (* Kseq *)
-      + apply cheat.
-
-      (* Kblock *)
-      + apply cheat.
-      Qed. FEnd match_call_cont.
-      
-      FInduction match_is_call_cont about match_cont motive
-        (fun k tk (MK : match_cont k tk) => Source.is_call_cont k ->
-            forall tge tfn te sp tm,
-              exists tk',
-              star Target.step tge (Target.State tfn Target.Sskip tk sp te tm)
-                          E0 (Target.State tfn Target.Sskip tk' sp te tm)
-              /\ Target.is_call_cont tk'
-              /\ match_cont k tk').
-      FProof.
-
-      (* Kstop *)
-      + apply cheat.
-
-      (* Kseq *)
-      + apply cheat.
-
-      (* Kblock *)
-      + apply cheat.
-      Qed. FEnd match_is_call_cont.
-
-      FLemma bool_of_val_match:
-         forall f v tv b,
-         Val.bool_of_val v b -> match_value f v tv -> Val.bool_of_val tv b.
-      FProofLemma.
-      Admitted. CloseFLemma.
-
-      (* Lemma make_boolean_correct:
-          forall e le m a v ty b,
-          eval_expr ge e le m a v ->
-          bool_val v ty m = Some b ->
-           exists vb,
-             eval_expr ge e le m (make_boolean a ty) vb
-             /\ Val.bool_of_val vb b.*)           
-      
-      FOpaque Definition measure : Source.state -> nat := cheat.
-
-      FInduction transl_step_correct about Source.step motive
-        (fun ge S1 t S2 (_ : Source.step ge S1 t S2) => 
-        forall prog tprog tge, (* match_prog prog tprog -> *)
-                Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->               
-          forall T1, match_states S1 T1 -> 
-          (exists T2, plus Target.step tge T1 t T2 /\ match_states S2 T2) \/
-          (measure S2 < measure S1 /\ t = E0 /\ match_states S2 T1)%nat).
-      FProof.
-      
-          (* skip seq *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f s k e le m prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.
-            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSskip in TR.
-            monadInv TR. 
-            left. econstructor. split. apply plus_one. 
-            
-            (* We need to somehow prove that *)
-            (* match_cont (self__Cfamtransl.Source.Kseq s k) tk ==> tk = Kseq s' k' *)
-            apply (* self__Cfamtransl.Target.step_skip_seq*) cheat.
-            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).            
-            apply TRF.
-            apply cheat. (* prove TR again?? *)
-            apply MINJ.
-            apply MCS.
-            apply cheat. (* This is in a way a consequence of the call_cont theorem above *)                      
-
-          (* skip call *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f k e le m m' CC FENV prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.
-            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSskip in TR.
-            monadInv TR. 
-            left.
-            exploit self__Cfamtransl.match_is_call_cont; eauto. intros [tk' [A [B C]]].
-            exploit self__Cfamtransl.match_callstack_freelist; eauto. intros [tm' [P [Q R]]].                      
-            econstructor. split. apply plus_one. 
-            apply self__Cfamtransl.Target.step_skip_call.
-            apply cheat. apply P.
-            eapply self__Cfamtransl.match_returnstate; eauto.
-            apply self__Cfamtransl.match_value_refl.                        
-
-          (* set *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f id a k e le m v EVAL prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.                        
-            rewrite -> self__Cfamtransl.transl_stmt_Sset_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSset in TR.            
-            monadInv TR. 
-            exploit self__Cfamtransl.transl_expr_correct; eauto.            
-            intros H. destruct H as [tv [EV MV]].
-            left. econstructor. split. apply plus_one.             
-            eapply self__Cfamtransl.Target.step_set.
-            apply EV.
-            exploit self__Cfamtransl.match_callstack_set_temp; eauto.
-            intros G.
-            eapply self__Cfamtransl.match_state; eauto.
-            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq.
-            unfold self__Cfamtransl.transl_stmtSskip. reflexivity.            
-          
-          (* seq *)
-          + 
-            intros ge f s1 s2 k e le m prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.                                    
-            fsimpl in TR.
-            monadInv TR. 
-            left. econstructor. split. apply plus_one. 
-            apply self__Cfamtransl.Target.step_seq.
-            eapply self__Cfamtransl.match_state; (try eassumption ;apply self__Cfamtransl.match_Kseq; eassumption).
-              
-          (* ifthenelse *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f a s1 s2 k e le m v b EV V prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.
-            rewrite -> self__Cfamtransl.transl_stmt_Sifthenelse_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSifthenelse in TR.            
-            monadInv TR.
-            exploit self__Cfamtransl.transl_expr_correct; eauto. intros [tv [H1 H2]].
-            left. 
-            exists (self__Cfamtransl.Target.State tfn (if b then x0 else x1) tk sp te tm). 
-            split. apply plus_one. 
-            eapply self__Cfamtransl.Target.step_ifthenelse; eauto.
-            eapply self__Cfamtransl.bool_of_val_match; eauto.
-            eapply self__Cfamtransl.match_state; eauto.
-            destruct b; eauto.                                  
-            
-          (* return none *)
-          + 
-            intros ge f k e le m m' F prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.  
-            fsimpl in TR.
-            monadInv TR.
-            left.
-            exploit self__Cfamtransl.match_callstack_freelist; eauto. intros [tv [EVAL [VINJ0 VINJ1]]].            
-            econstructor. split. apply plus_one. 
-            eapply self__Cfamtransl.Target.step_return_0. eauto.           
-            eapply self__Cfamtransl.match_returnstate; eauto.
-            eapply self__Cfamtransl.match_call_cont.
-            apply self__Cfamtransl.match_value_refl.            
-            
-          (* return some *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f a k e le m v m' E F prog tprog tge H G.
-            intros T1 MSTATE. inv MSTATE.
-            rewrite -> self__Cfamtransl.transl_stmt_Sreturn_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSreturn in TR.
-            monadInv TR. left.
-            exploit self__Cfamtransl.transl_expr_correct; eauto. intros [tv [EVAL VINJ]].
-            exploit self__Cfamtransl.match_callstack_freelist; eauto. intros [tm' [A [B C]]].
-            econstructor. split. apply plus_one. 
-            eapply self__Cfamtransl.Target.step_return_1; eauto.
-            eapply self__Cfamtransl.match_returnstate; eauto.
-            eapply self__Cfamtransl.match_call_cont.
-                        
-          (* internal function *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f vargs k m m1 e le FENV ENV prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.
-            left.
-        Qed.
-      FEnd transl_step_correct.
-    
-     FLemma transl_initial_states:
-          forall S prog tprog ge, Csharpminor.Sem.initial_state prog S ->
-          transl_program prog = OK tprog ->
-          exists R, Cminor.Sem.initial_state tprog R /\ match_states ge S R.
-            FProofLemma.
-              apply cheat.
-            Qed.
-     CloseFLemma.
-        
-     FLemma transl_final_states:
-          forall S R r ge,
-          match_states ge S R -> Csharpminor.Sem.final_state S r -> Cminor.Sem.final_state R r.
-            FProofLemma.
-              intros. inv H0. inv H. inv MK. inv RESINJ. constructor. Qed.            
-     CloseFLemma.     
-  FEnd Cfamtransl.
-  
-  Family Csharpminor extends Cfam.
-       
-       Inherit stmt.
-       
-       MetaData fn.
-       Record fn : Type := mkfunction {
-         fn_sig: signature;
-         fn_params: list ident;
-         fn_vars: list (ident * Z);
-         fn_temps: list ident;
-         fn_body: self__Csharpminor.stmt
-       }.
-       FEnd fn.
-       
-       FOverride Definition function := fn.
-       FOverride Definition function_body := self__Csharpminor.fn_body.
-       FOverride Definition function_locals := self__Csharpminor.fn_temps.
-       FOverride Definition function_params := self__Csharpminor.fn_params.
-       FOverride Definition function_sig := self__Csharpminor.fn_sig.
-       
-       FOverride Definition fenv := PTree.t (block * Z).
-       FOverride Definition empty_fenv := PTree.empty (block * Z).                    
-
-       FDefinition block_of_binding := fun (id_b_sz: ident * (block * Z)) => 
-           match id_b_sz with (id, (b, sz)) => (b, 0, sz) end.
-
-       FDefinition blocks_of_env : fenv -> list (block * Z * Z) := fun e => 
-          List.map block_of_binding (PTree.elements e).          
-
-       FOverride Definition free_fenv := fun m e f =>
-         Mem.free_list m (blocks_of_env e).          
-   
-       MetaData alloc_variables.
-         Inductive alloc_variables: self__Sem.fenv -> mem ->
-                        list (ident * Z) ->
-                        self__Sem.fenv -> mem -> Prop :=
-         | alloc_variables_nil:
-           forall e m,
-             alloc_variables e m nil e m
-         | alloc_variables_cons:
-           forall e m id sz vars m1 b1 m2 e2,
-             Mem.alloc m 0 sz = (m1, b1) ->
-             alloc_variables (PTree.set id (b1, sz) e) m1 vars e2 m2 ->
-             alloc_variables e m ((id, sz) :: vars) e2 m2.
-       FEnd alloc_variables.
+MetaData alloc_variables.
+Inductive alloc_variables: self__Csharpminor.fenv -> mem ->
+               list (ident * Z) ->
+               self__Csharpminor.fenv -> mem -> Prop :=
+| alloc_variables_nil:
+  forall e m,
+    alloc_variables e m nil e m
+| alloc_variables_cons:
+  forall e m id sz vars m1 b1 m2 e2,
+    Mem.alloc m 0 sz = (m1, b1) ->
+    alloc_variables (PTree.set id (b1, sz) e) m1 vars e2 m2 ->
+    alloc_variables e m ((id, sz) :: vars) e2 m2.
+FEnd alloc_variables.
          
-       FOverride Definition alloc_fenv := fun e m f e' m' => 
-         list_norepet (map fst f.(self__Csharpminor.fn_vars)) /\
-         list_norepet f.(self__Csharpminor.fn_params) /\
-         list_disjoint f.(self__Csharpminor.fn_params) f.(self__Csharpminor.fn_temps) /\
-         alloc_variables self__Sem.empty_fenv m (self__Csharpminor.fn_vars f) e m'.       
+FOverride Definition alloc_fenv := fun e m f e' m' => 
+  list_norepet (map fst f.(self__Csharpminor.fn_vars)) /\
+  list_norepet f.(self__Csharpminor.fn_params) /\
+  list_disjoint f.(self__Csharpminor.fn_params) f.(self__Csharpminor.fn_temps) /\
+  alloc_variables self__Csharpminor.empty_fenv m (self__Csharpminor.fn_vars f) e m'.
 
-  FEnd Csharpminor.
+FEnd Csharpminor.
 
-  Family Cminor extends Cfam.
+Family Cminor extends Cfam.
   
-       Inherit stmt.
+Inherit stmt.
         
-       MetaData fn.
-          Record fn : Type := mkfunction {
-             fn_sig: signature;
-             fn_params: list ident;
-             fn_vars: list ident;
-             fn_stackspace: Z;
-             fn_body: self__Cminor.stmt
-          }.
-       FEnd fn.
+MetaData fn.
+Record fn : Type := mkfunction {
+   fn_sig: signature;
+   fn_params: list ident;
+   fn_vars: list ident;
+   fn_stackspace: Z;
+   fn_body: self__Cminor.stmt
+}.
+FEnd fn.
 
-       FOverride Definition function := fn.
-       FOverride Definition function_body := self__Cminor.fn_body.
-       FOverride Definition function_locals := self__Cminor.fn_vars.
-       FOverride Definition function_params := self__Cminor.fn_params.
-       FOverride Definition function_sig := self__Cminor.fn_sig.
+FOverride Definition function := fn.
+FOverride Definition function_body := self__Cminor.fn_body.
+FOverride Definition function_locals := self__Cminor.fn_vars.
+FOverride Definition function_params := self__Cminor.fn_params.
+FOverride Definition function_sig := self__Cminor.fn_sig.
               
-       (* stack pointer *)
-       (* Vptr sp Ptrofs.zero *)
-       FOverride Definition fenv := block.
+(* stack pointer *)
+(* Vptr sp Ptrofs.zero *)
+FOverride Definition fenv := block.
    
-       FOverride Definition free_fenv := fun m sp f =>
-         Mem.free m sp 0 f.(self__Cminor.fn_stackspace).
+FOverride Definition free_fenv := fun m sp f => Mem.free m sp 0 f.(self__Cminor.fn_stackspace).
           
-       FOverride Definition alloc_fenv := fun sp m f sp' m' => 
-          Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp).      
+FOverride Definition alloc_fenv := fun sp m f sp' m' => Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp).
 
 FEnd Cminor.  
-  
-  (* RISC-V *)
+
+(* RISC-V *)
   Family Asm.
       (* Operations *)
       FInductive condition : Type :=
@@ -2593,6 +2263,358 @@ FEnd Cminor.
               eval_condexpr ge sp e m (v1 :: le) b v2 ->
               eval_condexpr ge sp e m le (CElet a b) v2.       
   FEnd CminorSel.
+
+
+
+(* A translation between C family languages *)
+Family Cfamtransl.
+      Family Source extends Cfam.
+      FEnd Source.
+
+      Family Target extends Cfam.
+      FEnd Target.
+   
+      FRecursion transl_expr about Source.expr motive (fun (_ : Source.expr) => res Target.expr) by _rect.
+         Case Evar := (fun id => OK (Target.Evar id)).
+         Case Econst := cheat.
+      FEnd transl_expr.
+
+      FRecursion transl_stmt about Source.stmt motive (fun (_ : Source.stmt) => res Target.stmt) by _rect.
+          Case Sskip := (OK (Target.Sskip)).
+          Case Sset := (fun id e =>
+                       do te <- transl_expr e;
+                       OK (Target.Sset id te)).
+          Case Sseq := (fun s1 transl_stmt_s1 s2 transl_stmt_s2 =>                        
+                          do ts1 <- transl_stmt_s1; 
+                          do ts2 <- transl_stmt_s2; 
+                          OK (Target.Sseq ts1 ts2)).
+          Case Sifthenelse := (fun e s1 transl_stmt_s1 s2 transl_stmt_s2 =>                               
+                                   do te <- transl_expr e;
+                                   do ts1 <- transl_stmt_s1;
+                                   do ts2 <- transl_stmt_s2;
+                                   OK (Target.Sifthenelse te ts1 ts2)).          
+          Case Sreturn := (fun expr =>
+                             match expr with
+                             | None => OK (Target.Sreturn None)
+                             | Some expr =>
+                                  do te <- transl_expr expr;
+                                  OK (Target.Sreturn (Some te))
+                             end).
+      FEnd transl_stmt.
+      
+      FOpaque Definition transl_function : Source.function -> res Target.function :=
+        cheat.
+      FOpaque Definition transl_fundef : Source.fundef -> res Target.fundef := 
+        cheat.
+
+      (* Simulation Proof *)      
+      (* Invariant on abstract call stack *)
+      MetaData frame.
+      Inductive frame : Type :=
+          Frame(tf: self__Cfamtransl.Target.function)
+               (e: self__Cfamtransl.Source.fenv)
+               (le: self__Cfamtransl.Source.env)
+               (te: self__Cfamtransl.Target.env)
+               (sp: self__Cfamtransl.Target.fenv)
+               (lo hi: block).
+      FEnd frame.
+
+      FDefinition callstack : Type := list frame.
+          
+      (* This subsumes "match_env" for the C family lanauges *)
+      FOpaque Definition match_callstack : 
+         meminj -> mem -> mem ->
+         callstack -> block -> block -> Prop := cheat.
+          
+      FOpaque Definition match_mem : meminj -> mem -> mem -> Prop := cheat.
+      
+      FInductive match_value : meminj -> val -> val -> Prop := 
+        | match_value_refl : forall f v, match_value f v v
+        | match_value_undef : forall f v, match_value f Vundef v.                                                     
+        
+      FInductive match_values : meminj -> list val -> list val -> Prop :=
+        | match_values_nil : forall mi,
+          match_values mi nil nil
+        | match_values_cons : forall mi v v' vl vl' ,
+            match_value mi v v' -> match_values mi vl vl'->
+            match_values mi (v :: vl) (v' :: vl').
+          
+      FInductive match_cont: Source.cont -> Target.cont -> Prop :=
+         | match_Kstop:
+             match_cont Source.Kstop Target.Kstop
+         | match_Kseq: forall s k ts tk,
+             transl_stmt s = OK ts ->
+             match_cont k tk ->
+             match_cont (Source.Kseq s k) (Target.Kseq ts tk)
+         | match_Kblock: forall k tk,
+             match_cont k tk ->
+             match_cont (Source.Kblock k) (Target.Kblock tk).
+      
+      MetaData match_states.
+      Inductive match_states: 
+         self__Cfamtransl.Source.state -> self__Cfamtransl.Target.state -> Prop :=
+          | match_state:
+              forall fn s k e le m tfn ts tk sp te tm f lo hi cs
+              (TRF: self__Cfamtransl.transl_function fn = OK tfn)
+              (TR: self__Cfamtransl.transl_stmt s = OK ts)
+              (MINJ: self__Cfamtransl.match_mem f m tm)
+              (MCS: self__Cfamtransl.match_callstack f m tm
+                       (self__Cfamtransl.Frame tfn e le te sp lo hi :: cs)
+                       (Mem.nextblock m) (Mem.nextblock tm))
+              (MK: self__Cfamtransl.match_cont k tk),
+              match_states (self__Cfamtransl.Source.State fn s k e le m)
+                           (self__Cfamtransl.Target.State tfn ts tk sp te tm)
+         | match_callstate:
+              forall fd args k m tfd targs tk tm f cs
+              (TR: self__Cfamtransl.transl_fundef fd = OK tfd)
+              (MINJ: self__Cfamtransl.match_mem f m tm)
+              (MCS: self__Cfamtransl.match_callstack f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
+              (MK: self__Cfamtransl.match_cont k tk)
+              (ISCC: self__Cfamtransl.Source.is_call_cont k)
+              (ARGSINJ: self__Cfamtransl.match_values f args targs),
+              match_states (self__Cfamtransl.Source.Callstate fd args k m)
+                           (self__Cfamtransl.Target.Callstate tfd targs tk tm)
+          | match_returnstate:
+              forall v k m tv tk tm f cs
+              (MINJ: self__Cfamtransl.match_mem f m tm)
+              (MCS: self__Cfamtransl.match_callstack f m tm cs (Mem.nextblock m) (Mem.nextblock tm))
+              (MK: self__Cfamtransl.match_cont k tk)
+              (RESINJ: self__Cfamtransl.match_value f v tv),
+              match_states (self__Cfamtransl.Source.Returnstate v k m)
+                           (self__Cfamtransl.Target.Returnstate tv tk tm).
+      FEnd match_states.
+             
+      FInduction transl_expr_correct about Source.eval_expr motive 
+         (fun  e le m a v (_ : Source.eval_expr e le m a v) => 
+            forall f m tm tf te sp lo hi cs
+                (MINJ: match_mem f m tm)
+                (MATCH: match_callstack f m tm
+                         (self__Cfamtransl.Frame tf e le te sp lo hi :: cs)
+                         (Mem.nextblock m) (Mem.nextblock tm)),                
+                    forall ta
+                (TR: transl_expr a = OK ta),
+              exists tv,
+                 Target.eval_expr sp te tm ta tv
+              /\ match_value f v tv).
+      FProof.
+        + intros. apply cheat.
+        + intros. apply cheat.
+      Qed. FEnd transl_expr_correct.
+      
+      (* call stack match even with set *)
+      FLemma match_callstack_set_temp:
+           forall f e le te sp lo hi cs bound tbound m tm tf id v tv,
+           match_value f v tv ->
+           match_callstack f m tm (self__Cfamtransl.Frame tf e le te sp lo hi :: cs) bound tbound ->
+           match_callstack f m tm (self__Cfamtransl.Frame tf e (PTree.set id v le) (PTree.set id tv te) sp lo hi :: cs) bound tbound.
+      FProofLemma.
+      Admitted.
+      CloseFLemma.      
+
+      (* Preservation of match_callstack by freeing  function env allocated at function entry *)      
+      FLemma match_callstack_freelist:
+        forall f sf tf e le te sp lo hi cs m m' tm,
+          match_mem f m tm ->          
+          Source.free_fenv m e sf = Some m' -> 
+          match_callstack f m tm (self__Cfamtransl.Frame tf e le te sp lo hi :: cs) (Mem.nextblock m) (Mem.nextblock tm) ->
+          exists tm',            
+            Target.free_fenv tm sp tf = Some tm' 
+          /\ match_callstack f m' tm' cs (Mem.nextblock m') (Mem.nextblock tm')
+          /\  match_mem f m' tm'.
+      FProofLemma.
+        Admitted.
+      CloseFLemma.
+
+      FInduction match_call_cont about match_cont motive
+          (fun k tk (_ : match_cont k tk) => match_cont (Source.call_cont k) (Target.call_cont tk)).
+      FProof.
+
+      (* Kstop *)
+      + apply cheat.
+      
+      (* Kseq *)
+      + apply cheat.
+
+      (* Kblock *)
+      + apply cheat.
+      Qed. FEnd match_call_cont.
+      
+      FInduction match_is_call_cont about match_cont motive
+        (fun k tk (MK : match_cont k tk) => Source.is_call_cont k ->
+            forall tge tfn te sp tm,
+              exists tk',
+              star Target.step tge (Target.State tfn Target.Sskip tk sp te tm)
+                          E0 (Target.State tfn Target.Sskip tk' sp te tm)
+              /\ Target.is_call_cont tk'
+              /\ match_cont k tk').
+      FProof.
+
+      (* Kstop *)
+      + apply cheat.
+
+      (* Kseq *)
+      + apply cheat.
+
+      (* Kblock *)
+      + apply cheat.
+      Qed. FEnd match_is_call_cont.
+
+      FLemma bool_of_val_match:
+         forall f v tv b,
+         Val.bool_of_val v b -> match_value f v tv -> Val.bool_of_val tv b.
+      FProofLemma.
+      Admitted. CloseFLemma.
+
+      (* Lemma make_boolean_correct:
+          forall e le m a v ty b,
+          eval_expr ge e le m a v ->
+          bool_val v ty m = Some b ->
+           exists vb,
+             eval_expr ge e le m (make_boolean a ty) vb
+             /\ Val.bool_of_val vb b.*)           
+      
+      FOpaque Definition measure : Source.state -> nat := cheat.
+
+      FInduction transl_step_correct about Source.step motive
+        (fun ge S1 t S2 (_ : Source.step ge S1 t S2) => 
+        forall prog tprog tge, (* match_prog prog tprog -> *)
+                Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->               
+          forall T1, match_states S1 T1 -> 
+          (exists T2, plus Target.step tge T1 t T2 /\ match_states S2 T2) \/
+          (measure S2 < measure S1 /\ t = E0 /\ match_states S2 T1)%nat).
+      FProof.
+      
+          (* skip seq *)
+          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f s k e le m prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE.
+            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq in TR.
+            unfold self__Cfamtransl.transl_stmtSskip in TR.
+            monadInv TR. 
+            left. econstructor. split. apply plus_one. 
+            
+            (* We need to somehow prove that *)
+            (* match_cont (self__Cfamtransl.Source.Kseq s k) tk ==> tk = Kseq s' k' *)
+            apply (* self__Cfamtransl.Target.step_skip_seq*) cheat.
+            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).            
+            apply TRF.
+            apply cheat. (* prove TR again?? *)
+            apply MINJ.
+            apply MCS.
+            apply cheat. (* This is in a way a consequence of the call_cont theorem above *)                      
+
+          (* skip call *)
+          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f k e le m m' CC FENV prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE.
+            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq in TR.
+            unfold self__Cfamtransl.transl_stmtSskip in TR.
+            monadInv TR. 
+            left.
+            exploit self__Cfamtransl.match_is_call_cont; eauto. intros [tk' [A [B C]]].
+            exploit self__Cfamtransl.match_callstack_freelist; eauto. intros [tm' [P [Q R]]].                      
+            econstructor. split. apply plus_one. 
+            apply self__Cfamtransl.Target.step_skip_call.
+            apply cheat. apply P.
+            eapply self__Cfamtransl.match_returnstate; eauto.
+            apply self__Cfamtransl.match_value_refl.                        
+
+          (* set *)
+          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f id a k e le m v EVAL prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE.                        
+            rewrite -> self__Cfamtransl.transl_stmt_Sset_eq in TR.
+            unfold self__Cfamtransl.transl_stmtSset in TR.            
+            monadInv TR. 
+            exploit self__Cfamtransl.transl_expr_correct; eauto.            
+            intros H. destruct H as [tv [EV MV]].
+            left. econstructor. split. apply plus_one.             
+            eapply self__Cfamtransl.Target.step_set.
+            apply EV.
+            exploit self__Cfamtransl.match_callstack_set_temp; eauto.
+            intros G.
+            eapply self__Cfamtransl.match_state; eauto.
+            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq.
+            unfold self__Cfamtransl.transl_stmtSskip. reflexivity.            
+          
+          (* seq *)
+          + 
+            intros ge f s1 s2 k e le m prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE.                                    
+            fsimpl in TR.
+            monadInv TR. 
+            left. econstructor. split. apply plus_one. 
+            apply self__Cfamtransl.Target.step_seq.
+            eapply self__Cfamtransl.match_state; (try eassumption ;apply self__Cfamtransl.match_Kseq; eassumption).
+              
+          (* ifthenelse *)
+          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f a s1 s2 k e le m v b EV V prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE.
+            rewrite -> self__Cfamtransl.transl_stmt_Sifthenelse_eq in TR.
+            unfold self__Cfamtransl.transl_stmtSifthenelse in TR.            
+            monadInv TR.
+            exploit self__Cfamtransl.transl_expr_correct; eauto. intros [tv [H1 H2]].
+            left. 
+            exists (self__Cfamtransl.Target.State tfn (if b then x0 else x1) tk sp te tm). 
+            split. apply plus_one. 
+            eapply self__Cfamtransl.Target.step_ifthenelse; eauto.
+            eapply self__Cfamtransl.bool_of_val_match; eauto.
+            eapply self__Cfamtransl.match_state; eauto.
+            destruct b; eauto.                                  
+            
+          (* return none *)
+          + 
+            intros ge f k e le m m' F prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE.  
+            fsimpl in TR.
+            monadInv TR.
+            left.
+            exploit self__Cfamtransl.match_callstack_freelist; eauto. intros [tv [EVAL [VINJ0 VINJ1]]].            
+            econstructor. split. apply plus_one. 
+            eapply self__Cfamtransl.Target.step_return_0. eauto.           
+            eapply self__Cfamtransl.match_returnstate; eauto.
+            eapply self__Cfamtransl.match_call_cont.
+            apply self__Cfamtransl.match_value_refl.            
+            
+          (* return some *)
+          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f a k e le m v m' E F prog tprog tge H G.
+            intros T1 MSTATE. inv MSTATE.
+            rewrite -> self__Cfamtransl.transl_stmt_Sreturn_eq in TR.
+            unfold self__Cfamtransl.transl_stmtSreturn in TR.
+            monadInv TR. left.
+            exploit self__Cfamtransl.transl_expr_correct; eauto. intros [tv [EVAL VINJ]].
+            exploit self__Cfamtransl.match_callstack_freelist; eauto. intros [tm' [A [B C]]].
+            econstructor. split. apply plus_one. 
+            eapply self__Cfamtransl.Target.step_return_1; eauto.
+            eapply self__Cfamtransl.match_returnstate; eauto.
+            eapply self__Cfamtransl.match_call_cont.
+                        
+          (* internal function *)
+          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
+            intros ge f vargs k m m1 e le FENV ENV prog tprog tge H G. 
+            intros T1 MSTATE. inv MSTATE.
+            left.
+        Qed.
+      FEnd transl_step_correct.
+    
+     FLemma transl_initial_states:
+          forall S prog tprog ge, Csharpminor.Sem.initial_state prog S ->
+          transl_program prog = OK tprog ->
+          exists R, Cminor.Sem.initial_state tprog R /\ match_states ge S R.
+            FProofLemma.
+              apply cheat.
+            Qed.
+     CloseFLemma.
+        
+     FLemma transl_final_states:
+          forall S R r ge,
+          match_states ge S R -> Csharpminor.Sem.final_state S r -> Cminor.Sem.final_state R r.
+            FProofLemma.
+              intros. inv H0. inv H. inv MK. inv RESINJ. constructor. Qed.            
+     CloseFLemma.     
+  FEnd Cfamtransl.        
 
   (* Linear family languages *)
   Family Lfam.
