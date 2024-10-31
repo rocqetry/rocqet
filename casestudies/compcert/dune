@@ -35,6 +35,7 @@
    lib/Cop
    lib/Mon
    lib/Prelude
+   lib/Registers
   ))
 
 
