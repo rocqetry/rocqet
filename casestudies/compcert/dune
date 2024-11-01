@@ -36,6 +36,10 @@
    lib/Mon
    lib/Prelude
    lib/Registers
+   lib/Decidableplus
+   lib/Machregs
+   lib/Locations
+   lib/Conventions1
   ))
 
 
