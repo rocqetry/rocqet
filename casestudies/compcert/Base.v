@@ -493,13 +493,13 @@ Inductive bitfield : Type :=
       FProof.
 
       (* Kstop *)
-      + apply cheat.
+      + fsimpl. apply cheat.
       
       (* Kseq *)
       + apply cheat.
 
       (* Kblock *)
-      + apply cheat.
+      + fsimpl. apply cheat.
       Qed. FEnd match_call_cont.
       
       FInduction match_is_call_cont about match_cont motive
@@ -537,7 +537,7 @@ Inductive bitfield : Type :=
               end).
       FProof.
       (* Skip *)
-      + intros. fsimpl in H. monadInv H.
+      + intros. fsimpl. fsimpl in H. monadInv H.
         destruct (self__Cfamtransl.Source.find_label self__Cfamtransl.Source.Sskip lbl k) as []eqn:?.
         ++ destruct p. eexists. esplit.
            split. fsimpl in Heqo.
