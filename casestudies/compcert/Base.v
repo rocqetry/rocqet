@@ -289,8 +289,6 @@ Inductive bitfield : Type :=
                   init_env f vargs = le ->                        
                    step ge (self__Cfam.Callstate (Internal f) vargs k m)
                      E0 (self__Cfam.State f (function_body f) k e le m1).
-       
-       FOpaque Definition is_main_function : fundef -> Prop := cheat.
             
        MetaData initial_state.
        Inductive initial_state (p: self__Cfam.program): self__Cfam.state -> Prop :=
@@ -299,7 +297,7 @@ Inductive bitfield : Type :=
                Genv.init_mem p = Some m0 ->
                Genv.find_symbol ge p.(prog_main) = Some b ->
                Genv.find_funct_ptr ge b = Some f ->
-               self__Cfam.is_main_function f ->
+               self__Cfam.funsig f = signature_main ->
                initial_state p (self__Cfam.Callstate f nil self__Cfam.Kstop m0).
        FEnd initial_state.
             
@@ -755,7 +753,6 @@ Inductive bitfield : Type :=
 
        Inherit transl_expr.
 
-
        FDefinition exit_env := list bool.
 
        MetaData shift_exit.
@@ -811,7 +808,9 @@ Inductive bitfield : Type :=
 
        FDefinition transl_program : Source.program -> res Target.program := fun p => 
          transform_partial_program transl_fundef p.
-
+       
+       (* FOverride Definition match_callstack := cheat. *)
+       
        FDefinition match_prog : Source.program -> Target.program -> Prop :=
          fun p tp =>
              match_program (fun cu f tf => transl_fundef f = OK tf) eq p tp.
@@ -832,7 +831,7 @@ Inductive bitfield : Type :=
 
        FDefinition match_temps : meminj -> Source.env -> Target.env -> Prop :=
            fun f le te =>
-           forall id v, le!id = Some v -> exists v', te!(id) = Some v' /\ Val.inject f v v'.
+             forall id v, le!id = Some v -> exists v', te!(id) = Some v' /\ Val.inject f v v'.
 
        MetaData match_var.
        Inductive match_var (f: meminj) (sp: block): option (block * Z) -> option Z -> Prop :=
@@ -870,7 +869,34 @@ Inductive bitfield : Type :=
 
        FDefinition match_bounds : Source.fenv -> mem -> Prop :=
          fun e m => forall id b sz ofs p,
-            PTree.get id e = Some(b, sz) -> Mem.perm m b ofs Max p -> 0 <= ofs < sz.
+             PTree.get id e = Some(b, sz) -> Mem.perm m b ofs Max p -> 0 <= ofs < sz.
+
+       Inherit callstack.
+       
+        MetaData match_callstack_.
+        Inductive match_callstack_ (f: meminj) (m: mem) (tm: mem):
+                          self__Cminorgen.callstack -> block -> block -> Prop :=
+          | mcs_nil:
+              forall hi bound tbound,
+
+              Ple hi bound -> Ple hi tbound ->
+              match_callstack_ f m tm nil bound tbound
+          | mcs_cons:
+              forall cenv tf e le te sp lo hi cs bound tbound
+                (BOUND: Ple hi bound)
+                (TBOUND: Plt sp tbound)
+                (MTMP: self__Cminorgen.match_temps f le te)
+                (MENV: self__Cminorgen.match_env f cenv e sp lo hi)
+                (BOUND: self__Cminorgen.match_bounds e m)
+                (PERM: self__Cminorgen.padding_freeable f e tm sp tf.(self__Cminorgen.Target.fn_stackspace))
+                (MCS: match_callstack_ f m tm cs lo sp),
+              match_callstack_ f m tm (self__Cminorgen.Frame tf e le te sp lo hi :: cs) bound tbound.
+        FEnd match_callstack_.
+
+        (* FOverride Definition match_callstack := match_callstack_. *)
+       FOverride Definition match_callstack := cheat.
+       
+       FOverride Definition match_mem := fun mi m1 m2 => Mem.inject mi m1 m2.
        
        MetaData match_globalenvs.
        Inductive match_globalenvs (ge: self__Cminorgen.Source.genv) (f: meminj) (bound: block): Prop :=
@@ -882,7 +908,7 @@ Inductive bitfield : Type :=
            (VARINFOS: forall b gv, Genv.find_var_info ge b = Some gv -> Plt b bound).
        FEnd match_globalenvs.
 
-       Inherit match_callstack.
+      
 
        (* MetaData match_cont. *)
        (* Inductive match_cont: self__Cminorgen.Source.cont -> self__Cminorgen.Target.cont -> self__Cminorgen.compilenv -> self__Cminorgen.exit_env -> self__Cminorgen.callstack -> Prop := *)
@@ -983,36 +1009,79 @@ Inductive bitfield : Type :=
 
        FLemma function_ptr_translated:
          forall (b: block) (f: Source.fundef) (prog: Source.program) (tprog: Target.program),
+         match_prog prog tprog ->
          Genv.find_funct_ptr (Genv.globalenv prog) b = Some f ->
          exists tf,
          Genv.find_funct_ptr (Genv.globalenv tprog) b = Some tf /\ transl_fundef f = OK tf.
            FProofLemma.
              intros.
-             apply (Genv.find_funct_ptr_transf_partial (self__Cminorgen.match_prog prog tprog)).
-             apply cheat.
-           Qed.
+             apply (Genv.find_funct_ptr_transf_partial H); exact H0.
+         Qed.
+       CloseFLemma.
+ 
+       FLemma transf_program_match:
+         forall p tp, transl_program p = OK tp -> match_prog p tp.
+           FProofLemma.
+             intros. apply match_transform_partial_program; auto.
+         Qed.
        CloseFLemma.
 
+       FLemma symbols_preserved:
+         forall (s: ident) prog tprog,
+           match_prog prog tprog ->
+           Genv.find_symbol (Genv.globalenv tprog) s = Genv.find_symbol (Genv.globalenv prog) s.
+             FProofLemma.
+               intros.
+               apply (Genv.find_symbol_transf_partial H).
+          Qed.
+       CloseFLemma.
+
+       FLemma sig_preserved_body:
+         forall f tf cenv size,
+         self__Cminorgen.transl_funbody cenv size f = OK tf ->
+         Target.fn_sig tf  = Source.fn_sig f.
+       FProofLemma.
+         intros. unfold self__Cminorgen.transl_funbody in H. monadInv H; reflexivity.
+         Qed.
+       CloseFLemma.
+
+       FLemma sig_preserved:
+         forall f tf,
+         transl_fundef f = OK tf ->
+         Target.funsig tf = Source.funsig f.
+       FProofLemma.
+         intros until tf; destruct f; simpl.
+         unfold self__Cminorgen.transl_function. destruct (self__Cminorgen.build_compilenv f).
+         case (zle z Ptrofs.max_unsigned); simpl bind; try congruence.
+         intros. monadInv H. simpl. eapply self__Cminorgen.sig_preserved_body; eauto.
+         intro. inv H. reflexivity.
+         Qed.
+       CloseFLemma.
+       
        FLemma transl_initial_states:
          forall S prog tprog, Source.initial_state prog S ->
          transl_program prog = OK tprog ->
          exists R, Target.initial_state tprog R /\ match_states S R.
            FProofLemma.
              induction 1.
-             exploit (self__Cminorgen.function_ptr_translated b f); eauto. intros [tf [FIND TR]].
+             intros H3; apply (self__Cminorgen.transf_program_match prog tprog) in H3.
+             exploit (self__Cminorgen.function_ptr_translated b f); eauto.
+             intros [tf [FIND TR]].
              econstructor; split.
              econstructor.
-             apply (Genv.init_mem_transf_partial (self__Cminorgen.match_prog prog tprog)). eauto.
-             simpl. fold tge. rewrite symbols_preserved.
+             apply (Genv.init_mem_transf_partial H3). eauto.
+             simpl. fold (Genv.globalenv tprog). rewrite (self__Cminorgen.symbols_preserved _ prog tprog H3).
              replace (prog_main tprog) with (prog_main prog). eexact H0.
-             symmetry. unfold transl_program in TRANSL.
+             symmetry. unfold self__Cminorgen.transl_program in H3.
              eapply match_program_main; eauto.
              eexact FIND.
-             rewrite <- H2. apply sig_preserved; auto.
-             eapply match_callstate with (f := Mem.flat_inj (Mem.nextblock m0)) (cs := @nil frame) (cenv := PTree.empty Z).
+             apply self__Cminorgen.sig_preserved in TR.
+             (* rewrite <- H2. apply self__Cminorgen.sig_preserved; auto. *)
+             apply cheat.
+             eapply self__Cminorgen.match_callstate with (f := Mem.flat_inj (Mem.nextblock m0)) (cs := @nil self__Cminorgen.frame).
              auto.
              eapply Genv.initmem_inject; eauto.
-             apply mcs_nil with (Mem.nextblock m0). apply match_globalenvs_init; auto. extlia. extlia.
+             apply self__Cminorgen.mcs_nil with (Mem.nextblock m0). apply match_globalenvs_init; auto. extlia. extlia.        
              constructor. red; auto.
              constructor.
            Qed.
