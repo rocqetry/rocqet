@@ -1327,15 +1327,9 @@ FEnd SimplExpr.
 
 (* C family languages: Csharpminor, Cminor, CminorSel *)
 Family Cfam.
-FInductive constant : Type :=
-| Ointconst: int -> constant (* integer constant *)
-| Ofloatconst: float -> constant (* double-precision floating-point constant *)
-| Osingleconst: float32 -> constant (* single-precision floating-point constant *)
-| Olongconst: int64 -> constant.
 
 FInductive expr : Type :=
-| Evar : ident -> expr (* reading a temporary variable *)            
-| Econst : constant -> expr. (* constants *)
+| Evar : ident -> expr. (* reading a temporary variable *)            
 
 FDefinition label := ident.
 FInductive stmt : Type :=
@@ -1344,7 +1338,6 @@ FInductive stmt : Type :=
 | Sset : ident -> expr -> stmt            
 | Sseq: stmt -> stmt -> stmt                    
 | Sreturn: option expr -> stmt
-| Sifthenelse: expr -> stmt -> stmt -> stmt
 | Slabel: label -> stmt -> stmt
 | Sgoto: label -> stmt.
        
@@ -1449,22 +1442,14 @@ FEnd call_cont.
 FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
 Case Kstop := True.                   
 Case Kseq := (fun s c call_cont_c => False).
-FEnd is_call_cont.
+FEnd is_call_cont.              
+
+FDefinition letenv := list val.
                
-FRecursion eval_constant about constant motive (fun (_ : constant) => option val) by _rect.
-Case Ointconst := (fun n => Some (Vint n)). 
-Case Ofloatconst := (fun n => Some (Vfloat n)).
-Case Osingleconst := (fun n => Some (Vsingle n)).
-Case Olongconst := (fun n => Some (Vlong n)).
-FEnd eval_constant.
-               
-FInductive eval_expr : fenv -> env -> mem -> expr -> val -> Prop :=
-| eval_Evar: forall e le m id v,
+FInductive eval_expr :  genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
+| eval_Evar: forall ge lenv e le m id v,
     PTree.get id le = Some v ->
-    eval_expr e le m (Evar id) v                  
-| eval_Econst: forall e le m cst v,
-    eval_constant cst = Some v ->
-    eval_expr e le m (Econst cst) v.
+    eval_expr ge e le m lenv (Evar id) v.
                            
 FInductive step : genv -> state -> trace -> state -> Prop :=
 | step_skip_seq: forall ge f s k e le m,
@@ -1475,8 +1460,8 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
     free_fenv m e f = Some m' ->
     step ge (self__Cfam.State f Sskip k e le m)
       E0 (self__Cfam.Returnstate Vundef k m')
-| step_set: forall ge f id a k e le m v,
-    eval_expr e le m a v ->
+| step_set: forall lenv ge f id a k e le m v,
+    eval_expr ge e le m lenv a v ->
     step ge (self__Cfam.State f (Sset id a) k e le m)
       E0 (self__Cfam.State f Sskip k e (PTree.set id v le) m)
 | step_seq: forall ge f s1 s2 k e le m,
@@ -1486,21 +1471,16 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
     free_fenv m e f = Some m' ->
     step ge (self__Cfam.State f (Sreturn None) k e le m)
       E0 (self__Cfam.Returnstate Vundef (call_cont k) m')            
-| step_return_1: forall ge f a k e le m v m',
-    eval_expr e le m a v ->
+| step_return_1: forall lenv ge f a k e le m v m',
+    eval_expr ge e le m lenv a v ->
     free_fenv m e f = Some m' ->
     step ge (self__Cfam.State f (Sreturn (Some a)) k e le m)
       E0 (self__Cfam.Returnstate v (call_cont k) m')
-| step_ifthenelse: forall ge f a s1 s2 k sp e m v b,
-      eval_expr sp e m a v ->
-      Val.bool_of_val v b ->
-      step ge (self__Cfam.State f (Sifthenelse a s1 s2) k sp e m)
-        E0 (self__Cfam.State f (if b then s1 else s2) k sp e m)
 | step_internal_function: forall ge f vargs k m m1 e le,                                               
     alloc_fenv empty_fenv m f e m1 ->
     init_env f vargs = le ->                        
      step ge (self__Cfam.Callstate (AST.Internal f) vargs k m)
-       E0 (self__Cfam.State f (function_body f) k e le m1).              
+       E0 (self__Cfam.State f (function_body f) k e le m1).
             
 MetaData initial_state.
 Inductive initial_state (p: self__Cfam.program): self__Cfam.state -> Prop :=
@@ -1522,8 +1502,16 @@ FEnd final_state.
 FEnd Cfam.
 
 Family Csharpminor extends Cfam.
+
+FInductive constant : Type :=
+| Ointconst: int -> constant (* integer constant *)
+| Ofloatconst: float -> constant (* double-precision floating-point constant *)
+| Osingleconst: float32 -> constant (* single-precision floating-point constant *)
+| Olongconst: int64 -> constant.
+
+FInductive expr : Type := Econst : constant -> expr. (* constants *)
        
-Inherit stmt.
+FInductive stmt : Type := Sifthenelse: expr -> stmt -> stmt -> stmt.
        
 (* function *)
 MetaData fn.
@@ -1573,11 +1561,31 @@ FOverride Definition alloc_fenv := fun e m f e' m' =>
   list_disjoint f.(self__Csharpminor.fn_params) f.(self__Csharpminor.fn_temps) /\
   alloc_variables self__Csharpminor.empty_fenv m (self__Csharpminor.fn_vars f) e m'.
 
+FRecursion eval_constant about constant motive (fun (_ : constant) => option val) by _rect.
+Case Ointconst := (fun n => Some (Vint n)). 
+Case Ofloatconst := (fun n => Some (Vfloat n)).
+Case Osingleconst := (fun n => Some (Vsingle n)).
+Case Olongconst := (fun n => Some (Vlong n)).
+FEnd eval_constant.
+
+FInductive eval_expr :  genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
+| eval_Econst: forall ge lenv e le m cst v,
+    eval_constant cst = Some v ->
+    eval_expr ge e le m lenv (Econst cst) v.
+                           
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_ifthenelse: forall lenv ge f a s1 s2 k sp e m v b,
+    eval_expr ge sp e m lenv a v ->
+    Val.bool_of_val v b ->
+    step ge (self__Csharpminor.State f (Sifthenelse a s1 s2) k sp e m)
+      E0 (self__Csharpminor.State f (if b then s1 else s2) k sp e m).
+
 FEnd Csharpminor.
 
 Family Cminor extends Cfam.
-  
-Inherit stmt.
+
+FInductive expr : Type := Econst : Csharpminor.constant -> expr.        
+FInductive stmt : Type := Sifthenelse: expr -> stmt -> stmt -> stmt.  
         
 MetaData fn.
 Record fn : Type := mkfunction {
@@ -1603,7 +1611,21 @@ FOverride Definition free_fenv := fun m sp f => Mem.free m sp 0 f.(self__Cminor.
           
 FOverride Definition alloc_fenv := fun sp m f sp' m' => Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp).
 
-FEnd Cminor.  
+FDefinition eval_constant := Csharpminor.eval_constant.
+
+FInductive eval_expr :  genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
+| eval_Econst: forall ge lenv e le m cst v,
+    eval_constant cst = Some v ->
+    eval_expr ge e le m lenv (Econst cst) v.
+                           
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_ifthenelse: forall lenv ge f a s1 s2 k sp e m v b,
+    eval_expr ge sp e m lenv a v ->
+    Val.bool_of_val v b ->
+    step ge (self__Cminor.State f (Sifthenelse a s1 s2) k sp e m)
+      E0 (self__Cminor.State f (if b then s1 else s2) k sp e m).
+
+FEnd Cminor.
 
 (* RISC-V *)
 Family Asm.
@@ -1863,7 +1885,90 @@ Inductive final_state: self__Asm.state -> int -> Prop :=
     final_state (self__Asm.State rs m) r.
 FEnd final_state.
      
-FEnd Asm. 
+FEnd Asm.
+
+Family CminorSel extends Cfam.
+FInductive expr : Type :=
+| Econdition : condexpr -> expr -> expr -> expr
+| Eop : Asm.operation -> exprlist -> expr
+| Elet : expr -> expr -> expr
+| Eletvar : nat -> expr
+with exprlist : Type :=
+| Enil: exprlist
+| Econs: expr -> exprlist -> exprlist
+with condexpr : Type :=
+| CEcond : Asm.condition -> exprlist -> condexpr
+| CEcondition : condexpr -> condexpr -> condexpr -> condexpr
+| CElet: expr -> condexpr -> condexpr.
+       
+FInductive stmt : Type := Sifthenelse: condexpr -> stmt -> stmt -> stmt.
+
+MetaData fn.
+Record fn : Type := mkfunction {
+   fn_sig: signature;
+   fn_params: list ident;
+   fn_vars: list ident;
+   fn_stackspace: Z;
+   fn_body: self__CminorSel.stmt
+}.
+FEnd fn.
+
+FOverride Definition function := fn.
+FOverride Definition function_body := self__CminorSel.fn_body.
+FOverride Definition function_locals := self__CminorSel.fn_vars.
+FOverride Definition function_params := self__CminorSel.fn_params.
+FOverride Definition function_sig := self__CminorSel.fn_sig.
+       
+(* stack pointer *)
+(* Vptr sp Ptrofs.zero *)
+FOverride Definition fenv := block.   
+FOverride Definition free_fenv := fun m sp f => Mem.free m sp 0 f.(self__CminorSel.fn_stackspace).          
+FOverride Definition alloc_fenv := fun sp m f sp' m' => Mem.alloc m 0 f.(self__CminorSel.fn_stackspace) = (m', sp).          
+FDefinition eval_operation := fun op => Asm.eval_operation op fundef unit.
+             
+FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
+| eval_Eop: forall ge sp e m le op al vl v,
+    eval_exprlist ge sp e m le al vl ->
+    eval_operation op ge (Vptr sp Ptrofs.zero) vl m = Some v ->
+    eval_expr ge sp e m le (Eop op al) v
+| eval_Econdition: forall ge sp e m le a b c va v,
+    eval_condexpr ge sp e m le a va ->
+    eval_expr ge sp e m le (if va then b else c) v ->
+    eval_expr ge sp e m le (Econdition a b c) v
+| eval_Elet: forall ge sp e m le a b v1 v2,
+    eval_expr ge sp e m le a v1 ->
+    eval_expr ge sp e m (v1 :: le) b v2 ->
+    eval_expr ge sp e m le (Elet a b) v2
+| eval_Eletvar: forall ge sp e m le n v,
+    nth_error le n = Some v ->
+    eval_expr ge sp e m le (Eletvar n) v
+with eval_exprlist: genv -> fenv -> env -> mem -> letenv -> self__CminorSel.exprlist -> list val -> Prop :=
+| eval_Enil: forall ge sp e m le,
+    eval_exprlist ge sp e m le Enil nil
+| eval_Econs: forall ge sp e m le a1 al v1 vl,
+    eval_expr ge sp e m le a1 v1 -> eval_exprlist ge sp e m le al vl ->
+    eval_exprlist ge sp e m le (Econs a1 al) (v1 :: vl)
+with eval_condexpr: genv -> fenv -> env -> mem -> letenv -> self__CminorSel.condexpr -> bool -> Prop :=
+| eval_CEcond: forall ge sp e m le cond al vl vb,
+    eval_exprlist ge sp e m le al vl ->
+    Asm.eval_condition cond vl m = Some vb ->
+    eval_condexpr ge sp e m le (CEcond cond al) vb
+| eval_CEcondition: forall ge sp e m le a b c va v,
+    eval_condexpr ge sp e m le a va ->
+    eval_condexpr ge sp e m le (if va then b else c) v ->
+    eval_condexpr ge sp e m le (CEcondition a b c) v
+| eval_CElet: forall ge sp e m le a b v1 v2,
+    eval_expr ge sp e m le a v1 ->
+    eval_condexpr ge sp e m (v1 :: le) b v2 ->
+    eval_condexpr ge sp e m le (CElet a b) v2.
+
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_ifthenelse: forall ge f c s1 s2 k sp e m b,
+   eval_condexpr ge sp e m nil c b ->
+   step ge (self__CminorSel.State f (Sifthenelse c s1 s2) k sp e m)
+     E0 (self__CminorSel.State f (if b then s1 else s2) k sp e m).
+
+FEnd CminorSel.
 
 Family RTL.
 FDefinition node := positive.
@@ -2545,86 +2650,6 @@ Inductive final_state: self__Mach.state -> int -> Prop :=
 FEnd final_state.
 
 FEnd Mach.
-
-Family CminorSel extends Cfam.
-FInductive expr : Type :=
-| Econdition : condexpr -> expr -> expr -> expr
-| Eop : Asm.operation -> exprlist -> expr
-| Elet : expr -> expr -> expr
-| Eletvar : nat -> expr
-with exprlist : Type :=
-| Enil: exprlist
-| Econs: expr -> exprlist -> exprlist
-with condexpr : Type :=
-| CEcond : Asm.condition -> exprlist -> condexpr
-| CEcondition : condexpr -> condexpr -> condexpr -> condexpr
-| CElet: expr -> condexpr -> condexpr.
-       
-Inherit stmt.
-
-MetaData function.
-Record function : Type := mkfunction {
-   fn_sig: signature;
-   fn_params: list ident;
-   fn_vars: list ident;
-   fn_stackspace: Z;
-   fn_body: self__CminorSel.stmt
-}.
-FEnd function.
-       
-FDefinition letenv := list val.       
-(* stack pointer *)
-(* Vptr sp Ptrofs.zero *)
-FOverride Definition fenv := block.
-   
-FOverride Definition free_fenv := fun m sp f =>
-   Mem.free m sp 0 f.(self__Cminor.fn_stackspace).
-          
-FOverride Definition alloc_fenv := fun sp m f sp' m' => 
-   Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp).
-          
-FDefinition eval_operation := fun op => Asm.eval_operation op fundef unit.
-             
-FInductive eval_expr: genv -> val -> env -> mem -> letenv -> expr -> val -> Prop :=
-| eval_Evar: forall ge sp e m le id v,
-    PTree.get id e = Some v ->
-    eval_expr ge sp e m le (Evar id) v
-| eval_Eop: forall ge sp e m le op al vl v,
-    eval_exprlist ge sp e m le al vl ->
-    Asm.eval_operation ge sp op vl m = Some v ->
-    eval_expr ge sp e m le (Eop op al) v
-| eval_Econdition: forall ge sp e m le a b c va v,
-    eval_condexpr ge sp e m le a va ->
-    eval_expr ge sp e m le (if va then b else c) v ->
-    eval_expr ge sp e m le (Econdition a b c) v
-| eval_Elet: forall ge sp e m le a b v1 v2,
-    eval_expr ge sp e m le a v1 ->
-    eval_expr ge sp e m (v1 :: le) b v2 ->
-    eval_expr ge sp e m le (Elet a b) v2
-| eval_Eletvar: forall ge sp e m le n v,
-    nth_error le n = Some v ->
-    eval_expr ge sp e m le (Eletvar n) v
-with eval_exprlist: genv -> val -> env -> mem -> letenv -> self__CminorSel.exprlist -> list val -> Prop :=
-| eval_Enil: forall ge sp e m le,
-    eval_exprlist ge sp e m le Enil nil
-| eval_Econs: forall ge sp e m le a1 al v1 vl,
-    eval_expr ge sp e m le a1 v1 -> eval_exprlist ge sp e m le al vl ->
-    eval_exprlist ge sp e m le (Econs a1 al) (v1 :: vl)
-with eval_condexpr: genv -> val -> env -> mem -> letenv -> self__CminorSel.condexpr -> bool -> Prop :=
-| eval_CEcond: forall ge sp e m le cond al vl vb,
-    eval_exprlist ge sp e m le al vl ->
-    Asm.eval_condition cond vl m = Some vb ->
-    eval_condexpr ge sp e m le (CEcond cond al) vb
-| eval_CEcondition: forall ge sp e m le a b c va v,
-    eval_condexpr ge sp e m le a va ->
-    eval_condexpr ge sp e m le (if va then b else c) v ->
-    eval_condexpr ge sp e m le (CEcondition a b c) v
-| eval_CElet: forall ge sp e m le a b v1 v2,
-    eval_expr ge sp e m le a v1 ->
-    eval_condexpr ge sp e m (v1 :: le) b v2 ->
-    eval_condexpr ge sp e m le (CElet a b) v2.
-
-FEnd CminorSel.
 
 (* A translation between C family languages *)
 Family Cfamtransl.
