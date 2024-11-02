@@ -135,6 +135,15 @@ module VernacInductive = struct
     in
     inductive |> List.map check_one_type
 
+  let inductive_expr_name (expr : Vernacexpr.inductive_expr) = 
+    let ( (_coercion_flag, (ind_type_name, _cumul_univ_decl)),
+          _ind_params,
+          _ind_type,
+          _cstrlist ) =
+      expr
+    in
+    ind_type_name.v  
+
   let concatenate ~(base : t) ~(derived : t) : t =
     let remove_duplicates lst =
       let rec aux seen = function
@@ -160,9 +169,32 @@ module VernacInductive = struct
       let child_ind = (a, b, c, childcstrs) in
       (child_ind, [])
     in
-    if List.length base <> List.length derived then
-      Errors.fail ~info:"All inductive types must be specified when extending.";
-    List.combine base derived |> List.map check_one_type
+    let combine (lefts : t) (rights : t) = 
+      lefts
+      |> List.map (fun ((b, _)as base) ->         
+         let result = 
+           rights
+           |> List.find_opt (fun (d, _) -> 
+                  Names.Id.equal (inductive_expr_name d) 
+                    (inductive_expr_name b)) 
+         in 
+         match result with 
+         | None -> base 
+         | Some derived -> check_one_type (base, derived))      
+    in
+    let combined = combine base derived in  
+    let combined_names = combined |> List.map (fun (e, _) -> inductive_expr_name e) in
+    let _ = 
+      combined_names |> List.iter (fun n -> Printf.printf "Comb: %s\n" (Names.Id.to_string n))
+    in    
+
+    let rest =       
+      derived |> List.filter (fun (r, _) ->         
+        match combined_names |> List.find_opt (fun l -> Names.Id.equal l (inductive_expr_name r)) with 
+        | None -> true
+        | Some _ -> false)
+    in    
+    combined @ rest    
 
   let lookup_inductive_name ~constructor ~inductive =
     let result = 
