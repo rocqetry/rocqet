@@ -2302,9 +2302,7 @@ Family Lfam.
 FDefinition label := positive.
 
 FInductive instruction: Type :=
-| Lop : Asm.operation -> list mreg -> mreg -> instruction     
-(*| Lgetstack : slot -> Z -> typ -> mreg -> instruction
-| Lsetstack : mreg -> slot -> Z -> typ -> instruction*)
+| Lop : Asm.operation -> list mreg -> mreg -> instruction
 | Lcond : Asm.condition -> list mreg -> label -> instruction
 | Llabel: label -> instruction
 | Lgoto: label -> instruction                                                     
@@ -2650,6 +2648,9 @@ Inductive final_state: self__Mach.state -> int -> Prop :=
 FEnd final_state.
 
 FEnd Mach.
+
+FEnd Base.
+
 
 (* A translation between C family languages *)
 Family Cfamtransl.
