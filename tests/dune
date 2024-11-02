@@ -33,4 +33,5 @@
   ;Nested_fsimpl
   ;STLC_trait
   ;STLC_mind 
+  ;Ext_mind
   ))
