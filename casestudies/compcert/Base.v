@@ -2649,8 +2649,6 @@ FEnd final_state.
 
 FEnd Mach.
 
-FEnd Base.
-
 
 (* A translation between C family languages *)
 Family Cfamtransl.
