@@ -1269,7 +1269,7 @@ FProof.
 (* do 1 *)
 + apply cheat.
 (* do 2 *)
-+ apply cheat.
++ intros. apply cheat.
 (* seq *)
 + intros. apply cheat.
 (* skip seq *)
@@ -2198,8 +2198,8 @@ FDefinition label := positive.
 
 FInductive instruction: Type :=
 | Lop : Asm.operation -> list mreg -> mreg -> instruction     
-| Lgetstack : slot -> Z -> typ -> mreg -> instruction
-| Lsetstack : mreg -> slot -> Z -> typ -> instruction
+(*| Lgetstack : slot -> Z -> typ -> mreg -> instruction
+| Lsetstack : mreg -> slot -> Z -> typ -> instruction*)
 | Lcond : Asm.condition -> list mreg -> label -> instruction
 | Llabel: label -> instruction
 | Lgoto: label -> instruction                                                     
@@ -2223,14 +2223,21 @@ FDefinition funsig := fun (fd: fundef) =>
              
 FDefinition genv := Genv.t fundef unit.
 FDefinition eval_operation := fun op => Asm.eval_operation op fundef unit.
-FDefinition locset := Locmap.t.      
+(* regset/locset *)
+FOpaque Definition storeset : Type := cheat.
+(* function/block *)
+FOpaque Definition func_ptr : Type := cheat.
+FOpaque Definition call_func_ptr : Type := cheat.
+(* return address / locset *)
+FOpaque Definition stack_state : Type := cheat.
+
 
 MetaData stackframe.
 Inductive stackframe : Type :=
 | Stackframe:
-    forall (f: self__Lfam.function)(* calling function *)
+    forall (f: self__Lfam.func_ptr)(* calling function *)
            (sp: val)(* stack pointer in calling function *)
-           (ls: self__Lfam.locset)(* location state in calling function *)
+           (ls: self__Lfam.stack_state)(* location state in calling function *)
            (bb: self__Lfam.code), (* program point in calling function *)
       stackframe.
 FEnd stackframe.
@@ -2239,29 +2246,29 @@ MetaData state.
 Inductive state: Type :=
 | State:
     forall (stack: list self__Lfam.stackframe)(* call stack *)
-           (f: self__Lfam.function)(* function currently executing *)
+           (f: self__Lfam.func_ptr)(* function currently executing *)
            (sp: val)(* stack pointer *)
            (c: self__Lfam.code)(* current program point *)
-           (rs: self__Lfam.locset)(* location state *)
+           (rs: self__Lfam.storeset)(* location state *)
            (m: mem),(* memory state *)
     state
 | Callstate:
     forall (stack: list self__Lfam.stackframe)(* call stack *)
-           (f: self__Lfam.fundef)(* function to call *)
-           (rs: self__Lfam.locset)(* location state at point of call *)
+           (f: self__Lfam.call_func_ptr)(* function to call *)
+           (rs: self__Lfam.storeset)(* location state at point of call *)
            (m: mem),(* memory state *)
     state
 | Returnstate:
     forall (stack: list self__Lfam.stackframe)(* call stack *)
-           (rs: self__Lfam.locset)(* location state at point of return *)
+           (rs: self__Lfam.storeset)(* location state at point of return *)
            (m: mem),(* memory state *)
     state.
 FEnd state.
 
 FRecursion is_label about instruction motive (fun (_ : instruction) => label -> bool) by _rect.
 Case Lop op arg dst := (fun lbl => false).
-Case Lgetstack s i t dst := (fun lbl => false). 
-Case Lsetstack d s i t := (fun lbl => false). 
+(*Case Lgetstack s i t dst := (fun lbl => false). 
+Case Lsetstack d s i t := (fun lbl => false). *)
 Case Lcond c args l := (fun lbl => false). 
 Case Llabel lbl' := (fun lbl => if peq lbl lbl' then true else false).
 Case Lgoto lbl' := (fun lbl => false).
@@ -2276,77 +2283,269 @@ Fixpoint find_label (lbl: self__Lfam.label) (c: self__Lfam.code) {struct c} : op
   end.
 FEnd find_label.
 
-FDefinition parent_locset : list stackframe -> locset := fun stack => 
+(* FDefinition parent_locset : list stackframe -> locset := fun stack => 
   match stack with
   | nil => Locmap.init Vundef
   | self__Lfam.Stackframe f sp ls c :: stack' => ls
-  end.
+  end. *)
+
+FOpaque Definition reglist : storeset -> list mreg -> list val := cheat.
+FOpaque Definition undef_regs : list mreg -> storeset -> storeset := cheat.
+FOpaque Definition set_storeset : mreg -> val -> storeset -> storeset := cheat.
+FOpaque Definition find_func_ptr : genv -> func_ptr -> option fundef := cheat. 
+
 
 FInductive step: genv -> state -> trace -> state -> Prop :=          
-| exec_Lop:
-    forall ge s f sp op args res b rs m v rs',
-    eval_operation op ge sp (LTL.reglist rs args) m = Some v ->
-    rs' = Locmap.set (R res) v (LTL.undef_regs (M.destroyed_by_op op) rs) ->
-    step ge (self__Lfam.State s f sp (Lop op args res :: b) rs m)
-      E0 (self__Lfam.State s f sp b rs' m)      
-| exec_Lcond_true:
-    forall ge s f sp cond args lbl b rs m rs' b',
-    Asm.eval_condition cond (LTL.reglist rs args) m = Some true ->
-    rs' = LTL.undef_regs (M.destroyed_by_cond cond) rs ->
-    find_label lbl (function_code f) = Some b' ->
-    step ge (self__Lfam.State s f sp (Lcond cond args lbl :: b) rs m)
-      E0 (self__Lfam.State s f sp b' rs' m)      
-| exec_Lcond_false:
-    forall ge s f sp cond args lbl b rs m rs',
-    Asm.eval_condition cond (LTL.reglist rs args) m = Some false ->
-    rs' = LTL.undef_regs (M.destroyed_by_cond cond) rs ->
-    step ge (self__Lfam.State s f sp (Lcond cond args lbl :: b) rs m)
-      E0 (self__Lfam.State s f sp b rs' m)      
 | exec_Llabel:
     forall ge s f sp lbl b rs m,
     step ge (self__Lfam.State s f sp (Llabel lbl :: b) rs m)
       E0 (self__Lfam.State s f sp b rs m)
 | exec_Lgoto:
-    forall ge s f sp lbl b rs m b',
+    forall ge s fb f sp lbl b rs m b',
+    find_func_ptr ge fb = Some (AST.Internal f) -> 
     find_label lbl (function_code f) = Some b' ->
-    step ge (self__Lfam.State s f sp (Lgoto lbl :: b) rs m)
-      E0 (self__Lfam.State s f sp b' rs m)      
-| exec_Lreturn:
-      forall ge s f stk b rs m m',
-      Mem.free m stk 0 (function_stacksize f) = Some m' ->
-      step ge (self__Lfam.State s f (Vptr stk Ptrofs.zero) (Lreturn :: b) rs m)
-        E0 (self__Lfam.Returnstate s (LTL.return_regs (parent_locset s) rs) m')
+    step ge (self__Lfam.State s fb sp (Lgoto lbl :: b) rs m)
+      E0 (self__Lfam.State s fb sp b' rs m)
+| exec_Lop:
+    forall ge s f sp op args res b rs m v rs',
+    eval_operation op ge sp (reglist rs args) m = Some v ->
+    rs' = set_storeset res v (undef_regs (M.destroyed_by_op op) rs) ->
+    step ge (self__Lfam.State s f sp (Lop op args res :: b) rs m)
+      E0 (self__Lfam.State s f sp b rs' m)
+| exec_Lcond_true:
+    forall ge s (fb: func_ptr) (f: function) sp cond args lbl b rs m rs' b',
+    Asm.eval_condition cond (reglist rs args) m = Some true ->
+    rs' = undef_regs (M.destroyed_by_cond cond) rs ->
+    find_func_ptr ge fb = Some (AST.Internal f) -> 
+    find_label lbl (function_code f) = Some b' ->
+    step ge (self__Lfam.State s fb sp (Lcond cond args lbl :: b) rs m)
+      E0 (self__Lfam.State s fb sp b' rs' m)
+| exec_Lcond_false:
+    forall ge s f sp cond args lbl b rs m rs',
+    Asm.eval_condition cond (reglist rs args) m = Some false ->
+    rs' = undef_regs (M.destroyed_by_cond cond) rs ->
+    step ge (self__Lfam.State s f sp (Lcond cond args lbl :: b) rs m)
+      E0 (self__Lfam.State s f sp b rs' m)
 | exec_return:
       forall ge s f sp rs0 c rs m,
       step ge (self__Lfam.Returnstate (self__Lfam.Stackframe f sp rs0 c :: s) rs m)
-        E0 (self__Lfam.State s f sp c rs m)        
+        E0 (self__Lfam.State s f sp c rs m).
+
+FEnd Lfam.
+
+Family Linear extends Lfam.
+FInductive instruction: Type :=
+| Lgetstack: slot -> Z -> typ -> mreg -> instruction
+| Lsetstack: mreg -> slot -> Z -> typ -> instruction.
+
+Inherit code.
+
+MetaData fn.
+Record fn: Type := mkfunction {
+  fn_sig: signature;
+  fn_stacksize: Z;
+  fn_code: self__Linear.code
+}.
+FEnd fn.
+
+FOverride Definition function := fn.
+FOverride Definition function_sig := self__Linear.fn_sig.
+FOverride Definition function_stacksize := self__Linear.fn_stacksize.
+FOverride Definition function_code := self__Linear.fn_code.
+              
+FOverride Definition storeset := Locmap.t.
+FOverride Definition func_ptr := function.
+FOverride Definition call_func_ptr := fundef.
+FOverride Definition stack_state := storeset.
+
+FRecursion is_label.
+Case Lgetstack s i t dst := (fun lbl => false).
+Case Lsetstack d s i t := (fun lbl => false).
+FEnd is_label.
+
+FOverride Definition reglist := LTL.reglist.
+FOverride Definition undef_regs := LTL.undef_regs.
+FOverride Definition set_storeset := fun dst => Locmap.set (R dst).
+FOverride Definition find_func_ptr := fun ge f => Some (AST.Internal f).
+
+FDefinition destroyed_by_getstack : slot -> list mreg := fun s => 
+  match s with
+  | Incoming => temp_for_parent_frame :: nil
+  | _ => nil
+  end.
+
+FDefinition parent_locset : list stackframe -> storeset := fun stack => 
+  match stack with
+  | nil => Locmap.init Vundef
+  | self__Linear.Stackframe f sp ls c :: stack' => ls
+  end.
+
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_Lgetstack:
+  forall ge s f sp sl ofs ty dst b rs m rs',
+    rs' = Locmap.set (R dst) (rs (S sl ofs ty)) (undef_regs (destroyed_by_getstack sl) rs) ->
+    step ge (self__Linear.State s f sp (Lgetstack sl ofs ty dst :: b) rs m)
+      E0 (self__Linear.State s f sp b rs' m)
+| exec_Lsetstack:
+  forall ge s f sp src sl ofs ty b rs m rs',
+    rs' = Locmap.set (S sl ofs ty) (rs (R src)) (undef_regs (destroyed_by_setstack ty) rs) ->
+    step ge (self__Linear.State s f sp (Lsetstack src sl ofs ty :: b) rs m)
+      E0 (self__Linear.State s f sp b rs' m)
 | exec_function_internal:
     forall ge s f rs m rs' m' stk,
     Mem.alloc m 0 (function_stacksize f) = (m', stk) ->
-    rs' = LTL.undef_regs destroyed_at_function_entry (LTL.call_regs rs) ->
-    step ge (self__Lfam.Callstate s (AST.Internal f) rs m)
-      E0 (self__Lfam.State s f (Vptr stk Ptrofs.zero) (function_code f) rs' m').
+    rs' = undef_regs destroyed_at_function_entry (LTL.call_regs rs) ->
+    step ge (self__Linear.Callstate s (AST.Internal f) rs m)
+      E0 (self__Linear.State s f (Vptr stk Ptrofs.zero) (function_code f) rs' m')
+| exec_Lreturn:
+      forall ge s f stk b rs m m',
+      Mem.free m stk 0 (function_stacksize f) = Some m' ->
+      step ge (self__Linear.State s f (Vptr stk Ptrofs.zero) (Lreturn :: b) rs m)
+        E0 (self__Linear.Returnstate s (LTL.return_regs (parent_locset s) rs) m').
 
 MetaData initial_state.
-Inductive initial_state (p: self__Lfam.program): self__Lfam.state -> Prop :=
+Inductive initial_state (p: self__Linear.program): self__Linear.state -> Prop :=
 | initial_state_intro: forall b f m0,
     let ge := Genv.globalenv p in
     Genv.init_mem p = Some m0 ->
     Genv.find_symbol ge p.(AST.prog_main) = Some b ->
     Genv.find_funct_ptr ge b = Some f ->
-    self__Lfam.funsig f = signature_main ->
-    initial_state p (self__Lfam.Callstate nil f (Locmap.init Vundef) m0).
+    self__Linear.funsig f = signature_main ->
+    initial_state p (self__Linear.Callstate nil f (Locmap.init Vundef) m0).
 FEnd initial_state.
 
 MetaData final_state.
-Inductive final_state: self__Lfam.state -> int -> Prop :=
+Inductive final_state: self__Linear.state -> int -> Prop :=
 | final_state_intro: forall rs m retcode,
     Locmap.getpair (map_rpair R (loc_result signature_main)) rs = Vint retcode ->
-    final_state (self__Lfam.Returnstate nil rs m) retcode.
+    final_state (self__Linear.Returnstate nil rs m) retcode.
+FEnd final_state.
+FEnd Linear.
+
+Family Mach extends Lfam.
+FInductive instruction: Type :=
+| Lgetstack: ptrofs -> typ -> mreg -> instruction
+| Lgetparam: ptrofs -> typ -> mreg -> instruction
+| Lsetstack: mreg -> ptrofs -> typ -> instruction.
+
+Inherit code.
+        
+MetaData fn.
+Record fn: Type := mkfunction {
+  fn_sig: signature;
+  fn_code: self__Mach.code;
+  fn_stacksize: Z;
+  fn_link_ofs: ptrofs;
+  fn_retaddr_ofs: ptrofs 
+}.
+FEnd fn.
+
+FOverride Definition function := fn.
+FOverride Definition function_sig := self__Mach.fn_sig.
+FOverride Definition function_stacksize := self__Mach.fn_stacksize.
+FOverride Definition function_code := self__Mach.fn_code.
+
+From NFPOP Require Import Mregisters.        
+FOverride Definition storeset := Regmap.t val.
+FOverride Definition func_ptr := block.
+FOverride Definition call_func_ptr := block.
+(* Asm return address in calling function *)
+FOverride Definition stack_state := val.
+
+FRecursion is_label.
+Case Lgetstack ptr t dst := (fun lbl => false).
+Case Lsetstack ptr i dst := (fun lbl => false).
+Case Lgetparam ptr i dst := (fun lbl => false).
+FEnd is_label.    
+
+FDefinition load_stack := fun (m: mem) (sp: val) (ty: typ) (ofs: ptrofs) =>
+  Mem.loadv (chunk_of_type ty) m (Val.offset_ptr sp ofs).
+
+FDefinition store_stack := fun (m: mem) (sp: val) (ty: typ) (ofs: ptrofs) (v: val) =>
+  Mem.storev (chunk_of_type ty) m (Val.offset_ptr sp ofs) v.
+
+FOverride Definition reglist := fun a b => a ## b.
+MetaData undef_regs_.
+Fixpoint undef_regs_ (rl: list mreg) (rs: self__Mach.storeset) {struct rl} : self__Mach.storeset :=
+  match rl with
+  | nil => rs
+  | r1 :: rl' => Regmap.set r1 Vundef (undef_regs_ rl' rs)
+  end.
+FEnd undef_regs_.
+FOverride Definition undef_regs := undef_regs_.
+FOverride Definition set_storeset := fun b c a => a # b <- c.
+FOverride Definition find_func_ptr := fun ge fb => Genv.find_funct_ptr ge fb.
+
+FDefinition parent_sp := fun (s: list stackframe) =>
+  match s with
+  | nil => Vnullptr
+  | self__Mach.Stackframe f sp ra c :: s' => sp
+  end.
+
+FDefinition parent_ra := fun (s: list stackframe) =>
+  match s with
+  | nil => Vnullptr
+  | self__Mach.Stackframe f sp ra c :: s' => ra
+  end.
+
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_Lgetstack:
+      forall ge s f sp ofs ty dst c rs m v,
+      load_stack m sp ty ofs = Some v ->
+      step ge (self__Mach.State s f sp (Lgetstack ofs ty dst :: c) rs m)
+        E0 (self__Mach.State s f sp c (rs#dst <- v) m)
+| exec_Lsetstack:
+      forall ge s f sp src ofs ty c rs m m' rs',
+      store_stack m sp ty ofs (rs src) = Some m' ->
+      rs' = undef_regs (destroyed_by_setstack ty) rs ->
+      step ge (self__Mach.State s f sp (Lsetstack src ofs ty :: c) rs m)
+        E0 (self__Mach.State s f sp c rs' m')
+| exec_Lgetparam:
+      forall ge s fb f sp ofs ty dst c rs m v rs',
+      Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
+      load_stack m sp Tptr f.(self__Mach.fn_link_ofs) = Some (parent_sp s) ->
+      load_stack m (parent_sp s) ty ofs = Some v ->
+      rs' = (rs # temp_for_parent_frame <- Vundef # dst <- v) ->
+      step ge (self__Mach.State s fb sp (Lgetparam ofs ty dst :: c) rs m)
+        E0 (self__Mach.State s fb sp c rs' m)
+| exec_function_internal:
+      forall ge s fb rs m f m1 m2 m3 stk rs',
+      Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
+      Mem.alloc m 0 f.(self__Mach.fn_stacksize) = (m1, stk) ->
+      let sp := Vptr stk Ptrofs.zero in
+      store_stack m1 sp Tptr f.(self__Mach.fn_link_ofs) (parent_sp s) = Some m2 ->
+      store_stack m2 sp Tptr f.(self__Mach.fn_retaddr_ofs) (parent_ra s) = Some m3 ->
+      rs' = undef_regs destroyed_at_function_entry rs ->
+      step ge (self__Mach.Callstate s fb rs m)
+        E0 (self__Mach.State s fb sp f.(self__Mach.fn_code) rs' m3)
+| exec_Lreturn:
+      forall ge s fb stk soff c rs m f m',
+      Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
+      load_stack m (Vptr stk soff) Tptr f.(self__Mach.fn_link_ofs) = Some (parent_sp s) ->
+      load_stack m (Vptr stk soff) Tptr f.(self__Mach.fn_retaddr_ofs) = Some (parent_ra s) ->
+      Mem.free m stk 0 f.(self__Mach.fn_stacksize) = Some m' ->
+      step ge (self__Mach.State s fb (Vptr stk soff) (Lreturn :: c) rs m)
+        E0 (self__Mach.Returnstate s rs m').
+
+MetaData initial_state.
+Inductive initial_state (p: self__Mach.program): self__Mach.state -> Prop :=
+  | initial_state_intro: forall fb m0,
+      let ge := Genv.globalenv p in
+      Genv.init_mem p = Some m0 ->
+      Genv.find_symbol ge p.(AST.prog_main) = Some fb ->
+      initial_state p (self__Mach.Callstate nil fb (Regmap.init Vundef) m0).
+FEnd initial_state.
+
+MetaData final_state.
+Inductive final_state: self__Mach.state -> int -> Prop :=
+  | final_state_intro: forall rs m r retcode,
+      loc_result signature_main = AST.One r ->
+      rs r = Vint retcode ->
+      final_state (self__Mach.Returnstate nil rs m) retcode.
 FEnd final_state.
 
-FEnd Lfam.
-  
+FEnd Mach.
+
 Family CminorSel extends Cfam.
 FInductive expr : Type :=
 | Econdition : condexpr -> expr -> expr -> expr
@@ -2361,7 +2560,7 @@ with condexpr : Type :=
 | CEcondition : condexpr -> condexpr -> condexpr -> condexpr
 | CElet: expr -> condexpr -> condexpr.
        
-       Inherit stmt.
+Inherit stmt.
 
        MetaData function.
        Record function : Type := mkfunction {
@@ -2425,71 +2624,7 @@ with condexpr : Type :=
               eval_condexpr ge sp e m (v1 :: le) b v2 ->
               eval_condexpr ge sp e m le (CElet a b) v2.       
   FEnd CminorSel.    
-
-   Family Linear extends Lfam.
-       FInductive instruction: Type :=
-          | Lgetstack: slot -> Z -> typ -> mreg -> instruction
-          | Lsetstack: mreg -> slot -> Z -> typ -> instruction.          
-
-       Record function: Type := mkfunction {
-         fn_sig: signature;
-         fn_stacksize: Z;
-         fn_code: code
-       }.
-              
-       Definition genv := Genv.t fundef unit.
-       Definition locset := Locmap.t.          
-
-       FInductive step: state -> trace -> state -> Prop :=
-          | exec_Lgetstack:
-            forall s f sp sl ofs ty dst b rs m rs',
-              rs' = Locmap.set (R dst) (rs (S sl ofs ty)) (undef_regs (destroyed_by_getstack sl) rs) ->
-              step (State s f sp (Lgetstack sl ofs ty dst :: b) rs m)
-                E0 (State s f sp b rs' m)
-          | exec_Lsetstack:
-            forall s f sp src sl ofs ty b rs m rs',
-              rs' = Locmap.set (S sl ofs ty) (rs (R src)) (undef_regs (destroyed_by_setstack ty) rs) ->
-              step (State s f sp (Lsetstack src sl ofs ty :: b) rs m)
-                E0 (State s f sp b rs' m)          
-   FEnd Linear.
-
-   Family Mach extends Lfam.
-        FInductive instruction: Type :=
-            | Mgetstack: ptrofs -> typ -> mreg -> instruction
-            | Mgetparam: ptrofs -> typ -> mreg -> instruction
-            | Msetstack: mreg -> ptrofs -> typ -> instruction.        
-        
-        Record function: Type := mkfunction
-            { fn_sig: signature;
-              fn_code: code;
-              fn_stacksize: Z;
-              fn_link_ofs: ptrofs;
-              fn_retaddr_ofs: ptrofs }.
-        
-        Definition genv := Genv.t fundef unit.
-        Definition locset := Locmap.t.                        
-            
-        FInductive step:  state -> trace -> state -> Prop :=           
-           | exec_Mgetstack:
-                 forall s f sp ofs ty dst c rs m v,
-                 load_stack m sp ty ofs = Some v ->
-                 step (State s f sp (Mgetstack ofs ty dst :: c) rs m)
-                   E0 (State s f sp c (rs#dst <- v) m)
-           | exec_Msetstack:
-                 forall s f sp src ofs ty c rs m m' rs',
-                 store_stack m sp ty ofs (rs src) = Some m' ->
-                 rs' = undef_regs (destroyed_by_setstack ty) rs ->
-                 step (State s f sp (Msetstack src ofs ty :: c) rs m)
-                   E0 (State s f sp c rs' m')
-           | exec_Mgetparam:
-                 forall s fb f sp ofs ty dst c rs m v rs',
-                 Genv.find_funct_ptr ge fb = Some (Internal f) ->
-                 load_stack m sp Tptr f.(fn_link_ofs) = Some (parent_sp s) ->
-                 load_stack m (parent_sp s) ty ofs = Some v ->
-                 rs' = (rs # temp_for_parent_frame <- Vundef # dst <- v) ->
-                 step (State s fb sp (Mgetparam ofs ty dst :: c) rs m)
-                   E0 (State s fb sp c rs' m).        
-FEnd Mach.  
+  
 
 
 
@@ -4171,3 +4306,7 @@ Family Cfamtransl.
    FEnd Asmgen.
 
 FEnd Base.
+
+Require Extraction.
+Extraction Language OCaml.
+Extraction "compcert.ml" Base.SimplExpr.transl_function.
