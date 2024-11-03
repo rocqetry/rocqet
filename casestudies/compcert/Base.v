@@ -456,13 +456,19 @@ Inductive bitfield : Type :=
         + intros. fsimpl in TR. 
           monadInv TR. exists v. split.
           ++ eapply self__Cfamtransl.Target.eval_Evar.
-             rewrite <- e0. exploit MATCH. INJ.
-             apply cheat.
+             rewrite <- e0. apply cheat.
           ++ apply self__Cfamtransl.match_value_refl.
         + intros. exists v.
           fsimpl in TR. split.
           ++ apply cheat.
           ++ apply self__Cfamtransl.match_value_refl.
+<<<<<<< HEAD
+        + intros. exists v.
+          fsimpl in TR. split.
+          ++ apply cheat.
+          ++ apply self__Cfamtransl.match_value_refl.
+=======
+>>>>>>> 8e3c3fd (update)
       Qed. FEnd transl_expr_correct.
       
       (* call stack match even with set *)
@@ -538,10 +544,14 @@ Inductive bitfield : Type :=
               end).
       FProof.
       (* Skip *)
+<<<<<<< HEAD
       + intros. fsimpl in H. monadInv H.
         destruct (self__Cfamtransl.Source.find_label self__Cfamtransl.Source.Sskip lbl k) as []eqn:?.
         ++ destruct p. eexists. esplit.
            split. fsimpl in Heqo.
+=======
+      + fsimpl. apply cheat.
+>>>>>>> 8e3c3fd (update)
       (* Set *)
       + apply cheat.
       (* Seq *)
