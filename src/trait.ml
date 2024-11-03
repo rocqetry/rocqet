@@ -31,6 +31,8 @@ let open_with_base ~name ~base =
          name;
          definition = None;
          base;
+         (* there's not point of using the real name here? *)
+         base_names = [];
          fields = Bwd.Emp;
          default_ctx_params;
        }
