@@ -456,7 +456,8 @@ Inductive bitfield : Type :=
         + intros. fsimpl in TR. 
           monadInv TR. exists v. split.
           ++ eapply self__Cfamtransl.Target.eval_Evar.
-             rewrite <- e0. apply cheat.
+             rewrite <- e0. exploit MATCH. INJ.
+             apply cheat.
           ++ apply self__Cfamtransl.match_value_refl.
         + intros. exists v.
           fsimpl in TR. split.
@@ -606,7 +607,6 @@ Inductive bitfield : Type :=
             monadInv TR. 
             left. econstructor. split.
             ++ apply plus_one. 
-            ++ 
             (* We need to somehow prove that *)
             (* match_cont (self__Cfamtransl.Source.Kseq s k) tk ==> tk = Kseq s' k' *)
             apply (* self__Cfamtransl.Target.step_skip_seq*) cheat.
