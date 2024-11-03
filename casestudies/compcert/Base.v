@@ -873,12 +873,11 @@ Inductive bitfield : Type :=
 
        Inherit callstack.
        
-        MetaData match_callstack_.
-        Inductive match_callstack_ (f: meminj) (m: mem) (tm: mem):
+       MetaData match_callstack_.
+       Inductive match_callstack_ (f: meminj) (m: mem) (tm: mem):
                           self__Cminorgen.callstack -> block -> block -> Prop :=
           | mcs_nil:
               forall hi bound tbound,
-
               Ple hi bound -> Ple hi tbound ->
               match_callstack_ f m tm nil bound tbound
           | mcs_cons:
@@ -891,7 +890,7 @@ Inductive bitfield : Type :=
                 (PERM: self__Cminorgen.padding_freeable f e tm sp tf.(self__Cminorgen.Target.fn_stackspace))
                 (MCS: match_callstack_ f m tm cs lo sp),
               match_callstack_ f m tm (self__Cminorgen.Frame tf e le te sp lo hi :: cs) bound tbound.
-        FEnd match_callstack_.
+       FEnd match_callstack_.
 
         (* FOverride Definition match_callstack := match_callstack_. *)
        FOverride Definition match_callstack := cheat.
@@ -909,7 +908,6 @@ Inductive bitfield : Type :=
        FEnd match_globalenvs.
 
       
-
        (* MetaData match_cont. *)
        (* Inductive match_cont: self__Cminorgen.Source.cont -> self__Cminorgen.Target.cont -> self__Cminorgen.compilenv -> self__Cminorgen.exit_env -> self__Cminorgen.callstack -> Prop := *)
        (*    | match_Kstop: forall cenv xenv, *)
@@ -980,7 +978,10 @@ Inductive bitfield : Type :=
          Hypothesis TRANSL: match_prog prog tprog.
          Let ge : Csharpminor.genv := Genv.globalenv prog.
          Let tge: genv := Genv.globalenv tprog. 
-       *)
+        *)
+
+       
+       (* Commented out for performance *)
 
        (* FRecursion seq_left_depth about Source.stmt motive (fun (_ : Source.stmt) => nat) by _rect. *)
        (*       Case Sskip := O. *)
