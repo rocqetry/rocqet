@@ -180,6 +180,7 @@ and Linkage : sig
     name : Names.Id.t;
     definition: Names.Id.t option;
     base : t option;
+    base_names : Names.Id.t list;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 

@@ -397,7 +397,10 @@ and Linkage : sig
     (* TODO: This should be a Libnames.qualid *)
     name : Names.Id.t;
     definition: Names.Id.t option;
-    base : t option;    
+    (* currently base is a concatenation of further binding bases 
+       and normal basses *)
+    base : t option; 
+    base_names : Names.Id.t list;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
@@ -416,6 +419,7 @@ end = struct
     name : Names.Id.t;
     definition: Names.Id.t option;
     base : t option;
+    base_names : Names.Id.t list;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
