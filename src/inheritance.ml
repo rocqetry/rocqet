@@ -354,6 +354,10 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
               in
               elem, more
            end
+        
+        
+        | FamilyDefinition ({ linkage = { definition = Some _; _} ; _ } as family) ->            
+           FamilyDefinition { family with compiled_context; }, []
 
         | FamilyDefinition family -> (
             match family.linkage.base with
