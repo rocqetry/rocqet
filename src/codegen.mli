@@ -70,6 +70,11 @@ val compile_linkage_context :
 val compile_linkage : Linkage.t -> CompiledModule.t
 val compile_linkage_signature : Linkage.t -> CompiledModuleType.t
 
+val compile_final_linkage_signature : 
+  linkage:Linkage.t -> 
+  base:Libnames.qualid -> 
+  CompiledModuleType.t
+
 (* Compiling a field definition *)
 val compile_definition :
   name:Names.Id.t ->
