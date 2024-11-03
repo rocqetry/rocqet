@@ -29,6 +29,7 @@ let open_with_base ~name ~base =
        {
          context = Bwd.of_list parameters;
          name;
+         definition = None;
          base;
          fields = Bwd.Emp;
          default_ctx_params;
