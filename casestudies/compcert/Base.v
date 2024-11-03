@@ -457,18 +457,14 @@ Inductive bitfield : Type :=
           monadInv TR. exists v. split;fconstructor.
           rewrite <- e0. apply cheat.
         + intros. exists v.
-<<<<<<< HEAD
-          fsimpl in TR. split.
-          ++ apply cheat.
+          monadInv TR. exists v. split.
+          ++ eapply self__Cfamtransl.Target.eval_Evar.
+             rewrite <- e0. apply cheat.
           ++ apply self__Cfamtransl.match_value_refl.
         + intros. exists v.
-          fsimpl in TR. split.
+          fsimpl in TR. split;tryfconstructor.
           ++ apply cheat.
           ++ apply self__Cfamtransl.match_value_refl.
-=======
-          fsimpl in TR. split;try fconstructor.
-          apply cheat.
->>>>>>> ab6b8c2 (updates)
       Qed. FEnd transl_expr_correct.
       
       (* call stack match even with set *)
@@ -500,7 +496,7 @@ Inductive bitfield : Type :=
       FProof.
 
       (* Kstop *)
-      + apply cheat.
+      + fsimpl. apply cheat.
       
       (* Kseq *)
       + apply cheat.
@@ -544,7 +540,6 @@ Inductive bitfield : Type :=
               end).
       FProof.
       (* Skip *)
-
       + intros. fsimpl in H. monadInv H.
         destruct (self__Cfamtransl.Source.find_label self__Cfamtransl.Source.Sskip lbl k) as []eqn:?.
         ++ destruct p. eexists. esplit.
@@ -553,6 +548,7 @@ Inductive bitfield : Type :=
         destruct (self__Cfamtransl.Source.find_label self__Cfamtransl.Source.Sskip lbl k) as [[]|]eqn:?.
         * fsimpl in Heqo. discriminate.
         * fsimpl in H. monadInv H. apply cheat.
+
       (* Set *)
       + intros. fsimpl. fsimpl in *. monadInv H.
         fsimpl. reflexivity.
@@ -629,7 +625,6 @@ Inductive bitfield : Type :=
             monadInv TR. 
             left. econstructor. split.
             * apply plus_one. 
-            
             (* We need to somehow prove that *)
             (* match_cont (self__Cfamtransl.Source.Kseq s k) tk ==> tk = Kseq s' k' *)
             apply (* self__Cfamtransl.Target.step_skip_seq*) cheat.
