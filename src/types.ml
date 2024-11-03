@@ -396,7 +396,8 @@ and Linkage : sig
     default_ctx_params : (Names.Id.t * CompiledModule.t) list;
     (* TODO: This should be a Libnames.qualid *)
     name : Names.Id.t;
-    base : t option;
+    definition: Names.Id.t option;
+    base : t option;    
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }
 
@@ -413,6 +414,7 @@ end = struct
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
     default_ctx_params : (Names.Id.t * CompiledModule.t) list;
     name : Names.Id.t;
+    definition: Names.Id.t option;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }

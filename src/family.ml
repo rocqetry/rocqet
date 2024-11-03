@@ -27,6 +27,7 @@ let open_family name =
           {
             context = Bwd.of_list parameters;
             name;
+            definition = None;
             base;
             fields = Bwd.Emp;
             default_ctx_params;
@@ -40,9 +41,10 @@ let open_family name =
           {
             context = Bwd.Emp;
             name;
-            base = None;
+            definition = None;
+            base = None;            
             fields = Bwd.Emp;
-            default_ctx_params = [];
+            default_ctx_params = [];            
           }
       in
       Context.destructive_update (Some (LinkageCtx.Toplevel linkage))
@@ -84,6 +86,7 @@ let open_family_with_base ~name ~base =
               {
                 context = Bwd.of_list parameters;
                 name;
+                definition = None;
                 base;
                 fields = Bwd.Emp;
                 default_ctx_params;
@@ -98,6 +101,7 @@ let open_family_with_base ~name ~base =
               {
                 context = Bwd.Emp;
                 name;
+                definition = None;
                 base = Some base_linkage;
                 fields = Bwd.Emp;
                 default_ctx_params = [];
@@ -144,6 +148,7 @@ let open_family_with_base_list ~name ~bases =
           {
             context = Bwd.of_list parameters;
             name;
+            definition = None;
             base;
             fields = Bwd.Emp;
             default_ctx_params;
@@ -158,6 +163,7 @@ let open_family_with_base_list ~name ~bases =
           {
             context = Bwd.Emp;
             name;
+            definition = None;
             base = Some base_linkage;
             fields = Bwd.Emp;
             default_ctx_params = [];
@@ -181,34 +187,71 @@ let close_family () =
       let _impl = Codegen.compile_linkage linkage in
       Linkages.add linkage
   | LinkageCtx.Nested (upper, linkage) ->
-      let linkage =
-        match linkage.base with
-        | None -> linkage
-        | Some base_linkage ->
-            let elements = Bwd.to_list base_linkage.fields in
-            Inheritance.inherit_elements ~elements ~linkage ~context
-      in
-      let signature = Codegen.compile_linkage_signature linkage in
-      let elem =
-        let compiled_context =
-          match linkage.context with
-          | Bwd.Emp ->
-              Errors.fail
-                ~info:
-                  "close_family: Couldn't get compiled context from parameters"
-          | Bwd.Snoc (_, (_, mapply)) -> Termutils.extract_functor_name mapply
-        in
-        let default_ctx_params =
-          upper |> Context.family_linkage |> function
-          | { default_ctx_params; _ } -> default_ctx_params
-        in
-        LinkageElem.FamilyDefinition
-          {
-            linkage;
-            compiled_context;
-            compiled_signature = signature;
-            default_ctx_params;
-          }
-      in
-      Context.destructive_update (Some upper);
-      Context.add_field ~name:linkage.name ~elem
+      match linkage with 
+      | Linkage.{ fields = Bwd.Emp; base = Some base; _ } -> 
+         (* { linkage with 
+                   default_ctx_params = base_linkage.default_ctx_params; 
+                   fields = base_linkage.fields } *)
+         let qualid = Libnames.qualid_of_ident base.name in 
+         let resolved_qualid = Resolver.resolve_qualid ~context ~qualid in 
+         let linkage = { linkage with fields = base.fields; definition = Some base.name } in
+         let compiled_signature = 
+           Codegen.compile_final_linkage_signature 
+             ~linkage 
+             ~base:resolved_qualid 
+         in
+         let elem =
+           let compiled_context =
+             match linkage.context with
+             | Bwd.Emp ->
+                 Errors.fail
+                   ~info:
+                     "close_family: Couldn't get compiled context from parameters"
+             | Bwd.Snoc (_, (_, mapply)) -> Termutils.extract_functor_name mapply
+           in
+           let default_ctx_params =
+             upper |> Context.family_linkage |> function
+             | { default_ctx_params; _ } -> default_ctx_params
+           in
+           LinkageElem.FamilyDefinition
+             {
+               linkage;
+               compiled_context;
+               compiled_signature;
+               default_ctx_params;
+             }
+         in
+         Context.destructive_update (Some upper);
+         Context.add_field ~name:linkage.name ~elem
+      | _ ->
+         let linkage =
+           match linkage.base with
+           | None -> linkage
+           | Some base_linkage ->
+               let elements = Bwd.to_list base_linkage.fields in
+               Inheritance.inherit_elements ~elements ~linkage ~context
+         in
+         let signature = Codegen.compile_linkage_signature linkage in
+         let elem =
+           let compiled_context =
+             match linkage.context with
+             | Bwd.Emp ->
+                 Errors.fail
+                   ~info:
+                     "close_family: Couldn't get compiled context from parameters"
+             | Bwd.Snoc (_, (_, mapply)) -> Termutils.extract_functor_name mapply
+           in
+           let default_ctx_params =
+             upper |> Context.family_linkage |> function
+             | { default_ctx_params; _ } -> default_ctx_params
+           in
+           LinkageElem.FamilyDefinition
+             {
+               linkage;
+               compiled_context;
+               compiled_signature = signature;
+               default_ctx_params;
+             }
+         in
+         Context.destructive_update (Some upper);
+         Context.add_field ~name:linkage.name ~elem

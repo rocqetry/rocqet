@@ -178,6 +178,7 @@ and Linkage : sig
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
     default_ctx_params : (Names.Id.t * CompiledModule.t) list;
     name : Names.Id.t;
+    definition: Names.Id.t option;
     base : t option;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
   }

@@ -723,7 +723,7 @@ type synth_ctx = {
 }
 
 let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
-  let Linkage.{ name; fields; _ } = linkage in
+  let Linkage.{ name; fields; definition; _ } = linkage in
   let rec compile_fields fields (ctx : CompiledModule.t list) =
     match fields with
     | Bwd.Emp -> B.return ()
@@ -766,6 +766,12 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
     (* traits have no implementation *)
     | Snoc (fields, (_, TraitDefinition _ )) -> compile_fields fields ctx
 
+    (* Use the definition if we already have one *)
+    | Snoc (fields, (_, FamilyDefinition { linkage = { name; definition = Some definition; _ }; _ })) ->
+       let open B in
+       let* _ = compile_fields fields ctx in
+       let value = definition |> Libnames.qualid_of_ident |> Termutils.ident_to_module_expr in
+       define_module_inline ~name ~value
     | Snoc (fields, (_, FamilyDefinition { linkage = nested_linkage; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in
@@ -775,6 +781,7 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
             in
             let _ = compile_linkage (Some synth_ctx) nested_linkage in
             return ())
+    
     (* An implementation will be provided by the inductive *)
     | Snoc (fields, (_, InductiveAxiom _)) -> compile_fields fields ctx
     | Snoc
@@ -849,20 +856,31 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         let* _ = include_module ~module_expr in
         return ()
   in
-  B.run
-  @@ B.define_module ~module_name:name ~parameters:[] ~body:(fun ctx ->
-         let open B in         
-         let* _ =
-           (* Provide the context for a nested family, before 
-              compiling fields *)
-           B.thunk (fun () ->
-               match synth_ctx with
-               | None -> B.return ()
-               | Some { context; module_name; fields } ->
-                   let _ = synthesize_context ~context ~module_name ~fields in
-                   B.return ())
-         in
-         compile_fields fields ctx)
+  match definition with 
+  | None -> 
+     B.run
+     @@ B.define_module ~module_name:name ~parameters:[] ~body:(fun ctx ->
+            let open B in         
+            let* _ =
+              (* Provide the context for a nested family, before 
+                 compiling fields *)
+              B.thunk (fun () ->
+                  match synth_ctx with
+                  | None -> B.return ()
+                  | Some { context; module_name; fields } ->
+                      let _ = synthesize_context ~context ~module_name ~fields in
+                      B.return ())
+            in
+            compile_fields fields ctx)
+  | Some definition -> 
+     let value = 
+       definition |> Libnames.qualid_of_ident 
+       |> Termutils.ident_to_module_expr
+     in 
+     B.run @@ 
+       let open B in
+       let* _ = define_module_inline ~name ~value in 
+       return (Libnames.qualid_of_ident name)
 
 (* Compile a toplevel linkage *)
 let compile_linkage = compile_linkage None
@@ -967,10 +985,10 @@ let compile_linkage_signature linkage =
                        (Termutils.ident_to_module_expr compiled_context)
                      ~arguments:ctx
                  in
-                 let* _ = include_module ~module_expr:context_module_expr in
+                 let* _ = include_module ~module_expr:context_module_expr in                 
                  let ctx =
                    normalize_parameters ~default_ctx_params ~parameters:ctx
-                 in
+                 in                 
                  let signature_module_expr =
                    Termutils.apply_module
                      ~functor_expr:
@@ -992,6 +1010,19 @@ let compile_linkage_signature linkage =
            in
            (* Declare Name : Helper *)
            let* _ = declare_module ~module_name:name helper_module_expr in
+           return ()))
+
+(* linkage is definitionally equal to base *)
+let compile_final_linkage_signature ~linkage ~(base: Libnames.qualid) = 
+  let Linkage.{ name; context; _ } = linkage in
+  let sig_final = Naming.fresh_name ~prefix:"Sig" in
+  B.(
+    run
+    @@ define_moduletype ~module_name:sig_final
+         ~parameters:(Bwd.to_list context) ~body:(fun _ctx ->
+           let base_module_expr = Termutils.ident_to_module_expr base in
+           (* Module Name := Base. *)
+           let* _ = define_module_inline ~name ~value:base_module_expr in
            return ()))
 
 let compile_definition ~(name : Names.Id.t)
