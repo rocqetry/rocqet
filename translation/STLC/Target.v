@@ -292,8 +292,10 @@ Module Type BaseComp_IL_Sig_Helper (self__BaseComp : BaseComp_IL_Ctx).
 End BaseComp_IL_Sig_Helper.
 
 Module Type BaseComp_IL_Sig (self__BaseComp : BaseComp_IL_Ctx).
-  Declare Module IL : BaseComp_IL_Sig_Helper (self__BaseComp).
+  Declare Module IL : BaseComp_IL_Sig_Helper self__BaseComp.
 End BaseComp_IL_Sig.
+
+
 
 (* Instantiate BaseComp.IL *)
 Module BaseComp_IL_Impl (self__BaseComp : BaseComp_IL_Ctx)
@@ -327,6 +329,43 @@ Module Type BaseComp_ILK_Ctx.
   Include BaseComp_IL_Ctx.
   Include BaseComp_IL_Sig.
 End BaseComp_ILK_Ctx.
+
+Print BaseComp_ILK_Ctx.
+
+Module STL.
+
+Definition y := 10.
+
+Inductive ask := yes | no.
+
+End STL.
+
+Module Type BaseComp_ILK_Sig_ (self__BaseComp : BaseComp_ILK_Ctx).
+  (* late binding inheritance *)
+  Module ILK := self__BaseComp.IL.
+  (* non late binding inheritance *)
+  Module J := STL.
+  
+  (*Declare Module ILK : BaseComp_IL_Sig_Helper self__BaseComp := self__BaseComp.IL.*)
+  
+  (* with Module := self__BaseComp.IL.                                               
+
+  Include BaseComp_IL_Sig (self__BaseComp) with Module IL := ILK.*)
+End BaseComp_ILK_Sig_.
+
+Module Type Ctx.
+Include BaseComp_ILK_Ctx.
+Include BaseComp_ILK_Sig_.
+End Ctx.
+
+Module R (self: Ctx).
+
+(* Check self.J.y.*) 
+
+Definition y := self.IL.TUnit.
+Definition x := self.ILK.TCont (y :: nil).
+
+End R.
 
 Module Type BaseComp_ILK_Ty_Ctx
   (self__BaseComp : BaseComp_ILK_Ctx).
