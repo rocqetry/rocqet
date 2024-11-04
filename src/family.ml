@@ -188,11 +188,11 @@ let close_family () =
   match context with
   | LinkageCtx.Toplevel linkage ->
      begin match linkage with 
-     | Linkage.{ fields = Bwd.Emp; base = Some base; base_names = [base_name]; _ } ->       
+     (*| Linkage.{ fields = Bwd.Emp; base = Some base; base_names = [base_name]; _ } ->       
         let linkage = { linkage with fields = base.fields; definition = Some base_name } in
         Context.destructive_update None;
         let _impl = Codegen.compile_linkage linkage in
-        Linkages.add linkage
+        Linkages.add linkage *)
      | _ ->   
         let linkage =
           match linkage.base with
@@ -207,7 +207,8 @@ let close_family () =
      end 
   | LinkageCtx.Nested (upper, linkage) ->
       match linkage with 
-      | Linkage.{ fields = Bwd.Emp; base = Some base; base_names = [base_name]; _ } ->         
+      (*| Linkage.{ fields = Bwd.Emp; base = Some base; base_names = [base_name]; _ } ->         
+         (* This optimization should not work when you inherit from a trait *)
          (* Can we somehow get the helper signature of this linkage *)
          let qualid = Libnames.qualid_of_ident base_name in 
          let resolved_qualid = Resolver.resolve_qualid ~context ~qualid in 
@@ -239,7 +240,7 @@ let close_family () =
              }
          in
          Context.destructive_update (Some upper);
-         Context.add_field ~name:linkage.name ~elem
+         Context.add_field ~name:linkage.name ~elem *)
       | _ ->
          let linkage =
            match linkage.base with
