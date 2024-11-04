@@ -121,3 +121,5 @@ let open_trait_with_base ~name ~base =
         command = PluginCmd.Trait;
         close = Trait.close_trait;
       }
+
+let final_family = Family.define_final_family

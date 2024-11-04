@@ -1020,9 +1020,12 @@ let compile_final_linkage_signature ~linkage ~(base: Libnames.qualid) =
     run
     @@ define_moduletype ~module_name:sig_final
          ~parameters:(Bwd.to_list context) ~body:(fun _ctx ->
-           let base_module_expr = Termutils.ident_to_module_expr base in
+           let module_expr = Termutils.ident_to_module_expr base in
            (* Module Name := Base. *)
-           let* _ = define_module_inline ~name ~value:base_module_expr in
+           let* _ = define_module_inline ~name ~value:module_expr in
+           (*let* _ = define_module ~module_name:name 
+                      ~parameters:[] ~body:(fun _ -> include_module ~module_expr)
+           in*)
            return ()))
 
 let compile_definition ~(name : Names.Id.t)

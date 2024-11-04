@@ -34,4 +34,6 @@
   ;STLC_trait
   ;STLC_mind 
   ;Ext_mind
+  ;Conformance_opt
+  ;Final_families
   ))
