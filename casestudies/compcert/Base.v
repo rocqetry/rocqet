@@ -457,14 +457,8 @@ Inductive bitfield : Type :=
           monadInv TR. exists v. split;fconstructor.
           rewrite <- e0. apply cheat.
         + intros. exists v.
-          monadInv TR. exists v. split.
-          ++ eapply self__Cfamtransl.Target.eval_Evar.
-             rewrite <- e0. apply cheat.
-          ++ apply self__Cfamtransl.match_value_refl.
-        + intros. exists v.
-          fsimpl in TR. split;tryfconstructor.
-          ++ apply cheat.
-          ++ apply self__Cfamtransl.match_value_refl.
+          fsimpl in TR. split;try fconstructor.
+          apply cheat.
       Qed. FEnd transl_expr_correct.
       
       (* call stack match even with set *)
@@ -496,13 +490,11 @@ Inductive bitfield : Type :=
       FProof.
 
       (* Kstop *)
-      + fsimpl. apply cheat.
-      
+      + fsimpl. fsimpl in *. fconstructor.
       (* Kseq *)
-      + apply cheat.
-
+      + intros. fsimpl. fsimpl in *. eauto.
       (* Kblock *)
-      + intros. fsimpl in *. fsimpl. apply cheat.
+      + intros. fsimpl in *. fsimpl. eauto.
       Qed. FEnd match_call_cont.
       
       FInduction match_is_call_cont about match_cont motive
@@ -516,13 +508,14 @@ Inductive bitfield : Type :=
       FProof.
 
       (* Kstop *)
-      + apply cheat.
-
+      + intros. eexists. fsimpl. fsimpl in *.
+        split.
+        * constructor.
+        * split;eauto. fconstructor.
       (* Kseq *)
-      + apply cheat.
-
+      + intros. fsimpl in *. destruct H0.
       (* Kblock *)
-      + apply cheat.
+      + intros. fsimpl in *. destruct H0.
       Qed. FEnd match_is_call_cont.                                 
       
       (* Find label *)
@@ -541,22 +534,34 @@ Inductive bitfield : Type :=
       FProof.
       (* Skip *)
       + intros. fsimpl in H. monadInv H.
-        destruct (self__Cfamtransl.Source.find_label self__Cfamtransl.Source.Sskip lbl k) as []eqn:?.
-        ++ destruct p. eexists. esplit.
-           split. fsimpl in Heqo.
-      + intros.
         destruct (self__Cfamtransl.Source.find_label self__Cfamtransl.Source.Sskip lbl k) as [[]|]eqn:?.
         * fsimpl in Heqo. discriminate.
-        * fsimpl in H. monadInv H. apply cheat.
-
+        * fsimpl. reflexivity. 
       (* Set *)
       + intros. fsimpl. fsimpl in *. monadInv H.
         fsimpl. reflexivity.
       (* Seq *)
-      + intros. fsimpl. fsimpl in *.
+      (* make use of inductive hypothesis *)
+      (* H and H0 same thing, just one for __i the other for __i0
+         hole is  Sseq of __i and __i0 *)
+      + intros. fsimpl.
         destruct (self__Cfamtransl.Source.find_label __i lbl (self__Cfamtransl.Source.Kseq __i0 k)) as [[s' k'] | ]eqn:?.
-        * exists ts,tk. monadInv H1. fsimpl. split.
-           ** destruct (self__Cfamtransl.Target.find_label x lbl (self__Cfamtransl.Target.Kseq x0 tk)) as [|]eqn:?.
+        * apply cheat.
+        * fsimpl in H1. monadInv H1.
+          specialize H0 with
+            (k:=k) (tk:=tk) (lbl:=lbl).
+          apply H0 in EQ1;eauto.
+          destruct (self__Cfamtransl.Source.find_label __i0 lbl k) as [[s' k'] | ]eqn:?.
+          ** destruct EQ1 as [ts' [tk' [hyp1 [hyp2 hyp3]]]].
+             exists ts',tk'. repeat (try (split;eauto)).
+          apply H0;eauto. fsimpl in *. H1. monadInv H1.
+          rewrite EQ1.  constructor.
+        destruct (self__Cfamtransl.Target.find_label x lbl (self__Cfamtransl.Target.Kseq x0 tk)) as [[s c]|]eqn:?.
+        *
+          ** exists s,c. split;eauto. split.
+             *** 
+        * eexists. eexists. split.
+          ** destruct (self__Cfamtransl.Target.find_label x lbl (self__Cfamtransl.Target.Kseq x0 tk)) as [[]|]eqn:?. reflexivity.
               *** rewrite <- Heqo0. apply cheat.
               *** apply cheat.
            ** apply cheat.
