@@ -208,6 +208,7 @@ let close_family () =
   | LinkageCtx.Nested (upper, linkage) ->
       match linkage with 
       | Linkage.{ fields = Bwd.Emp; base = Some base; base_names = [base_name]; _ } ->         
+         (* Can we somehow get the helper signature of this linkage *)
          let qualid = Libnames.qualid_of_ident base_name in 
          let resolved_qualid = Resolver.resolve_qualid ~context ~qualid in 
          let linkage = { linkage with fields = base.fields; definition = Some base_name } in
@@ -271,3 +272,53 @@ let close_family () =
          in
          Context.destructive_update (Some upper);
          Context.add_field ~name:linkage.name ~elem
+
+
+(* Family X := Y. *)
+let define_final_family ~(name: Names.Id.t) ~(value : Libnames.qualid) = 
+  let context = Context.get () in
+  let default_ctx_params =
+    context |> Context.family_linkage |> function
+    | { default_ctx_params; _ } -> default_ctx_params
+  in
+  match Context.lookup (Some context) value with 
+  | None -> Errors.fail ~info:"Unbound name"
+  | Some base_linkage -> 
+    let compiled_context, parameters =
+      Codegen.compile_linkage_context ~field_name:name context
+    in
+    (*let default_ctx_params =
+      Codegen.compile_default_params ~context:parameters
+    in*)
+    (* TODO: handle paths better later *)
+    let definition = (Naming.extract_path_base value) in 
+    let linkage =
+      Linkage.
+      {
+          context = Bwd.of_list parameters;
+          name;
+          definition = Some definition;
+          base = None;
+          base_names = [];
+          fields = base_linkage.fields;
+          default_ctx_params;            
+      }
+    in
+    let qualid = value in 
+    let resolved_qualid = Resolver.resolve_qualid ~context ~qualid in     
+    let compiled_signature = 
+      Codegen.compile_final_linkage_signature 
+        ~linkage 
+        ~base:resolved_qualid 
+    in
+    let elem = 
+      LinkageElem.FamilyDefinition
+      {
+        linkage;
+        compiled_context;
+        compiled_signature;
+        default_ctx_params;
+      }
+    in 
+    Context.add_field ~name ~elem
+      
