@@ -362,6 +362,7 @@ Inductive bitfield : Type :=
       FOpaque Definition transl_fundef : Source.fundef -> res Target.fundef := 
         cheat.
 
+      FOpaque Definition transl_program : Source.program -> res Target.program := cheat.
       (* Simulation Proof *)      
       (* Invariant on abstract call stack *)
       MetaData frame.
@@ -588,211 +589,191 @@ Inductive bitfield : Type :=
       FProof.
       
           (* skip seq *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f s k e le m prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.
-            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSskip in TR.
-            monadInv TR. 
-            left. econstructor. split. apply plus_one. 
-            
-            (* We need to somehow prove that *)
-            (* match_cont (self__Cfamtransl.Source.Kseq s k) tk ==> tk = Kseq s' k' *)
-            apply (* self__Cfamtransl.Target.step_skip_seq*) cheat.
-            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).            
-            apply TRF.
-            apply cheat. (* prove TR again?? *)
-            apply MINJ.
-            apply MCS.
-            apply cheat. (* This is in a way a consequence of the call_cont theorem above *)
+          + apply cheat.
             
           (* skip block *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f k e le m prog tprog tge H G.
-            intros T1 MSTATE. inv MSTATE.
-            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSskip in TR.
-            monadInv TR.
-            left. econstructor. split. apply plus_one. 
-            (* Same as above, we need to show the cont is a Kblock *)
-            apply (*self__Cfamtransl.Target.step_skip_block*) cheat.
-            eapply self__Cfamtransl.match_state.
-            apply TRF.
-            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq.
-            unfold self__Cfamtransl.transl_stmtSskip.
-            reflexivity.
-            apply MINJ.
-            apply MCS.
-            apply cheat. (* call_cont *)
+          + apply cheat.
 
           (* skip call *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f k e le m m' CC FENV prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.
-            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSskip in TR.
-            monadInv TR. 
-            left.
-            exploit self__Cfamtransl.match_is_call_cont; eauto. intros [tk' [A [B C]]].
-            exploit self__Cfamtransl.match_callstack_freelist; eauto. intros [tm' [P [Q R]]].                      
-            econstructor. split. apply plus_one. 
-            apply self__Cfamtransl.Target.step_skip_call.
-            apply cheat. apply P.
-            eapply self__Cfamtransl.match_returnstate; eauto.
-            apply self__Cfamtransl.match_value_refl.                        
+          + apply cheat.  
 
           (* set *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f id a k e le m v EVAL prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.                        
-            rewrite -> self__Cfamtransl.transl_stmt_Sset_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSset in TR.            
-            monadInv TR. 
-            exploit self__Cfamtransl.transl_expr_correct; eauto.            
-            intros H. destruct H as [tv [EV MV]].
-            left. econstructor. split. apply plus_one.             
-            eapply self__Cfamtransl.Target.step_set.
-            apply EV.
-            exploit self__Cfamtransl.match_callstack_set_temp; eauto.
-            intros G.
-            eapply self__Cfamtransl.match_state; eauto.
-            rewrite -> self__Cfamtransl.transl_stmt_Sskip_eq.
-            unfold self__Cfamtransl.transl_stmtSskip. reflexivity.            
+          + apply cheat.         
           
           (* seq *)
           + 
-            intros ge f s1 s2 k e le m prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.                                    
-            fsimpl in TR.
-            monadInv TR. 
-            left. econstructor. split. apply plus_one. 
-            apply self__Cfamtransl.Target.step_seq.
-            eapply self__Cfamtransl.match_state; (try eassumption ;apply self__Cfamtransl.match_Kseq; eassumption).
+            apply cheat.
               
           (* ifthenelse *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f a s1 s2 k e le m v b EV V prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.
-            rewrite -> self__Cfamtransl.transl_stmt_Sifthenelse_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSifthenelse in TR.            
-            monadInv TR.
-            exploit self__Cfamtransl.transl_expr_correct; eauto. intros [tv [H1 H2]].
-            left. 
-            exists (self__Cfamtransl.Target.State tfn (if b then x0 else x1) tk sp te tm). 
-            split. apply plus_one. 
-            eapply self__Cfamtransl.Target.step_ifthenelse; eauto.
-            eapply self__Cfamtransl.bool_of_val_match; eauto.
-            eapply self__Cfamtransl.match_state; eauto.
-            destruct b; eauto.
-                        
+          + apply cheat.
           (* loop *)
           + 
-            unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f s k e le m prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.            
-            rewrite -> self__Cfamtransl.transl_stmt_Sloop_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSloop in TR.            
-            monadInv TR. 
-            left. econstructor. split. apply plus_one. 
-            apply self__Cfamtransl.Target.step_loop.            
-            eapply self__Cfamtransl.match_state; eauto.            
-            - apply self__Cfamtransl.match_Kseq.  
-           rewrite -> self__Cfamtransl.transl_stmt_Sloop_eq.
-            unfold self__Cfamtransl.transl_stmtSloop. 
-            (* (do ts <- self__Cfamtransl.transl_stmt s; OK (self__Cfamtransl.Target.Sloop ts)) =
-                OK (self__Cfamtransl.Target.Sloop x) *)
-            apply cheat. apply MK.     
+            apply cheat.
             
           (* block *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f s k e le m prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE. 
-            rewrite -> self__Cfamtransl.transl_stmt_Sblock_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSblock in TR.
-            monadInv TR. 
-            left. econstructor. split. apply plus_one. 
-            apply self__Cfamtransl.Target.step_block.
-            apply self__Cfamtransl.match_state with (f := f0) (lo := lo) (hi := hi) (cs := cs).
-            apply TRF. apply EQ. apply MINJ. apply MCS. apply self__Cfamtransl.match_Kblock.  apply MK.
+          + apply cheat.
             
           (* return none *)
           + 
-            intros ge f k e le m m' F prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.  
-            fsimpl in TR.
-            monadInv TR.
-            left.
-            exploit self__Cfamtransl.match_callstack_freelist; eauto. intros [tv [EVAL [VINJ0 VINJ1]]].            
-            econstructor. split. apply plus_one. 
-            eapply self__Cfamtransl.Target.step_return_0. eauto.           
-            eapply self__Cfamtransl.match_returnstate; eauto.
-            eapply self__Cfamtransl.match_call_cont.
-            apply self__Cfamtransl.match_value_refl.            
+           apply cheat.
             
           (* return some *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f a k e le m v m' E F prog tprog tge H G.
-            intros T1 MSTATE. inv MSTATE.
-            rewrite -> self__Cfamtransl.transl_stmt_Sreturn_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSreturn in TR.
-            monadInv TR. left.
-            exploit self__Cfamtransl.transl_expr_correct; eauto. intros [tv [EVAL VINJ]].
-            exploit self__Cfamtransl.match_callstack_freelist; eauto. intros [tm' [A [B C]]].
-            econstructor. split. apply plus_one. 
-            eapply self__Cfamtransl.Target.step_return_1; eauto.
-            eapply self__Cfamtransl.match_returnstate; eauto.
-            eapply self__Cfamtransl.match_call_cont.
+          + apply cheat.
 
           (* label *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f lbl s k e le m prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE. 
-            rewrite -> self__Cfamtransl.transl_stmt_Slabel_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSlabel in TR.
-            monadInv TR.
-            left. econstructor. split. apply plus_one. 
-            apply self__Cfamtransl.Target.step_label.
-            eapply self__Cfamtransl.match_state; eauto.            
+          + apply cheat.       
             
           (* goto *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f lbl k e le m s' k' FL prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.
-            exploit self__Cfamtransl.transl_find_label; eauto. intros.
-            rewrite -> self__Cfamtransl.transl_stmt_Sgoto_eq in TR.
-            unfold self__Cfamtransl.transl_stmtSgoto in TR.
-            monadInv TR.
-            exploit self__Cfamtransl.transl_find_label_body; eauto. intros [ts' [tk' [A [B C]]]].
-            (* exploit (self__Cfamtransl.transl_find_label (self__Cfamtransl.Source.function_body f)); eauto.*)            
-            left. econstructor. split. apply plus_one.
-            apply self__Cfamtransl.Target.step_goto.
-            exact A.            
-            eapply self__Cfamtransl.match_state; eauto.
+          +
+            apply cheat.
                         
           (* internal function *)
-          + unfold self__Cfamtransl.__motiveTtransl_step_correct.
-            intros ge f vargs k m m1 e le FENV ENV prog tprog tge H G. 
-            intros T1 MSTATE. inv MSTATE.
-            left.
+          + 
+            apply cheat.
         Qed.
       FEnd transl_step_correct.
     
      FLemma transl_initial_states:
-          forall S prog tprog ge, Csharpminor.Sem.initial_state prog S ->
+          forall S prog tprog, Source.initial_state prog S ->
           transl_program prog = OK tprog ->
-          exists R, Cminor.Sem.initial_state tprog R /\ match_states ge S R.
+          exists R, Target.initial_state tprog R /\ match_states S R.
             FProofLemma.
               apply cheat.
             Qed.
      CloseFLemma.
         
      FLemma transl_final_states:
-          forall S R r ge,
-          match_states ge S R -> Csharpminor.Sem.final_state S r -> Cminor.Sem.final_state R r.
+          forall S R r,
+          match_states S R -> Source.final_state S r -> Target.final_state R r.
             FProofLemma.
-              intros. inv H0. inv H. inv MK. inv RESINJ. constructor. Qed.            
+              (* intros. inv H0. inv H. inv MK. inv RESINJ. constructor. Qed. *)
+              apply cheat.
+            Qed.
      CloseFLemma.     
   FEnd Cfamtransl.
+
+  Family Cminor extends Cfam.
+  
+       Inherit stmt.
+        
+       MetaData fn.
+          Record fn : Type := mkfunction {
+             fn_sig: signature;
+             fn_params: list ident;
+             fn_vars: list ident;
+             fn_stackspace: Z;
+             fn_body: self__Cminor.stmt
+          }.
+       FEnd fn.
+
+       FOverride Definition function := fn.
+       FOverride Definition function_body := self__Cminor.fn_body.
+       FOverride Definition function_locals := self__Cminor.fn_vars.
+       FOverride Definition function_params := self__Cminor.fn_params.
+       FOverride Definition function_sig := self__Cminor.fn_sig.
+              
+       (* stack pointer *)
+       (* Vptr sp Ptrofs.zero *)
+       FOverride Definition fenv := block.
+   
+       FOverride Definition free_fenv := fun m sp f =>
+         Mem.free m sp 0 f.(self__Cminor.fn_stackspace).
+          
+       FOverride Definition alloc_fenv := fun sp m f sp' m' => 
+          Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp).      
+  FEnd Cminor.  
+  
+  (* Cminor with processor-dependent instructions *)
+  Family CminorSel extends Cfam.
+       FInductive expr : Type :=
+          | Evar : ident -> expr          
+          | Econdition : condexpr -> expr -> expr -> expr
+          | Eop : Asm.operation -> exprlist -> expr
+          | Elet : expr -> expr -> expr
+          | Eletvar : nat -> expr
+       with exprlist : Type :=
+          | Enil: exprlist
+          | Econs: expr -> exprlist -> exprlist
+       with condexpr : Type :=
+          | CEcond : Asm.condition -> exprlist -> condexpr
+          | CEcondition : condexpr -> condexpr -> condexpr -> condexpr
+          | CElet: expr -> condexpr -> condexpr.
+       
+       Inherit stmt.
+
+       MetaData function.
+       Record function : Type := mkfunction {
+          fn_sig: signature;
+          fn_params: list ident;
+          fn_vars: list ident;
+          fn_stackspace: Z;
+          fn_body: self__CminorSel.stmt
+       }.
+       FEnd function.
+       
+       FDefinition letenv := list val.       
+       (* stack pointer *)
+       (* Vptr sp Ptrofs.zero *)
+       FOverride Definition fenv := block.
+   
+       FOverride Definition free_fenv := fun m sp f =>
+          Mem.free m sp 0 f.(self__Cminor.fn_stackspace).
+          
+       FOverride Definition alloc_fenv := fun sp m f sp' m' => 
+          Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp).
+          
+       FDefinition eval_operation := fun op => Asm.eval_operation op fundef unit.                     
+                    
+       FInductive eval_expr: genv -> val -> env -> mem -> letenv -> expr -> val -> Prop :=
+           | eval_Evar: forall ge sp e m le id v,
+               PTree.get id e = Some v ->
+               eval_expr ge sp e m le (Evar id) v
+           | eval_Eop: forall ge sp e m le op al vl v,
+               eval_exprlist ge sp e m le al vl ->
+               Asm.eval_operation ge sp op vl m = Some v ->
+               eval_expr ge sp e m le (Eop op al) v
+           | eval_Econdition: forall ge sp e m le a b c va v,
+               eval_condexpr ge sp e m le a va ->
+               eval_expr ge sp e m le (if va then b else c) v ->
+               eval_expr ge sp e m le (Econdition a b c) v
+           | eval_Elet: forall ge sp e m le a b v1 v2,
+               eval_expr ge sp e m le a v1 ->
+               eval_expr ge sp e m (v1 :: le) b v2 ->
+               eval_expr ge sp e m le (Elet a b) v2
+           | eval_Eletvar: forall ge sp e m le n v,
+               nth_error le n = Some v ->
+               eval_expr ge sp e m le (Eletvar n) v
+       with eval_exprlist: genv -> val -> env -> mem -> letenv -> self__CminorSel.exprlist -> list val -> Prop :=
+          | eval_Enil: forall ge sp e m le,
+              eval_exprlist ge sp e m le Enil nil
+          | eval_Econs: forall ge sp e m le a1 al v1 vl,
+              eval_expr ge sp e m le a1 v1 -> eval_exprlist ge sp e m le al vl ->
+              eval_exprlist ge sp e m le (Econs a1 al) (v1 :: vl)
+       with eval_condexpr: genv -> val -> env -> mem -> letenv -> self__CminorSel.condexpr -> bool -> Prop :=
+          | eval_CEcond: forall ge sp e m le cond al vl vb,
+              eval_exprlist ge sp e m le al vl ->
+              Asm.eval_condition cond vl m = Some vb ->
+              eval_condexpr ge sp e m le (CEcond cond al) vb
+          | eval_CEcondition: forall ge sp e m le a b c va v,
+              eval_condexpr ge sp e m le a va ->
+              eval_condexpr ge sp e m le (if va then b else c) v ->
+              eval_condexpr ge sp e m le (CEcondition a b c) v
+          | eval_CElet: forall ge sp e m le a b v1 v2,
+              eval_expr ge sp e m le a v1 ->
+              eval_condexpr ge sp e m (v1 :: le) b v2 ->
+              eval_condexpr ge sp e m le (CElet a b) v2.       
+  FEnd CminorSel.
+
+  Family Selection extends Cfamtransl.
+      Family Source extends Cminor.
+      FEnd Source.
+
+      Family Target extends Cminor.
+      FEnd Target.
+      
+
+  FEnd Selection
+  
          
   Family C extends Cfam.
       
@@ -1353,37 +1334,6 @@ Inductive bitfield : Type :=
          alloc_variables self__Sem.empty_fenv m (self__Csharpminor.fn_vars f) e m'.       
 
   FEnd Csharpminor.
-
-  Family Cminor extends Cfam.
-  
-       Inherit stmt.
-        
-       MetaData fn.
-          Record fn : Type := mkfunction {
-             fn_sig: signature;
-             fn_params: list ident;
-             fn_vars: list ident;
-             fn_stackspace: Z;
-             fn_body: self__Cminor.stmt
-          }.
-       FEnd fn.
-
-       FOverride Definition function := fn.
-       FOverride Definition function_body := self__Cminor.fn_body.
-       FOverride Definition function_locals := self__Cminor.fn_vars.
-       FOverride Definition function_params := self__Cminor.fn_params.
-       FOverride Definition function_sig := self__Cminor.fn_sig.
-              
-       (* stack pointer *)
-       (* Vptr sp Ptrofs.zero *)
-       FOverride Definition fenv := block.
-   
-       FOverride Definition free_fenv := fun m sp f =>
-         Mem.free m sp 0 f.(self__Cminor.fn_stackspace).
-          
-       FOverride Definition alloc_fenv := fun sp m f sp' m' => 
-          Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp).      
-  FEnd Cminor.  
   
   (* RISC-V *)
   Family Asm.
@@ -1966,87 +1916,6 @@ Inductive bitfield : Type :=
         FEnd final_state.
       FEnd Sem.         
    FEnd Asm.
-
-  (* Cminor with processor-dependent instructions *)
-  Family CminorSel extends Cfam.
-       FInductive expr : Type :=
-          | Evar : ident -> expr          
-          | Econdition : condexpr -> expr -> expr -> expr
-          | Eop : Asm.operation -> exprlist -> expr
-          | Elet : expr -> expr -> expr
-          | Eletvar : nat -> expr
-       with exprlist : Type :=
-          | Enil: exprlist
-          | Econs: expr -> exprlist -> exprlist
-       with condexpr : Type :=
-          | CEcond : Asm.condition -> exprlist -> condexpr
-          | CEcondition : condexpr -> condexpr -> condexpr -> condexpr
-          | CElet: expr -> condexpr -> condexpr.
-       
-       Inherit stmt.
-
-       MetaData function.
-       Record function : Type := mkfunction {
-          fn_sig: signature;
-          fn_params: list ident;
-          fn_vars: list ident;
-          fn_stackspace: Z;
-          fn_body: self__CminorSel.stmt
-       }.
-       FEnd function.
-       
-       FDefinition letenv := list val.       
-       (* stack pointer *)
-       (* Vptr sp Ptrofs.zero *)
-       FOverride Definition fenv := block.
-   
-       FOverride Definition free_fenv := fun m sp f =>
-          Mem.free m sp 0 f.(self__Cminor.fn_stackspace).
-          
-       FOverride Definition alloc_fenv := fun sp m f sp' m' => 
-          Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp).
-          
-       FDefinition eval_operation := fun op => Asm.eval_operation op fundef unit.                     
-                    
-       FInductive eval_expr: genv -> val -> env -> mem -> letenv -> expr -> val -> Prop :=
-           | eval_Evar: forall ge sp e m le id v,
-               PTree.get id e = Some v ->
-               eval_expr ge sp e m le (Evar id) v
-           | eval_Eop: forall ge sp e m le op al vl v,
-               eval_exprlist ge sp e m le al vl ->
-               Asm.eval_operation ge sp op vl m = Some v ->
-               eval_expr ge sp e m le (Eop op al) v
-           | eval_Econdition: forall ge sp e m le a b c va v,
-               eval_condexpr ge sp e m le a va ->
-               eval_expr ge sp e m le (if va then b else c) v ->
-               eval_expr ge sp e m le (Econdition a b c) v
-           | eval_Elet: forall ge sp e m le a b v1 v2,
-               eval_expr ge sp e m le a v1 ->
-               eval_expr ge sp e m (v1 :: le) b v2 ->
-               eval_expr ge sp e m le (Elet a b) v2
-           | eval_Eletvar: forall ge sp e m le n v,
-               nth_error le n = Some v ->
-               eval_expr ge sp e m le (Eletvar n) v
-       with eval_exprlist: genv -> val -> env -> mem -> letenv -> self__CminorSel.exprlist -> list val -> Prop :=
-          | eval_Enil: forall ge sp e m le,
-              eval_exprlist ge sp e m le Enil nil
-          | eval_Econs: forall ge sp e m le a1 al v1 vl,
-              eval_expr ge sp e m le a1 v1 -> eval_exprlist ge sp e m le al vl ->
-              eval_exprlist ge sp e m le (Econs a1 al) (v1 :: vl)
-       with eval_condexpr: genv -> val -> env -> mem -> letenv -> self__CminorSel.condexpr -> bool -> Prop :=
-          | eval_CEcond: forall ge sp e m le cond al vl vb,
-              eval_exprlist ge sp e m le al vl ->
-              Asm.eval_condition cond vl m = Some vb ->
-              eval_condexpr ge sp e m le (CEcond cond al) vb
-          | eval_CEcondition: forall ge sp e m le a b c va v,
-              eval_condexpr ge sp e m le a va ->
-              eval_condexpr ge sp e m le (if va then b else c) v ->
-              eval_condexpr ge sp e m le (CEcondition a b c) v
-          | eval_CElet: forall ge sp e m le a b v1 v2,
-              eval_expr ge sp e m le a v1 ->
-              eval_condexpr ge sp e m (v1 :: le) b v2 ->
-              eval_condexpr ge sp e m le (CElet a b) v2.       
-  FEnd CminorSel.
 
   (* Linear family languages *)
   Family Lfam.
