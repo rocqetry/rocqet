@@ -333,19 +333,30 @@ End BaseComp_ILK_Ctx.
 Print BaseComp_ILK_Ctx.
 
 Module STL.
-
-Definition y := 10.
-
-Inductive ask := yes | no.
-
+  Inductive ty := mt | mo : nat -> ty -> ty.
 End STL.
+
+Module J.
+  Import STL.
+End J.
+
+
+
+(* Module Type helper (self__BaseComp : BaseComp_ILK_Ctx) := BaseComp_IL_Sig(self__BaseComp). *)
 
 (* for final families *)
 Module Type BaseComp_ILK_Sig_ (self__BaseComp : BaseComp_ILK_Ctx).
+  
+  Declare Module ILK : BaseComp_IL_Sig_Helper self__BaseComp.
+  
   (* late binding inheritance *)
-  Module ILK := self__BaseComp.IL.
+  (*Module ILK :=
+    self__BaseComp.IL. *)
+
   (* non late binding inheritance *)
-  Module J := STL.
+  Module J.
+    Include STL.
+  End J.
   
   (*Declare Module ILK : BaseComp_IL_Sig_Helper self__BaseComp := self__BaseComp.IL.*)
   
@@ -359,11 +370,26 @@ Include BaseComp_ILK_Ctx.
 Include BaseComp_ILK_Sig_.
 End Ctx.
 
+(*Module Im (self__BaseComp : BaseComp_ILK_Ctx) <: BaseComp_ILK_Sig_ self__BaseComp.
+
+Module ILK. 
+  Include self__BaseComp.IL.
+End ILK.
+
+Definition y := self__BaseComp.IL.TUnit.
+Definition x := ILK.TCont (y :: nil).
+
+End Im.*)
+
 Module R (self: Ctx).
 
-(* Check self.J.y.*) 
+
+(* Print self.J.*)
+Definition x0 := STL.mt.
+Definition y0 := self.J.mo 0 x0.
 
 Definition y := self.IL.TUnit.
+
 Definition x := self.ILK.TCont (y :: nil).
 
 End R.
