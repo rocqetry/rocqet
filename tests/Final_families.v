@@ -11,6 +11,11 @@ Family A.
      | Emem : expr.
    FEnd Clight.
 
+   Family Csharpminor.
+     FInductive expr : Type := 
+     | Evar : expr.
+   FEnd Csharpminor.
+
    (*Family lower_addr.
      Family S extends C. FEnd S.
      Family T extends Clight. FEnd T.
@@ -27,6 +32,21 @@ Family A.
        Case Eaddr := T.Emem.
      FEnd lower.
    FEnd SimplExpr.
+
+   Family Cshmgen.
+     Family S extends Clight. FEnd S.
+     Family T extends Csharpminor. FEnd T.
+          
+     FRecursion lower about S.expr motive (fun (_ : S.expr) => T.expr) by _rect.
+       Case Emem := T.Evar.
+     FEnd lower.
+   FEnd Cshmgen.
+
+   (* This fails: *)
+   (*FDefinition f : C.expr -> Csharpminor.expr := 
+     fun input => 
+        Cshmgen.lower (SimplExpr.lower input).*)
+   
 FEnd A.
 
 Family B extends A.
@@ -59,10 +79,18 @@ Family B extends A.
    
    Family SimplExpr extends Remove_Esizeof, Remove_Ealignof.
       Final Family S := C.
-      Final Family T := Clight. 
-      
+      Final Family T := Clight.      
    FEnd SimplExpr.
+   
+   Family Cshmgen.
+     Final Family S := Clight. 
+     Final Family T := Csharpminor. 
+   FEnd Cshmgen.
 
+   (* chain passes together using final families *)
+   FDefinition f : C.expr -> Csharpminor.expr := 
+     fun input => 
+        Cshmgen.lower (SimplExpr.lower input).
 FEnd B.
 
 
