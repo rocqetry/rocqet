@@ -999,18 +999,21 @@ let compile_linkage_signature linkage =
                  return ()))
   in
   let sig_final = Naming.fresh_name ~prefix:"Sig" in
-  B.(
-    run
-    @@ define_moduletype ~module_name:sig_final
-         ~parameters:(Bwd.to_list context) ~body:(fun ctx ->
-           let helper_module_expr =
-             Termutils.apply_module
-               ~functor_expr:(Termutils.ident_to_module_expr helper_module)
-               ~arguments:ctx
-           in
-           (* Declare Name : Helper *)
-           let* _ = declare_module ~module_name:name helper_module_expr in
-           return ()))
+  let include_signature = 
+     B.(
+       run
+       @@ define_moduletype ~module_name:sig_final
+            ~parameters:(Bwd.to_list context) ~body:(fun ctx ->
+              let helper_module_expr =
+                Termutils.apply_module
+                  ~functor_expr:(Termutils.ident_to_module_expr helper_module)
+                  ~arguments:ctx
+              in
+              (* Declare Name : Helper *)
+              let* _ = declare_module ~module_name:name helper_module_expr in
+              return ()))
+  in 
+  include_signature, helper_module
 
 (* linkage is definitionally equal to base *)
 let compile_final_linkage_signature ~linkage ~(base: Libnames.qualid) = 

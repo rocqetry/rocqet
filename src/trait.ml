@@ -48,7 +48,7 @@ let close_trait () =
   match context with
   | LinkageCtx.Toplevel _ -> Errors.fail ~info:"Toplevel traits not supported"     
   | LinkageCtx.Nested (upper, linkage) ->      
-      let signature = Codegen.compile_linkage_signature linkage in
+      let signature, _ = Codegen.compile_linkage_signature linkage in
       let elem =
         let compiled_context =
           match linkage.context with
