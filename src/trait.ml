@@ -35,6 +35,7 @@ let open_with_base ~name ~base =
          base_names = [];
          fields = Bwd.Emp;
          default_ctx_params;
+         signature = None;
        }
   in
   let context = LinkageCtx.Nested (context, linkage) in
