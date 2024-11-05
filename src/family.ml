@@ -32,6 +32,7 @@ let open_family name =
             base_names = [];
             fields = Bwd.Emp;
             default_ctx_params;            
+            signature = None;
           }
       in
       (* Check further binding structure? *)
@@ -47,6 +48,7 @@ let open_family name =
             base_names = [];
             fields = Bwd.Emp;
             default_ctx_params = [];            
+            signature = None;
           }
       in
       Context.destructive_update (Some (LinkageCtx.Toplevel linkage))
@@ -93,6 +95,7 @@ let open_family_with_base ~name ~base =
                 base_names = [ base_linkage.name ];
                 fields = Bwd.Emp;
                 default_ctx_params;
+                signature = None;
               }
           in
           let context = LinkageCtx.Nested (context, linkage) in
@@ -109,6 +112,7 @@ let open_family_with_base ~name ~base =
                 base_names = [ base_linkage.name ];
                 fields = Bwd.Emp;
                 default_ctx_params = [];
+                signature = None;
               }
           in
           let context = LinkageCtx.Toplevel linkage in
@@ -161,6 +165,7 @@ let open_family_with_base_list ~name ~bases =
             base_names;
             fields = Bwd.Emp;
             default_ctx_params;
+            signature = None;
           }
       in
       let context = LinkageCtx.Nested (context, linkage) in
@@ -178,6 +183,7 @@ let open_family_with_base_list ~name ~bases =
             base_names;
             fields = Bwd.Emp;
             default_ctx_params = [];
+            signature = None;
           }
       in
       let context = LinkageCtx.Toplevel linkage in
@@ -303,6 +309,7 @@ let define_final_family ~(name: Names.Id.t) ~(value : Libnames.qualid) =
           base_names = [];
           fields = base_linkage.fields;
           default_ctx_params;            
+          signature = None;
       }
     in
     let qualid = value in 

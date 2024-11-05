@@ -402,6 +402,7 @@ and Linkage : sig
     base : t option; 
     base_names : Names.Id.t list;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
+    signature : CompiledModuleType.t option;
   }
 
   (* TODO: Some of these are not needed and some should be moved to
@@ -419,8 +420,9 @@ end = struct
     name : Names.Id.t;
     definition: Names.Id.t option;
     base : t option;
-    base_names : Names.Id.t list;
+    base_names : Names.Id.t list;    
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
+    signature : CompiledModuleType.t option;
   }
 
   let context_parameters linkage =
