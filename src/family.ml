@@ -213,16 +213,23 @@ let close_family () =
      end 
   | LinkageCtx.Nested (upper, linkage) ->
       match linkage with 
-      (*| Linkage.{ fields = Bwd.Emp; base = Some base; base_names = [base_name]; _ } ->         
-         (* This optimization should not work when you inherit from a trait *)
-         (* Can we somehow get the helper signature of this linkage *)
-         let qualid = Libnames.qualid_of_ident base_name in 
-         let resolved_qualid = Resolver.resolve_qualid ~context ~qualid in 
-         let linkage = { linkage with fields = base.fields; definition = Some base_name } in
+      | Linkage.{ fields = Bwd.Emp; 
+                  base = Some { signature = Some signature; fields; _  };
+                  base_names = [base_name]; 
+                  default_ctx_params;  _ } ->         
+         (* optimizing empty linkages with a single base to point to reuse the base signature  *)         
+         let linkage = 
+           { linkage with 
+             signature = Some signature; 
+             fields;
+             definition = Some base_name 
+           } 
+         in
          let compiled_signature = 
-           Codegen.compile_final_linkage_signature 
+           Codegen.compile_same_linkage_signature 
              ~linkage 
-             ~base:resolved_qualid 
+             ~signature
+             ~default_ctx_params
          in
          let elem =
            let compiled_context =
@@ -246,7 +253,7 @@ let close_family () =
              }
          in
          Context.destructive_update (Some upper);
-         Context.add_field ~name:linkage.name ~elem *)
+         Context.add_field ~name:linkage.name ~elem
       | _ ->
          let linkage =
            match linkage.base with
@@ -255,7 +262,7 @@ let close_family () =
                let elements = Bwd.to_list base_linkage.fields in
                Inheritance.inherit_elements ~elements ~linkage ~context
          in
-         let signature, helper_signature = Codegen.compile_linkage_signature linkage in
+         let compiled_signature, helper_signature = Codegen.compile_linkage_signature linkage in
          let elem =
            let compiled_context =
              match linkage.context with
@@ -274,7 +281,7 @@ let close_family () =
              {
                linkage;
                compiled_context;
-               compiled_signature = signature;
+               compiled_signature;
                default_ctx_params;
              }
          in
