@@ -2,20 +2,31 @@ open Types
 open Env
 open Bwd
 
+let lookup_base context base =
+  let path = Libnames.qualid_of_ident base in
+  match Context.lookup (Some context) path with 
+  | Some linkage -> Some linkage
+  | None -> 
+    Inheritance.inherit_dependencies ~prefix:base;
+    let elem = Inheritance.lookup_field_in_base ~field:base ~context in
+    match elem with 
+    | Some (FamilyDefinition { linkage; _ }) -> Some linkage 
+    | _ -> None
+    
+
 let open_with_base ~name ~base = 
   (* We don't have to inherit depenencies, we just need the compiled context *)
-  Inheritance.inherit_dependencies ~prefix:base;
-  let context = Context.get () in
+  let context = Context.get () in  
+  let elem = lookup_base context base in   
   let _, parameters =
      Codegen.compile_linkage_context ~field_name:name context
   in
   let default_ctx_params =
     Codegen.compile_default_params ~context:parameters
   in
-  let elem = Inheritance.lookup_field_in_base ~field:base ~context in
   let base = 
      match elem with 
-     | Some (LinkageElem.FamilyDefinition { linkage; _ }) -> 
+     | Some linkage -> 
         let linkage =
            Linkage.path_subtitution linkage
              ~source:(Naming.self_version linkage.name)
