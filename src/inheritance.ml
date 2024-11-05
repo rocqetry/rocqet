@@ -356,7 +356,8 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
            end
         
         
-        | FamilyDefinition ({ linkage = { definition = Some def; _} ; _ } as family) ->            
+        (* TODO *)
+        (*| FamilyDefinition ({ linkage = { definition = Some def; _} ; _ } as family) ->            
            let path = Libnames.qualid_of_ident def in
            begin match Context.local_lookup context path with
            | None -> Errors.fail ~info:"Definition not found"
@@ -368,10 +369,10 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                   fields = base_linkage.fields 
                 } 
               in  
-              let base = Resolver.resolve_qualid ~context ~qualid:path in
-              let compiled_signature = Codegen.compile_final_linkage_signature ~linkage ~base in
+              let base = Resolver.resolve_qualid ~context ~qualid:path in              
+              let compiled_signature = Codegen.compile_same_linkage_signature ~linkage in
               FamilyDefinition { family with linkage; compiled_signature; compiled_context; }, []
-           end 
+           end *)
         | FamilyDefinition family -> (
             match family.linkage.base with
             | None ->
