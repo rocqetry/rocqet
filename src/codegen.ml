@@ -1033,6 +1033,7 @@ let compile_final_linkage_signature ~linkage ~(base: Libnames.qualid) =
 
 (* optimization for empty families with a single base *)
 let compile_same_linkage_signature ~linkage ~signature ~default_ctx_params =
+  default_ctx_params |> List.iter (fun (n, _) -> Printf.printf "N: %s\n" (Names.Id.to_string n));
   let Linkage.{ name; context; _ } = linkage in
   let sig_final = Naming.fresh_name ~prefix:"Sig" in
   let include_signature = 
@@ -1047,7 +1048,7 @@ let compile_same_linkage_signature ~linkage ~signature ~default_ctx_params =
                 Termutils.apply_module
                   ~functor_expr:(Termutils.ident_to_module_expr signature)
                   ~arguments:ctx
-              in
+              in              
               (* Declare Name : Helper *)
               let* _ = declare_module ~module_name:name helper_module_expr in
               return ()))
