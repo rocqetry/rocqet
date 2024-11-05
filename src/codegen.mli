@@ -76,6 +76,12 @@ val compile_final_linkage_signature :
   base:Libnames.qualid -> 
   CompiledModuleType.t
 
+val compile_same_linkage_signature :
+  linkage:Linkage.t -> 
+  signature:CompiledModuleType.t -> 
+  default_ctx_params:(Names.Id.t * CompiledModule.t) list -> 
+  CompiledModuleType.t
+
 (* Compiling a field definition *)
 val compile_definition :
   name:Names.Id.t ->
