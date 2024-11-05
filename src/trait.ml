@@ -11,8 +11,7 @@ let lookup_base context base =
     let elem = Inheritance.lookup_field_in_base ~field:base ~context in
     match elem with 
     | Some (FamilyDefinition { linkage; _ }) -> Some linkage 
-    | _ -> None
-  
+    | _ -> None  
 
 let open_with_base ~name ~base =  
   match Context.get_store () with 
@@ -77,7 +76,45 @@ let open_with_base ~name ~base =
       let context = LinkageCtx.Toplevel linkage in
       Context.destructive_update (Some context)
 
-
+let open_trait ~name =
+  match Context.get_store () with
+  | Some _context ->      
+      let context = Context.get () in
+      let _, parameters =
+        Codegen.compile_linkage_context ~field_name:name context
+      in
+      let default_ctx_params =
+        Codegen.compile_default_params ~context:parameters
+      in      
+      let linkage =
+        Linkage.
+          {
+            context = Bwd.of_list parameters;
+            name;
+            definition = None;
+            base = None;
+            base_names = [];
+            fields = Bwd.Emp;
+            default_ctx_params;            
+            signature = None;
+          }
+      in      
+      Context.destructive_update (Some (LinkageCtx.Nested (context, linkage)))
+  | None ->
+      let linkage =
+        Linkage.
+          {
+            context = Bwd.Emp;
+            name;
+            definition = None;
+            base = None;            
+            base_names = [];
+            fields = Bwd.Emp;
+            default_ctx_params = [];            
+            signature = None;
+          }
+      in
+      Context.destructive_update (Some (LinkageCtx.Toplevel linkage))
 
 let close_trait () =
   let context = Context.get () in

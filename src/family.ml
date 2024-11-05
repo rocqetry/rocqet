@@ -193,24 +193,16 @@ let close_family () =
   let context = Context.get () in
   match context with
   | LinkageCtx.Toplevel linkage ->
-     begin match linkage with 
-     (*| Linkage.{ fields = Bwd.Emp; base = Some base; base_names = [base_name]; _ } ->       
-        let linkage = { linkage with fields = base.fields; definition = Some base_name } in
-        Context.destructive_update None;
-        let _impl = Codegen.compile_linkage linkage in
-        Linkages.add linkage *)
-     | _ ->   
-        let linkage =
-          match linkage.base with
-          | None -> linkage
-          | Some base_linkage ->
-              let elements = Bwd.to_list base_linkage.fields in
-              Inheritance.inherit_elements ~elements ~linkage ~context
-        in
-        Context.destructive_update None;
-        let _impl = Codegen.compile_linkage linkage in
-        Linkages.add linkage
-     end 
+     let linkage =
+       match linkage.base with
+       | None -> linkage
+       | Some base_linkage ->
+           let elements = Bwd.to_list base_linkage.fields in
+           Inheritance.inherit_elements ~elements ~linkage ~context
+     in
+     Context.destructive_update None;
+     let _impl = Codegen.compile_linkage linkage in
+     Linkages.add linkage     
   | LinkageCtx.Nested (upper, linkage) ->
       match linkage with 
       | Linkage.{ fields = Bwd.Emp; 

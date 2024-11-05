@@ -99,6 +99,8 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "Trait" ident(name) "extends" ident(base) ] -> { Entry.open_trait_with_base ~name ~base }
 
+| [ "Trait" ident(name) ] -> { Entry.open_trait ~name }
+
 | [ "FEnd" ident(scope_name) ] -> { Entry.fend scope_name }
 
 | [ "FEnd" ne_ident_list_sep(scope_names, "with") ] -> { Entry.fend_with scope_names }
