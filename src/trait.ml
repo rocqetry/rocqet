@@ -82,7 +82,9 @@ let open_with_base ~name ~base =
 let close_trait () =
   let context = Context.get () in
   match context with
-  | LinkageCtx.Toplevel _ -> Errors.fail ~info:"Toplevel traits not supported"     
+  | LinkageCtx.Toplevel linkage -> 
+     Context.destructive_update None;     
+     Linkages.add linkage     
   | LinkageCtx.Nested (upper, linkage) ->      
       let signature, _ = Codegen.compile_linkage_signature linkage in
       let elem =
