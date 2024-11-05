@@ -37,4 +37,5 @@
   ;Conformance_opt
   ;Final_families
   ;Conformance_opt2
+  ;Trait_no_base 
   ))
