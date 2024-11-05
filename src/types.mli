@@ -182,6 +182,7 @@ and Linkage : sig
     base : t option;
     base_names : Names.Id.t list;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
+    signature : CompiledModuleType.t option;
   }
 
   val context_parameters : t -> Libnames.qualid list
