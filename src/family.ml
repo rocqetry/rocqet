@@ -214,16 +214,17 @@ let close_family () =
   | LinkageCtx.Nested (upper, linkage) ->
       match linkage with 
       | Linkage.{ fields = Bwd.Emp; 
-                  base = Some { signature = Some signature; fields; _  };
-                  base_names = [base_name]; 
-                  default_ctx_params;  _ } ->         
-         (* optimizing empty linkages with a single base to point to reuse the base signature  *)         
+                  base = Some { name; signature = Some signature; fields; default_ctx_params; _  };
+                  base_names = [ base_name ];  _ } when base_name = name ->         
+         (* optimizing empty linkages with a single base to point to reuse the base signature, 
+            rather than compiling a new one. *)         
          let linkage = 
            { linkage with 
-             signature = Some signature; 
+             (* Maybe this thing should store it's own default_ctx_params ? *)
+             (* signature = Some signature; *)
              fields;
-             definition = Some base_name 
-           } 
+             definition = Some base_name;             
+           }
          in
          let compiled_signature = 
            Codegen.compile_same_linkage_signature 
@@ -239,7 +240,7 @@ let close_family () =
                    ~info:
                      "close_family: Couldn't get compiled context from parameters"
              | Bwd.Snoc (_, (_, mapply)) -> Termutils.extract_functor_name mapply
-           in
+           in           
            let default_ctx_params =
              upper |> Context.family_linkage |> function
              | { default_ctx_params; _ } -> default_ctx_params
