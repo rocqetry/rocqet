@@ -58,8 +58,8 @@ Family B extends A.
    FEnd Remove_Ealignof.            
    
    Family SimplExpr extends Remove_Esizeof, Remove_Ealignof.
-      Family S := C. 
-      Family T := Clight. 
+      Final Family S := C.
+      Final Family T := Clight. 
       
    FEnd SimplExpr.
 
