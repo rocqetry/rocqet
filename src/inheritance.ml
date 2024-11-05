@@ -392,7 +392,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                     ~linkage:empty_linkage
                     ~context:(LinkageCtx.Nested (context, empty_linkage))
                 in
-                let compiled_signature =
+                let compiled_signature, _ =
                   Codegen.compile_linkage_signature linkage
                 in
                 let default_ctx_params =
@@ -428,7 +428,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                         ~linkage:empty_linkage
                         ~context:(LinkageCtx.Nested (context, empty_linkage))
                     in
-                    let compiled_signature =
+                    let compiled_signature, _ =
                       Codegen.compile_linkage_signature linkage
                     in
                     let default_ctx_params =
@@ -480,7 +480,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                     let linkage =
                       Linkage.{ linkage with base = Some new_base }
                     in
-                    let compiled_signature =
+                    let compiled_signature, _ =
                       Codegen.compile_linkage_signature linkage
                     in
                     let default_ctx_params =
