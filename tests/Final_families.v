@@ -62,6 +62,10 @@ Family B extends A.
 
    Family C extends C_Esizeof, C_Ealignof.
    FEnd C.
+
+   (* Inherit Clight.
+
+   Inherit Csharpminor.*)
    
    Trait Remove_Esizeof extends SimplExpr.      
      Family S extends C_Esizeof. FEnd S.

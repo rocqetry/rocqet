@@ -14,11 +14,11 @@ let lookup_base context base =
     | _ -> None
   
 
-let open_with_base ~name ~base = 
-  (* We don't have to inherit depenencies, we just need the compiled context *)  
+let open_with_base ~name ~base =  
   match Context.get_store () with 
   | Some context -> 
      let elem = lookup_base context base in
+     let context = Context.get () in
      let _, parameters =
         Codegen.compile_linkage_context ~field_name:name context
      in
