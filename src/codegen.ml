@@ -1031,6 +1031,30 @@ let compile_final_linkage_signature ~linkage ~(base: Libnames.qualid) =
            in*)
            return ()))
 
+(* optimization for empty families with a single base *)
+let compile_same_linkage_signature ~linkage ~signature ~default_ctx_params =
+  let Linkage.{ name; context; _ } = linkage in
+  let sig_final = Naming.fresh_name ~prefix:"Sig" in
+  let include_signature = 
+     B.(
+       run
+       @@ define_moduletype ~module_name:sig_final
+            ~parameters:(Bwd.to_list context) ~body:(fun ctx ->
+              let ctx =
+                normalize_parameters ~default_ctx_params ~parameters:ctx
+              in                 
+              let helper_module_expr =
+                Termutils.apply_module
+                  ~functor_expr:(Termutils.ident_to_module_expr signature)
+                  ~arguments:ctx
+              in
+              (* Declare Name : Helper *)
+              let* _ = declare_module ~module_name:name helper_module_expr in
+              return ()))
+  in 
+  include_signature
+  
+
 let compile_definition ~(name : Names.Id.t)
     ?(body_type : Constrexpr.constr_expr option)
     ~(body_expr : Constrexpr.constr_expr) parameters =
