@@ -64,7 +64,7 @@ Family STLC_prod extends STLC_bool.
   FEnd subst_size.  
 FEnd STLC_prod.
 
-Family STLC_nat. 
+Trait STLC_nat extends STLC. 
   Family X.
     FInductive ty : Set :=
       | ty_nat : ty.

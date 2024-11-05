@@ -292,8 +292,10 @@ Module Type BaseComp_IL_Sig_Helper (self__BaseComp : BaseComp_IL_Ctx).
 End BaseComp_IL_Sig_Helper.
 
 Module Type BaseComp_IL_Sig (self__BaseComp : BaseComp_IL_Ctx).
-  Declare Module IL : BaseComp_IL_Sig_Helper (self__BaseComp).
+  Declare Module IL : BaseComp_IL_Sig_Helper self__BaseComp.
 End BaseComp_IL_Sig.
+
+
 
 (* Instantiate BaseComp.IL *)
 Module BaseComp_IL_Impl (self__BaseComp : BaseComp_IL_Ctx)
@@ -327,6 +329,70 @@ Module Type BaseComp_ILK_Ctx.
   Include BaseComp_IL_Ctx.
   Include BaseComp_IL_Sig.
 End BaseComp_ILK_Ctx.
+
+Print BaseComp_ILK_Ctx.
+
+Module STL.
+  Inductive ty := mt | mo : nat -> ty -> ty.
+End STL.
+
+Module J.
+  Import STL.
+End J.
+
+
+
+(* Module Type helper (self__BaseComp : BaseComp_ILK_Ctx) := BaseComp_IL_Sig(self__BaseComp). *)
+
+(* for final families *)
+Module Type BaseComp_ILK_Sig_ (self__BaseComp : BaseComp_ILK_Ctx).
+  
+  Declare Module ILK : BaseComp_IL_Sig_Helper self__BaseComp.
+  
+  (* late binding inheritance *)
+  (*Module ILK :=
+    self__BaseComp.IL. *)
+
+  (* non late binding inheritance *)
+  Module J.
+    Include STL.
+  End J.
+  
+  (*Declare Module ILK : BaseComp_IL_Sig_Helper self__BaseComp := self__BaseComp.IL.*)
+  
+  (* with Module := self__BaseComp.IL.                                               
+
+  Include BaseComp_IL_Sig (self__BaseComp) with Module IL := ILK.*)
+End BaseComp_ILK_Sig_.
+
+Module Type Ctx.
+Include BaseComp_ILK_Ctx.
+Include BaseComp_ILK_Sig_.
+End Ctx.
+
+(*Module Im (self__BaseComp : BaseComp_ILK_Ctx) <: BaseComp_ILK_Sig_ self__BaseComp.
+
+Module ILK. 
+  Include self__BaseComp.IL.
+End ILK.
+
+Definition y := self__BaseComp.IL.TUnit.
+Definition x := ILK.TCont (y :: nil).
+
+End Im.*)
+
+Module R (self: Ctx).
+
+
+(* Print self.J.*)
+Definition x0 := STL.mt.
+Definition y0 := self.J.mo 0 x0.
+
+Definition y := self.IL.TUnit.
+
+Definition x := self.ILK.TCont (y :: nil).
+
+End R.
 
 Module Type BaseComp_ILK_Ty_Ctx
   (self__BaseComp : BaseComp_ILK_Ctx).
@@ -380,9 +446,15 @@ Module Type BaseComp_ILK_Sig_Helper (self__BaseComp : BaseComp_ILK_Ctx).
   Include BaseComp_ILK_Exp (self__BaseComp) (* BaseComp_ILK_Exp_Ctx_Impl *).
 End BaseComp_ILK_Sig_Helper.
 
+Module Type T (self__BaseComp : BaseComp_ILK_Ctx) := BaseComp_ILK_Exp_Ctx self__BaseComp <+ BaseComp_ILK_Exp self__BaseComp.
+
 Module Type BaseComp_ILK_Sig (self__BaseComp : BaseComp_ILK_Ctx).
-  Declare Module ILK : BaseComp_ILK_Sig_Helper (self__BaseComp).
+   Module ILK := BaseComp_ILK_Exp_Ctx self__BaseComp <+ BaseComp_ILK_Exp self__BaseComp.
 End BaseComp_ILK_Sig.
+
+(*Module Type BaseComp_ILK_Sig (self__BaseComp : BaseComp_ILK_Ctx).
+  Declare Module ILK : BaseComp_ILK_Sig_Helper (self__BaseComp).
+End BaseComp_ILK_Sig. *)
 
 (* Instantiate BaseComp.ILK *)
 Module BaseComp_ILK_Impl (self__BaseComp : BaseComp_ILK_Ctx)
@@ -426,6 +498,7 @@ End BaseComp_ILC_Ty_Ctx.
 Module Type BaseComp_ILC_Ty 
   (self__BaseComp : BaseComp_ILC_Ctx)
   (self__ILC : BaseComp_ILC_Ty_Ctx self__BaseComp).  
+  
   Include BaseComp_IL_Ty (self__BaseComp) (self__ILC).
   Axiom TVar : self__BaseComp.Ident -> Ty.
   Axiom TExist : self__BaseComp.Ident -> Ty -> Ty.

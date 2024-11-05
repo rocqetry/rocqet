@@ -354,7 +354,25 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
               in
               elem, more
            end
-
+        
+        
+        (* TODO *)
+        (*| FamilyDefinition ({ linkage = { definition = Some def; _} ; _ } as family) ->            
+           let path = Libnames.qualid_of_ident def in
+           begin match Context.local_lookup context path with
+           | None -> Errors.fail ~info:"Definition not found"
+           | Some base_linkage -> 
+              (* (1) We need to update the linkage *)              
+              let linkage = 
+                { family.linkage with 
+                  context = Bwd.of_list parameters; 
+                  fields = base_linkage.fields 
+                } 
+              in  
+              let base = Resolver.resolve_qualid ~context ~qualid:path in              
+              let compiled_signature = Codegen.compile_same_linkage_signature ~linkage in
+              FamilyDefinition { family with linkage; compiled_signature; compiled_context; }, []
+           end *)
         | FamilyDefinition family -> (
             match family.linkage.base with
             | None ->
@@ -375,7 +393,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                     ~linkage:empty_linkage
                     ~context:(LinkageCtx.Nested (context, empty_linkage))
                 in
-                let compiled_signature =
+                let compiled_signature, _ =
                   Codegen.compile_linkage_signature linkage
                 in
                 let default_ctx_params =
@@ -411,7 +429,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                         ~linkage:empty_linkage
                         ~context:(LinkageCtx.Nested (context, empty_linkage))
                     in
-                    let compiled_signature =
+                    let compiled_signature, _ =
                       Codegen.compile_linkage_signature linkage
                     in
                     let default_ctx_params =
@@ -463,7 +481,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                     let linkage =
                       Linkage.{ linkage with base = Some new_base }
                     in
-                    let compiled_signature =
+                    let compiled_signature, _ =
                       Codegen.compile_linkage_signature linkage
                     in
                     let default_ctx_params =
