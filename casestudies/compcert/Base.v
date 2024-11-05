@@ -26,7 +26,7 @@ From NFPOP Require Import Prelude.
 Local Open Scope string_scope.
 Local Open Scope list_scope.
 
-Family Base.
+Trait Base.
 
 Family C.
 FInductive expr : Type :=
@@ -1582,6 +1582,263 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
 
 FEnd Csharpminor.
 
+(* Clight -> Csharpminor *)
+Family Cshmgen.
+FDefinition make_intconst := fun (n: int) => Csharpminor.Econst (Csharpminor.Ointconst n).
+FDefinition make_longconst := fun (f: int64) => Csharpminor.Econst (Csharpminor.Olongconst f).
+FDefinition make_floatconst := fun (f: float) => Csharpminor.Econst (Csharpminor.Ofloatconst f).
+FDefinition make_singleconst := fun (f: float32) => Csharpminor.Econst (Csharpminor.Osingleconst f).
+FDefinition make_ptrofsconst := fun (n: Z) =>
+  if Archi.ptr64 then make_longconst (Int64.repr n) else make_intconst (Int.repr n).            
+
+FDefinition sizeof : composite_env -> type -> res Z := fun ce t => 
+  if complete_type ce t
+  then OK (Ctypes.sizeof ce t)
+  else Error (msg "incomplete type").
+
+FDefinition alignof : composite_env -> type -> res Z := fun ce t => 
+  if complete_type ce t
+  then OK (Ctypes.alignof ce t)
+  else Error (msg "incomplete type").
+
+(* TODO: they rely on binary/unary ops *)
+(* To be overriden in a compiler that supports operations *)
+FOpaque Definition make_cast : type -> type -> Csharpminor.expr -> res Csharpminor.expr :=
+  fun _ _ e => OK e.
+FOpaque Definition make_boolean : Csharpminor.expr -> type -> Csharpminor.expr :=
+  fun e _ => e.
+
+FRecursion transl_expr about Clight.expr motive (fun (_ : Clight.expr) => composite_env -> res Csharpminor.expr) by _rect.
+Case Econst_int n ty := (fun ce => OK(make_intconst n)). 
+Case Econst_float n ty := (fun ce => OK(make_floatconst n)).
+Case Econst_single n ty := (fun ce => OK(make_singleconst n)).
+Case Econst_long n ty := (fun ce => OK(make_longconst n)).
+Case Etempvar id ty := (fun ce => OK(Csharpminor.Evar id)). 
+Case Esizeof ty' ty := (fun ce => do sz <- sizeof ce ty'; OK(make_ptrofsconst sz)).
+Case Ealignof ty' ty := (fun ce => do al <- alignof ce ty'; OK(make_ptrofsconst al)).
+Case Ecast b ty := (fun ce => do tb <- transl_expr b ce; make_cast (Clight.typeof b) ty tb).
+FEnd transl_expr.
+
+(* (nbrk : nat) -> if Clight.stmt terminates on break return Csharpminor.exit nbrk
+   (ncnt : nat) -> if Clight.smt terminates on continue return Csharpminor.exit ncnt
+*)      
+      
+FRecursion transl_stmt about Clight.stmt motive (fun (_ : Clight.stmt) => composite_env -> type -> nat -> nat -> res Csharpminor.stmt) by _rect.
+Case Sskip := (fun ce tyret nbrk ncnt => OK Csharpminor.Sskip).   
+Case Sset x b :=
+(fun ce tyret nbrk ncnt => 
+  do tb <- transl_expr b ce;
+  OK (Csharpminor.Sset x tb)).
+Case Sseq s1 s2 :=
+(fun ce tyret nbrk ncnt => 
+  do ts1 <- transl_stmt s1 ce tyret nbrk ncnt;
+  do ts2 <- transl_stmt s2 ce tyret nbrk ncnt;
+  OK (Csharpminor.Sseq ts1 ts2)).
+Case Sifthenelse e s1 s2 :=
+(fun ce tyret nbrk ncnt => 
+  do te <- transl_expr e ce;
+  do ts1 <- transl_stmt s1 ce tyret nbrk ncnt;
+  do ts2 <- transl_stmt s2 ce tyret nbrk ncnt;
+  OK (Csharpminor.Sifthenelse (make_boolean te (Clight.typeof e)) ts1 ts2)).
+Case Sreturn e :=
+(fun ce tyret nbrk ncnt =>
+   match e with
+   | None => OK (Csharpminor.Sreturn None)
+   | Some e => 
+       do te <- transl_expr e ce;
+       do te' <- make_cast (Clight.typeof e) tyret te;
+       OK (Csharpminor.Sreturn (Some te'))
+   end).
+Case Slabel lbl s :=
+(fun ce tyret nbrk ncnt => 
+  do ts <- transl_stmt s ce tyret nbrk ncnt;
+  OK (Csharpminor.Slabel lbl ts)).
+Case Sgoto lbl := (fun ce tyret nbrk ncnt => OK (Csharpminor.Sgoto lbl)).
+FEnd transl_stmt.
+
+(* Translation of functions *)
+FDefinition transl_var := fun (ce: composite_env) (v: ident * type) =>
+  do sz <- sizeof ce (snd v); OK (fst v, sz).
+      
+FDefinition signature_of_function := fun (f: Clight.function) =>
+  {| sig_args := map typ_of_type (map snd (Clight.fn_params f));
+    sig_res  := rettype_of_type (Clight.fn_return f);
+    sig_cc   := Clight.fn_callconv f |}.
+      
+FDefinition transl_function : composite_env -> Clight.function -> res Csharpminor.function :=
+  fun (ce: composite_env) (f: Clight.function)  =>
+  do tbody <- transl_stmt (Clight.fn_body f) ce f.(self__Base.Clight.fn_return) 1%nat 0%nat;
+  do tvars <- mmap (transl_var ce) (self__Base.Clight.fn_vars f);
+  OK (Csharpminor.mkfunction
+        (signature_of_function f)
+        (map fst (Clight.fn_params f))
+        tvars
+        (map fst (Clight.fn_temps f))
+        tbody).      
+
+FDefinition transl_fundef : composite_env -> ident -> Clight.fundef -> res Csharpminor.fundef :=
+  fun (ce: composite_env) (id: ident) (f: Clight.fundef) =>
+  match f with
+  | Internal g =>
+      do tg <- transl_function ce g; OK(AST.Internal tg)
+  | External ef args res cconv =>
+      if signature_eq (ef_sig ef) (signature_of_type args res cconv)
+      then OK(AST.External ef)
+      else Error(msg "Cshmgen.transl_fundef: wrong external signature")
+  end.
+
+FDefinition transl_globvar := fun (id: ident) (ty: type) => OK tt.
+
+FDefinition transl_program : Clight.program -> res Csharpminor.program := fun p => 
+  transform_partial_program2 (transl_fundef p.(prog_comp_env)) transl_globvar p.
+
+(* correctness of translation *)
+
+MetaData match_fundef.
+Inductive match_fundef (p: self__Base.Clight.program) : self__Base.Clight.fundef -> self__Base.Csharpminor.fundef -> Prop :=
+  | match_fundef_internal: forall f tf,
+      self__Cshmgen.transl_function p.(prog_comp_env) f = OK tf ->
+      match_fundef p (Ctypes.Internal f) (AST.Internal tf)
+  | match_fundef_external: forall ef args res cc,
+      ef_sig ef = signature_of_type args res cc ->
+      match_fundef p (Ctypes.External ef args res cc) (AST.External ef).
+FEnd match_fundef.
+
+FDefinition match_varinfo : type -> unit -> Prop := fun v tv => True.
+
+FDefinition match_prog : Clight.program -> Csharpminor.program -> Prop := fun p tp =>
+  match_program_gen match_fundef match_varinfo p p tp.
+
+FInductive match_transl
+  : self__Base.Csharpminor.stmt -> self__Base.Csharpminor.cont ->
+    self__Base.Csharpminor.stmt -> self__Base.Csharpminor.cont -> Prop :=
+| match_transl_0: forall ts tk,
+    match_transl ts tk ts tk.
+
+(* | match_transl_1: forall ts tk,
+    match_transl (self__Base.Csharpminor.Sblock ts) tk ts
+      (self__Base.Csharpminor.Kblock tk).*)
+
+FInductive match_cont : composite_env -> type -> nat -> nat -> Clight.cont -> Csharpminor.cont -> Prop :=
+| match_Kstop: forall ce tyret nbrk ncnt,
+    match_cont ce tyret nbrk ncnt Clight.Kstop Csharpminor.Kstop      
+| match_Kseq: forall ce tyret nbrk ncnt s k ts tk,
+    transl_stmt s ce tyret nbrk ncnt = OK ts ->
+    match_cont ce tyret nbrk ncnt k tk ->
+    match_cont ce tyret nbrk ncnt (Clight.Kseq s k) (Csharpminor.Kseq ts tk).
+               
+(*| match_Kloop1: forall tyret s1 s2 k ts1 ts2 nbrk ncnt tk,
+    transl_stmt s1 tyret 1%nat 0%nat = OK ts1 ->
+    transl_stmt s2 tyret 0%nat (S ncnt) = OK ts2 ->
+    match_cont tyret nbrk ncnt k tk ->
+    match_cont tyret 1%nat 0%nat
+               (Clight.Sem.Kloop1 s1 s2 k)
+               (Csharpminor.Sem.Kblock
+                  (Csharpminor.Sem.Kseq ts2
+                     (Csharpminor.Sem.Kseq
+                        (Csharpminor.Sloop
+                           (Csharpminor.Sseq
+                              (Csharpminor.Sblock ts1) ts2))
+                        (Csharpminor.Sem.Kblock tk))))
+| match_Kloop2: forall tyret s1 s2 k ts1 ts2 nbrk ncnt tk,
+    transl_stmt s1 tyret 1%nat 0%nat = OK ts1 ->
+    transl_stmt s2 tyret 0%nat (S ncnt) = OK ts2 ->
+    match_cont tyret nbrk ncnt k tk ->
+    match_cont tyret 0%nat (S ncnt)
+               (Clight.Sem.Kloop2 s1 s2 k)
+               (Csharpminor.Sem.Kseq
+                  (Csharpminor.Sloop
+                     (Csharpminor.Sseq
+                        (Csharpminor.Sblock ts1) ts2))
+                  (Csharpminor.Sem.Kblock tk)).*)
+
+(*
+Variable prog: Clight.program.
+Variable tprog: Csharpminor.program.
+Hypothesis TRANSL: match_prog prog tprog.
+
+Let ge := globalenv prog.
+Let tge := Genv.globalenv tprog.
+*)
+
+MetaData match_env.
+Record match_env
+  (prog: self__Base.Clight.program)
+  (e: self__Base.Clight.env) (te: self__Base.Csharpminor.fenv) : Prop :=
+ mk_match_env {
+   me_local:
+     forall id b ty,
+       e!id = Some (b, ty) ->
+       let ge := self__Base.Clight.globalenv prog in 
+       te!id = Some(b, sizeof (self__Base.Clight.genv_cenv ge) ty);
+   me_local_inv:
+     forall id b sz,
+     te!id = Some (b, sz) -> exists ty, e!id = Some(b, ty)
+}.
+FEnd match_env.
+
+MetaData match_states.
+Inductive match_states : self__Base.Clight.state -> self__Base.Csharpminor.state -> Prop :=
+| match_state:
+    forall f nbrk ncnt s k e le m tf ts tk te ts' tk' (cu : self__Base.Clight.program)
+        (* (LINK: linkorder cu prog)*)
+        (TRF: self__Cshmgen.transl_function cu.(prog_comp_env) f = OK tf)
+        (TR: self__Cshmgen.transl_stmt s cu.(prog_comp_env) (self__Base.Clight.fn_return f) nbrk ncnt = OK ts)
+        (MTR: self__Cshmgen.match_transl ts tk ts' tk')
+        (MENV: self__Cshmgen.match_env cu e te)
+        (MK: self__Cshmgen.match_cont cu.(prog_comp_env) (self__Base.Clight.fn_return f) nbrk ncnt k tk),
+    match_states (self__Base.Clight.State f s k e le m)
+      (self__Base.Csharpminor.State tf ts' tk' te le m)      
+| match_callstate:
+    forall fd args k m tfd tk targs tres cconv cu ce
+        (* (LINK: linkorder cu prog)*)
+        (TR: self__Cshmgen.match_fundef cu fd tfd)
+        (MK: self__Cshmgen.match_cont ce tres 0%nat 0%nat k tk)
+        (ISCC: self__Base.Clight.is_call_cont k)
+        (TY: self__Base.Clight.type_of_fundef fd = Tfunction targs tres cconv),
+    match_states (self__Base.Clight.Callstate fd args k m)
+      (self__Base.Csharpminor.Callstate tfd args tk m)      
+| match_returnstate:
+    forall res tres k m tk ce
+        (MK: self__Cshmgen.match_cont ce tres 0%nat 0%nat k tk),
+        (* (WT: wt_val res tres),*) (* Need Ctyping.v? *)
+    match_states (self__Base.Clight.Returnstate res k m)
+      (self__Base.Csharpminor.Returnstate res tk m).
+FEnd match_states.
+                 
+FInduction transl_step about Clight.step
+  motive (fun ge S1 t S2 (_ : Clight.step ge S1 t S2) => 
+            forall prog tprog tge, match_prog prog tprog ->
+            Clight.globalenv prog = ge -> Genv.globalenv tprog = tge ->
+  forall T1, match_states S1 T1 -> 
+  exists T2, plus Csharpminor.step tge T1 t T2 /\ match_states S2 T2).            
+FProof.              
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.  
+Qed. FEnd transl_step.
+                
+FLemma transl_initial_states:
+  forall S prog tprog, Clight.initial_state prog S -> transl_program prog = OK tprog ->
+  exists R, Csharpminor.initial_state tprog R /\ match_states S R.
+FProofLemma. apply cheat. Qed. CloseFLemma.          
+          
+FLemma transl_final_states:
+  forall S R r,
+  match_states S R -> Clight.final_state S r -> Csharpminor.final_state R r.
+FProofLemma. apply cheat. Qed. CloseFLemma.
+
+FEnd Cshmgen.
+
+
+
 Family Cminor extends Cfam.
 
 FInductive expr : Type := Econst : Csharpminor.constant -> expr.        
@@ -2099,6 +2356,241 @@ Inductive final_state: self__RTL.state -> int -> Prop :=
 FEnd final_state.      
 
 FEnd RTL.
+
+(* CminorSel -> RTL *)
+Family RTLgen.
+        FRecursion transl_expr about CminorSel.expr motive (fun (_ : CminorSel.expr) => mapping -> reg -> node -> node).
+            Case Evar := (fun id => fun map rd nd => 
+                             do r <- find_var map v; 
+                                add_move r rd nd).
+            Case Eop := (fun op al => fun map rd nd => 
+                            do rl <- alloc_regs map al;
+                            do no <- add_instr (Iop op rl rd nd);
+                            transl_exprlist map al rl no).
+            Case Econdition := (fun a b transl_b c transl_c => fun map rd nd => 
+                                     do nfalse <- transl_expr map c rd nd;
+                                    do ntrue <- transl_expr map b rd nd;
+                                      transl_condexpr map a ntrue nfalse).
+            Case Elet := (fun b c => fun map rd nd => 
+                                       do r <- new_reg;
+                                      do nc <- transl_expr (add_letvar map r) c rd nd;
+                                        transl_expr map b r nc).
+            Case Eletvar := (fun n => fun map rd nd => 
+                                      do r <- find_letvar map n; add_move r rd nd).            
+        FEnd transl_expr.        
+        (* with transl_exprlist about CminorSel.exprlist motive (fun (_ : CminorSel.exprlist) => mapping -> list reg -> node -> node).
+              Case Enil := (fun map al rl nd => match rl with nil => ret nd | _ => error (Errors.msg "RTLgen.transl_exprlist") end).
+              Case Econs := (fun fun b bs transl_bs => map al rl nd => 
+                                  match rl with 
+                                  | r :: rs =>  
+                                      do no <- transl_exprlist map bs rs nd; 
+                                      transl_expr map b r no 
+                                | _ => error (Errors.msg "RTLgen.transl_exprlist") end).
+         *)
+        (* with transl_condexpr about CminorSel.condexpr (fun (_ : CminorSel.condexpr) => mapping  -> node -> node -> node)
+              Case CEcond := (fun c al => fun map ntrue nfalse => 
+                              do rl <- alloc_regs map al;
+                              do nt <- add_instr (Icond c rl ntrue nfalse);
+                                transl_exprlist map al rl nt).
+              Case CEcondition := (fun a b transl_b c transl_c => fun map ntrue nfalse => 
+                                     do nc <- transl_c map ntrue nfalse;
+                                    do nb <- transl_b map ntrue nfalse;
+                                      transl_condexpr map a nb nc).
+              Case CElet := (fun b c transl_c => fun map ntrue nfalse => 
+                             do r <- new_reg;
+                            do nc <- transl_condexpr (add_letvar map r) c ntrue nfalse;
+                                transl_expr map b r nc).              
+        FEnd transl_expr. *)      
+
+        Definition transl_exit (nexits: list node) (n: nat) : mon node :=
+          match nth_error nexits n with
+          | None => error (Errors.msg "RTLgen: wrong exit")
+          | Some ne => ret ne
+          end.
+
+        Definition labelmap : Type := PTree.t node.
+        
+        FRecursion transl_stmt about CminorSel.stmt
+          motive (fun (_ : CminorSel.stmt) => 
+                    mapping -> node -> list node -> labelmap -> node -> option reg -> node).
+             Case Sskip := (fun map nd nexits ngoto nret rret => ret nd).
+             Case Sassign := (fun id e => fun map nd nexits ngoto nret rret => 
+                                  do r <- find_var map v;
+                                  transl_expr map b r nd). 
+             Case Sseq := (fun s1 transl_s1 s2 transl_s2 => fun map nd nexits ngoto nret rret =>  
+                         do ns <- transl_s2 map nd nexits ngoto nret rret;
+                         transl_s1 map ns nexits ngoto nret rret).
+             Case Sifthenelse := (fun c strue transl_strue sfalse transl_sfalse =>
+                                     fun map nd nexits ngoto nret rret => 
+                            (* Don't use "more likely" heuristic *)
+                            do ntrue <- transl_strue map nd nexits ngoto nret rret;
+                            do nfalse <- transl_sfalse map nd nexits ngoto nret rret;
+                            transl_condexpr map c ntrue nfalse).
+             Case Sloop := (fun s tranl_s => fun map nd nexits ngoto nret rret => 
+                                do n1 <- reserve_instr;
+                                do n2 <- transl_s map n1 nexits ngoto nret rret;
+                                do xx <- update_instr n1 (Inop n2);
+                                add_instr (Inop n2)).
+             Case Sblock := (fun s tranl_s => fun map nd nexits ngoto nret rret => 
+                                   transl_s map nd (nd :: nexits) ngoto nret rret).
+             Case Sexit := (fun n => fun map nd nexits ngoto nret rret =>  transl_exit nexits n).
+             Case Sreturn := (fun opt_a => fun map nd nexits ngoto nret rret => 
+                                match opt_a, rret with
+                                | None, _ => ret nret
+                                | Some a, Some r => transl_expr map a r nret
+                                | _, _ => error (Errors.msg "RTLgen: type mismatch on return")
+                                end).
+             Case Slabel := (fun lbl s transl_s => fun map nd nexits ngoto nret rret => 
+                               do ns <- transl_stmt map s' nd nexits ngoto nret rret;
+                               (* Some eror handling stuff about labels *)
+                               ret ns).
+             Case Sgoto := (fun lbl => fun map nd nexits ngoto nret rret => 
+                              match ngoto!lbl with
+                              | None => error (Errors.MSG "Undefined defined label " ::
+                                              Errors.CTX lbl :: nil)
+                              | Some n => ret n
+                              end).
+        FEnd transl_stmt.
+
+        (* Non executable relation spec for transl_stmt, defined via an Inductive type *)
+        Family Spec.
+             (* tr_move c ns rs nd rd holds if the graph c, between nodes ns and nd, contains 
+                instructions that move the value of register rs to register rd. *)
+             Inductive tr_move (c: code):
+                    node -> reg -> node -> reg -> Prop :=
+                | tr_move_0: forall n r,
+                    tr_move c n r n r
+                | tr_move_1: forall ns rs nd rd,
+                    c!ns = Some (RTL.Iop Asm.Omove (rs :: nil) rd nd) ->
+                    tr_move c ns rs nd rd.
+
+              Inductive reg_map_ok: mapping -> reg -> option ident -> Prop :=
+                | reg_map_ok_novar: forall map rd,
+                    ~reg_in_map map rd ->
+                    reg_map_ok map rd None
+                | reg_map_ok_somevar: forall map rd id,
+                    map.(map_vars)!id = Some rd ->
+                    reg_map_ok map rd (Some id).
+ 
+                 
+              FInductive tr_expr (c: code):
+                      mapping -> list reg -> expr -> node -> node -> reg -> option ident -> Prop :=
+                  | tr_Evar: forall map pr id ns nd r rd dst,
+                      map.(map_vars)!id = Some r ->
+                      ((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr)) ->
+                      tr_move c ns r nd rd ->
+                      tr_expr c map pr (Evar id) ns nd rd dst
+                  | tr_Eop: forall map pr op al ns nd rd n1 rl dst,
+                      tr_exprlist c map pr al ns n1 rl ->
+                      c!n1 = Some (Iop op rl rd nd) ->
+                      reg_map_ok map rd dst -> ~In rd pr ->
+                      tr_expr c map pr (Eop op al) ns nd rd dst
+                  | tr_Eload: forall map pr chunk addr al ns nd rd n1 rl dst,
+                      tr_exprlist c map pr al ns n1 rl ->
+                      c!n1 = Some (Iload chunk addr rl rd nd) ->
+                      reg_map_ok map rd dst -> ~In rd pr ->
+                      tr_expr c map pr (Eload chunk addr al) ns nd rd dst
+                  | tr_Econdition: forall map pr a ifso ifnot ns nd rd ntrue nfalse dst,
+                      tr_condition c map pr a ns ntrue nfalse ->
+                      tr_expr c map pr ifso ntrue nd rd dst ->
+                      tr_expr c map pr ifnot nfalse nd rd dst ->
+                      tr_expr c map pr (Econdition a ifso ifnot) ns nd rd dst
+                  | tr_Elet: forall map pr b1 b2 ns nd rd n1 r dst,
+                      ~reg_in_map map r ->
+                      tr_expr c map pr b1 ns n1 r None ->
+                      tr_expr c (add_letvar map r) pr b2 n1 nd rd dst ->
+                      tr_expr c map pr (Elet b1 b2) ns nd rd dst
+                  | tr_Eletvar: forall map pr n ns nd rd r dst,
+                      List.nth_error map.(map_letvars) n = Some r ->
+                      ((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr)) ->
+                      tr_move c ns r nd rd ->
+                      tr_expr c map pr (Eletvar n) ns nd rd dst
+                  with tr_condition (c: code):
+                        mapping -> list reg -> condexpr -> node -> node -> node -> Prop :=
+                    | tr_CEcond: forall map pr cond bl ns ntrue nfalse n1 rl,
+                        tr_exprlist c map pr bl ns n1 rl ->
+                        c!n1 = Some (Icond cond rl ntrue nfalse) ->
+                        tr_condition c map pr (CEcond cond bl) ns ntrue nfalse
+                    | tr_CEcondition: forall map pr a1 a2 a3 ns ntrue nfalse n2 n3,
+                        tr_condition c map pr a1 ns n2 n3 ->
+                        tr_condition c map pr a2 n2 ntrue nfalse ->
+                        tr_condition c map pr a3 n3 ntrue nfalse ->
+                        tr_condition c map pr (CEcondition a1 a2 a3) ns ntrue nfalse
+                    | tr_CElet: forall map pr a b ns ntrue nfalse r n1,
+                        ~reg_in_map map r ->
+                        tr_expr c map pr a ns n1 r None ->
+                        tr_condition c (add_letvar map r) pr b n1 ntrue nfalse ->
+                        tr_condition c map pr (CElet a b) ns ntrue nfalse
+                  with tr_exprlist (c: code):
+                          mapping -> list reg -> exprlist -> node -> node -> list reg -> Prop :=
+                      | tr_Enil: forall map pr n,
+                          tr_exprlist c map pr Enil n n nil
+                      | tr_Econs: forall map pr a1 al ns nd r1 rl n1,
+                          tr_expr c map pr a1 ns n1 r1 None ->
+                          tr_exprlist c map (r1 :: pr) al n1 nd rl ->
+                          tr_exprlist c map pr (Econs a1 al) ns nd (r1 :: rl).
+    
+              FInductive tr_stmt (c: code) (map: mapping):
+                    CminorSel.stmt -> node -> node -> list node -> labelmap -> node -> option reg -> Prop :=
+                  | tr_Sskip: forall ns nexits ngoto nret rret,
+                    tr_stmt c map Sskip ns ns nexits ngoto nret rret
+                  | tr_Sassign: forall id a ns nd nexits ngoto nret rret r,
+                    map.(map_vars)!id = Some r ->
+                    tr_expr c map nil a ns nd r (Some id) ->
+                    tr_stmt c map (Sassign id a) ns nd nexits ngoto nret rret
+                  | tr_Sseq: forall s1 s2 ns nd nexits ngoto nret rret n,
+                    tr_stmt c map s2 n nd nexits ngoto nret rret ->
+                    tr_stmt c map s1 ns n nexits ngoto nret rret ->
+                    tr_stmt c map (Sseq s1 s2) ns nd nexits ngoto nret rret
+                  | tr_Sifthenelse: forall a strue sfalse ns nd nexits ngoto nret rret ntrue nfalse,
+                    tr_stmt c map strue ntrue nd nexits ngoto nret rret ->
+                    tr_stmt c map sfalse nfalse nd nexits ngoto nret rret ->
+                    tr_condition c map nil a ns ntrue nfalse ->
+                    tr_stmt c map (Sifthenelse a strue sfalse) ns nd nexits ngoto nret rret
+                  | tr_Sloop: forall sbody ns nd nexits ngoto nret rret nloop nend,
+                    tr_stmt c map sbody nloop nend nexits ngoto nret rret ->
+                    c!ns = Some(Inop nloop) ->
+                    c!nend = Some(Inop nloop) ->
+                    tr_stmt c map (Sloop sbody) ns nd nexits ngoto nret rret
+                  | tr_Sblock: forall sbody ns nd nexits ngoto nret rret,
+                    tr_stmt c map sbody ns nd (nd :: nexits) ngoto nret rret ->
+                    tr_stmt c map (Sblock sbody) ns nd nexits ngoto nret rret
+                  | tr_Sexit: forall n ns nd nexits ngoto nret rret,
+                    nth_error nexits n = Some ns ->
+                    tr_stmt c map (Sexit n) ns nd nexits ngoto nret rret
+                  | tr_Sreturn_none: forall nret nd nexits ngoto rret,
+                    tr_stmt c map (Sreturn None) nret nd nexits ngoto nret rret
+                  | tr_Sreturn_some: forall a ns nd nexits ngoto nret rret,
+                    tr_expr c map nil a ns nret rret None ->
+                    tr_stmt c map (Sreturn (Some a)) ns nd nexits ngoto nret (Some rret)
+                  | tr_Slabel: forall lbl s ns nd nexits ngoto nret rret n,
+                    ngoto!lbl = Some n ->
+                    c!n = Some (Inop ns) ->
+                    tr_stmt c map s ns nd nexits ngoto nret rret ->
+                    tr_stmt c map (Slabel lbl s) ns nd nexits ngoto nret rret
+                  | tr_Sgoto: forall lbl ns nd nexits ngoto nret rret,
+                    ngoto!lbl = Some ns ->
+                    tr_stmt c map (Sgoto lbl) ns nd nexits ngoto nret rret.   
+
+                Inductive tr_function: CminorSel.function -> RTL.function -> Prop :=
+                    | tr_function_intro:
+                        forall f code rparams map1 s0 s1 i1 rvars map2 s2 i2 nentry ngoto nret rret orret,
+                        add_vars init_mapping f.(CminorSel.fn_params) s0 = OK (rparams, map1) s1 i1 ->
+                        add_vars map1 f.(CminorSel.fn_vars) s1 = OK (rvars, map2) s2 i2 ->
+                        orret = ret_reg f.(CminorSel.fn_sig) rret ->
+                        tr_stmt code map2 f.(CminorSel.fn_body) nentry nret nil ngoto nret orret ->
+                        code!nret = Some(Ireturn orret) ->
+                        tr_function f (RTL.mkfunction
+                                        f.(CminorSel.fn_sig)
+                                        rparams
+                                        f.(CminorSel.fn_stackspace)
+                                        code
+                                        nentry).
+
+                (* Proof that the translation proof meets the specification *)    
+                       
+        FEnd Spec.
+   FEnd RTLgen.  
 
 From NFPOP Require Import Machregs.
 From NFPOP Require Import Conventions1.
@@ -2649,7 +3141,6 @@ FEnd final_state.
 
 FEnd Mach.
 
-
 (* A translation between C family languages *)
 Family Cfamtransl.
       Family Source extends Cfam.
@@ -2998,303 +3489,10 @@ Family Cfamtransl.
             FProofLemma.
               intros. inv H0. inv H. inv MK. inv RESINJ. constructor. Qed.            
      CloseFLemma.     
-  FEnd Cfamtransl.        
-
-  
+  FEnd Cfamtransl.          
 
   Family Lfamtranl.
-  FEnd Lfamtransl.  
-  
-  (* Clight -> Csharpminor *)
-  Family Cshmgen.
-      FDefinition make_intconst := fun (n: int) => Csharpminor.Econst (Csharpminor.Ointconst n).
-      FDefinition make_longconst := fun (f: int64) => Csharpminor.Econst (Csharpminor.Olongconst f).
-      FDefinition make_floatconst := fun (f: float) => Csharpminor.Econst (Csharpminor.Ofloatconst f).
-      FDefinition make_singleconst := fun (f: float32) => Csharpminor.Econst (Csharpminor.Osingleconst f).            
-
-      FDefinition make_ptrofsconst := fun (n: Z) =>
-        if Archi.ptr64 then make_longconst (Int64.repr n) else make_intconst (Int.repr n).
-      
-      (* Definition sizeof (ce: composite_env) (t: type) : res Z := *)
-      MetaData sizeof.
-      Axiom sizeof : (* self__Imp.Clight.Sem.composite_env -> *)self__Imp.type -> res Z.
-      FEnd sizeof.
-      
-      MetaData alignof.
-      Axiom alignof : (* self__Imp.Clight.Sem.composite_env ->*) self__Imp.type -> res Z.
-      FEnd alignof.
-
-      (* Definition make_cast (from to: type) (e: expr) :=*)
-      MetaData make_cast.
-      Axiom make_cast : self__Imp.type -> self__Imp.type -> self__Imp.Csharpminor.expr -> res self__Imp.Csharpminor.expr.
-      FEnd make_cast.
-      
-      FRecursion transl_expr about Clight.expr motive (fun (_ : Clight.expr) => res Csharpminor.expr) by _rect.
-          Case Econst_int := (fun n type => OK(make_intconst n)). 
-          Case Econst_float := (fun n type => OK(make_floatconst n)).
-          Case Econst_single := (fun n type => OK(make_singleconst n)).
-          Case Econst_long := (fun n type => OK(make_longconst n)).        
-          Case Etempvar := (fun id ty => OK(Csharpminor.Evar id)). 
-          Case Esizeof := (fun ty _ =>
-                               do sz <- sizeof ty; OK(make_ptrofsconst sz)).
-          Case Ealignof := (fun ty _ => 
-                               do al <- alignof ty; OK(make_ptrofsconst al)).
-          Case Ecast := (fun b transl_expr_b ty => 
-                                do tb <- transl_expr_b;
-                                make_cast (Clight.typeof b) ty tb).
-      FEnd transl_expr.
-
-       (* (nbrk : nat) -> if Clight.stmt terminates on break return Csharpminor.exit nbrk
-          (ncnt : nat) -> if Clight.smt terminates on continue return Csharpminor.exit ncnt
-        *)
-      
-      (* Definition make_boolean (e: expr) (ty: type) := *)
-      MetaData make_boolean.
-      Axiom make_boolean : self__Imp.Csharpminor.expr -> self__Imp.type -> self__Imp.Csharpminor.expr.
-      FEnd make_boolean.            
-      
-      FRecursion transl_stmt about Clight.stmt motive (fun (_ : Clight.stmt) => type -> nat -> nat -> res Csharpminor.stmt) by _rect.
-           Case Sskip := (fun tyret nbrk ncnt => OK Csharpminor.Sskip).   
-           Case Sset := (fun x b => fun tyret nbrk ncnt => 
-                            do tb <- transl_expr b;
-                            OK (Csharpminor.Sset x tb)).
-           Case Sseq := (fun s1 transl_s1 s2 transl_s2 =>
-                              fun tyret nbrk ncnt => 
-                             do ts1 <- transl_s1 tyret nbrk ncnt;
-                             do ts2 <- transl_s2 tyret nbrk ncnt;
-                             OK (Csharpminor.Sseq ts1 ts2)).
-           Case Sifthenelse := (fun e s1 transl_s1 s2 transl_s2 => 
-                                  fun tyret nbrk ncnt => 
-                                do te <- transl_expr e;
-                                do ts1 <- transl_s1 tyret nbrk ncnt;
-                                do ts2 <- transl_s2 tyret nbrk ncnt;
-                                OK (Csharpminor.Sifthenelse (make_boolean te (Clight.typeof e)) ts1 ts2)).
-           Case Sloop := (fun s1 transl_s1 s2 transl_s2 => 
-                          fun tyret nbrk ncnt =>
-                             do ts1 <- transl_s1 tyret 1%nat 0%nat;
-                             do ts2 <- transl_s2 tyret 0%nat (S ncnt);
-                             OK (Csharpminor.Sblock (Csharpminor.Sloop (Csharpminor.Sseq (Csharpminor.Sblock ts1) ts2)))).
-           Case Sbreak := (fun tyret nbrk ncnt => OK (Csharpminor.Sexit nbrk)).
-           Case Scontinue := (fun tyret nbrk ncnt => OK (Csharpminor.Sexit ncnt)).
-           Case Sreturn := (fun e => fun tyret nbrk ncnt =>
-                              match e with
-                              | None => OK (Csharpminor.Sreturn None)
-                              | Some e => 
-                                  do te <- transl_expr e;
-                                  do te' <- make_cast (Clight.typeof e) tyret te;
-                                  OK (Csharpminor.Sreturn (Some te'))
-                              end).
-           Case Slabel := (fun lbl s transl_s =>
-                           fun tyret nbrk ncnt => 
-                             do ts <- transl_s tyret nbrk ncnt;
-                             OK (Csharpminor.Slabel lbl ts)).
-           Case Sgoto := (fun lbl =>  
-                            fun tyret nbrk ncnt =>  
-                              OK (Csharpminor.Sgoto lbl)).
-      FEnd transl_stmt.     
-
-      (* Translation of functions *)
-      FDefinition transl_var := fun (v: ident * type) =>
-        do sz <- sizeof (snd v); OK (fst v, sz).
-
-      (* Definition typ_of_type (t: type) : AST.typ :=*)
-      MetaData typ_of_type.
-      Axiom typ_of_type : self__Imp.type -> typ.
-      FEnd typ_of_type.
-
-      (* Definition rettype_of_type (t: type) : AST.rettype :=*)
-      MetaData rettype_of_type.
-      Axiom rettype_of_type : self__Imp.type -> typ.
-      FEnd rettype_of_type.
-      
-      FDefinition signature_of_function := fun (f: Clight.function) =>
-        {| sig_args := map typ_of_type (map snd (Clight.fn_params f));
-          sig_res  := rettype_of_type (Clight.fn_return f);
-          sig_cc   := Clight.fn_callconv f |}.
-      
-      FDefinition transl_function : Clight.function -> res Csharpminor.function := fun f =>
-        do tbody <- transl_stmt (Clight.fn_body f) f.(self__Imp.Clight.fn_return) 1%nat 0%nat;
-        do tvars <- mmap (transl_var) (self__Imp.Clight.fn_vars f);
-        OK (self__Imp.Csharpminor.mkfunction
-              (signature_of_function f)
-              (map fst (Clight.fn_params f))
-              tvars
-              (map fst (Clight.fn_temps f))
-              tbody).      
-
-     FDefinition transl_fundef : ident -> Clight.fundef -> res Csharpminor.fundef := fun id f =>
-       match f with
-       | Internal g =>
-           do tg <- transl_function g; OK(AST.Internal tg)
-       | _ =>
-           cheat (* no external*)
-       end.
-
-     (** ** Translation of programs *)
-
-     FDefinition transl_globvar := fun (id: ident) (ty: type) => OK tt.
-
-     FDefinition transl_program : Clight.program -> res Csharpminor.program := fun p => 
-       transform_partial_program2 (transl_fundef) transl_globvar p.
-     
-     Family Proof.
-          FInductive match_fundef :  Clight.fundef -> Csharpminor.fundef -> Prop :=
-            | match_fundef_internal: forall f tf,
-                transl_function f = OK tf ->
-                match_fundef (Internal f) (Internal tf).
-
-          FDefinition match_varinfo : self__Imp.type -> unit -> Prop := fun v tb => True.
-
-          FDefinition match_prog : Clight.program -> Csharpminor.program -> Prop := fun p tp => 
-            (* match_program_gen match_fundef match_varinfo p p tp.*) cheat.
-
-     
-          FInductive match_cont : type -> nat -> nat -> Clight.Sem.cont -> Csharpminor.Sem.cont -> Prop :=
-              | match_Kstop: forall tyret nbrk ncnt,
-                  match_cont tyret nbrk ncnt
-                    Clight.Sem.Kstop
-                    Csharpminor.Sem.Kstop
-              | match_Kseq: forall tyret nbrk ncnt s k ts tk,
-                  transl_stmt s tyret nbrk ncnt = OK ts ->
-                  match_cont tyret nbrk ncnt k tk ->
-                  match_cont tyret nbrk ncnt
-                             (Clight.Sem.Kseq s k)
-                             (Csharpminor.Sem.Kseq ts tk)
-              | match_Kloop1: forall tyret s1 s2 k ts1 ts2 nbrk ncnt tk,
-                  transl_stmt s1 tyret 1%nat 0%nat = OK ts1 ->
-                  transl_stmt s2 tyret 0%nat (S ncnt) = OK ts2 ->
-                  match_cont tyret nbrk ncnt k tk ->
-                  match_cont tyret 1%nat 0%nat
-                             (Clight.Sem.Kloop1 s1 s2 k)
-                             (Csharpminor.Sem.Kblock
-                                (Csharpminor.Sem.Kseq ts2
-                                   (Csharpminor.Sem.Kseq
-                                      (Csharpminor.Sloop
-                                         (Csharpminor.Sseq
-                                            (Csharpminor.Sblock ts1) ts2))
-                                      (Csharpminor.Sem.Kblock tk))))
-              | match_Kloop2: forall tyret s1 s2 k ts1 ts2 nbrk ncnt tk,
-                  transl_stmt s1 tyret 1%nat 0%nat = OK ts1 ->
-                  transl_stmt s2 tyret 0%nat (S ncnt) = OK ts2 ->
-                  match_cont tyret nbrk ncnt k tk ->
-                  match_cont tyret 0%nat (S ncnt)
-                             (Clight.Sem.Kloop2 s1 s2 k)
-                             (Csharpminor.Sem.Kseq
-                                (Csharpminor.Sloop
-                                   (Csharpminor.Sseq
-                                      (Csharpminor.Sblock ts1) ts2))
-                                (Csharpminor.Sem.Kblock tk)).          
-          
-          MetaData match_states.
-          Record match_env (e: self__Imp.Clight.Sem.env) (te: self__Imp.Csharpminor.Sem.env) : Prop :=
-           mk_match_env {
-             me_local:
-               forall id b ty,
-               e!id = Some (b, ty) -> te!id = Some(b, self__Imp.Clight.Sem.sizeof ty);
-             me_local_inv:
-               forall id b sz,
-               te!id = Some (b, sz) -> exists ty, e!id = Some(b, ty)
-           }.
-
-          Inductive match_transl
-            : self__Imp.Csharpminor.stmt -> self__Imp.Csharpminor.Sem.cont ->
-              self__Imp.Csharpminor.stmt -> self__Imp.Csharpminor.Sem.cont -> Prop :=
-          | match_transl_0: forall ts tk,
-              match_transl ts tk ts tk
-          | match_transl_1: forall ts tk,
-              match_transl (self__Imp.Csharpminor.Sblock ts) tk ts (self__Imp.Csharpminor.Sem.Kblock tk).
-          
-          Inductive match_states: self__Imp.Clight.Sem.state -> self__Imp.Csharpminor.Sem.state -> Prop :=
-              | match_state:
-                  forall f nbrk ncnt s k e le m tf ts tk te ts' tk'
-                      (* (LINK: linkorder cu prog)*)
-                      (TRF: self__Cshmgen.transl_function f = OK tf)
-                      (TR: self__Cshmgen.transl_stmt s (self__Imp.Clight.fn_return f) nbrk ncnt = OK ts)
-                      (MTR: match_transl ts tk ts' tk')
-                      (MENV: match_env e te)
-                      (MK: self__Proof.match_cont (self__Imp.Clight.fn_return f) nbrk ncnt k tk),
-                  match_states (self__Imp.Clight.Sem.State f s k e le m)
-                               (self__Imp.Csharpminor.Sem.State tf ts' tk' te le m)
-              | match_callstate:
-                  forall fd args k m tfd tk targs tres cconv 
-                      (* (LINK: linkorder cu prog)*)
-                      (TR: self__Proof.match_fundef fd tfd)
-                      (MK: self__Proof.match_cont tres 0%nat 0%nat k tk)
-                      (ISCC: self__Imp.Clight.Sem.is_call_cont k)
-                      (TY: self__Imp.Clight.type_of_fundef fd = self__Imp.Tfunction targs tres cconv),
-                  match_states (self__Imp.Clight.Sem.Callstate fd args k m)
-                               (self__Imp.Csharpminor.Sem.Callstate tfd args tk m)
-              | match_returnstate:
-                  forall res tres k m tk 
-                      (MK: self__Proof.match_cont tres 0%nat 0%nat k tk),
-                      (* (WT: wt_val res tres),*)
-                  match_states (self__Imp.Clight.Sem.Returnstate res k m)
-                    (self__Imp.Csharpminor.Sem.Returnstate res tk m).
-          FEnd match_states.
-                 
-          FInduction transl_step about Clight.Sem.step
-            motive (fun ge S1 t S2 (_ : Clight.Sem.step ge S1 t S2) => 
-             forall prog tprog tge, match_prog prog tprog -> Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
-            forall T1, self__Proof.match_states S1 T1 -> 
-            exists T2, plus Csharpminor.Sem.step tge T1 t T2 /\ match_states S2 T2).            
-          FProof.              
-              (* set *)
-              + apply cheat.
-              (* seq *)
-              + intros. unfold self__Proof.__motiveTtransl_step. intros.
-                econstructor; split.
-                - apply plus_one. apply self__Imp.Csharpminor.Sem.step_seq.
-                - econstructor; eauto. apply cheat.
-              (* skip seq *)
-              + apply cheat.
-              (* continue seq *)
-              + apply cheat.
-              (* break seq *)
-              + apply cheat.
-              (* ifthenelse *)
-              + apply cheat.
-              (* loop *)
-              + apply cheat.
-              (* skip-or-continue loop *)
-              + apply cheat.
-              (* break loop1 *)
-              + intros. apply cheat.
-              (* skip loop2 *)
-              + apply cheat.
-              (* break loop2 *)
-              + apply cheat.
-              (* return none *)
-              + apply cheat.
-              (* return some *)
-              + intros. apply cheat.
-              (* skip call *)
-              + apply cheat.
-              (* label *)
-              + apply cheat.
-              (* goto *)
-              + intros. apply cheat.
-              (* internal function *)
-              + intros. apply cheat.
-          Qed.
-          FEnd transl_step.
-                
-          FLemma transl_initial_states:
-            forall S prog tprog, Clight.Sem.initial_state prog S -> transl_program prog = OK tprog ->
-            exists R, Csharpminor.Sem.initial_state tprog R /\ match_states S R.
-          FProofLemma.
-              apply cheat. Qed.
-          CloseFLemma.
-
-          FDisplay PluginScope.
-          
-          FLemma transl_final_states:
-            forall S R r,
-            match_states S R -> Clight.Sem.final_state S r -> Csharpminor.Sem.final_state R r.
-          FProofLemma.
-             intros. inv H0. inv H. inv MK. constructor. Qed.
-          CloseFLemma.
-     FEnd Proof.
-  FEnd Cshmgen.             
+  FEnd Lfamtransl.                 
 
    (* Csharpminor -> Cminor *)
   Family Cminorgen.
@@ -3834,242 +4032,7 @@ Family Cfamtransl.
            Proof.
        FEnd Proof.
 
-  FEnd Selection.      
-
-  (* CminorSel -> RTL *)
-  Family RTLgen.
-        FRecursion transl_expr about CminorSel.expr motive (fun (_ : CminorSel.expr) => mapping -> reg -> node -> node).
-            Case Evar := (fun id => fun map rd nd => 
-                             do r <- find_var map v; 
-                                add_move r rd nd).
-            Case Eop := (fun op al => fun map rd nd => 
-                            do rl <- alloc_regs map al;
-                            do no <- add_instr (Iop op rl rd nd);
-                            transl_exprlist map al rl no).
-            Case Econdition := (fun a b transl_b c transl_c => fun map rd nd => 
-                                     do nfalse <- transl_expr map c rd nd;
-                                    do ntrue <- transl_expr map b rd nd;
-                                      transl_condexpr map a ntrue nfalse).
-            Case Elet := (fun b c => fun map rd nd => 
-                                       do r <- new_reg;
-                                      do nc <- transl_expr (add_letvar map r) c rd nd;
-                                        transl_expr map b r nc).
-            Case Eletvar := (fun n => fun map rd nd => 
-                                      do r <- find_letvar map n; add_move r rd nd).            
-        FEnd transl_expr.        
-        (* with transl_exprlist about CminorSel.exprlist motive (fun (_ : CminorSel.exprlist) => mapping -> list reg -> node -> node).
-              Case Enil := (fun map al rl nd => match rl with nil => ret nd | _ => error (Errors.msg "RTLgen.transl_exprlist") end).
-              Case Econs := (fun fun b bs transl_bs => map al rl nd => 
-                                  match rl with 
-                                  | r :: rs =>  
-                                      do no <- transl_exprlist map bs rs nd; 
-                                      transl_expr map b r no 
-                                | _ => error (Errors.msg "RTLgen.transl_exprlist") end).
-         *)
-        (* with transl_condexpr about CminorSel.condexpr (fun (_ : CminorSel.condexpr) => mapping  -> node -> node -> node)
-              Case CEcond := (fun c al => fun map ntrue nfalse => 
-                              do rl <- alloc_regs map al;
-                              do nt <- add_instr (Icond c rl ntrue nfalse);
-                                transl_exprlist map al rl nt).
-              Case CEcondition := (fun a b transl_b c transl_c => fun map ntrue nfalse => 
-                                     do nc <- transl_c map ntrue nfalse;
-                                    do nb <- transl_b map ntrue nfalse;
-                                      transl_condexpr map a nb nc).
-              Case CElet := (fun b c transl_c => fun map ntrue nfalse => 
-                             do r <- new_reg;
-                            do nc <- transl_condexpr (add_letvar map r) c ntrue nfalse;
-                                transl_expr map b r nc).              
-        FEnd transl_expr. *)      
-
-        Definition transl_exit (nexits: list node) (n: nat) : mon node :=
-          match nth_error nexits n with
-          | None => error (Errors.msg "RTLgen: wrong exit")
-          | Some ne => ret ne
-          end.
-
-        Definition labelmap : Type := PTree.t node.
-        
-        FRecursion transl_stmt about CminorSel.stmt
-          motive (fun (_ : CminorSel.stmt) => 
-                    mapping -> node -> list node -> labelmap -> node -> option reg -> node).
-             Case Sskip := (fun map nd nexits ngoto nret rret => ret nd).
-             Case Sassign := (fun id e => fun map nd nexits ngoto nret rret => 
-                                  do r <- find_var map v;
-                                  transl_expr map b r nd). 
-             Case Sseq := (fun s1 transl_s1 s2 transl_s2 => fun map nd nexits ngoto nret rret =>  
-                         do ns <- transl_s2 map nd nexits ngoto nret rret;
-                         transl_s1 map ns nexits ngoto nret rret).
-             Case Sifthenelse := (fun c strue transl_strue sfalse transl_sfalse =>
-                                     fun map nd nexits ngoto nret rret => 
-                            (* Don't use "more likely" heuristic *)
-                            do ntrue <- transl_strue map nd nexits ngoto nret rret;
-                            do nfalse <- transl_sfalse map nd nexits ngoto nret rret;
-                            transl_condexpr map c ntrue nfalse).
-             Case Sloop := (fun s tranl_s => fun map nd nexits ngoto nret rret => 
-                                do n1 <- reserve_instr;
-                                do n2 <- transl_s map n1 nexits ngoto nret rret;
-                                do xx <- update_instr n1 (Inop n2);
-                                add_instr (Inop n2)).
-             Case Sblock := (fun s tranl_s => fun map nd nexits ngoto nret rret => 
-                                   transl_s map nd (nd :: nexits) ngoto nret rret).
-             Case Sexit := (fun n => fun map nd nexits ngoto nret rret =>  transl_exit nexits n).
-             Case Sreturn := (fun opt_a => fun map nd nexits ngoto nret rret => 
-                                match opt_a, rret with
-                                | None, _ => ret nret
-                                | Some a, Some r => transl_expr map a r nret
-                                | _, _ => error (Errors.msg "RTLgen: type mismatch on return")
-                                end).
-             Case Slabel := (fun lbl s transl_s => fun map nd nexits ngoto nret rret => 
-                               do ns <- transl_stmt map s' nd nexits ngoto nret rret;
-                               (* Some eror handling stuff about labels *)
-                               ret ns).
-             Case Sgoto := (fun lbl => fun map nd nexits ngoto nret rret => 
-                              match ngoto!lbl with
-                              | None => error (Errors.MSG "Undefined defined label " ::
-                                              Errors.CTX lbl :: nil)
-                              | Some n => ret n
-                              end).
-        FEnd transl_stmt.
-
-        (* Non executable relation spec for transl_stmt, defined via an Inductive type *)
-        Family Spec.
-             (* tr_move c ns rs nd rd holds if the graph c, between nodes ns and nd, contains 
-                instructions that move the value of register rs to register rd. *)
-             Inductive tr_move (c: code):
-                    node -> reg -> node -> reg -> Prop :=
-                | tr_move_0: forall n r,
-                    tr_move c n r n r
-                | tr_move_1: forall ns rs nd rd,
-                    c!ns = Some (RTL.Iop Asm.Omove (rs :: nil) rd nd) ->
-                    tr_move c ns rs nd rd.
-
-              Inductive reg_map_ok: mapping -> reg -> option ident -> Prop :=
-                | reg_map_ok_novar: forall map rd,
-                    ~reg_in_map map rd ->
-                    reg_map_ok map rd None
-                | reg_map_ok_somevar: forall map rd id,
-                    map.(map_vars)!id = Some rd ->
-                    reg_map_ok map rd (Some id).
- 
-                 
-              FInductive tr_expr (c: code):
-                      mapping -> list reg -> expr -> node -> node -> reg -> option ident -> Prop :=
-                  | tr_Evar: forall map pr id ns nd r rd dst,
-                      map.(map_vars)!id = Some r ->
-                      ((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr)) ->
-                      tr_move c ns r nd rd ->
-                      tr_expr c map pr (Evar id) ns nd rd dst
-                  | tr_Eop: forall map pr op al ns nd rd n1 rl dst,
-                      tr_exprlist c map pr al ns n1 rl ->
-                      c!n1 = Some (Iop op rl rd nd) ->
-                      reg_map_ok map rd dst -> ~In rd pr ->
-                      tr_expr c map pr (Eop op al) ns nd rd dst
-                  | tr_Eload: forall map pr chunk addr al ns nd rd n1 rl dst,
-                      tr_exprlist c map pr al ns n1 rl ->
-                      c!n1 = Some (Iload chunk addr rl rd nd) ->
-                      reg_map_ok map rd dst -> ~In rd pr ->
-                      tr_expr c map pr (Eload chunk addr al) ns nd rd dst
-                  | tr_Econdition: forall map pr a ifso ifnot ns nd rd ntrue nfalse dst,
-                      tr_condition c map pr a ns ntrue nfalse ->
-                      tr_expr c map pr ifso ntrue nd rd dst ->
-                      tr_expr c map pr ifnot nfalse nd rd dst ->
-                      tr_expr c map pr (Econdition a ifso ifnot) ns nd rd dst
-                  | tr_Elet: forall map pr b1 b2 ns nd rd n1 r dst,
-                      ~reg_in_map map r ->
-                      tr_expr c map pr b1 ns n1 r None ->
-                      tr_expr c (add_letvar map r) pr b2 n1 nd rd dst ->
-                      tr_expr c map pr (Elet b1 b2) ns nd rd dst
-                  | tr_Eletvar: forall map pr n ns nd rd r dst,
-                      List.nth_error map.(map_letvars) n = Some r ->
-                      ((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr)) ->
-                      tr_move c ns r nd rd ->
-                      tr_expr c map pr (Eletvar n) ns nd rd dst
-                  with tr_condition (c: code):
-                        mapping -> list reg -> condexpr -> node -> node -> node -> Prop :=
-                    | tr_CEcond: forall map pr cond bl ns ntrue nfalse n1 rl,
-                        tr_exprlist c map pr bl ns n1 rl ->
-                        c!n1 = Some (Icond cond rl ntrue nfalse) ->
-                        tr_condition c map pr (CEcond cond bl) ns ntrue nfalse
-                    | tr_CEcondition: forall map pr a1 a2 a3 ns ntrue nfalse n2 n3,
-                        tr_condition c map pr a1 ns n2 n3 ->
-                        tr_condition c map pr a2 n2 ntrue nfalse ->
-                        tr_condition c map pr a3 n3 ntrue nfalse ->
-                        tr_condition c map pr (CEcondition a1 a2 a3) ns ntrue nfalse
-                    | tr_CElet: forall map pr a b ns ntrue nfalse r n1,
-                        ~reg_in_map map r ->
-                        tr_expr c map pr a ns n1 r None ->
-                        tr_condition c (add_letvar map r) pr b n1 ntrue nfalse ->
-                        tr_condition c map pr (CElet a b) ns ntrue nfalse
-                  with tr_exprlist (c: code):
-                          mapping -> list reg -> exprlist -> node -> node -> list reg -> Prop :=
-                      | tr_Enil: forall map pr n,
-                          tr_exprlist c map pr Enil n n nil
-                      | tr_Econs: forall map pr a1 al ns nd r1 rl n1,
-                          tr_expr c map pr a1 ns n1 r1 None ->
-                          tr_exprlist c map (r1 :: pr) al n1 nd rl ->
-                          tr_exprlist c map pr (Econs a1 al) ns nd (r1 :: rl).
-    
-              FInductive tr_stmt (c: code) (map: mapping):
-                    CminorSel.stmt -> node -> node -> list node -> labelmap -> node -> option reg -> Prop :=
-                  | tr_Sskip: forall ns nexits ngoto nret rret,
-                    tr_stmt c map Sskip ns ns nexits ngoto nret rret
-                  | tr_Sassign: forall id a ns nd nexits ngoto nret rret r,
-                    map.(map_vars)!id = Some r ->
-                    tr_expr c map nil a ns nd r (Some id) ->
-                    tr_stmt c map (Sassign id a) ns nd nexits ngoto nret rret
-                  | tr_Sseq: forall s1 s2 ns nd nexits ngoto nret rret n,
-                    tr_stmt c map s2 n nd nexits ngoto nret rret ->
-                    tr_stmt c map s1 ns n nexits ngoto nret rret ->
-                    tr_stmt c map (Sseq s1 s2) ns nd nexits ngoto nret rret
-                  | tr_Sifthenelse: forall a strue sfalse ns nd nexits ngoto nret rret ntrue nfalse,
-                    tr_stmt c map strue ntrue nd nexits ngoto nret rret ->
-                    tr_stmt c map sfalse nfalse nd nexits ngoto nret rret ->
-                    tr_condition c map nil a ns ntrue nfalse ->
-                    tr_stmt c map (Sifthenelse a strue sfalse) ns nd nexits ngoto nret rret
-                  | tr_Sloop: forall sbody ns nd nexits ngoto nret rret nloop nend,
-                    tr_stmt c map sbody nloop nend nexits ngoto nret rret ->
-                    c!ns = Some(Inop nloop) ->
-                    c!nend = Some(Inop nloop) ->
-                    tr_stmt c map (Sloop sbody) ns nd nexits ngoto nret rret
-                  | tr_Sblock: forall sbody ns nd nexits ngoto nret rret,
-                    tr_stmt c map sbody ns nd (nd :: nexits) ngoto nret rret ->
-                    tr_stmt c map (Sblock sbody) ns nd nexits ngoto nret rret
-                  | tr_Sexit: forall n ns nd nexits ngoto nret rret,
-                    nth_error nexits n = Some ns ->
-                    tr_stmt c map (Sexit n) ns nd nexits ngoto nret rret
-                  | tr_Sreturn_none: forall nret nd nexits ngoto rret,
-                    tr_stmt c map (Sreturn None) nret nd nexits ngoto nret rret
-                  | tr_Sreturn_some: forall a ns nd nexits ngoto nret rret,
-                    tr_expr c map nil a ns nret rret None ->
-                    tr_stmt c map (Sreturn (Some a)) ns nd nexits ngoto nret (Some rret)
-                  | tr_Slabel: forall lbl s ns nd nexits ngoto nret rret n,
-                    ngoto!lbl = Some n ->
-                    c!n = Some (Inop ns) ->
-                    tr_stmt c map s ns nd nexits ngoto nret rret ->
-                    tr_stmt c map (Slabel lbl s) ns nd nexits ngoto nret rret
-                  | tr_Sgoto: forall lbl ns nd nexits ngoto nret rret,
-                    ngoto!lbl = Some ns ->
-                    tr_stmt c map (Sgoto lbl) ns nd nexits ngoto nret rret.   
-
-                Inductive tr_function: CminorSel.function -> RTL.function -> Prop :=
-                    | tr_function_intro:
-                        forall f code rparams map1 s0 s1 i1 rvars map2 s2 i2 nentry ngoto nret rret orret,
-                        add_vars init_mapping f.(CminorSel.fn_params) s0 = OK (rparams, map1) s1 i1 ->
-                        add_vars map1 f.(CminorSel.fn_vars) s1 = OK (rvars, map2) s2 i2 ->
-                        orret = ret_reg f.(CminorSel.fn_sig) rret ->
-                        tr_stmt code map2 f.(CminorSel.fn_body) nentry nret nil ngoto nret orret ->
-                        code!nret = Some(Ireturn orret) ->
-                        tr_function f (RTL.mkfunction
-                                        f.(CminorSel.fn_sig)
-                                        rparams
-                                        f.(CminorSel.fn_stackspace)
-                                        code
-                                        nentry).
-
-                (* Proof that the translation proof meets the specification *)    
-                       
-        FEnd Spec.
-   FEnd RTLgen.  
+  FEnd Selection.  
 
    (* LTL -> Linear *)
   Family Linearize.
