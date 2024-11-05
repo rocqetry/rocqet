@@ -478,9 +478,28 @@ end = struct
         TraitDefinition { trait with linkage; default_ctx_params }
     | InductiveDefinition definition ->
        let default_ctx_params = path_subst_ctx definition.default_ctx_params in
-        InductiveDefinition
+       (* TODO: refactor out. Path sustitution on recursors *)
+       let recursors =
+         definition.recursors
+         |> RecursorStore.map (fun (r: Recursor.t) ->
+                let recursors = r.recursors |> Names.Id.Map.map (Naming.replace_qualid_root ~source ~target) in
+                let handlers =
+                  r.handlers
+                  |> Names.Id.Map.map (List.map (fun (n, e) -> (n, Naming.replace_qualid_root ~source ~target e)))
+                in
+                let mutual =
+                  r.mutual
+                  |> Option.map (fun (m : MutualRecursor.t) ->
+                       let mutual_recursor = Naming.replace_qualid_root ~source ~target m.mutual_recursor in
+                       let mutual_handlers = m.mutual_handlers |> List.map (fun (n, e) -> (n, Naming.replace_qualid_root ~source ~target e)) in
+                       MutualRecursor.{ mutual_recursor; mutual_handlers } )
+                in 
+              Recursor.{ recursors; handlers; mutual } )
+       in
+       InductiveDefinition
           {
             definition with
+            recursors;
             default_ctx_params;
             inductive =
               VernacInductive.path_subtitution definition.inductive ~source
