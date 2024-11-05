@@ -68,7 +68,8 @@ val compile_linkage_context :
 
 (* Compiling Linkages *)
 val compile_linkage : Linkage.t -> CompiledModule.t
-val compile_linkage_signature : Linkage.t -> CompiledModuleType.t
+(* include signature, helper signature *)
+val compile_linkage_signature : Linkage.t -> CompiledModuleType.t * CompiledModuleType.t
 
 val compile_final_linkage_signature : 
   linkage:Linkage.t -> 
