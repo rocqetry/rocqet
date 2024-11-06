@@ -2509,17 +2509,17 @@ Case Elet a b := (fun map => new_reg).
 FEnd alloc_reg.
 
 FRecursion alloc_regs about CminorSel.exprlist motive (fun (_ : CminorSel.exprlist) => mapping -> mon (list reg)) by _rect.
-Case Enil := (ret nil).
+Case Enil := (fun map => ret nil).
 Case Econs a bl :=
-(fun fun map al =>
-  do r <- alloc_reg map a;
-  do rl <- alloc_regs map bl;
+(fun map =>
+  do r <- alloc_reg a map;
+  do rl <- alloc_regs bl map;
   ret (r :: rl)).
 FEnd alloc_regs.
 
 FRecursion transl_expr about CminorSel.expr motive (fun (_ : CminorSel.expr) => mapping -> reg -> RTL.node -> mon RTL.node)
   with transl_exprlist about CminorSel.exprlist motive (fun (_ : CminorSel.exprlist) => mapping -> list reg -> RTL.node -> mon RTL.node)
-  with transl_condexpr about CminorSel.condexpr motive (fun (_ : CminorSel.condexpr) => mapping  -> RTL.node -> RTL.node -> RTL.node) by _rect.
+  with transl_condexpr about CminorSel.condexpr motive (fun (_ : CminorSel.condexpr) => mapping  -> RTL.node -> RTL.node -> mon RTL.node) by _rect.
 Case Evar v := (fun map rd nd => do r <- find_var map v; add_move r rd nd).
 Case Elet b c :=
 (fun map rd nd => 
@@ -2528,20 +2528,20 @@ Case Elet b c :=
    transl_expr b map r nc).
 Case Eop op al :=
 (fun map rd nd => 
-    do rl <- alloc_regs map al;
+    do rl <- alloc_regs al map;
     do no <- add_instr (RTL.Iop op rl rd nd);
-    transl_exprlist map al rl no).
+    transl_exprlist al map rl no).
 Case Econdition a b c :=
-(fun fun map rd nd => 
+(fun map rd nd => 
   do nfalse <- transl_expr c map rd nd;
   do ntrue <- transl_expr b map rd nd;
   transl_condexpr a map ntrue nfalse).
 Case Eletvar n := (fun map rd nd => do r <- find_letvar map n; add_move r rd nd).
 
 (* exprlist *)
-Case Enil := (fun map al rl nd => match rl with nil => ret nd | _ => error (Errors.msg "RTLgen.transl_exprlist") end).
+Case Enil := (fun map rl nd => match rl with nil => ret nd | _ => error (Errors.msg "RTLgen.transl_exprlist") end).
 Case Econs b bs :=
-(fun map al rl nd => 
+(fun map rl nd => 
    match rl with 
    | r :: rs =>  
        do no <- transl_exprlist bs map rs nd; 
@@ -2551,7 +2551,7 @@ Case Econs b bs :=
 (* condexpr *)
 Case CEcond c al :=
 (fun map ntrue nfalse => 
-   do rl <- alloc_regs map al;
+   do rl <- alloc_regs al map;
    do nt <- add_instr (RTL.Icond c rl ntrue nfalse);
    transl_exprlist al map rl nt).
 Case CEcondition a b c :=
@@ -2566,39 +2566,39 @@ Case CElet b c :=
    transl_expr b map r nc).
 FEnd transl_expr with transl_exprlist with transl_condexpr.
         
-FDefinition labelmap : Type := PTree.t node.
+FDefinition labelmap : Type := PTree.t RTL.node.
         
 FRecursion transl_stmt about CminorSel.stmt motive (fun (_ : CminorSel.stmt) => mapping -> RTL.node -> list RTL.node -> labelmap -> RTL.node -> option reg -> mon RTL.node) by _rect.
 Case Sskip := (fun map nd nexits ngoto nret rret => ret nd).
-Case Sassign id e :=
+Case Sassign v b :=
 (fun map nd nexits ngoto nret rret => 
    do r <- find_var map v;
    transl_expr b map r nd). 
 Case Sseq s1 s2 :=
 (fun map nd nexits ngoto nret rret =>  
-   do ns <- transl_s2 map nd nexits ngoto nret rret;
-   transl_s1 map ns nexits ngoto nret rret).
+   do ns <- transl_stmt s2 map nd nexits ngoto nret rret;
+   transl_stmt s1 map ns nexits ngoto nret rret).
 Case Sifthenelse c strue sfalse :=
 (fun map nd nexits ngoto nret rret => 
    (* Don't use "more likely" heuristic *)
-   do ntrue <- transl_strue map nd nexits ngoto nret rret;
-   do nfalse <- transl_sfalse map nd nexits ngoto nret rret;
-   transl_condexpr map c ntrue nfalse).
+   do ntrue <- transl_stmt strue map nd nexits ngoto nret rret;
+   do nfalse <- transl_stmt sfalse map nd nexits ngoto nret rret;
+   transl_condexpr c map ntrue nfalse).
 Case Sreturn opt_a :=
 (fun map nd nexits ngoto nret rret => 
   match opt_a, rret with
   | None, _ => ret nret
-  | Some a, Some r => transl_expr map a r nret
+  | Some a, Some r => transl_expr a map r nret
   | _, _ => error (Errors.msg "RTLgen: type mismatch on return")
   end).
-Case Slabel lbl s :=
+Case Slabel lbl s' :=
 (fun map nd nexits ngoto nret rret => 
-  do ns <- transl_stmt map s' nd nexits ngoto nret rret;
+  do ns <- transl_stmt s' map nd nexits ngoto nret rret;
   match ngoto!lbl with
   | None => error (Errors.msg "RTLgen: unbound label")
   | Some n =>
       do xx <-
-        (handle_error (update_instr n (Inop ns))
+        (handle_error (update_instr n (RTL.Inop ns))
                       (error (Errors.MSG "Multiply-defined label " ::
                               Errors.CTX lbl :: nil)));
       ret ns
@@ -2610,54 +2610,60 @@ Case Sgoto lbl :=
                   Errors.CTX lbl :: nil)
   | Some n => ret n
   end).
+(* TODO: remove this, there is no set in CminorSel *)
+Case Sset := cheat.
 FEnd transl_stmt.
 
-Definition alloc_label (lbl: Cminor.label) (map: labelmap) : mon labelmap :=
+FDefinition alloc_label : Cminor.label -> labelmap -> mon labelmap :=
+  fun (lbl: Cminor.label) (map: labelmap) =>
   do n <- reserve_instr;
   ret (PTree.set lbl n map).   
 
-Fixpoint reserve_labels (s: stmt) (lm: labelmap)
-                        {struct s} : mon labelmap :=
-  match s with
-  | Sseq s1 s2 | Sifthenelse _ s1 s2 =>
-      do lm' <- reserve_labels s2 lm; reserve_labels s1 lm'
-  | Sloop s1 | Sblock s1 => reserve_labels s1 lm
-  | Slabel lbl s1 =>
-      do lm' <- reserve_labels s1 lm; alloc_label lbl lm'
-  | _ => ret lm
-  end.
+FRecursion reserve_labels about CminorSel.stmt
+  motive (fun (_ : CminorSel.stmt) => labelmap -> mon labelmap) by _rect.
+Case Sseq s1 s2 := (fun lm => do lm' <- reserve_labels s2 lm; reserve_labels s1 lm').
+Case Sifthenelse e s1 s2 := (fun lm => do lm' <- reserve_labels s2 lm; reserve_labels s1 lm').
+Case Slabel lbl s1 := (fun lm => do lm' <- reserve_labels s1 lm; alloc_label lbl lm').
+Case Sskip := (fun lm => ret lm).
+Case Sassign i e := (fun lm => ret lm).
+Case Sset i e := (fun lm => ret lm).
+Case Sreturn a := (fun lm => ret lm).
+Case Sgoto lbl := (fun lm => ret lm).
+FEnd reserve_labels.
 
+FDefinition ret_reg : signature -> reg -> option reg :=
+  fun (sig: signature) (rd: reg) =>
+  if rettype_eq sig.(AST.sig_res) AST.Tvoid then None else Some rd.
 
-Definition ret_reg (sig: signature) (rd: reg) : option reg :=
-  if rettype_eq sig.(sig_res) Tvoid then None else Some rd.
-
-Definition transl_fun (f: CminorSel.function): mon (node * list reg) :=
-  do ngoto <- reserve_labels f.(fn_body) (PTree.empty node);
-  do (rparams, map1) <- add_vars init_mapping f.(CminorSel.fn_params);
-  do (rvars, map2) <- add_vars map1 f.(CminorSel.fn_vars);
+FDefinition transl_fun : CminorSel.function -> mon (RTL.node * list reg) :=
+  fun (f: CminorSel.function) => 
+  do ngoto <- reserve_labels f.(self__Base.CminorSel.fn_body) (PTree.empty RTL.node);
+  do (rparams, map1) <- add_vars init_mapping f.(self__Base.CminorSel.fn_params);
+  do (rvars, map2) <- add_vars map1 f.(self__Base.CminorSel.fn_vars);
   do rret <- new_reg;
-  let orret := ret_reg f.(CminorSel.fn_sig) rret in
-  do nret <- add_instr (Ireturn orret);
-  do nentry <- transl_stmt map2 f.(CminorSel.fn_body) nret nil ngoto nret orret;
+  let orret := ret_reg f.(self__Base.CminorSel.fn_sig) rret in
+  do nret <- add_instr (RTL.Ireturn orret);
+  do nentry <- transl_stmt f.(self__Base.CminorSel.fn_body) map2 nret nil ngoto nret orret;
   ret (nentry, rparams).
 
-Definition transl_function (f: CminorSel.function) : Errors.res RTL.function :=
+FDefinition transl_function : CminorSel.function -> Errors.res RTL.function := 
+    fun (f: CminorSel.function) => 
   match transl_fun f init_state with
   | Error msg => Errors.Error msg
   | OK (nentry, rparams) s i =>
       Errors.OK (RTL.mkfunction
-                   f.(CminorSel.fn_sig)
+                   f.(self__Base.CminorSel.fn_sig)
                    rparams
-                   f.(CminorSel.fn_stackspace)
-                   s.(st_code)
+                   f.(self__Base.CminorSel.fn_stackspace)
+                   s.(st_code RTL.instruction)
                    nentry)
   end.
 
-Definition transl_fundef := transf_partial_fundef transl_function.
+FDefinition transl_fundef := transf_partial_fundef transl_function.
 
-Definition transl_program (p: CminorSel.program) : Errors.res RTL.program :=
-  transform_partial_program transl_fundef p.
-
+FDefinition transl_program : CminorSel.program -> Errors.res RTL.program := 
+  fun (p: CminorSel.program) =>
+     transform_partial_program transl_fundef p.
 
         (* Non executable relation spec for transl_stmt, defined via an Inductive type *)
         Family Spec.
