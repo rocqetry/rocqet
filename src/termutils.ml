@@ -361,9 +361,10 @@ let handler_type_for_recursion
            match target with
            | None -> handler
            | Some path ->
-               let inductive_names =
+               (*let inductive_names =
                  inductive_paths |> List.map Naming.extract_path_base
-               in
+               in*)
+               let inductive_names = recursor.handlers |> Names.Id.Map.domain |> Names.Id.Set.to_list in
                let names =
                  case_name :: inductive_names |> Names.Id.Set.of_list
                in               
@@ -523,10 +524,12 @@ let extract_handler_types_from_principle
     mutual_principle
     |> RecursorStore.find_opt suffix
     |> Option.map (fun mutual_recursor ->
+        (* This is critical: We need the constructors to be in order, so we do it manually here *)
         let all_constructors =
-          inductive_constructor
-          |> Names.Id.Map.bindings |> List.concat_map snd          
-        in 
+          inductive
+          |> List.map fst
+          |> List.concat_map (fun e -> e |> VernacInductive.extract_type_and_cstrs |> snd |> List.map fst)
+        in              
         let mutual_handlers = from_recursor_type_to_subcase_handlers_constructor all_constructors  mutual_recursor in
         MutualRecursor.{ mutual_recursor; mutual_handlers; })
   in 
