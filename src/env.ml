@@ -201,16 +201,17 @@ module Context = struct
   
   let lookup_linkage_elem context (path : Libnames.qualid) =
     let family, name = Naming.path_to_prefix path in
+    let found ~bound_names = bound_names |> List.exists (Names.Id.equal name) in 
     let result =
       match Option.bind family (lookup (Some context)) with
       | None -> None
       | Some linkage ->
           linkage.fields
           |> Bwd.find_map (fun (found_name, elem) ->
-                 if Names.Id.equal name found_name then Some (elem, linkage)
+                 let bound_names = linkage_elem_names (found_name, elem) in 
+                 if found ~bound_names then Some (elem, linkage)
                  else None)
-    in
-    let found ~bound_names = bound_names |> List.exists (Names.Id.equal name) in 
+    in    
     let rec go context =
       match context with
       | LinkageCtx.Toplevel linkage ->
