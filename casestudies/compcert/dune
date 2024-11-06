@@ -42,6 +42,11 @@
    lib/Conventions1
    lib/Mregisters
    lib/RTLmonad
+   lib/Heaps
+   lib/Kildall
+   lib/Lattice
+   lib/Iteration
+   lib/Wfsimpl   
   ))
 
 

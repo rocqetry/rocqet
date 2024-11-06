@@ -1900,7 +1900,12 @@ FInductive operation : Type :=
 | Osingleconst : float32 -> operation (**r [rd] is set to the given float constant *)
 | Oaddrstack : ptrofs -> operation (**r [rd] is set to the stack pointer plus the given offset *)
 | Ocmp : condition -> operation.  (**r [rd = 1] if condition holds, [rd = 0] otherwise. *)
-      
+
+FRecursion negate_condition about condition motive (fun (_ : condition) => condition) by _rect.
+Case Ccomp c := (Ccomp(negate_comparison c)).
+Case Ccompimm c n := (Ccompimm (negate_comparison c) n).
+FEnd negate_condition.
+
 FRecursion eval_condition about condition motive (fun (_ : condition) => list val -> mem -> option bool) by _rect.
 Case Ccomp c := 
 (fun vl m =>
@@ -3116,6 +3121,23 @@ Inductive final_state: self__LTL.state -> int -> Prop :=
     final_state (self__LTL.Returnstate nil rs m) retcode.
 FEnd final_state.
 
+FRecursion successors_instr about instruction motive (fun (_ : instruction) =>  list node -> list node) by _rect.
+Case Lop op args dst := (fun rest => rest).
+Case Lgetstack a b c d := (fun rest => rest). 
+Case Lsetstack a b c d := (fun rest => rest).
+Case Lbranch s := (fun _  => s :: nil).
+Case Lcond cond args s1 s2 := (fun _ => s1 :: s2 :: nil).
+Case Lreturn := (fun rest => rest).
+FEnd successors_instr.
+
+MetaData successors_block.
+Fixpoint successors_block (b: self__LTL.bblock) : list self__LTL.node :=
+  match b with
+  | nil => nil(* should never happen *)
+  | op :: b' => self__LTL.successors_instr op (successors_block b')
+  end.
+FEnd successors_block.
+
 FEnd LTL.
 
 Family Lfam.
@@ -3468,6 +3490,337 @@ Inductive final_state: self__Mach.state -> int -> Prop :=
 FEnd final_state.
 
 FEnd Mach.
+
+(* LTL -> Linear *)
+Family Linearize.
+
+From NFPOP Require Import Lattice.
+From NFPOP Require Import Kildall.
+
+(* Determination of the order of basic blocks *)
+
+Module DS := Dataflow_Solver(LBoolean)(NodeSetForward).
+
+FDefinition reachable_aux : LTL.function -> option (PMap.t bool) :=
+  fun (f: LTL.function) =>
+  DS.fixpoint
+    (LTL.fn_code f) LTL.successors_block
+    (fun pc r => r)
+    f.(self__Base.LTL.fn_entrypoint) true.
+
+FDefinition reachable : LTL.function -> PMap.t bool := fun f =>
+  match reachable_aux f with
+  | None => PMap.init true
+  | Some rs => rs
+  end.
+
+MetaData enumerate_aux.
+Parameter enumerate_aux: self__Base.LTL.function -> PMap.t bool -> list self__Base.LTL.node.
+FEnd enumerate_aux.
+
+Module Nodeset := FSetAVL.Make(OrderedPositive).
+
+From NFPOP Require Import Errors.
+Open Scope error_monad_scope.
+
+MetaData nodeset_of_list.
+Fixpoint nodeset_of_list (l: list self__Base.LTL.node) (s: Nodeset.t)
+                         {struct l}: res Nodeset.t :=
+  match l with
+  | nil => OK s
+  | hd :: tl =>
+      if Nodeset.mem hd s
+      then Error (msg "Linearize: duplicates in enumeration")
+      else nodeset_of_list tl (Nodeset.add hd s)
+  end.
+FEnd nodeset_of_list.
+
+FDefinition check_reachable_aux := 
+     fun (reach: PMap.t bool) (s: Nodeset.t)
+     (ok: bool) (pc: LTL.node) (bb: LTL.bblock) =>
+  if reach!!pc then ok && Nodeset.mem pc s else ok.
+
+FDefinition check_reachable := 
+     fun (f: LTL.function) (reach: PMap.t bool) (s: Nodeset.t) =>
+  PTree.fold (check_reachable_aux reach s) f.(self__Base.LTL.fn_code) true.
+
+FDefinition enumerate : LTL.function -> res (list LTL.node) := fun f => 
+  let reach := reachable f in
+  let enum := enumerate_aux f reach in
+  do s <- nodeset_of_list enum Nodeset.empty;
+  if check_reachable f reach s
+  then OK enum
+  else Error (msg "Linearize: wrong enumeration").
+
+FRecursion starts_with_label about Linear.instruction motive (fun (_ : Linear.instruction) => Linear.label -> bool) by _rect.
+Case Llabel lbl' := (fun lbl => peq lbl lbl').
+Case Lop op args res := (fun lbl => false).
+Case Lgetstack sl ofs ty r := (fun lbl => false).
+Case Lsetstack r sl ofs ty := (fun lbl => false).
+Case Lcond cond args lbl' := (fun lbl => false).
+Case Lreturn := (fun lbl => false).
+Case Lgoto lbl' := (fun lbl => false).
+FEnd starts_with_label.
+
+MetaData starts_with.
+Fixpoint starts_with (lbl: self__Base.Linear.label) (k: self__Base.Linear.code) {struct k} : bool :=
+     match k with
+     | i :: k' => if self__Linearize.starts_with_label i lbl then true else starts_with lbl k'
+     | _ => false
+     end.
+FEnd starts_with.
+              
+FDefinition add_branch : Linear.label -> Linear.code -> Linear.code := fun (s: Linear.label) (k: Linear.code) =>
+   if starts_with s k then k else Linear.Lgoto s :: k.
+
+FRecursion translate_instr about LTL.instruction motive (fun (_ : LTL.instruction) => (Linear.code -> Linear.code) -> Linear.code -> Linear.code) by _rect.
+Case Lop op args res := (fun f k => Linear.Lop op args res :: f k).
+Case Lgetstack sl ofs ty r := (fun f k => Linear.Lgetstack sl ofs ty r :: f k).
+Case Lsetstack r sl ofs ty := (fun f k => Linear.Lsetstack r sl ofs ty :: f k).
+Case Lbranch s := (fun f k => add_branch s k).
+Case Lcond cond args s1 s2 :=
+(fun f k => if starts_with s1 k then Linear.Lcond (Asm.negate_condition cond) args s2 :: add_branch s1 k else Linear.Lcond cond args s1 :: add_branch s2 k).
+Case Lreturn := (fun f k => Linear.Lreturn :: f k).
+FEnd translate_instr.
+       
+MetaData linearize_block.
+Fixpoint linearize_block (b: self__Base.LTL.bblock) (k: self__Base.Linear.code) : self__Base.Linear.code :=
+   match b with
+   | nil => k
+   | i :: b' => self__Linearize.translate_instr i (linearize_block b') k
+   end.
+FEnd linearize_block.
+
+FDefinition linearize_node : LTL.function -> LTL.node -> Linear.code -> Linear.code :=
+  fun (f: LTL.function) (pc: LTL.node) (k: Linear.code) =>
+  match f.(self__Base.LTL.fn_code)!pc with
+  | None => k
+  | Some b => Linear.Llabel pc :: linearize_block b k
+  end.
+
+FDefinition linearize_body : LTL.function -> list LTL.node -> Linear.code :=
+  fun (f: LTL.function) (enum: list LTL.node) =>
+  list_fold_right (linearize_node f) enum nil.
+
+FDefinition transf_function : LTL.function -> res Linear.function := fun f =>
+  do enum <- enumerate f;
+  OK (Linear.mkfunction
+       (LTL.fn_sig f)
+       (LTL.fn_stacksize f)
+       (add_branch (LTL.fn_entrypoint f) (linearize_body f enum))).
+
+FDefinition transf_fundef : LTL.fundef -> res Linear.fundef := fun f =>
+  AST.transf_partial_fundef transf_function f.
+
+FDefinition transf_program : LTL.program -> res Linear.program := fun p =>
+  transform_partial_program transf_fundef p.
+
+FEnd Linearize.
+   
+   (* Linear -> Mach *)
+  Family Stacking.
+        Definition transl_op (fe: frame_env) (op: operation) :=
+            Asm.shift_stack_operation fe.(fe_stack_data) op.
+
+        Fixpoint restore_callee_save_rec (rl: list mreg) (ofs: Z) (k: Mach.code) :=
+          match rl with
+          | nil => k
+          | r :: rl =>
+              let ty := mreg_type r in
+              let sz := AST.typesize ty in
+              let ofs1 := align ofs sz in
+              Mgetstack (Ptrofs.repr ofs1) ty r :: restore_callee_save_rec rl (ofs1 + sz) k
+          end.
+
+        Definition restore_callee_save (fe: frame_env) (k: Mach.code) :=
+          restore_callee_save_rec fe.(fe_used_callee_save) fe.(fe_ofs_callee_save) k.
+
+        FRecursion transl_instr about Linear.instruction motive (fun (_ : Linear.instruction) => frame_env -> Mach.code -> Mach.code).
+             Case Lgetstack := (fun sl ofs ty r => fun fe k => 
+                      match sl with
+                      | Local =>
+                          Mach.Mgetstack (Ptrofs.repr (offset_local fe ofs)) ty r :: k
+                      | Incoming =>
+                          Mach.Mgetparam (Ptrofs.repr (offset_arg ofs)) ty r :: k
+                      | Outgoing =>
+                          Mach.Mgetstack (Ptrofs.repr (offset_arg ofs)) ty r :: k
+                      end).
+             Case Lsetstack := (fun r sl ofs ty => fun fe k => 
+                      match sl with
+                      | Local =>
+                          Mach.Msetstack r (Ptrofs.repr (offset_local fe ofs)) ty :: k
+                      | Incoming =>
+                          k
+                      | Outgoing =>
+                          Mach.Msetstack r (Ptrofs.repr (offset_arg ofs)) ty :: k
+                      end). 
+             Case Lop := (fun op args res => fun fe k =>  Mach.Mop (transl_op fe op) args res :: k).
+             Case Llabel := (fun lbl => fun fe k => Mach.Mlabel lbl :: k).
+             Case Lgoto := (fun lbl => fun fe k => Mach.Mgoto lbl :: k).
+             Case Lcond := (fun cond args lbl => fun fe k => Mach.Mcond cond args lbl :: k).
+             Case Lreturn := (fun fe k =>  restore_callee_save fe (Mreturn :: k)).
+        FEnd transl_instr.
+
+        Definition transl_code
+            (fe: frame_env) (il: list Linear.instruction) : Mach.code :=
+          list_fold_right (transl_instr fe) il nil.
+  FEnd Stacking.
+
+   (* Mach -> Asm *)
+  Family Asmgen.
+    FRecursion transl_op about Linear.operation motive (fun (_ : Linear.operation) => list mreg -> mreg -> Asm.code -> Asm.code).
+        Case Omove := (fun a1 res k => 
+            match preg_of res, preg_of a1 with
+            | IR r, IR a => Pmv r a :: k
+            | FR r, FR a => Pfmv r a :: k
+            |  _  ,  _   => error (Errors.msg "Asmgen.Omove")
+            end).
+        Case Ointconst := (fun n res k => 
+            match ireg_of res with
+            | None => error (Errors.msg "Asmgen.Ointconst")
+            | Some rd => loadimm32 rd n k
+            end).
+        Case Olongconst := (fun n res k => 
+            match ireg_of res with
+            | None => error (Errors.msg "Asmgen.Olongconst")
+            | Some rd => loadimm64 rd n k
+            end).
+        Case Ofloatconst := (fun f res k => 
+            match freg_of res with
+            | None => error (Errors.msg "Asmgen.Ofloatconst")
+            | Some rd => 
+                if Float.eq_dec f Float.zero
+                then Pfcvtdw rd X0 :: k
+                else Ploadfi rd f :: k
+            end).
+        Case Osingleconst := (fun f res k => 
+            match freg_of res with
+            | None => error (Errors.msg "Asmgen.Osingleconst")
+            | Some rd => 
+                if Float32.eq_dec f Float32.zero
+                then Pfcvtsw rd X0 :: k
+                else Ploadsi rd f :: k
+            end).
+        Case Oaddrsymbol := (fun s ofs res k => 
+            match ireg_of res with
+            | None => error (Errors.msg "Asmgen.Oaddrsymbol")
+            | Some rd => 
+                if Archi.pic_code tt && negb (Ptrofs.eq ofs Ptrofs.zero)
+                then Ploadsymbol rd s Ptrofs.zero :: addptrofs rd rd ofs k
+                else Ploadsymbol rd s ofs :: k
+            end).
+        Case Oaddrstack := (fun n res k => 
+            match ireg_of res with
+            | None => error (Errors.msg " Asmgen.Oaddrstack")
+            | Some rd => addptrofs rd SP n k
+            end).
+    FEnd transl_op.
+
+    FRecursion transl_cbranch about condition motive (fun (_ : condition) => list mreg -> label -> Asm.code -> Asm.code).
+        Case Ccomp := (fun c => fun args lbl k => 
+            match args with
+            | a1 :: a2 :: nil =>
+                do r1 <- ireg_of a1; do r2 <- ireg_of a2;
+                OK (transl_cbranch_int32s c r1 r2 lbl :: k)
+            | _ => error (Errors.msg "Asmgen.transl_cbranch")
+            end).
+        Case Ccompu := (fun c => fun args lbl k => 
+            match args with
+            | a1 :: a2 :: nil =>
+                do r1 <- ireg_of a1; do r2 <- ireg_of a2;
+                OK (transl_cbranch_int32u c r1 r2 lbl :: k)
+            | _ => error (Errors.msg "Asmgen.transl_cbranch")
+            end).
+        Case Ccompimm := (fun c n => fun args lbl k => 
+            match args with
+            | a1 :: nil =>
+                do r1 <- ireg_of a1;
+                OK (if Int.eq n Int.zero then
+                        transl_cbranch_int32s c r1 X0 lbl :: k
+                    else loadimm32 X31 n (transl_cbranch_int32s c r1 X31 lbl :: k))
+            | _ => error (Errors.msg "Asmgen.transl_cbranch")
+            end).
+        Case Ccompuimm := (fun c n => fun args lbl k => 
+            match args with
+            | a1 :: nil =>
+                do r1 <- ireg_of a1;
+                OK (if Int.eq n Int.zero then
+                        transl_cbranch_int32u c r1 X0 lbl :: k
+                    else loadimm32 X31 n (transl_cbranch_int32u c r1 X31 lbl :: k))
+            | _ => error (Errors.msg "Asmgen.transl_cbranch")
+            end).
+        Case Ccompl := (fun c => fun args lbl k => 
+            match args with
+            | a1 :: a2 :: nil =>
+                do r1 <- ireg_of a1; do r2 <- ireg_of a2;
+                OK (transl_cbranch_int64s c r1 r2 lbl :: k)
+            | _ => error (Errors.msg "Asmgen.transl_cbranch")
+            end).
+        Case Ccomplu := (fun c => fun args lbl k => 
+            match args with
+            | a1 :: a2 :: nil =>
+                do r1 <- ireg_of a1; do r2 <- ireg_of a2;
+                OK (transl_cbranch_int64u c r1 r2 lbl :: k)
+            | _ => error (Errors.msg "Asmgen.transl_cbranch")
+            end).
+        Case Ccomplimm := (fun c n => fun args lbl k => 
+            match args with
+            | a1 :: nil =>
+                do r1 <- ireg_of a1;
+                OK (if Int64.eq n Int64.zero then
+                        transl_cbranch_int64s c r1 X0 lbl :: k
+                    else loadimm64 X31 n (transl_cbranch_int64s c r1 X31 lbl :: k))
+            | _ => error (Errors.msg "Asmgen.transl_cbranch")
+            end).
+        Case Ccompluimm := (fun c n => fun args lbl k => 
+            match args with
+            | a1 :: nil =>
+                do r1 <- ireg_of a1;
+                OK (if Int64.eq n Int64.zero then
+                        transl_cbranch_int64u c r1 X0 lbl :: k
+                    else loadimm64 X31 n (transl_cbranch_int64u c r1 X31 lbl :: k))
+            | _ => error (Errors.msg "Asmgen.transl_cbranch")
+            end).
+        Case Ccompf := (fun c => fun args lbl k => 
+            match args with
+            | f1 :: f2 :: nil =>
+                do r1 <- freg_of f1; do r2 <- freg_of f2;
+                let (insn, normal) := transl_cond_float c X31 r1 r2 in
+                OK (insn :: (if normal then Pbnew X31 X0 lbl else Pbeqw X31 X0 lbl) :: k)
+            | _ => error (Errors.msg "Asmgen.transl_cbranch")
+            end).
+        Case Cnotcompf := (fun c => fun args lbl k => 
+            match args with
+            | f1 :: f2 :: nil =>
+                do r1 <- freg_of f1; do r2 <- freg_of f2;
+                let (insn, normal) := transl_cond_float c X31 r1 r2 in
+                OK (insn :: (if normal then Pbeqw X31 X0 lbl else Pbnew X31 X0 lbl) :: k)
+            | _ => error (Errors.msg "Asmgen.transl_cbranch")
+            end).
+        Case Ccompfs := (fun c => fun args lbl k => 
+            match args with
+            | f1 :: f2 :: nil =>
+                do r1 <- freg_of f1; do r2 <- freg_of f2;
+                let (insn, normal) := transl_cond_single c X31 r1 r2 in
+                OK (insn :: (if normal then Pbnew X31 X0 lbl else Pbeqw X31 X0 lbl) :: k)
+            | _ => error (Errors.msg "Asmgen.transl_cbranch")
+            end).
+    FEnd transl_cbranch.
+
+    FRecursion translate_instr about Mach.instruction motive (fun (_ : Mach.instruction) => Mach.function -> bool -> Asm.code -> Asm.code).
+       Case Mgetstack := (fun ofs ty dst => fun f ep k => loadind SP ofs ty dst k).
+       Case Msetstack := (fun src ofs ty => fun f ep k => storeind SP src ofs ty k).
+       Case Mgetparam := (fun ofs ty dst => fun f ep k => 
+                         do c <- loadind X30 ofs ty dst k;
+                        OK (if ep then c
+                                  else loadind_ptr SP f.(fn_link_ofs) X30 c).
+      Case Mop := (fun op args res => fun f ep k => transl_op op args res k).
+      Case Mlabel := (fun lbl => fun f ep k => Asm.Plabel lbl :: k).
+      Case Mgoto := (fun lbl => fun f ep k => Asm.Pj_l lbl :: k).
+      Case Mcond := (fun cond args lbl => fun f ep k => transl_cbranch cond args lbl k).
+      Case Mreturn := (fun f ep k => make_epilogue f (Pj_r RA f.(Mach.fn_sig) :: k)).
+    FEnd translate_instr.
+   FEnd Asmgen.
 
 (* A translation between C family languages *)
 Family Cfamtransl.
@@ -4361,261 +4714,6 @@ Family Cfamtransl.
        FEnd Proof.
 
   FEnd Selection.  
-
-   (* LTL -> Linear *)
-  Family Linearize.
-       FRecursion starts_with_label about Linear.instruction motive (fun (_ : Linear.instruction) => label -> bool).
-            Case Llabel := (fun lbl' => fun lbl => peq lbl lbl').
-            Case Lop := (fun op args res => fun lbl => false).
-            Case Lgetstack := (fun sl ofs ty r => fun lbl => false).
-            Case Lsetstack := (fun r sl ofs ty => fun lbl => false).
-            Case Lbranch := (fun lbl => fun lbl => false).
-            Case Lcond := (fun cond args lbl => fun lbl => false).
-            Case Lreturn := (fun lbl => false).
-            Case Ljumptable := (fun arg tbl => fun lbl => false).
-       FEnd starts_with_label.
-
-       Metadata _starts_with.
-       Fixpoint starts_with (lbl: label) (k: code) {struct k} : bool :=
-            match k with
-            | i :: k' => if starts_with_label i then true else starts_with lbl k'
-            | _ => false
-            end.
-       FEnd _starts_with.
-              
-       FDefinition add_branch (s: label) (k: code) : code :=
-          if starts_with s k then k else Lgoto s :: k.
-
-       FRecursion translate_instr about LTL.instruction motive (fun (_ : LTL.instruction) => Linear.code -> Linear.instruction).
-          Case Lop := (fun op args res => fun k => Lop op args res).
-          Case Lgetstack := (fun sl ofs ty r => fun k => Lgetstack sl ofs ty r).
-          Case Lsetstack := (fun r sl ofs ty => fun k => Lsetstack r sl ofs ty).
-          Case Lbranch := (fun lbl => fun k => add_branch s k).
-          Case Lcond := (fun cond args lbl => fun k => 
-                              if starts_with s1 k then
-                                  Lcond (Asm.negate_condition cond) args s2 :: add_branch s1 k
-                                else
-                                  Lcond cond args s1 :: add_branch s2 k).
-          Case Lreturn := (fun k => Lreturn).
-       FEnd transl_instr.
-       
-       MetaData _linearize_block.
-       Fixpoint linearize_block (b: LTL.bblock) (k: code) : code :=
-          match b with
-          | nil => k
-          | i :: b' => linearize_block b' (transl_instr i k)
-          end.
-       FEnd _linearize_block.
-   FEnd Linearize.
-
-   (* Linear -> Linear *)
-   Family Debugvar.
-   FEnd Debugvar.
-   
-   (* Linear -> Mach *)
-  Family Stacking.
-        Definition transl_op (fe: frame_env) (op: operation) :=
-            Asm.shift_stack_operation fe.(fe_stack_data) op.
-
-        Fixpoint restore_callee_save_rec (rl: list mreg) (ofs: Z) (k: Mach.code) :=
-          match rl with
-          | nil => k
-          | r :: rl =>
-              let ty := mreg_type r in
-              let sz := AST.typesize ty in
-              let ofs1 := align ofs sz in
-              Mgetstack (Ptrofs.repr ofs1) ty r :: restore_callee_save_rec rl (ofs1 + sz) k
-          end.
-
-        Definition restore_callee_save (fe: frame_env) (k: Mach.code) :=
-          restore_callee_save_rec fe.(fe_used_callee_save) fe.(fe_ofs_callee_save) k.
-
-        FRecursion transl_instr about Linear.instruction motive (fun (_ : Linear.instruction) => frame_env -> Mach.code -> Mach.code).
-             Case Lgetstack := (fun sl ofs ty r => fun fe k => 
-                      match sl with
-                      | Local =>
-                          Mach.Mgetstack (Ptrofs.repr (offset_local fe ofs)) ty r :: k
-                      | Incoming =>
-                          Mach.Mgetparam (Ptrofs.repr (offset_arg ofs)) ty r :: k
-                      | Outgoing =>
-                          Mach.Mgetstack (Ptrofs.repr (offset_arg ofs)) ty r :: k
-                      end).
-             Case Lsetstack := (fun r sl ofs ty => fun fe k => 
-                      match sl with
-                      | Local =>
-                          Mach.Msetstack r (Ptrofs.repr (offset_local fe ofs)) ty :: k
-                      | Incoming =>
-                          k
-                      | Outgoing =>
-                          Mach.Msetstack r (Ptrofs.repr (offset_arg ofs)) ty :: k
-                      end). 
-             Case Lop := (fun op args res => fun fe k =>  Mach.Mop (transl_op fe op) args res :: k).
-             Case Llabel := (fun lbl => fun fe k => Mach.Mlabel lbl :: k).
-             Case Lgoto := (fun lbl => fun fe k => Mach.Mgoto lbl :: k).
-             Case Lcond := (fun cond args lbl => fun fe k => Mach.Mcond cond args lbl :: k).
-             Case Lreturn := (fun fe k =>  restore_callee_save fe (Mreturn :: k)).
-        FEnd transl_instr.
-
-        Definition transl_code
-            (fe: frame_env) (il: list Linear.instruction) : Mach.code :=
-          list_fold_right (transl_instr fe) il nil.
-  FEnd Stacking.
-
-   (* Mach -> Asm *)
-  Family Asmgen.
-    FRecursion transl_op about Linear.operation motive (fun (_ : Linear.operation) => list mreg -> mreg -> Asm.code -> Asm.code).
-        Case Omove := (fun a1 res k => 
-            match preg_of res, preg_of a1 with
-            | IR r, IR a => Pmv r a :: k
-            | FR r, FR a => Pfmv r a :: k
-            |  _  ,  _   => error (Errors.msg "Asmgen.Omove")
-            end).
-        Case Ointconst := (fun n res k => 
-            match ireg_of res with
-            | None => error (Errors.msg "Asmgen.Ointconst")
-            | Some rd => loadimm32 rd n k
-            end).
-        Case Olongconst := (fun n res k => 
-            match ireg_of res with
-            | None => error (Errors.msg "Asmgen.Olongconst")
-            | Some rd => loadimm64 rd n k
-            end).
-        Case Ofloatconst := (fun f res k => 
-            match freg_of res with
-            | None => error (Errors.msg "Asmgen.Ofloatconst")
-            | Some rd => 
-                if Float.eq_dec f Float.zero
-                then Pfcvtdw rd X0 :: k
-                else Ploadfi rd f :: k
-            end).
-        Case Osingleconst := (fun f res k => 
-            match freg_of res with
-            | None => error (Errors.msg "Asmgen.Osingleconst")
-            | Some rd => 
-                if Float32.eq_dec f Float32.zero
-                then Pfcvtsw rd X0 :: k
-                else Ploadsi rd f :: k
-            end).
-        Case Oaddrsymbol := (fun s ofs res k => 
-            match ireg_of res with
-            | None => error (Errors.msg "Asmgen.Oaddrsymbol")
-            | Some rd => 
-                if Archi.pic_code tt && negb (Ptrofs.eq ofs Ptrofs.zero)
-                then Ploadsymbol rd s Ptrofs.zero :: addptrofs rd rd ofs k
-                else Ploadsymbol rd s ofs :: k
-            end).
-        Case Oaddrstack := (fun n res k => 
-            match ireg_of res with
-            | None => error (Errors.msg " Asmgen.Oaddrstack")
-            | Some rd => addptrofs rd SP n k
-            end).
-    FEnd transl_op.
-
-    FRecursion transl_cbranch about condition motive (fun (_ : condition) => list mreg -> label -> Asm.code -> Asm.code).
-        Case Ccomp := (fun c => fun args lbl k => 
-            match args with
-            | a1 :: a2 :: nil =>
-                do r1 <- ireg_of a1; do r2 <- ireg_of a2;
-                OK (transl_cbranch_int32s c r1 r2 lbl :: k)
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccompu := (fun c => fun args lbl k => 
-            match args with
-            | a1 :: a2 :: nil =>
-                do r1 <- ireg_of a1; do r2 <- ireg_of a2;
-                OK (transl_cbranch_int32u c r1 r2 lbl :: k)
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccompimm := (fun c n => fun args lbl k => 
-            match args with
-            | a1 :: nil =>
-                do r1 <- ireg_of a1;
-                OK (if Int.eq n Int.zero then
-                        transl_cbranch_int32s c r1 X0 lbl :: k
-                    else loadimm32 X31 n (transl_cbranch_int32s c r1 X31 lbl :: k))
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccompuimm := (fun c n => fun args lbl k => 
-            match args with
-            | a1 :: nil =>
-                do r1 <- ireg_of a1;
-                OK (if Int.eq n Int.zero then
-                        transl_cbranch_int32u c r1 X0 lbl :: k
-                    else loadimm32 X31 n (transl_cbranch_int32u c r1 X31 lbl :: k))
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccompl := (fun c => fun args lbl k => 
-            match args with
-            | a1 :: a2 :: nil =>
-                do r1 <- ireg_of a1; do r2 <- ireg_of a2;
-                OK (transl_cbranch_int64s c r1 r2 lbl :: k)
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccomplu := (fun c => fun args lbl k => 
-            match args with
-            | a1 :: a2 :: nil =>
-                do r1 <- ireg_of a1; do r2 <- ireg_of a2;
-                OK (transl_cbranch_int64u c r1 r2 lbl :: k)
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccomplimm := (fun c n => fun args lbl k => 
-            match args with
-            | a1 :: nil =>
-                do r1 <- ireg_of a1;
-                OK (if Int64.eq n Int64.zero then
-                        transl_cbranch_int64s c r1 X0 lbl :: k
-                    else loadimm64 X31 n (transl_cbranch_int64s c r1 X31 lbl :: k))
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccompluimm := (fun c n => fun args lbl k => 
-            match args with
-            | a1 :: nil =>
-                do r1 <- ireg_of a1;
-                OK (if Int64.eq n Int64.zero then
-                        transl_cbranch_int64u c r1 X0 lbl :: k
-                    else loadimm64 X31 n (transl_cbranch_int64u c r1 X31 lbl :: k))
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccompf := (fun c => fun args lbl k => 
-            match args with
-            | f1 :: f2 :: nil =>
-                do r1 <- freg_of f1; do r2 <- freg_of f2;
-                let (insn, normal) := transl_cond_float c X31 r1 r2 in
-                OK (insn :: (if normal then Pbnew X31 X0 lbl else Pbeqw X31 X0 lbl) :: k)
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Cnotcompf := (fun c => fun args lbl k => 
-            match args with
-            | f1 :: f2 :: nil =>
-                do r1 <- freg_of f1; do r2 <- freg_of f2;
-                let (insn, normal) := transl_cond_float c X31 r1 r2 in
-                OK (insn :: (if normal then Pbeqw X31 X0 lbl else Pbnew X31 X0 lbl) :: k)
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccompfs := (fun c => fun args lbl k => 
-            match args with
-            | f1 :: f2 :: nil =>
-                do r1 <- freg_of f1; do r2 <- freg_of f2;
-                let (insn, normal) := transl_cond_single c X31 r1 r2 in
-                OK (insn :: (if normal then Pbnew X31 X0 lbl else Pbeqw X31 X0 lbl) :: k)
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-    FEnd transl_cbranch.
-
-    FRecursion translate_instr about Mach.instruction motive (fun (_ : Mach.instruction) => Mach.function -> bool -> Asm.code -> Asm.code).
-       Case Mgetstack := (fun ofs ty dst => fun f ep k => loadind SP ofs ty dst k).
-       Case Msetstack := (fun src ofs ty => fun f ep k => storeind SP src ofs ty k).
-       Case Mgetparam := (fun ofs ty dst => fun f ep k => 
-                         do c <- loadind X30 ofs ty dst k;
-                        OK (if ep then c
-                                  else loadind_ptr SP f.(fn_link_ofs) X30 c).
-      Case Mop := (fun op args res => fun f ep k => transl_op op args res k).
-      Case Mlabel := (fun lbl => fun f ep k => Asm.Plabel lbl :: k).
-      Case Mgoto := (fun lbl => fun f ep k => Asm.Pj_l lbl :: k).
-      Case Mcond := (fun cond args lbl => fun f ep k => transl_cbranch cond args lbl k).
-      Case Mreturn := (fun f ep k => make_epilogue f (Pj_r RA f.(Mach.fn_sig) :: k)).
-    FEnd translate_instr.
-   FEnd Asmgen.
 
 FEnd Base.
 
