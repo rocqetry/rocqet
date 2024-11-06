@@ -257,10 +257,10 @@ let open_recursion_extension ~names =
   Ctx.update recursion_ctx
 
 let extend_argumets_with_inductive_case
+    ~(inductive_names: Names.Id.t list)
     ~(recursors : Names.Id.t list)
     ~(constructor : Names.Id.t) ~(arguments : Names.Id.t list)
-    ~(inductive : VernacInductive.t) =
-  let inductive_names = inductive |> VernacInductive.extract_all_inductive_names in 
+    ~(inductive : VernacInductive.t) =  
   let types =
     Termutils.flatten_inductive_constructor_type ~inductive_names ~inductive ~constructor
   in
@@ -353,16 +353,19 @@ let add_handler ~name ~arguments ~handler =
             in
             let handler = Termutils.mk_lambda recursion_ctx.arguments handler in
             handler
-        | Some arguments ->            
-            let arguments =
-              extend_argumets_with_inductive_case ~recursors:recursion_ctx.names
+        | Some arguments ->
+           let inductive_names = recursion_ctx.inductive_paths |> List.map Naming.extract_path_base in
+           let arguments =
+              extend_argumets_with_inductive_case
+                ~inductive_names
+                ~recursors:recursion_ctx.names
                 ~constructor:name ~arguments ~inductive:recursion_ctx.inductive
-            in
-            let handler =
-              replace_recursor ~recursors:recursion_ctx.names handler
-            in
-            let handler = Termutils.mk_lambda recursion_ctx.arguments handler in
-            Termutils.mk_lambda arguments handler
+           in
+           let handler =
+             replace_recursor ~recursors:recursion_ctx.names handler
+           in
+           let handler = Termutils.mk_lambda recursion_ctx.arguments handler in
+           Termutils.mk_lambda arguments handler
       in
       let () =
         Definition.add_definition ~name:case_name ~body_type:ty handler
