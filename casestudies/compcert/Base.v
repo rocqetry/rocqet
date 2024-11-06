@@ -2500,13 +2500,12 @@ FDefinition add_move : reg -> reg -> RTL.node -> mon RTL.node := fun (rs rd: reg
   then ret nd
   else add_instr (RTL.Iop Asm.Omove (rs::nil) rd nd).
 
-(*FRecursion alloc_reg about CminorSel.expr motive (fun (_ : CminorSel.expr) => mapping -> mon reg) by _rect.
+FRecursion alloc_reg about CminorSel.expr motive (fun (_ : CminorSel.expr) => mapping -> mon reg) by _rect.
 Case Evar id := (fun map => find_var map id).
 Case Eletvar n := (fun map => find_letvar map n).
-(* To fix: add the mutual inductive names to be resolved
-    when calculating the type *)
 Case Eop := (fun op args => fun map => new_reg).
-Case Econdition c a0 a1 := new_reg.
+Case Econdition c a0 a1 := (fun map => new_reg).
+Case Elet a b := (fun map => new_reg).
 FEnd alloc_reg.
 
 FRecursion alloc_regs about CminorSel.exprlist motive (fun (_ : CminorSel.exprlist) => mapping -> mon (list reg)) by _rect.
@@ -2516,7 +2515,7 @@ Case Econs a bl :=
   do r <- alloc_reg map a;
   do rl <- alloc_regs map bl;
   ret (r :: rl)).
-FEnd alloc_regs.*)
+FEnd alloc_regs.
 
 FRecursion transl_expr about CminorSel.expr motive (fun (_ : CminorSel.expr) => mapping -> reg -> RTL.node -> mon RTL.node)
   with transl_exprlist about CminorSel.exprlist motive (fun (_ : CminorSel.exprlist) => mapping -> list reg -> RTL.node -> mon RTL.node)
