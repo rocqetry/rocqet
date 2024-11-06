@@ -280,3 +280,26 @@ Definition builtin_constraints (ef: external_function) :
   | EF_debug kind txt targs => map (fun _ => OK_all) targs
   | _ => nil
   end.
+
+Require Import Prelude.
+
+Definition preg_of (r: mreg) : preg :=
+  match r with
+               | R5  => X5  | R6  => X6  | R7  => X7
+  | R8  => X8  | R9  => X9  | R10 => X10 | R11 => X11
+  | R12 => X12 | R13 => X13 | R14 => X14 | R15 => X15
+  | R16 => X16 | R17 => X17 | R18 => X18 | R19 => X19
+  | R20 => X20 | R21 => X21 | R22 => X22 | R23 => X23
+  | R24 => X24 | R25 => X25 | R26 => X26 | R27 => X27
+  | R28 => X28 | R29 => X29 | R30 => X30
+
+  | Machregs.F0  => F0  | Machregs.F1  => F1  | Machregs.F2  => F2  | Machregs.F3  => F3
+  | Machregs.F4  => F4  | Machregs.F5  => F5  | Machregs.F6  => F6  | Machregs.F7  => F7
+  | Machregs.F8  => F8  | Machregs.F9  => F9  | Machregs.F10 => F10 | Machregs.F11 => F11
+  | Machregs.F12 => F12 | Machregs.F13 => F13 | Machregs.F14 => F14 | Machregs.F15 => F15
+  | Machregs.F16 => F16 | Machregs.F17 => F17 | Machregs.F18 => F18 | Machregs.F19 => F19
+  | Machregs.F20 => F20 | Machregs.F21 => F21 | Machregs.F22 => F22 | Machregs.F23 => F23
+  | Machregs.F24 => F24 | Machregs.F25 => F25 | Machregs.F26 => F26 | Machregs.F27 => F27
+  | Machregs.F28 => F28 | Machregs.F29 => F29 | Machregs.F30 => F30 | Machregs.F31 => F31
+  end.
+

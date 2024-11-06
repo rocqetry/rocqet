@@ -1990,6 +1990,15 @@ FInductive instruction : Type :=
 (* Pseudo-instructions *)
 | Plabel : label -> instruction (**r define a code label *)    
 | Pnop : instruction. (**r nop instruction *)
+(* Paddiw *)
+(* Pluiw *)
+(* Paddil *)
+(* Ploadli*)
+(* Pfcvtdw *)
+(* Ploadfi *)
+(* Pfcvtsw *)
+(* Ploadsi *)
+
                        
 FDefinition code := list instruction.
 MetaData function.
@@ -2936,6 +2945,7 @@ Proof.
 FEnd RTLgen.  
 
 From NFPOP Require Import Machregs.
+
 From NFPOP Require Import Conventions1.
 From NFPOP Require Import Locations.
 (* Some Machreg functions will defined here *)
@@ -3937,159 +3947,214 @@ FEnd Stacking.
 
 (* Mach -> Asm *)
 Family Asmgen.
-    FRecursion transl_op about Linear.operation motive (fun (_ : Linear.operation) => list mreg -> mreg -> Asm.code -> Asm.code).
-        Case Omove := (fun a1 res k => 
-            match preg_of res, preg_of a1 with
-            | IR r, IR a => Pmv r a :: k
-            | FR r, FR a => Pfmv r a :: k
-            |  _  ,  _   => error (Errors.msg "Asmgen.Omove")
-            end).
-        Case Ointconst := (fun n res k => 
-            match ireg_of res with
-            | None => error (Errors.msg "Asmgen.Ointconst")
-            | Some rd => loadimm32 rd n k
-            end).
-        Case Olongconst := (fun n res k => 
-            match ireg_of res with
-            | None => error (Errors.msg "Asmgen.Olongconst")
-            | Some rd => loadimm64 rd n k
-            end).
-        Case Ofloatconst := (fun f res k => 
-            match freg_of res with
-            | None => error (Errors.msg "Asmgen.Ofloatconst")
-            | Some rd => 
-                if Float.eq_dec f Float.zero
-                then Pfcvtdw rd X0 :: k
-                else Ploadfi rd f :: k
-            end).
-        Case Osingleconst := (fun f res k => 
-            match freg_of res with
-            | None => error (Errors.msg "Asmgen.Osingleconst")
-            | Some rd => 
-                if Float32.eq_dec f Float32.zero
-                then Pfcvtsw rd X0 :: k
-                else Ploadsi rd f :: k
-            end).
-        Case Oaddrsymbol := (fun s ofs res k => 
-            match ireg_of res with
-            | None => error (Errors.msg "Asmgen.Oaddrsymbol")
-            | Some rd => 
-                if Archi.pic_code tt && negb (Ptrofs.eq ofs Ptrofs.zero)
-                then Ploadsymbol rd s Ptrofs.zero :: addptrofs rd rd ofs k
-                else Ploadsymbol rd s ofs :: k
-            end).
-        Case Oaddrstack := (fun n res k => 
-            match ireg_of res with
-            | None => error (Errors.msg " Asmgen.Oaddrstack")
-            | Some rd => addptrofs rd SP n k
-            end).
-    FEnd transl_op.
 
-    FRecursion transl_cbranch about condition motive (fun (_ : condition) => list mreg -> label -> Asm.code -> Asm.code).
-        Case Ccomp := (fun c => fun args lbl k => 
-            match args with
-            | a1 :: a2 :: nil =>
-                do r1 <- ireg_of a1; do r2 <- ireg_of a2;
-                OK (transl_cbranch_int32s c r1 r2 lbl :: k)
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccompu := (fun c => fun args lbl k => 
-            match args with
-            | a1 :: a2 :: nil =>
-                do r1 <- ireg_of a1; do r2 <- ireg_of a2;
-                OK (transl_cbranch_int32u c r1 r2 lbl :: k)
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccompimm := (fun c n => fun args lbl k => 
-            match args with
-            | a1 :: nil =>
-                do r1 <- ireg_of a1;
-                OK (if Int.eq n Int.zero then
-                        transl_cbranch_int32s c r1 X0 lbl :: k
-                    else loadimm32 X31 n (transl_cbranch_int32s c r1 X31 lbl :: k))
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccompuimm := (fun c n => fun args lbl k => 
-            match args with
-            | a1 :: nil =>
-                do r1 <- ireg_of a1;
-                OK (if Int.eq n Int.zero then
-                        transl_cbranch_int32u c r1 X0 lbl :: k
-                    else loadimm32 X31 n (transl_cbranch_int32u c r1 X31 lbl :: k))
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccompl := (fun c => fun args lbl k => 
-            match args with
-            | a1 :: a2 :: nil =>
-                do r1 <- ireg_of a1; do r2 <- ireg_of a2;
-                OK (transl_cbranch_int64s c r1 r2 lbl :: k)
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccomplu := (fun c => fun args lbl k => 
-            match args with
-            | a1 :: a2 :: nil =>
-                do r1 <- ireg_of a1; do r2 <- ireg_of a2;
-                OK (transl_cbranch_int64u c r1 r2 lbl :: k)
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccomplimm := (fun c n => fun args lbl k => 
-            match args with
-            | a1 :: nil =>
-                do r1 <- ireg_of a1;
-                OK (if Int64.eq n Int64.zero then
-                        transl_cbranch_int64s c r1 X0 lbl :: k
-                    else loadimm64 X31 n (transl_cbranch_int64s c r1 X31 lbl :: k))
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccompluimm := (fun c n => fun args lbl k => 
-            match args with
-            | a1 :: nil =>
-                do r1 <- ireg_of a1;
-                OK (if Int64.eq n Int64.zero then
-                        transl_cbranch_int64u c r1 X0 lbl :: k
-                    else loadimm64 X31 n (transl_cbranch_int64u c r1 X31 lbl :: k))
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccompf := (fun c => fun args lbl k => 
-            match args with
-            | f1 :: f2 :: nil =>
-                do r1 <- freg_of f1; do r2 <- freg_of f2;
-                let (insn, normal) := transl_cond_float c X31 r1 r2 in
-                OK (insn :: (if normal then Pbnew X31 X0 lbl else Pbeqw X31 X0 lbl) :: k)
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Cnotcompf := (fun c => fun args lbl k => 
-            match args with
-            | f1 :: f2 :: nil =>
-                do r1 <- freg_of f1; do r2 <- freg_of f2;
-                let (insn, normal) := transl_cond_float c X31 r1 r2 in
-                OK (insn :: (if normal then Pbeqw X31 X0 lbl else Pbnew X31 X0 lbl) :: k)
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-        Case Ccompfs := (fun c => fun args lbl k => 
-            match args with
-            | f1 :: f2 :: nil =>
-                do r1 <- freg_of f1; do r2 <- freg_of f2;
-                let (insn, normal) := transl_cond_single c X31 r1 r2 in
-                OK (insn :: (if normal then Pbnew X31 X0 lbl else Pbeqw X31 X0 lbl) :: k)
-            | _ => error (Errors.msg "Asmgen.transl_cbranch")
-            end).
-    FEnd transl_cbranch.
+FDefinition ireg_of : mreg -> res ireg := fun r =>
+  match preg_of r with IR mr => OK mr | _ => Error(msg "Asmgen.ireg_of") end.
 
-    FRecursion translate_instr about Mach.instruction motive (fun (_ : Mach.instruction) => Mach.function -> bool -> Asm.code -> Asm.code).
-       Case Mgetstack := (fun ofs ty dst => fun f ep k => loadind SP ofs ty dst k).
-       Case Msetstack := (fun src ofs ty => fun f ep k => storeind SP src ofs ty k).
-       Case Mgetparam := (fun ofs ty dst => fun f ep k => 
-                         do c <- loadind X30 ofs ty dst k;
-                        OK (if ep then c
-                                  else loadind_ptr SP f.(fn_link_ofs) X30 c).
-      Case Mop := (fun op args res => fun f ep k => transl_op op args res k).
-      Case Mlabel := (fun lbl => fun f ep k => Asm.Plabel lbl :: k).
-      Case Mgoto := (fun lbl => fun f ep k => Asm.Pj_l lbl :: k).
-      Case Mcond := (fun cond args lbl => fun f ep k => transl_cbranch cond args lbl k).
-      Case Mreturn := (fun f ep k => make_epilogue f (Pj_r RA f.(Mach.fn_sig) :: k)).
-    FEnd translate_instr.
-   FEnd Asmgen.
+FDefinition freg_of : mreg -> res freg := fun r =>
+  match preg_of r with FR mr => OK mr | _ => Error(msg "Asmgen.freg_of") end.
+
+MetaData immed32.
+Inductive immed32 : Type :=
+  | Imm32_single (imm: int)
+  | Imm32_pair   (hi: int) (lo: int).
+FEnd immed32.
+
+FDefinition make_immed32 := fun (val: int) =>
+  let lo := Int.sign_ext 12 val in
+  if Int.eq val lo
+  then self__Stacking.Imm32_single val
+  else self__Stacking.Imm32_pair (Int.shru (Int.sub val lo) (Int.repr 12)) lo.
+
+FDefinition load_hilo32 (r: ireg) (hi lo: int) k :=
+  if Int.eq lo Int.zero then Pluiw r hi :: k
+  else Pluiw r hi :: Paddiw r r lo :: k.
+
+FDefinition loadimm32 := fun (r: ireg) (n: int) (k: code) =>
+  match make_immed32 n with
+  | Imm32_single imm => Paddiw r X0 imm :: k
+  | Imm32_pair hi lo => load_hilo32 r hi lo k
+  end.
+
+Inductive immed64 : Type :=
+  | Imm64_single (imm: int64)
+  | Imm64_pair   (hi: int64) (lo: int64)
+  | Imm64_large  (imm: int64).
+
+Definition make_immed64 (val: int64) :=
+  let lo := Int64.sign_ext 12 val in
+  if Int64.eq val lo then Imm64_single lo else
+  let hi := Int64.zero_ext 20 (Int64.shru (Int64.sub val lo) (Int64.repr 12)) in
+  if Int64.eq val (Int64.add (Int64.sign_ext 32 (Int64.shl hi (Int64.repr 12))) lo)
+  then Imm64_pair hi lo
+  else Imm64_large val.
+
+FDefinition loadimm64 := fun (r: ireg) (n: int64) (k: code) =>
+  match make_immed64 n with
+  | Imm64_single imm => Paddil r X0 imm :: k
+  | Imm64_pair hi lo => load_hilo64 r hi lo k
+  | Imm64_large imm  => Ploadli r imm :: k
+  end.
+
+Definition addptrofs (rd rs: ireg) (n: ptrofs) (k: code) :=
+  if Ptrofs.eq_dec n Ptrofs.zero then
+    Pmv rd rs :: k
+  else
+    if Archi.ptr64
+    then addimm64 rd rs (Ptrofs.to_int64 n) k
+    else addimm32 rd rs (Ptrofs.to_int n) k.
+
+FRecursion transl_op about Asm.operation motive (fun (_ : Asm.operation) => list mreg -> mreg -> Asm.code -> res Asm.code) by _rect.
+Case Omove :=
+(fun args res k =>
+  match args with 
+  | a1 :: nil =>
+      match preg_of res, preg_of a1 with
+      | IR r, IR a => OK (Asm.Pmv r a :: k)
+      | FR r, FR a => OK (Asm.Pfmv r a :: k)
+      |  _  ,  _   => Error(msg "Asmgen.Omove")
+      end
+  | _ =>  Error(msg "Asmgen.transl_op")
+  end).
+Case Ointconst n := 
+(fun arg res k => 
+  match args with
+  | nil => do rd <- ireg_of res; OK (loadimm32 rd n k)
+  | _ => Error(msg "Asmgen.transl_op")).
+Case Olongconst n := 
+(fun arg res k => 
+  match args with
+  | nil => do rd <- ireg_of res; OK (loadimm64 rd n k)
+  | _ => Error(msg "Asmgen.transl_op")).
+Case Ofloatconst f := 
+(fun args res k => 
+  match args with
+  | nil => 
+      do rd <- freg_of res;
+      OK (if Float.eq_dec f Float.zero
+          then Pfcvtdw rd X0 :: k
+          else Ploadfi rd f :: k)
+  | _ => Error(msg "Asmgen.transl_op")).
+Case Osingleconst f := 
+(fun args res k => 
+  match args with
+  | nil => 
+       do rd <- freg_of res;
+      OK (if Float32.eq_dec f Float32.zero
+          then Pfcvtsw rd X0 :: k
+          else Ploadsi rd f :: k)
+  | _ => Error(msg "Asmgen.transl_op")).          
+Case Oaddrstack n := 
+(fun args res k => 
+  match args with
+  | nil =>  do rd <- ireg_of res; OK (addptrofs rd SP n k)
+  | _ => Error(msg "Asmgen.transl_op")).
+
+FEnd transl_op.
+
+Definition transl_cbranch_int32s (cmp: comparison) (r1 r2: ireg0) (lbl: label) :=
+  match cmp with
+  | Ceq => Pbeqw r1 r2 lbl
+  | Cne => Pbnew r1 r2 lbl
+  | Clt => Pbltw r1 r2 lbl
+  | Cle => Pbgew r2 r1 lbl
+  | Cgt => Pbltw r2 r1 lbl
+  | Cge => Pbgew r1 r2 lbl
+  end.
+
+FRecursion transl_cbranch about condition motive (fun (_ : condition) => list mreg -> label -> Asm.code -> res Asm.code).
+Case Ccomp c := 
+(fun args lbl k => 
+  match args with
+  | a1 :: a2 :: nil =>
+      do r1 <- ireg_of a1; do r2 <- ireg_of a2;
+      OK (transl_cbranch_int32s c r1 r2 lbl :: k)
+  | _ => error (Errors.msg "Asmgen.transl_cbranch")
+  end).
+Case Ccompimm := (fun c n => fun args lbl k => 
+    match args with
+    | a1 :: nil =>
+      do r1 <- ireg_of a1;
+      OK (if Int.eq n Int.zero then
+            transl_cbranch_int32s c r1 X0 lbl :: k
+          else
+            loadimm32 X31 n (transl_cbranch_int32s c r1 X31 lbl :: k))
+    | _ => error (Errors.msg "Asmgen.transl_cbranch")
+    end).
+FEnd transl_cbranch.
+
+FRecursion translate_instr about Mach.instruction motive (fun (_ : Mach.instruction) => Mach.function -> bool -> Asm.code -> Asm.code).
+Case Mgetstack := (fun ofs ty dst => fun f ep k => loadind SP ofs ty dst k).
+Case Msetstack := (fun src ofs ty => fun f ep k => storeind SP src ofs ty k).
+Case Mgetparam := (fun ofs ty dst => fun f ep k => 
+                  do c <- loadind X30 ofs ty dst k;
+                 OK (if ep then c
+                           else loadind_ptr SP f.(fn_link_ofs) X30 c).
+Case Mop := (fun op args res => fun f ep k => transl_op op args res k).
+Case Mlabel := (fun lbl => fun f ep k => Asm.Plabel lbl :: k).
+Case Mgoto := (fun lbl => fun f ep k => Asm.Pj_l lbl :: k).
+Case Mcond := (fun cond args lbl => fun f ep k => transl_cbranch cond args lbl k).
+Case Mreturn := (fun f ep k => make_epilogue f (Pj_r RA f.(Mach.fn_sig) :: k)).
+FEnd translate_instr.
+
+Definition it1_is_parent (before: bool) (i: Mach.instruction) : bool :=
+  match i with
+  | Msetstack src ofs ty => before
+  | Mgetparam ofs ty dst => negb (mreg_eq dst R30)
+  | Mop op args res => before && negb (mreg_eq res R30)
+  | _ => false
+  end.      
+      
+(** This is the naive definition that we no longer use because it
+  is not tail-recursive.  It is kept as specification. *)
+
+Fixpoint transl_code (f: Mach.function) (il: list Mach.instruction) (it1p: bool) :=
+  match il with
+  | nil => OK nil
+  | i1 :: il' =>
+      do k <- transl_code f il' (it1_is_parent it1p i1);
+      transl_instr f i1 it1p k
+  end.
+
+(** This is an equivalent definition in continuation-passing style
+  that runs in constant stack space. *)      
+
+Fixpoint transl_code_rec (f: Mach.function) (il: list Mach.instruction)
+                         (it1p: bool) (k: code -> res code) :=
+  match il with
+  | nil => k nil
+  | i1 :: il' =>
+      transl_code_rec f il' (it1_is_parent it1p i1)
+        (fun c1 => do c2 <- transl_instr f i1 it1p c1; k c2)
+  end.      
+
+Definition transl_code' (f: Mach.function) (il: list Mach.instruction) (it1p: bool) :=
+  transl_code_rec f il it1p (fun c => OK c).
+
+(** Translation of a whole function.  Note that we must check
+  that the generated code contains less than [2^32] instructions,
+  otherwise the offset part of the [PC] code pointer could wrap
+  around, leading to incorrect executions. *)
+
+Definition transl_function (f: Mach.function) :=
+  do c <- transl_code' f f.(Mach.fn_code) true;
+  OK (mkfunction f.(Mach.fn_sig)
+        (Pallocframe f.(fn_stacksize) f.(fn_link_ofs) ::
+         storeind_ptr RA SP f.(fn_retaddr_ofs) (Pcfi_rel_offset (Ptrofs.to_int f.(fn_retaddr_ofs)):: c))).
+
+Definition transf_function (f: Mach.function) : res Asm.function :=
+  do tf <- transl_function f;
+  if zlt Ptrofs.max_unsigned (list_length_z tf.(fn_code))
+  then Error (msg "code size exceeded")
+  else OK tf.
+
+Definition transf_fundef (f: Mach.fundef) : res Asm.fundef :=
+  transf_partial_fundef transf_function f.
+
+Definition transf_program (p: Mach.program) : res Asm.program :=
+  transform_partial_program transf_fundef p.
+      
+FEnd Asmgen.
 
 (* A translation between C family languages *)
 Family Cfamtransl.
