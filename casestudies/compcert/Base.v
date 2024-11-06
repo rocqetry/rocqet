@@ -2665,145 +2665,260 @@ FDefinition transl_program : CminorSel.program -> Errors.res RTL.program :=
   fun (p: CminorSel.program) =>
      transform_partial_program transl_fundef p.
 
-        (* Non executable relation spec for transl_stmt, defined via an Inductive type *)
-        Family Spec.
-             (* tr_move c ns rs nd rd holds if the graph c, between nodes ns and nd, contains 
-                instructions that move the value of register rs to register rd. *)
-             Inductive tr_move (c: code):
-                    node -> reg -> node -> reg -> Prop :=
-                | tr_move_0: forall n r,
-                    tr_move c n r n r
-                | tr_move_1: forall ns rs nd rd,
-                    c!ns = Some (RTL.Iop Asm.Omove (rs :: nil) rd nd) ->
-                    tr_move c ns rs nd rd.
+(* relational spec *)
 
-              Inductive reg_map_ok: mapping -> reg -> option ident -> Prop :=
-                | reg_map_ok_novar: forall map rd,
-                    ~reg_in_map map rd ->
-                    reg_map_ok map rd None
-                | reg_map_ok_somevar: forall map rd id,
-                    map.(map_vars)!id = Some rd ->
-                    reg_map_ok map rd (Some id).
- 
+FDefinition reg_in_map : mapping -> reg -> Prop := fun (m: mapping) (r: reg) =>
+  (exists id, m.(map_vars)!id = Some r) \/ In r m.(map_letvars).
+
+MetaData tr_move.
+Inductive tr_move (c: self__Base.RTL.code): self__Base.RTL.node -> reg -> self__Base.RTL.node -> reg -> Prop :=
+| tr_move_0: forall n r,
+    tr_move c n r n r
+| tr_move_1: forall ns rs nd rd,
+    c!ns = Some (self__Base.RTL.Iop self__Base.Asm.Omove (rs :: nil) rd nd) ->
+    tr_move c ns rs nd rd.
+FEnd tr_move.
+
+MetaData reg_map_ok.
+Inductive reg_map_ok: mapping -> reg -> option AST.ident -> Prop :=
+| reg_map_ok_novar: forall map rd,
+    ~self__RTLgen.reg_in_map map rd ->
+    reg_map_ok map rd None
+| reg_map_ok_somevar: forall map rd id,
+    map.(map_vars)!id = Some rd ->
+    reg_map_ok map rd (Some id).
+
+Global Hint Resolve reg_map_ok_novar: rtlg.
+FEnd reg_map_ok. 
                  
-              FInductive tr_expr (c: code):
-                      mapping -> list reg -> expr -> node -> node -> reg -> option ident -> Prop :=
-                  | tr_Evar: forall map pr id ns nd r rd dst,
-                      map.(map_vars)!id = Some r ->
-                      ((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr)) ->
-                      tr_move c ns r nd rd ->
-                      tr_expr c map pr (Evar id) ns nd rd dst
-                  | tr_Eop: forall map pr op al ns nd rd n1 rl dst,
-                      tr_exprlist c map pr al ns n1 rl ->
-                      c!n1 = Some (Iop op rl rd nd) ->
-                      reg_map_ok map rd dst -> ~In rd pr ->
-                      tr_expr c map pr (Eop op al) ns nd rd dst
-                  | tr_Eload: forall map pr chunk addr al ns nd rd n1 rl dst,
-                      tr_exprlist c map pr al ns n1 rl ->
-                      c!n1 = Some (Iload chunk addr rl rd nd) ->
-                      reg_map_ok map rd dst -> ~In rd pr ->
-                      tr_expr c map pr (Eload chunk addr al) ns nd rd dst
-                  | tr_Econdition: forall map pr a ifso ifnot ns nd rd ntrue nfalse dst,
-                      tr_condition c map pr a ns ntrue nfalse ->
-                      tr_expr c map pr ifso ntrue nd rd dst ->
-                      tr_expr c map pr ifnot nfalse nd rd dst ->
-                      tr_expr c map pr (Econdition a ifso ifnot) ns nd rd dst
-                  | tr_Elet: forall map pr b1 b2 ns nd rd n1 r dst,
-                      ~reg_in_map map r ->
-                      tr_expr c map pr b1 ns n1 r None ->
-                      tr_expr c (add_letvar map r) pr b2 n1 nd rd dst ->
-                      tr_expr c map pr (Elet b1 b2) ns nd rd dst
-                  | tr_Eletvar: forall map pr n ns nd rd r dst,
-                      List.nth_error map.(map_letvars) n = Some r ->
-                      ((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr)) ->
-                      tr_move c ns r nd rd ->
-                      tr_expr c map pr (Eletvar n) ns nd rd dst
-                  with tr_condition (c: code):
-                        mapping -> list reg -> condexpr -> node -> node -> node -> Prop :=
-                    | tr_CEcond: forall map pr cond bl ns ntrue nfalse n1 rl,
-                        tr_exprlist c map pr bl ns n1 rl ->
-                        c!n1 = Some (Icond cond rl ntrue nfalse) ->
-                        tr_condition c map pr (CEcond cond bl) ns ntrue nfalse
-                    | tr_CEcondition: forall map pr a1 a2 a3 ns ntrue nfalse n2 n3,
-                        tr_condition c map pr a1 ns n2 n3 ->
-                        tr_condition c map pr a2 n2 ntrue nfalse ->
-                        tr_condition c map pr a3 n3 ntrue nfalse ->
-                        tr_condition c map pr (CEcondition a1 a2 a3) ns ntrue nfalse
-                    | tr_CElet: forall map pr a b ns ntrue nfalse r n1,
-                        ~reg_in_map map r ->
-                        tr_expr c map pr a ns n1 r None ->
-                        tr_condition c (add_letvar map r) pr b n1 ntrue nfalse ->
-                        tr_condition c map pr (CElet a b) ns ntrue nfalse
-                  with tr_exprlist (c: code):
-                          mapping -> list reg -> exprlist -> node -> node -> list reg -> Prop :=
-                      | tr_Enil: forall map pr n,
-                          tr_exprlist c map pr Enil n n nil
-                      | tr_Econs: forall map pr a1 al ns nd r1 rl n1,
-                          tr_expr c map pr a1 ns n1 r1 None ->
-                          tr_exprlist c map (r1 :: pr) al n1 nd rl ->
-                          tr_exprlist c map pr (Econs a1 al) ns nd (r1 :: rl).
+FInductive tr_expr : RTL.code -> mapping -> list reg -> CminorSel.expr -> RTL.node -> RTL.node -> reg -> option AST.ident -> Prop :=
+| tr_Evar: forall c map pr id ns nd r rd dst,
+    map.(map_vars)!id = Some r ->
+    ((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr)) ->
+    tr_move c ns r nd rd ->
+    tr_expr c map pr (CminorSel.Evar id) ns nd rd dst            
+| tr_Eop: forall c map pr op al ns nd rd n1 rl dst,
+    tr_exprlist c map pr al ns n1 rl ->
+    c!n1 = Some (RTL.Iop op rl rd nd) ->
+    reg_map_ok map rd dst -> ~In rd pr ->
+    tr_expr c map pr (CminorSel.Eop op al) ns nd rd dst            
+| tr_Econdition: forall c map pr a ifso ifnot ns nd rd ntrue nfalse dst,
+    tr_condition c map pr a ns ntrue nfalse ->
+    tr_expr c map pr ifso ntrue nd rd dst ->
+    tr_expr c map pr ifnot nfalse nd rd dst ->
+    tr_expr c map pr (CminorSel.Econdition a ifso ifnot) ns nd rd dst
+| tr_Elet: forall c map pr b1 b2 ns nd rd n1 r dst,
+    ~reg_in_map map r ->
+    tr_expr c map pr b1 ns n1 r None ->
+    tr_expr c (add_letvar map r) pr b2 n1 nd rd dst ->
+    tr_expr c map pr (CminorSel.Elet b1 b2) ns nd rd dst
+| tr_Eletvar: forall c map pr n ns nd rd r dst,
+    List.nth_error map.(map_letvars) n = Some r ->
+    ((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr)) ->
+    tr_move c ns r nd rd ->
+    tr_expr c map pr (CminorSel.Eletvar n) ns nd rd dst
+with tr_condition : RTL.code -> mapping -> list reg -> CminorSel.condexpr -> RTL.node -> RTL.node -> RTL.node -> Prop :=
+| tr_CEcond: forall c map pr cond bl ns ntrue nfalse n1 rl,
+    tr_exprlist c map pr bl ns n1 rl ->
+    c!n1 = Some (RTL.Icond cond rl ntrue nfalse) ->
+    tr_condition c map pr (CminorSel.CEcond cond bl) ns ntrue nfalse
+| tr_CEcondition: forall c map pr a1 a2 a3 ns ntrue nfalse n2 n3,
+    tr_condition c map pr a1 ns n2 n3 ->
+    tr_condition c map pr a2 n2 ntrue nfalse ->
+    tr_condition c map pr a3 n3 ntrue nfalse ->
+    tr_condition c map pr (CminorSel.CEcondition a1 a2 a3) ns ntrue nfalse
+| tr_CElet: forall c map pr a b ns ntrue nfalse r n1,
+    ~reg_in_map map r ->
+    tr_expr c map pr a ns n1 r None ->
+    tr_condition c (add_letvar map r) pr b n1 ntrue nfalse ->
+    tr_condition c map pr (CminorSel.CElet a b) ns ntrue nfalse
+with tr_exprlist : RTL.code -> mapping -> list reg -> CminorSel.exprlist -> RTL.node -> RTL.node -> list reg -> Prop :=
+| tr_Enil: forall c map pr n,
+    tr_exprlist c map pr CminorSel.Enil n n nil
+| tr_Econs: forall c map pr a1 al ns nd r1 rl n1,
+    tr_expr c map pr a1 ns n1 r1 None ->
+    tr_exprlist c map (r1 :: pr) al n1 nd rl ->
+    tr_exprlist c map pr (CminorSel.Econs a1 al) ns nd (r1 :: rl).
     
-              FInductive tr_stmt (c: code) (map: mapping):
-                    CminorSel.stmt -> node -> node -> list node -> labelmap -> node -> option reg -> Prop :=
-                  | tr_Sskip: forall ns nexits ngoto nret rret,
-                    tr_stmt c map Sskip ns ns nexits ngoto nret rret
-                  | tr_Sassign: forall id a ns nd nexits ngoto nret rret r,
-                    map.(map_vars)!id = Some r ->
-                    tr_expr c map nil a ns nd r (Some id) ->
-                    tr_stmt c map (Sassign id a) ns nd nexits ngoto nret rret
-                  | tr_Sseq: forall s1 s2 ns nd nexits ngoto nret rret n,
-                    tr_stmt c map s2 n nd nexits ngoto nret rret ->
-                    tr_stmt c map s1 ns n nexits ngoto nret rret ->
-                    tr_stmt c map (Sseq s1 s2) ns nd nexits ngoto nret rret
-                  | tr_Sifthenelse: forall a strue sfalse ns nd nexits ngoto nret rret ntrue nfalse,
-                    tr_stmt c map strue ntrue nd nexits ngoto nret rret ->
-                    tr_stmt c map sfalse nfalse nd nexits ngoto nret rret ->
-                    tr_condition c map nil a ns ntrue nfalse ->
-                    tr_stmt c map (Sifthenelse a strue sfalse) ns nd nexits ngoto nret rret
-                  | tr_Sloop: forall sbody ns nd nexits ngoto nret rret nloop nend,
-                    tr_stmt c map sbody nloop nend nexits ngoto nret rret ->
-                    c!ns = Some(Inop nloop) ->
-                    c!nend = Some(Inop nloop) ->
-                    tr_stmt c map (Sloop sbody) ns nd nexits ngoto nret rret
-                  | tr_Sblock: forall sbody ns nd nexits ngoto nret rret,
-                    tr_stmt c map sbody ns nd (nd :: nexits) ngoto nret rret ->
-                    tr_stmt c map (Sblock sbody) ns nd nexits ngoto nret rret
-                  | tr_Sexit: forall n ns nd nexits ngoto nret rret,
-                    nth_error nexits n = Some ns ->
-                    tr_stmt c map (Sexit n) ns nd nexits ngoto nret rret
-                  | tr_Sreturn_none: forall nret nd nexits ngoto rret,
-                    tr_stmt c map (Sreturn None) nret nd nexits ngoto nret rret
-                  | tr_Sreturn_some: forall a ns nd nexits ngoto nret rret,
-                    tr_expr c map nil a ns nret rret None ->
-                    tr_stmt c map (Sreturn (Some a)) ns nd nexits ngoto nret (Some rret)
-                  | tr_Slabel: forall lbl s ns nd nexits ngoto nret rret n,
-                    ngoto!lbl = Some n ->
-                    c!n = Some (Inop ns) ->
-                    tr_stmt c map s ns nd nexits ngoto nret rret ->
-                    tr_stmt c map (Slabel lbl s) ns nd nexits ngoto nret rret
-                  | tr_Sgoto: forall lbl ns nd nexits ngoto nret rret,
-                    ngoto!lbl = Some ns ->
-                    tr_stmt c map (Sgoto lbl) ns nd nexits ngoto nret rret.   
+FInductive tr_stmt : RTL.code -> mapping -> CminorSel.stmt -> RTL.node -> RTL.node -> list RTL.node -> labelmap -> RTL.node -> option reg -> Prop :=
+| tr_Sskip: forall c map ns nexits ngoto nret rret,
+    tr_stmt c map CminorSel.Sskip ns ns nexits ngoto nret rret            
+| tr_Sassign: forall c map id a ns nd nexits ngoto nret rret r,
+  map.(map_vars)!id = Some r ->
+  tr_expr c map nil a ns nd r (Some id) ->
+  tr_stmt c map (CminorSel.Sassign id a) ns nd nexits ngoto nret rret          
+| tr_Sseq: forall c map s1 s2 ns nd nexits ngoto nret rret n,
+  tr_stmt c map s2 n nd nexits ngoto nret rret ->
+  tr_stmt c map s1 ns n nexits ngoto nret rret ->
+  tr_stmt c map (CminorSel.Sseq s1 s2) ns nd nexits ngoto nret rret
+| tr_Sifthenelse: forall c map a strue sfalse ns nd nexits ngoto nret rret ntrue nfalse,
+  tr_stmt c map strue ntrue nd nexits ngoto nret rret ->
+  tr_stmt c map sfalse nfalse nd nexits ngoto nret rret ->
+  tr_condition c map nil a ns ntrue nfalse ->
+  tr_stmt c map (CminorSel.Sifthenelse a strue sfalse) ns nd nexits ngoto nret rret
+| tr_Sreturn_none: forall c map nret nd nexits ngoto rret,
+  tr_stmt c map (CminorSel.Sreturn None) nret nd nexits ngoto nret rret
+| tr_Sreturn_some: forall c map a ns nd nexits ngoto nret rret,
+  tr_expr c map nil a ns nret rret None ->
+  tr_stmt c map (CminorSel.Sreturn (Some a)) ns nd nexits ngoto nret (Some rret)
+| tr_Slabel: forall c map lbl s ns nd nexits ngoto nret rret n,
+  ngoto!lbl = Some n ->
+  c!n = Some (RTL.Inop ns) ->
+  tr_stmt c map s ns nd nexits ngoto nret rret ->
+  tr_stmt c map (CminorSel.Slabel lbl s) ns nd nexits ngoto nret rret
+| tr_Sgoto: forall c map lbl ns nd nexits ngoto nret rret,
+  ngoto!lbl = Some ns ->
+  tr_stmt c map (CminorSel.Sgoto lbl) ns nd nexits ngoto nret rret.   
 
-                Inductive tr_function: CminorSel.function -> RTL.function -> Prop :=
-                    | tr_function_intro:
-                        forall f code rparams map1 s0 s1 i1 rvars map2 s2 i2 nentry ngoto nret rret orret,
-                        add_vars init_mapping f.(CminorSel.fn_params) s0 = OK (rparams, map1) s1 i1 ->
-                        add_vars map1 f.(CminorSel.fn_vars) s1 = OK (rvars, map2) s2 i2 ->
-                        orret = ret_reg f.(CminorSel.fn_sig) rret ->
-                        tr_stmt code map2 f.(CminorSel.fn_body) nentry nret nil ngoto nret orret ->
-                        code!nret = Some(Ireturn orret) ->
-                        tr_function f (RTL.mkfunction
-                                        f.(CminorSel.fn_sig)
-                                        rparams
-                                        f.(CminorSel.fn_stackspace)
-                                        code
-                                        nentry).
+MetaData tr_function.
+Inductive tr_function: self__Base.CminorSel.function -> self__Base.RTL.function -> Prop :=
+| tr_function_intro:
+    forall f code rparams map1 s0 s1 i1 rvars map2 s2 i2 nentry ngoto nret rret orret,
+    self__RTLgen.add_vars self__RTLgen.init_mapping f.(self__Base.CminorSel.fn_params) s0 = OK (rparams, map1) s1 i1 ->
+    self__RTLgen.add_vars map1 f.(self__Base.CminorSel.fn_vars) s1 = OK (rvars, map2) s2 i2 ->
+    orret = self__RTLgen.ret_reg f.(self__Base.CminorSel.fn_sig) rret ->
+    self__RTLgen.tr_stmt code map2 f.(self__Base.CminorSel.fn_body) nentry nret nil ngoto nret orret ->
+    code!nret = Some(self__Base.RTL.Ireturn orret) ->
+    tr_function f (self__Base.RTL.mkfunction
+                    f.(self__Base.CminorSel.fn_sig)
+                    rparams
+                    f.(self__Base.CminorSel.fn_stackspace)
+                    code
+                    nentry).
+FEnd tr_function.
 
-                (* Proof that the translation proof meets the specification *)    
-                       
-        FEnd Spec.
-   FEnd RTLgen.  
+(* Correctness of the spec *)
+(*
+Lemma tr_move_incr:
+  forall s1 s2, state_incr s1 s2 ->
+  forall ns rs nd rd,
+  tr_move s1.(st_code) ns rs nd rd ->
+  tr_move s2.(st_code) ns rs nd rd.
+Proof.
+
+Lemma tr_expr_incr:
+  forall s1 s2, state_incr s1 s2 ->
+  forall map pr a ns nd rd dst,
+  tr_expr s1.(st_code) map pr a ns nd rd dst ->
+  tr_expr s2.(st_code) map pr a ns nd rd dst
+with tr_condition_incr:
+  forall s1 s2, state_incr s1 s2 ->
+  forall map pr a ns ntrue nfalse,
+  tr_condition s1.(st_code) map pr a ns ntrue nfalse ->
+  tr_condition s2.(st_code) map pr a ns ntrue nfalse
+with tr_exprlist_incr:
+  forall s1 s2, state_incr s1 s2 ->
+  forall map pr al ns nd rl,
+  tr_exprlist s1.(st_code) map pr al ns nd rl ->
+  tr_exprlist s2.(st_code) map pr al ns nd rl.
+Proof.
+
+Lemma add_move_charact:
+  forall s ns rs nd rd s' i,
+  add_move rs rd nd s = OK ns s' i ->
+  tr_move s'.(st_code) ns rs nd rd.
+Proof.
+
+Lemma transl_expr_charact:
+  forall a map rd nd s ns s' pr INCR
+     (TR: transl_expr map a rd nd s = OK ns s' INCR)
+     (WF: map_valid map s)
+     (OK: target_reg_ok map pr a rd)
+     (VALID: regs_valid pr s)
+     (VALID2: reg_valid rd s),
+   tr_expr s'.(st_code) map pr a ns nd rd None
+
+with transl_exprlist_charact:
+  forall al map rl nd s ns s' pr INCR
+     (TR: transl_exprlist map al rl nd s = OK ns s' INCR)
+     (WF: map_valid map s)
+     (OK: target_regs_ok map pr al rl)
+     (VALID1: regs_valid pr s)
+     (VALID2: regs_valid rl s),
+   tr_exprlist s'.(st_code) map pr al ns nd rl
+
+with transl_condexpr_charact:
+  forall a map ntrue nfalse s ns s' pr INCR
+     (TR: transl_condexpr map a ntrue nfalse s = OK ns s' INCR)
+     (WF: map_valid map s)
+     (VALID: regs_valid pr s),
+   tr_condition s'.(st_code) map pr a ns ntrue nfalse.
+
+Proof.
+
+A variant of transl_expr_charact, for use when the destination register is the one associated with a variable.
+
+Lemma transl_expr_assign_charact:
+  forall id a map rd nd s ns s' INCR
+     (TR: transl_expr map a rd nd s = OK ns s' INCR)
+     (WF: map_valid map s)
+     (OK: reg_map_ok map rd (Some id)),
+   tr_expr s'.(st_code) map nil a ns nd rd (Some id).
+Proof.
+
+Lemma alloc_optreg_map_ok:
+  forall map optid s1 r s2 i,
+  map_valid map s1 ->
+  alloc_optreg map optid s1 = OK r s2 i ->
+  reg_map_ok map r optid.
+Proof.
+
+Lemma tr_exitexpr_incr:
+  forall s1 s2, state_incr s1 s2 ->
+  forall map a ns nexits,
+  tr_exitexpr s1.(st_code) map a ns nexits ->
+  tr_exitexpr s2.(st_code) map a ns nexits.
+Proof.
+
+Lemma tr_stmt_incr:
+  forall s1 s2, state_incr s1 s2 ->
+  forall map s ns nd nexits ngoto nret rret,
+  tr_stmt s1.(st_code) map s ns nd nexits ngoto nret rret ->
+  tr_stmt s2.(st_code) map s ns nd nexits ngoto nret rret.
+Proof.
+
+Lemma transl_exit_charact:
+  forall nexits n s ne s' incr,
+  transl_exit nexits n s = OK ne s' incr ->
+  nth_error nexits n = Some ne /\ s' = s.
+Proof.
+
+Lemma transl_jumptable_charact:
+  forall nexits tbl s nl s' incr,
+  transl_jumptable nexits tbl s = OK nl s' incr ->
+  tr_jumptable nexits tbl nl /\ s' = s.
+Proof.
+
+Lemma transl_exitexpr_charact:
+  forall nexits a map s ns s' INCR
+     (TR: transl_exitexpr map a nexits s = OK ns s' INCR)
+     (WF: map_valid map s),
+  tr_exitexpr s'.(st_code) map a ns nexits.
+Proof.
+
+Lemma convert_builtin_res_charact:
+  forall map oty res s res' s' INCR
+    (TR: convert_builtin_res map oty res s = OK res' s' INCR)
+    (WF: map_valid map s),
+  tr_builtin_res map res res'.
+Proof.
+
+Lemma transl_stmt_charact:
+  forall map stmt nd nexits ngoto nret rret s ns s' INCR
+    (TR: transl_stmt map stmt nd nexits ngoto nret rret s = OK ns s' INCR)
+    (WF: map_valid map s)
+    (OK: return_reg_ok s map rret),
+  tr_stmt s'.(st_code) map stmt ns nd nexits ngoto nret rret.
+Proof.
+
+Lemma transl_function_charact:
+  forall f tf,
+  transl_function f = Errors.OK tf ->
+  tr_function f tf.
+Proof.
+*)
+                               
+FEnd RTLgen.  
 
 From NFPOP Require Import Machregs.
 From NFPOP Require Import Conventions1.
