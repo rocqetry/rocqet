@@ -53,7 +53,7 @@ let add_new_inductive_definition ~inductive ~inductive_name =
   let compiled_impl, principles, mutual_principle =
     Codegen.compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
       ~family_name
-  in
+  in  
   
   let recursors =
     Termutils.extract_handler_types_from_principle
@@ -61,6 +61,7 @@ let add_new_inductive_definition ~inductive ~inductive_name =
       ~principles
       ~mutual_principle
   in  
+  
   let elem =
     LinkageElem.InductiveDefinition
       {
