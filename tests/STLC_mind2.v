@@ -29,6 +29,12 @@ FEnd C.
 
 
 Family S.
+
+FRecursion transl_exprlist_single about C.exprlist motive (fun (_ : C.exprlist) => nat -> nat) by _rect.
+Case Enil := (fun _ => 0).
+Case Econs a b := (fun _ => 0).
+FEnd transl_exprlist_single.
+
 FRecursion transl_expr about C.expr motive (fun (_ : C.expr) => nat -> nat)
   with transl_exprlist about C.exprlist motive (fun (_ : C.exprlist) => nat -> nat)
   with transl_condexpr about C.condexpr motive (fun (_ : C.condexpr) => nat -> nat) by _rect.
