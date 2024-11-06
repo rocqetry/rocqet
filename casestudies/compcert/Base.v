@@ -390,7 +390,8 @@ Inductive final_state: self__C.state -> int -> Prop :=
       final_state (self__C.Returnstate (Vint r) self__C.Kstop m) r.
 FEnd final_state.
 
-FEnd C.
+FEnd C. 
+
 
 Family Clight.
 FInductive expr : Type :=          
@@ -2451,7 +2452,7 @@ FLemma new_reg_incr:
   forall s,
   state_incr RTL.instruction s (mkstate RTL.instruction (Pos.succ s.(st_nextreg RTL.instruction))
                         s.(st_nextnode RTL.instruction) s.(st_code RTL.instruction) s.(st_wf RTL.instruction)).
-FProofLemma.  constructor; simpl. apply Ple_refl. apply Ple_succ. auto. Qed. CloseFLemma.
+FProofLemma. constructor; simpl. apply Ple_refl. apply Ple_succ. auto. Qed. CloseFLemma.
 
 FDefinition new_reg : mon reg :=
   fun s =>
@@ -2499,7 +2500,7 @@ FDefinition add_move : reg -> reg -> RTL.node -> mon RTL.node := fun (rs rd: reg
   then ret nd
   else add_instr (RTL.Iop Asm.Omove (rs::nil) rd nd).
 
-FRecursion alloc_reg about CminorSel.expr motive (fun (_ : CminorSel.expr) => mapping -> mon reg) by _rect.
+(*FRecursion alloc_reg about CminorSel.expr motive (fun (_ : CminorSel.expr) => mapping -> mon reg) by _rect.
 Case Evar id := (fun map => find_var map id).
 Case Eletvar n := (fun map => find_letvar map n).
 (* To fix: add the mutual inductive names to be resolved
@@ -2515,12 +2516,17 @@ Case Econs a bl :=
   do r <- alloc_reg map a;
   do rl <- alloc_regs map bl;
   ret (r :: rl)).
-FEnd alloc_regs.
+FEnd alloc_regs.*)
 
 FRecursion transl_expr about CminorSel.expr motive (fun (_ : CminorSel.expr) => mapping -> reg -> RTL.node -> mon RTL.node)
   with transl_exprlist about CminorSel.exprlist motive (fun (_ : CminorSel.exprlist) => mapping -> list reg -> RTL.node -> mon RTL.node)
-  with transl_condexpr about CminorSel.condexpr motive (fun (_ : CminorSel.condexpr) => mapping  -> RTL.node -> RTL.node -> RTL.node) by _rect.                       
+  with transl_condexpr about CminorSel.condexpr motive (fun (_ : CminorSel.condexpr) => mapping  -> RTL.node -> RTL.node -> RTL.node) by _rect.
 Case Evar v := (fun map rd nd => do r <- find_var map v; add_move r rd nd).
+Case Elet b c :=
+(fun map rd nd => 
+   do r <- new_reg;
+   do nc <- transl_expr c (add_letvar map r) rd nd;
+   transl_expr b map r nc).
 Case Eop op al :=
 (fun map rd nd => 
     do rl <- alloc_regs map al;
@@ -2531,11 +2537,6 @@ Case Econdition a b c :=
   do nfalse <- transl_expr c map rd nd;
   do ntrue <- transl_expr b map rd nd;
   transl_condexpr a map ntrue nfalse).
-Case Elet b c :=
-(fun map rd nd => 
-   do r <- new_reg;
-   do nc <- transl_expr c (add_letvar map r) rd nd;
-   transl_expr map b r nc).
 Case Eletvar n := (fun map rd nd => do r <- find_letvar map n; add_move r rd nd).
 
 (* exprlist *)
