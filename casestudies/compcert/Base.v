@@ -1919,6 +1919,16 @@ Case Ccompimm c n :=
    | _ => None end).
 FEnd eval_condition.
 
+FRecursion shift_stack_operation about operation motive (fun (_ : operation) => Z -> operation) by _rect.
+Case Omove := (fun delta => Omove).
+Case Ointconst i := (fun delta => Ointconst i). 
+Case Olongconst i := (fun delta => Olongconst i).
+Case Ofloatconst i := (fun delta => Ofloatconst i).
+Case Osingleconst i := (fun delta => Osingleconst i).
+Case Oaddrstack ofs := (fun delta => Oaddrstack (Ptrofs.add ofs (Ptrofs.repr delta))).
+Case Ocmp c := (fun delta => Ocmp c).
+FEnd shift_stack_operation.             
+
 FRecursion eval_operation about operation motive (fun (_ : operation) => forall F V, Genv.t F V -> val -> list val -> mem -> option val) by _rect.
 Case Omove := 
 (fun F V ge sp vl m => 
@@ -3615,59 +3625,318 @@ FDefinition transf_fundef : LTL.fundef -> res Linear.fundef := fun f =>
 FDefinition transf_program : LTL.program -> res Linear.program := fun p =>
   transform_partial_program transf_fundef p.
 
+(* correctness *)
+
+(*
+Inductive match_stackframes: LTL.stackframe -> Linear.stackframe -> Prop :=
+  | match_stackframe_intro:
+      forall f sp bb ls tf c,
+      transf_function f = OK tf ->
+      (forall pc, In pc (successors_block bb) -> (reachable f)!!pc = true) ->
+      is_tail c tf.(fn_code) ->
+      match_stackframes
+        (LTL.Stackframe f sp ls bb)
+        (Linear.Stackframe tf sp ls (linearize_block bb c)).
+
+Inductive match_states: LTL.state -> Linear.state -> Prop :=
+  | match_states_add_branch:
+      forall s f sp pc ls m tf ts c
+        (STACKS: list_forall2 match_stackframes s ts)
+        (TRF: transf_function f = OK tf)
+        (REACH: (reachable f)!!pc = true)
+        (TAIL: is_tail c tf.(fn_code)),
+      match_states (LTL.State s f sp pc ls m)
+                   (Linear.State ts tf sp (add_branch pc c) ls m)
+  | match_states_cond_taken:
+      forall s f sp pc ls m tf ts cond args c
+        (STACKS: list_forall2 match_stackframes s ts)
+        (TRF: transf_function f = OK tf)
+        (REACH: (reachable f)!!pc = true)
+        (JUMP: eval_condition cond (reglist ls args) m = Some true),
+      match_states (LTL.State s f sp pc (undef_regs (destroyed_by_cond cond) ls) m)
+                   (Linear.State ts tf sp (Lcond cond args pc :: c) ls m)
+  | match_states_jumptable:
+      forall s f sp pc ls m tf ts arg tbl c n
+        (STACKS: list_forall2 match_stackframes s ts)
+        (TRF: transf_function f = OK tf)
+        (REACH: (reachable f)!!pc = true)
+        (ARG: ls (R arg) = Vint n)
+        (JUMP: list_nth_z tbl (Int.unsigned n) = Some pc),
+      match_states (LTL.State s f sp pc (undef_regs destroyed_by_jumptable ls) m)
+                   (Linear.State ts tf sp (Ljumptable arg tbl :: c) ls m)
+  | match_states_block:
+      forall s f sp bb ls m tf ts c
+        (STACKS: list_forall2 match_stackframes s ts)
+        (TRF: transf_function f = OK tf)
+        (REACH: forall pc, In pc (successors_block bb) -> (reachable f)!!pc = true)
+        (TAIL: is_tail c tf.(fn_code)),
+      match_states (LTL.Block s f sp bb ls m)
+                   (Linear.State ts tf sp (linearize_block bb c) ls m)
+  | match_states_call:
+      forall s f ls m tf ts,
+      list_forall2 match_stackframes s ts ->
+      transf_fundef f = OK tf ->
+      match_states (LTL.Callstate s f ls m)
+                   (Linear.Callstate ts tf ls m)
+  | match_states_return:
+      forall s ls m ts,
+      list_forall2 match_stackframes s ts ->
+      match_states (LTL.Returnstate s ls m)
+                   (Linear.Returnstate ts ls m).
+
+Theorem transf_step_correct:
+  forall s1 t s2, LTL.step ge s1 t s2 ->
+  forall s1' (MS: match_states s1 s1'),
+  (exists s2', plus Linear.step tge s1' t s2' /\ match_states s2 s2')
+  \/ (measure s2 < measure s1 /\ t = E0 /\ match_states s2 s1')%nat.
+Proof.
+
+Lemma transf_initial_states:
+  forall st1, LTL.initial_state prog st1 ->
+  exists st2, Linear.initial_state tprog st2 /\ match_states st1 st2.
+Proof.
+
+Lemma transf_final_states:
+  forall st1 st2 r,
+  match_states st1 st2 -> LTL.final_state st1 r -> Linear.final_state st2 r.
+Proof.
+
+
+*)
+
 FEnd Linearize.
    
-   (* Linear -> Mach *)
-  Family Stacking.
-        Definition transl_op (fe: frame_env) (op: operation) :=
-            Asm.shift_stack_operation fe.(fe_stack_data) op.
+(* Linear -> Mach *)
+Family Stacking.
 
-        Fixpoint restore_callee_save_rec (rl: list mreg) (ofs: Z) (k: Mach.code) :=
-          match rl with
-          | nil => k
-          | r :: rl =>
-              let ty := mreg_type r in
-              let sz := AST.typesize ty in
-              let ofs1 := align ofs sz in
-              Mgetstack (Ptrofs.repr ofs1) ty r :: restore_callee_save_rec rl (ofs1 + sz) k
-          end.
+From NFPOP Require Import Bounds.
+(* Fields in bounds that depend on late bound names *)
 
-        Definition restore_callee_save (fe: frame_env) (k: Mach.code) :=
-          restore_callee_save_rec fe.(fe_used_callee_save) fe.(fe_ofs_callee_save) k.
+FRecursion record_regs_of_instr about Linear.instruction motive
+  (fun (_ : Linear.instruction) => RegSet.t -> Regset.t) by _rect.
+Case Lreturn := cheat. (* (fun u => u).*)
+Case Lgetstack sl ofs ty r := cheat. (* (fun u => record_reg u r).*)
+Case Lsetstack r sl ofs ty := cheat. (* (fun u => record_reg u r).*)
+Case Lop op args res := cheat. (* (fun u => record_reg u res). *)
+Case Llabel lbl := cheat. (* (fun u => u). *)
+Case Lgoto lbl := cheat. (* (fun u => u). *)
+Case Lcond cond args lbl := cheat. (* (fun u => u). *)
+FEnd record_regs_of_instr.
 
-        FRecursion transl_instr about Linear.instruction motive (fun (_ : Linear.instruction) => frame_env -> Mach.code -> Mach.code).
-             Case Lgetstack := (fun sl ofs ty r => fun fe k => 
-                      match sl with
-                      | Local =>
-                          Mach.Mgetstack (Ptrofs.repr (offset_local fe ofs)) ty r :: k
-                      | Incoming =>
-                          Mach.Mgetparam (Ptrofs.repr (offset_arg ofs)) ty r :: k
-                      | Outgoing =>
-                          Mach.Mgetstack (Ptrofs.repr (offset_arg ofs)) ty r :: k
-                      end).
-             Case Lsetstack := (fun r sl ofs ty => fun fe k => 
-                      match sl with
-                      | Local =>
-                          Mach.Msetstack r (Ptrofs.repr (offset_local fe ofs)) ty :: k
-                      | Incoming =>
-                          k
-                      | Outgoing =>
-                          Mach.Msetstack r (Ptrofs.repr (offset_arg ofs)) ty :: k
-                      end). 
-             Case Lop := (fun op args res => fun fe k =>  Mach.Mop (transl_op fe op) args res :: k).
-             Case Llabel := (fun lbl => fun fe k => Mach.Mlabel lbl :: k).
-             Case Lgoto := (fun lbl => fun fe k => Mach.Mgoto lbl :: k).
-             Case Lcond := (fun cond args lbl => fun fe k => Mach.Mcond cond args lbl :: k).
-             Case Lreturn := (fun fe k =>  restore_callee_save fe (Mreturn :: k)).
-        FEnd transl_instr.
+FDefinition record_regs_of_function : Linear.function -> RegSet.t := fun f =>
+  fold_left (fun u i => cheat (* record_regs_of_instr i u*)) (Linear.fn_code f) RegSet.empty.
 
-        Definition transl_code
-            (fe: frame_env) (il: list Linear.instruction) : Mach.code :=
-          list_fold_right (transl_instr fe) il nil.
-  FEnd Stacking.
+FRecursion slots_of_instr about Linear.instruction motive
+  (fun (_ : Linear.instruction) => list (slot * Z * typ)) by _rect.
+Case Lreturn := nil.
+Case Lgetstack sl ofs ty r := ((sl, ofs, ty) :: nil).
+Case Lsetstack r sl ofs ty := ((sl, ofs, ty) :: nil).
+Case Lop op args res := nil.
+Case Llabel lbl := nil.
+Case Lgoto lbl := nil.
+Case Lcond cond args lbl := nil.
+FEnd slots_of_instr.
 
-   (* Mach -> Asm *)
-  Family Asmgen.
+FRecursion outgoing_space about Linear.instruction motive
+  (fun (_ : Linear.instruction) => Z) by _rect.
+Case Lreturn := 0.
+Case Lgetstack sl ofs ty r := 0.
+Case Lsetstack r sl ofs ty := 0.
+Case Lop op args res := 0.
+Case Llabel lbl := 0.
+Case Lgoto lbl := 0.
+Case Lcond cond args lbl := 0.
+FEnd outgoing_space.
+
+FDefinition max_over_instrs : (Linear.instruction -> Z) -> Linear.function -> Z := fun valu f =>
+  max_over_list valu (Linear.fn_code f).
+
+FDefinition max_over_slots_of_instr : (slot * Z * typ -> Z) -> Linear.instruction -> Z := fun valu i =>
+  max_over_list valu (slots_of_instr i).
+
+FDefinition max_over_slots_of_funct : (slot * Z * typ -> Z) -> Linear.function -> Z := fun valu f =>
+  max_over_instrs (max_over_slots_of_instr valu) f.
+
+MetaData function_bounds.
+Program Definition function_bounds (f: self__Base.Linear.function) := {|
+  used_callee_save := RegSet.elements (self__Stacking.record_regs_of_function f);
+  bound_local := self__Stacking.max_over_slots_of_funct local_slot f;
+  bound_outgoing := Z.max (self__Stacking.max_over_instrs self__Stacking.outgoing_space f) (self__Stacking.max_over_slots_of_funct outgoing_slot f);
+  bound_stack_data := Z.max (self__Base.Linear.fn_stacksize f) 0
+|}.
+Next Obligation.
+  apply cheat.
+Qed.
+Next Obligation.
+  apply cheat.
+Qed.
+Next Obligation.
+  apply cheat.
+Qed.
+Next Obligation.
+  apply cheat.
+Qed.
+Next Obligation.
+  apply cheat.
+Qed.
+FEnd function_bounds.
+
+From NFPOP Require Import Stacklayout.
+
+FDefinition offset_local := fun (fe: frame_env) (x: Z) => fe.(fe_ofs_local) + 4 * x.
+
+FDefinition offset_arg := fun (x: Z) => fe_ofs_arg + 4 * x.
+
+FDefinition transl_op := fun (fe: frame_env) (op: Asm.operation) =>
+    Asm.shift_stack_operation op fe.(fe_stack_data).
+
+MetaData save_callee_save_rec.
+Fixpoint save_callee_save_rec (rl: list mreg) (ofs: Z) (k: self__Base.Mach.code) :=
+  match rl with
+  | nil => k
+  | r :: rl =>
+      let ty := mreg_type r in
+      let sz := AST.typesize ty in
+      let ofs1 := align ofs sz in
+      self__Base.Mach.Lsetstack r (Ptrofs.repr ofs1) ty :: save_callee_save_rec rl (ofs1 + sz) k
+  end.
+FEnd save_callee_save_rec.
+
+FDefinition save_callee_save := fun (fe: frame_env) (k: Mach.code) =>
+  save_callee_save_rec fe.(fe_used_callee_save) fe.(fe_ofs_callee_save) k.
+
+MetaData restore_callee_save_rec.
+Fixpoint restore_callee_save_rec (rl: list mreg) (ofs: Z) (k: self__Base.Mach.code) :=
+  match rl with
+  | nil => k
+  | r :: rl =>
+      let ty := mreg_type r in
+      let sz := AST.typesize ty in
+      let ofs1 := align ofs sz in
+      self__Base.Mach.Lgetstack (Ptrofs.repr ofs1) ty r :: restore_callee_save_rec rl (ofs1 + sz) k
+  end.
+FEnd restore_callee_save_rec.
+
+FDefinition restore_callee_save := fun (fe: frame_env) (k: Mach.code) =>
+  restore_callee_save_rec fe.(fe_used_callee_save) fe.(fe_ofs_callee_save) k.
+
+FRecursion transl_instr about Linear.instruction motive (fun (_ : Linear.instruction) => frame_env -> Mach.code -> Mach.code) by _rect.
+Case Lgetstack sl ofs ty r :=
+(fun fe k => 
+match sl with
+| Local =>
+    Mach.Lgetstack (Ptrofs.repr (offset_local fe ofs)) ty r :: k
+| Incoming =>
+    Mach.Lgetparam (Ptrofs.repr (offset_arg ofs)) ty r :: k
+| Outgoing =>
+    Mach.Lgetstack (Ptrofs.repr (offset_arg ofs)) ty r :: k
+end).
+Case Lsetstack r sl ofs ty :=
+(fun fe k => 
+  match sl with
+  | Local =>
+      Mach.Lsetstack r (Ptrofs.repr (offset_local fe ofs)) ty :: k
+  | Incoming =>
+      k
+  | Outgoing =>
+      Mach.Lsetstack r (Ptrofs.repr (offset_arg ofs)) ty :: k
+  end).
+Case Lop op args res := (fun fe k =>  Mach.Lop (transl_op fe op) args res :: k).
+Case Llabel lbl := (fun fe k => Mach.Llabel lbl :: k).
+Case Lgoto lbl := (fun fe k => Mach.Lgoto lbl :: k).
+Case Lcond cond args lbl := (fun fe k => Mach.Lcond cond args lbl :: k).
+Case Lreturn := (fun fe k =>  restore_callee_save fe (Mach.Lreturn :: k)).
+FEnd transl_instr.
+
+FDefinition transl_code : frame_env -> list Linear.instruction -> Mach.code := fun fe il =>     
+  list_fold_right (fun i k => transl_instr i fe k) il nil.
+
+FDefinition transl_body := fun (f: Linear.function) (fe: frame_env) =>
+  save_callee_save fe (transl_code fe (Linear.fn_code f)).
+
+Local Open Scope string_scope.
+
+FDefinition transf_function : Linear.function -> res Mach.function := fun f =>
+  let fe := make_env (function_bounds f) in
+  (* Don't type check linear *)
+  (*if negb (wt_function f) then
+    Error (msg "Ill-formed Linear code")*)
+  if zlt Ptrofs.max_unsigned fe.(fe_size) then
+    Error (msg "Too many spilled variables, stack size exceeded")
+  else
+    OK (Mach.mkfunction
+         f.(self__Base.Linear.fn_sig)
+         (transl_body f fe)
+         fe.(fe_size)
+         (Ptrofs.repr fe.(fe_ofs_link))
+         (Ptrofs.repr fe.(fe_ofs_retaddr))).
+
+FDefinition transf_fundef : Linear.fundef -> res Mach.fundef := fun f =>
+  AST.transf_partial_fundef transf_function f.
+
+FDefinition transf_program : Linear.program -> res Mach.program := fun p =>
+  transform_partial_program transf_fundef p.
+
+(* correctness *)
+(*
+Inductive match_states: Linear.state -> Mach.state -> Prop :=
+  | match_states_intro:
+      forall cs f sp c ls m cs' fb sp' rs m' j tf
+        (STACKS: match_stacks j cs cs' f.(Linear.fn_sig))
+        (TRANSL: transf_function f = OK tf)
+        (FIND: Genv.find_funct_ptr tge fb = Some (Internal tf))
+        (AGREGS: agree_regs j ls rs)
+        (AGLOCS: agree_locs f ls (parent_locset cs))
+        (INJSP: j sp = Some(sp', fe_stack_data (make_env (function_bounds f))))
+        (TAIL: is_tail c (Linear.fn_code f))
+        (SEP: m' |= frame_contents f j sp' ls (parent_locset cs) (parent_sp cs') (parent_ra cs')
+                 ** stack_contents j cs cs'
+                 ** minjection j m
+                 ** globalenv_inject ge j),
+      match_states (Linear.State cs f (Vptr sp Ptrofs.zero) c ls m)
+                   (Mach.State cs' fb (Vptr sp' Ptrofs.zero) (transl_code (make_env (function_bounds f)) c) rs m')
+  | match_states_call:
+      forall cs f ls m cs' fb rs m' j tf
+        (STACKS: match_stacks j cs cs' (Linear.funsig f))
+        (TRANSL: transf_fundef f = OK tf)
+        (FIND: Genv.find_funct_ptr tge fb = Some tf)
+        (AGREGS: agree_regs j ls rs)
+        (SEP: m' |= stack_contents j cs cs'
+                 ** minjection j m
+                 ** globalenv_inject ge j),
+      match_states (Linear.Callstate cs f ls m)
+                   (Mach.Callstate cs' fb rs m')
+  | match_states_return:
+      forall cs ls m cs' rs m' j sg
+        (STACKS: match_stacks j cs cs' sg)
+        (AGREGS: agree_regs j ls rs)
+        (SEP: m' |= stack_contents j cs cs'
+                 ** minjection j m
+                 ** globalenv_inject ge j),
+      match_states (Linear.Returnstate cs ls m)
+                  (Mach.Returnstate cs' rs m').
+
+Theorem transf_step_correct:
+  forall s1 t s2, Linear.step ge s1 t s2 ->
+  forall (WTS: wt_state s1) s1' (MS: match_states s1 s1'),
+  exists s2', plus step tge s1' t s2' /\ match_states s2 s2'.
+Proof.
+
+Lemma transf_initial_states:
+  forall st1, Linear.initial_state prog st1 ->
+  exists st2, Mach.initial_state tprog st2 /\ match_states st1 st2.
+Proof.
+
+Lemma transf_final_states:
+  forall st1 st2 r,
+  match_states st1 st2 -> Linear.final_state st1 r -> Mach.final_state st2 r.
+Proof.
+*)
+
+FEnd Stacking.
+
+(* Mach -> Asm *)
+Family Asmgen.
     FRecursion transl_op about Linear.operation motive (fun (_ : Linear.operation) => list mreg -> mreg -> Asm.code -> Asm.code).
         Case Omove := (fun a1 res k => 
             match preg_of res, preg_of a1 with

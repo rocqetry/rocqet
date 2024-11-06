@@ -47,6 +47,9 @@
    lib/Lattice
    lib/Iteration
    lib/Wfsimpl   
+   lib/Bounds
+   lib/Separation
+   lib/Stacklayout
   ))
 
 
