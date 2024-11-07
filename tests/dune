@@ -39,4 +39,5 @@
   ;Conformance_opt2
   ;Trait_no_base
   ;STLC_mind2 
+  ;Same_Diff_Reparam
   ))
