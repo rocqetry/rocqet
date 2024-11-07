@@ -26,6 +26,504 @@ From NFPOP Require Import Prelude.
 Local Open Scope string_scope.
 Local Open Scope list_scope.
 
+(* RISC-V *)
+Trait RV.
+
+(* Base integer instruction set, 32-bit *)
+Family RV32I.
+
+MetaData offset.
+Inductive offset : Type :=
+| Ofsimm (ofs: ptrofs)
+| Ofslow (id: ident) (ofs: ptrofs).
+FEnd offset.
+
+FDefinition label := positive.
+    
+FInductive instruction : Type :=
+| Pmv : ireg -> ireg -> instruction
+(** 32-bit integer register-immediate instructions *)
+| Paddiw  : ireg -> ireg0 -> int -> instruction        (**r add immediate *)
+| Psltiw  : ireg -> ireg0 -> int -> instruction        (**r set-less-than immediate *)
+| Psltiuw : ireg -> ireg0 -> int -> instruction        (**r set-less-than unsigned immediate *)
+| Pandiw  : ireg -> ireg0 -> int -> instruction        (**r and immediate *)
+| Poriw   : ireg -> ireg0 -> int -> instruction        (**r or immediate *)
+| Pxoriw  : ireg -> ireg0 -> int -> instruction        (**r xor immediate *)
+| Pslliw  : ireg -> ireg0 -> int -> instruction        (**r shift-left-logical immediate *)
+| Psrliw  : ireg -> ireg0 -> int -> instruction        (**r shift-right-logical immediate *)
+| Psraiw  : ireg -> ireg0 -> int -> instruction        (**r shift-right-arith immediate *)
+| Pluiw  : ireg ->  int -> instruction        (**r load upper-immediate *)
+(** 32-bit integer register-register instructions *)
+| Paddw  : ireg -> ireg0 -> ireg0 -> instruction  (**r integer addition *)
+| Psubw  : ireg -> ireg0 -> ireg0 -> instruction  (**r integer subtraction *)
+| Psltw  : ireg -> ireg0 -> ireg0 -> instruction  (**r set-less-than *)
+| Psltuw : ireg -> ireg0 -> ireg0 -> instruction  (**r set-less-than unsigned *)
+| Pseqw  : ireg -> ireg0 -> ireg0 -> instruction  (**r [rd <- rs1 == rs2] (pseudo) *)
+| Psnew  : ireg -> ireg0 -> ireg0 -> instruction  (**r [rd <- rs1 != rs2] (pseudo) *)
+| Pandw  : ireg -> ireg0 -> ireg0 -> instruction  (**r bitwise and *)
+| Porw   : ireg -> ireg0 -> ireg0 -> instruction  (**r bitwise or *)
+| Pxorw  : ireg -> ireg0 -> ireg0 -> instruction  (**r bitwise xor *)
+| Psllw  : ireg -> ireg0 -> ireg0 -> instruction  (**r shift-left-logical *)
+| Psrlw  : ireg -> ireg0 -> ireg0 -> instruction  (**r shift-right-logical *)
+| Psraw  : ireg -> ireg0 -> ireg0 -> instruction  (**r shift-right-arith *)
+(* Conditional branches, 32-bit comparisons *)
+| Pbeqw   : ireg0 -> ireg0 -> label -> instruction  (**r branch-if-equal *)
+| Pbnew   : ireg0 -> ireg0 -> label -> instruction  (**r branch-if-not-equal signed *)
+| Pbltw   : ireg0 -> ireg0 -> label -> instruction  (**r branch-if-less signed *)
+| Pbltuw  : ireg0 -> ireg0 -> label -> instruction  (**r branch-if-less unsigned *)
+| Pbgew   : ireg0 -> ireg0 -> label -> instruction  (**r branch-if-greater-or-equal signed *)
+| Pbgeuw  : ireg0 -> ireg0 -> label -> instruction  (**r branch-if-greater-or-equal unsigned *)
+(* Loads and stores *)
+| Plb  : ireg -> ireg -> offset -> instruction     (**r load signed int8 *)
+| Plbu : ireg -> ireg -> offset -> instruction     (**r load unsigned int8 *)
+| Plh  : ireg -> ireg -> offset -> instruction     (**r load signed int16 *)
+| Plhu : ireg -> ireg -> offset -> instruction     (**r load unsigned int16 *)
+| Plw  : ireg -> ireg -> offset -> instruction     (**r load int32 *)
+| Psb  : ireg -> ireg -> offset -> instruction     (**r store int8 *)
+| Psh  : ireg -> ireg -> offset -> instruction     (**r store int16 *)
+| Psw  : ireg -> ireg -> offset -> instruction     (**r store int32 *)            
+(* Pseudo-instructions *)
+| Plabel : label -> instruction  (**r define a code label *)
+| Pbtbl  : ireg -> list label -> instruction (**r N-way branch through a jump table *)
+  (* Unconditional jumps.  Links are always to X1/RA. *)
+| Pj_l : label -> instruction  (**r jump to label *)
+| Pj_s : ident -> signature -> instruction     (**r jump to symbol *)
+| Pj_r :  ireg -> signature -> instruction     (**r jump register *)
+| Pjal_s : ident -> signature -> instruction    (**r jump-and-link symbol *)
+| Pjal_r : ireg -> signature -> instruction     (**r jump-and-link register *)
+| Pnop : instruction. (**r nop instruction *)
+                       
+FDefinition code := list instruction.
+MetaData function.
+Record function : Type := mkfunction { fn_sig: signature; fn_code: self__RV32I.code }.
+FEnd function.
+
+FDefinition fundef := AST.fundef function.
+FDefinition program := AST.program fundef unit.    
+    
+(* Operational Semantics *)    
+FDefinition regset := Pregmap.t val.
+FDefinition genv := Genv.t fundef unit.
+
+Open Scope asm.
+          
+MetaData undef_regs.
+Fixpoint undef_regs (l: list preg) (rs: self__RV32I.regset) : self__RV32I.regset :=
+match l with
+| nil => rs
+| r :: l' => undef_regs l' (rs#r <- Vundef)
+end.
+FEnd undef_regs.
+          
+MetaData set_regs.
+Fixpoint set_regs (rl: list preg) (vl: list val) (rs: self__RV32I.regset) : self__RV32I.regset :=
+match rl, vl with
+| r1 :: rl', v1 :: vl' =>  set_regs rl' vl' (rs#r1 <- v1)
+| _, _ => rs
+end.
+FEnd set_regs.
+
+MetaData find_instr.
+Fixpoint find_instr (pos: Z) (c: self__RV32I.code) {struct c} : option self__RV32I.instruction :=
+match c with
+| nil => None
+| i :: il => if zeq pos 0 then Some i else find_instr (pos - 1) il
+end.
+FEnd find_instr.
+
+(*FRecursion is_label about instruction motive (fun (_ : instruction) => label -> bool) by _rect.
+Case Plabel lbl' := (fun lbl => peq lbl lbl').
+Case Pmv s d := (fun lbl => false).
+Case Pfmv s d := (fun lbl => false).
+Case Pj_l lbl' := (fun lbl => false).
+Case Pj_r i s := (fun lbl => false).
+Case Pbeqw i0 i1 lbl' := (fun lbl => false).
+Case Pbnew i0 i1 lbl' := (fun lbl => false).
+Case Pbltw i0 i1 lbl' := (fun lbl => false).
+Case Pbgew i0 i1 lbl' := (fun lbl => false).
+Case Pnop := (fun lbl => false).
+FEnd is_label.*)
+MetaData is_label.
+Axiom is_label : self__RV32I.instruction -> self__RV32I.label -> bool.
+FEnd is_label.
+          
+MetaData label_pos.
+Fixpoint label_pos (lbl: self__RV32I.label) (pos: Z) (c: self__RV32I.code) {struct c} : option Z :=
+match c with
+| nil => None
+| instr :: c' =>
+  if self__RV32I.is_label instr lbl then Some (pos + 1) else label_pos lbl (pos + 1) c'
+end.
+FEnd label_pos.
+          
+MetaData outcome.
+Inductive outcome: Type :=
+| Next:  self__RV32I.regset -> mem -> outcome
+| Stuck: outcome.
+FEnd outcome.
+          
+FDefinition nextinstr := fun (rs: regset) =>
+  Pregmap.set PC (Val.offset_ptr (rs PC) Ptrofs.one) rs.
+
+FDefinition goto_label := fun (f: self__RV32I.function) (lbl: self__RV32I.label) (rs: self__RV32I.regset) (m: mem) =>
+match label_pos lbl 0 (self__RV32I.fn_code f) with
+| None => self__RV32I.Stuck
+| Some pos =>
+    match (rs PC) with
+    | Vptr b ofs => self__RV32I.Next (Pregmap.set PC (Vptr b (Ptrofs.repr pos)) rs) m
+    | _          => self__RV32I.Stuck
+    end
+end.
+
+MetaData low_half.
+Parameter low_half: self__RV32I.genv -> ident -> ptrofs -> ptrofs.
+FEnd low_half.
+
+MetaData high_half.
+Parameter high_half: self__RV32I.genv -> ident -> ptrofs -> val.
+FEnd high_half.
+                    
+FDefinition eval_offset : self__RV32I.genv -> self__RV32I.offset -> ptrofs := fun ge ofs =>
+match ofs with
+| self__RV32I.Ofsimm n => n
+| self__RV32I.Ofslow id delta => low_half ge id delta
+end.          
+
+FDefinition exec_load := fun (ge : genv) (chunk: memory_chunk) (rs: regset) (m: mem)
+    (d: preg) (a: ireg) (ofs: offset) =>
+match  Mem.loadv chunk m (Val.offset_ptr (rs a) (eval_offset ge ofs)) with
+| None => self__RV32I.Stuck
+| Some v => self__RV32I.Next (nextinstr (Pregmap.set d v rs)) m
+end.          
+          
+FDefinition exec_store := fun (ge : genv) (chunk: memory_chunk) (rs: regset) (m: mem)
+  (s: preg) (a: ireg) (ofs: offset) =>
+match Mem.storev chunk m (Val.offset_ptr (rs a) (eval_offset ge ofs)) (rs s) with
+| None => self__RV32I.Stuck
+| Some m' => self__RV32I.Next (nextinstr rs) m'
+end.
+
+FDefinition eval_branch := fun (f: function) (l: label) (rs: regset) (m: mem) (res: option bool) =>
+match res with
+| Some true  => goto_label f l rs m
+| Some false => self__RV32I.Next (nextinstr rs) m
+| None => self__RV32I.Stuck
+end.
+          
+FRecursion exec_instr about instruction motive (fun (_ : instruction) => genv -> function -> regset -> mem -> outcome) by _rect.
+Case Pmv d s := (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (rs#s))) m).
+Case Paddiw d s i :=  (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.add rs##s (Vint i)))) m).
+Case Psltiw  d s i := (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.cmp Clt rs##s (Vint i)))) m).
+Case Psltiuw d s i :=  (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.cmpu (Mem.valid_pointer m) Clt rs##s (Vint i)))) m).
+Case Pandiw d s i := (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.and rs##s (Vint i)))) m).
+Case Poriw d s i := (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.or rs##s (Vint i)))) m).
+Case Pxoriw d s i := (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.xor rs##s (Vint i)))) m).
+Case Pslliw d s i := (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.shl rs##s (Vint i)))) m).
+Case Psrliw d s i := (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.shru rs##s (Vint i)))) m).
+Case Psraiw d s i := (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.shr rs##s (Vint i)))) m).
+Case Pluiw d i := (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Vint (Int.shl i (Int.repr 12))))) m).
+Case Paddw d s1 s2 := (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.add rs##s1 rs##s2))) m).
+Case Psubw d s1 s2 :=  (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.sub rs##s1 rs##s2))) m).
+Case Psltw d s1 s2 :=  (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.cmp Clt rs##s1 rs##s2))) m).
+Case Psltuw d s1 s2 := (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.cmpu (Mem.valid_pointer m) Clt rs##s1 rs##s2))) m). 
+Case Pseqw d s1 s2 :=  (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.cmpu (Mem.valid_pointer m) Ceq rs##s1 rs##s2))) m).
+Case Psnew d s1 s2 :=  (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.cmpu (Mem.valid_pointer m) Cne rs##s1 rs##s2))) m).
+Case Pandw d s1 s2 :=  (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.and rs##s1 rs##s2))) m).
+Case Porw d s1 s2 :=  (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.or rs##s1 rs##s2))) m).
+Case Pxorw d s1 s2 := (fun ge f rs m =>   self__RV32I.Next (nextinstr (rs#d <- (Val.xor rs##s1 rs##s2))) m). 
+Case Psllw d s1 s2 := (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.shl rs##s1 rs##s2))) m). 
+Case Psrlw d s1 s2 := (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.shru rs##s1 rs##s2))) m). 
+Case Psraw d s1 s2 := (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.shr rs##s1 rs##s2))) m). 
+Case Pbeqw s1 s2 l :=  (fun ge f rs m =>  eval_branch f l rs m (Val.cmpu_bool (Mem.valid_pointer m) Ceq rs##s1 rs##s2)).
+Case Pbnew s1 s2 l :=  (fun ge f rs m =>  eval_branch f l rs m (Val.cmpu_bool (Mem.valid_pointer m) Cne rs##s1 rs##s2)).
+Case Pbltw s1 s2 l :=  (fun ge f rs m => eval_branch f l rs m (Val.cmp_bool Clt rs##s1 rs##s2)).
+Case Pbltuw s1 s2 l := (fun ge f rs m => eval_branch f l rs m (Val.cmpu_bool (Mem.valid_pointer m) Clt rs##s1 rs##s2)).
+Case Pbgew s1 s2 l :=  (fun ge f rs m => eval_branch f l rs m (Val.cmp_bool Cge rs##s1 rs##s2)).
+Case Pbgeuw s1 s2 l := (fun ge f rs m => eval_branch f l rs m (Val.cmpu_bool (Mem.valid_pointer m) Cge rs##s1 rs##s2)).
+Case Plb d a ofs  := (fun ge f rs m => exec_load  ge Mint8signed rs m d a ofs).
+Case Plbu d a ofs := (fun ge f rs m => exec_load  ge Mint8unsigned rs m d a ofs).
+Case Plh d a ofs  := (fun ge f rs m =>  exec_load ge  Mint16signed rs m d a ofs).
+Case Plhu d a ofs := (fun ge f rs m =>  exec_load ge  Mint16unsigned rs m d a ofs).
+Case Plw d a ofs  := (fun ge f rs m =>  exec_load ge  Mint32 rs m d a ofs).
+Case Psb s a ofs  := (fun ge f rs m =>  exec_store ge Mint8unsigned rs m s a ofs).
+Case Psh s a ofs  := (fun ge f rs m => exec_store ge Mint16unsigned rs m s a ofs).
+Case Psw s a ofs  := (fun ge f rs m =>  exec_store ge Mint32 rs m s a ofs).
+Case Plabel lbl := (fun ge f rs m => self__RV32I.Next (nextinstr rs) m).
+Case Pbtbl r tbl := 
+(fun ge f rs m => 
+  match rs r with
+      | Vint n =>
+          match list_nth_z tbl (Int.unsigned n) with
+          | None => self__RV32I.Stuck
+          | Some lbl => goto_label f lbl (rs#X5 <- Vundef #X31 <- Vundef) m
+          end
+      | _ => self__RV32I.Stuck
+      end).
+Case Pj_l lbl := (fun ge f rs m => goto_label f lbl rs m).
+Case Pj_r r sg := (fun ge f rs m => self__RV32I.Next (rs#PC <- (rs#r)) m).
+Case Pj_s s sg := (fun ge f rs m =>  self__RV32I.Next (rs#PC <- (Genv.symbol_address ge s Ptrofs.zero) #X31 <- Vundef) m).
+Case Pjal_s s sg := 
+(fun ge f rs m =>  
+   self__RV32I.Next (rs#PC <- (Genv.symbol_address ge s Ptrofs.zero)
+                    #RA <- (Val.offset_ptr rs#PC Ptrofs.one)) m).
+Case Pjal_r r sg := 
+(fun ge f rs m => 
+    self__RV32I.Next (rs#PC <- (rs#r)
+              #RA <- (Val.offset_ptr rs#PC Ptrofs.one)) m).
+(** The following instructions and directives are not generated directly by Asmgen,
+    so we do not model them. *)
+Case Pnop := (fun ge f rs m => self__RV32I.Stuck). 
+FEnd exec_instr.
+
+(** Execution of the instruction at [rs PC]. *)
+
+MetaData state.
+Inductive state: Type :=
+| State: self__RV32I.regset -> mem -> state.
+FEnd state.
+
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_step_internal:
+    forall ge b ofs f i rs m rs' m',
+    rs PC = Vptr b ofs ->
+    Genv.find_funct_ptr ge b = Some (AST.Internal f) ->
+    find_instr (Ptrofs.unsigned ofs) (self__RV32I.fn_code f) = Some i ->
+    exec_instr i ge f rs m = self__RV32I.Next rs' m' ->
+    step ge (self__RV32I.State rs m) E0 (self__RV32I.State rs' m').        
+
+MetaData initial_state.
+Inductive initial_state (p: self__RV32I.program): self__RV32I.state -> Prop :=
+| initial_state_intro: forall m0,
+    let ge := Genv.globalenv p in
+    let rs0 :=
+      (Pregmap.init Vundef)
+      # PC <- (Genv.symbol_address ge p.(AST.prog_main) Ptrofs.zero)
+      # SP <- Vnullptr
+      # RA <- Vnullptr in
+    Genv.init_mem p = Some m0 ->
+    initial_state p (self__RV32I.State rs0 m0).
+FEnd initial_state.
+
+MetaData final_state.
+Inductive final_state: self__RV32I.state -> int -> Prop :=
+| final_state_intro: forall rs m r,
+   rs PC = Vnullptr ->
+   rs X10 = Vint r ->
+    final_state (self__RV32I.State rs m) r.
+FEnd final_state.
+
+FEnd RV32I.
+
+(* Base integer instruction set, 64-bit *)
+Family RV64I extends RV32I.
+FInductive instruction : Type :=
+(** 64-bit integer register-immediate instructions *)
+| Paddil : ireg -> ireg0 -> int64 -> instruction      (**r add immediate *)
+| Psltil : ireg -> ireg0 -> int64 -> instruction      (**r set-less-than immediate *)
+| Psltiul : ireg -> ireg0 -> int64 -> instruction    (**r set-less-than unsigned immediate *)
+| Pandil : ireg -> ireg0 -> int64 -> instruction      (**r and immediate *)
+| Poril : ireg -> ireg0 -> int64 -> instruction       (**r or immediate *)
+| Pxoril : ireg -> ireg0 -> int64 -> instruction      (**r xor immediate *)
+| Psllil : ireg -> ireg0 -> int -> instruction      (**r shift-left-logical immediate *)
+| Psrlil : ireg -> ireg0 -> int -> instruction      (**r shift-right-logical immediate *)
+| Psrail : ireg -> ireg0 -> int -> instruction      (**r shift-right-arith immediate *)
+| Pluil : ireg -> int64 -> instruction       (**r load upper-immediate *)
+(** 64-bit integer register-register instructions *)
+| Paddl  : ireg -> ireg0 -> ireg0 -> instruction (**r integer addition *)
+| Psubl  : ireg -> ireg0 -> ireg0 -> instruction (**r integer subtraction *)
+| Pmull  : ireg -> ireg0 -> ireg0 -> instruction (**r integer multiply low *)
+| Pmulhl : ireg -> ireg0 -> ireg0 -> instruction (**r integer multiply high signed *)
+| Pmulhul: ireg -> ireg0 -> ireg0 -> instruction (**r integer multiply high unsigned *)
+| Pdivl  : ireg -> ireg0 -> ireg0 -> instruction (**r integer division *)
+| Pdivul : ireg -> ireg0 -> ireg0 -> instruction (**r unsigned integer division *)
+| Preml  : ireg -> ireg0 -> ireg0 -> instruction (**r integer remainder *)
+| Premul : ireg -> ireg0 -> ireg0 -> instruction (**r unsigned integer remainder *)
+| Psltl  : ireg -> ireg0 -> ireg0 -> instruction (**r set-less-than *)
+| Psltul : ireg -> ireg0 -> ireg0 -> instruction (**r set-less-than unsigned *)
+| Pseql  : ireg -> ireg0 -> ireg0 -> instruction (**r [rd <- rs1 == rs2] (pseudo) *)
+| Psnel  : ireg -> ireg0 -> ireg0 -> instruction (**r [rd <- rs1 != rs2] (pseudo) *)
+| Pandl  : ireg -> ireg0 -> ireg0 -> instruction (**r bitwise and *)
+| Porl   : ireg -> ireg0 -> ireg0 -> instruction (**r bitwise or *)
+| Pxorl  : ireg -> ireg0 -> ireg0 -> instruction (**r bitwise xor *)
+| Pslll  : ireg -> ireg0 -> ireg0 -> instruction (**r shift-left-logical *)
+| Psrll  : ireg -> ireg0 -> ireg0 -> instruction (**r shift-right-logical *)
+| Psral  : ireg -> ireg0 -> ireg0 -> instruction (**r shift-right-arith *)
+| Pcvtl2w : ireg -> ireg0 -> instruction (**r int64->int32 (pseudo) *)
+| Pcvtw2l : ireg -> instruction (**r int32 signed -> int64 (pseudo) *)
+(* Conditional branches, 64-bit comparisons *)
+| Pbeql   : ireg0 -> ireg0 -> label -> instruction (**r branch-if-equal *)
+| Pbnel   : ireg0 -> ireg0 -> label -> instruction (**r branch-if-not-equal signed *)
+| Pbltl   : ireg0 -> ireg0 -> label -> instruction (**r branch-if-less signed *)
+| Pbltul  : ireg0 -> ireg0 -> label -> instruction (**r branch-if-less unsigned *)
+| Pbgel   : ireg0 -> ireg0 -> label -> instruction (**r branch-if-greater-or-equal signed *)
+| Pbgeul  : ireg0 -> ireg0 -> label -> instruction (**r branch-if-greater-or-equal unsigned *)
+| Pld : ireg -> ireg -> offset -> instruction     (**r load int64 *)            
+| Psd : ireg -> ireg -> offset -> instruction.     (**r store int64 *)
+
+FRecursion exec_instr.
+Case Paddil d s i := (fun ge f rs m => self__RV64I.Next (nextinstr (rs#d <- (Val.addl rs###s (Vlong i)))) m).
+Case Psltil d s i := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.cmpl Clt rs###s (Vlong i))))) m).
+Case Psltiul d s i := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.cmplu (Mem.valid_pointer m) Clt rs###s (Vlong i))))) m).
+Case Pandil d s i := (fun ge f rs m =>   self__RV64I.Next (nextinstr (rs#d <- (Val.andl rs###s (Vlong i)))) m).
+Case Poril d s i := (fun ge f rs m =>   self__RV64I.Next (nextinstr (rs#d <- (Val.orl rs###s (Vlong i)))) m).
+Case Pxoril d s i := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.xorl rs###s (Vlong i)))) m).
+Case Psllil d s i := (fun ge f rs m =>   self__RV64I.Next (nextinstr (rs#d <- (Val.shll rs###s (Vint i)))) m).
+Case Psrlil d s i := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.shrlu rs###s (Vint i)))) m).
+Case Psrail d s i := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.shrl rs###s (Vint i)))) m).
+Case Pluil d i := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Vlong (Int64.sign_ext 32 (Int64.shl i (Int64.repr 12)))))) m).
+Case Paddl d s1 s2 := (fun ge f rs m =>   self__RV64I.Next (nextinstr (rs#d <- (Val.addl rs###s1 rs###s2))) m).
+Case Psubl d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.subl rs###s1 rs###s2))) m).
+Case Pmull d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.mull rs###s1 rs###s2))) m).
+Case Pmulhl d s1 s2 := (fun ge f rs m => self__RV64I.Next (nextinstr (rs#d <- (Val.mullhs rs###s1 rs###s2))) m).
+Case Pmulhul d s1 s2 := (fun ge f rs m =>   self__RV64I.Next (nextinstr (rs#d <- (Val.mullhu rs###s1 rs###s2))) m).
+Case Pdivl d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.divls rs###s1 rs###s2)))) m).
+Case Pdivul d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.divlu rs###s1 rs###s2)))) m).
+Case Preml d s1 s2 := (fun ge f rs m => self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.modls rs###s1 rs###s2)))) m).
+Case Premul d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.modlu rs###s1 rs###s2)))) m).
+Case Psltl d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.cmpl Clt rs###s1 rs###s2)))) m).
+Case Psltul d s1 s2 := (fun ge f rs m =>   self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.cmplu (Mem.valid_pointer m) Clt rs###s1 rs###s2)))) m).
+Case Pseql d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.cmplu (Mem.valid_pointer m) Ceq rs###s1 rs###s2)))) m).
+Case Psnel d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.cmplu (Mem.valid_pointer m) Cne rs###s1 rs###s2)))) m).
+Case Pandl d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.andl rs###s1 rs###s2))) m).
+Case Porl d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.orl rs###s1 rs###s2))) m).
+Case Pxorl d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.orl rs###s1 rs###s2))) m).
+Case Pslll d s1 s2 := (fun ge f rs m =>   self__RV64I.Next (nextinstr (rs#d <- (Val.shll rs###s1 rs###s2))) m).
+Case Psrll d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.shrlu rs###s1 rs###s2))) m).
+Case Psral d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.shrl rs###s1 rs###s2))) m).
+Case Pcvtl2w d s := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.loword rs##s))) m).
+Case Pcvtw2l r := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#r <- (Val.longofint rs#r))) m).
+Case Pbeql s1 s2 l :=  (fun ge f rs m => eval_branch f l rs m (Val.cmplu_bool (Mem.valid_pointer m) Ceq rs###s1 rs###s2)).
+Case Pbnel s1 s2 l :=  (fun ge f rs m =>   eval_branch f l rs m (Val.cmplu_bool (Mem.valid_pointer m) Cne rs###s1 rs###s2)).
+Case Pbltl s1 s2 l :=  (fun ge f rs m =>  eval_branch f l rs m (Val.cmpl_bool Clt rs###s1 rs###s2)).
+Case Pbltul s1 s2 l := (fun ge f rs m => eval_branch f l rs m (Val.cmplu_bool (Mem.valid_pointer m) Clt rs###s1 rs###s2)).
+Case Pbgel s1 s2 l :=  (fun ge f rs m =>  eval_branch f l rs m (Val.cmpl_bool Cge rs###s1 rs###s2)).
+Case Pbgeul s1 s2 l := (fun ge f rs m =>  eval_branch f l rs m (Val.cmplu_bool (Mem.valid_pointer m) Cge rs###s1 rs###s2)).
+Case Pld d a ofs := (fun ge f rs m =>  exec_load ge Mint64 rs m d a ofs).
+Case Psd s a ofs := (fun ge f rs m => exec_store ge Mint64 rs m s a ofs).
+
+FEnd exec_instr.
+
+FEnd RV64I.
+
+(* Standard extension for single-precision floating-point *)
+Family F. 
+FInductive instruction : Type :=
+  (* floating point register move *)
+  | Pfmv     (rd: freg) (rs: freg)                  (**r move *)
+  | Pfmvxs   (rd: ireg) (rs: freg)                  (**r move FP single to integer register *)
+  | Pfmvsx   (rd: freg) (rs: ireg)                  (**r move integer register to FP single *)
+  | Pfmvxd   (rd: ireg) (rs: freg)                  (**r move FP double to integer register *)
+  | Pfmvdx   (rd: freg) (rs: ireg)                  (**r move integer register to FP double *)
+
+  (* 32-bit (single-precision) floating point *)
+  | Pfls     (rd: freg) (ra: ireg) (ofs: offset)    (**r load float *)
+  | Pfss     (rs: freg) (ra: ireg) (ofs: offset)    (**r store float *)
+
+  | Pfnegs   (rd: freg) (rs: freg)                  (**r negation *)
+  | Pfabss   (rd: freg) (rs: freg)                  (**r absolute value *)
+
+  | Pfadds   (rd: freg) (rs1 rs2: freg)             (**r addition *)
+  | Pfsubs   (rd: freg) (rs1 rs2: freg)             (**r subtraction *)
+  | Pfmuls   (rd: freg) (rs1 rs2: freg)             (**r multiplication *)
+  | Pfdivs   (rd: freg) (rs1 rs2: freg)             (**r division *)
+  | Pfmins   (rd: freg) (rs1 rs2: freg)             (**r minimum *)
+  | Pfmaxs   (rd: freg) (rs1 rs2: freg)             (**r maximum *)
+
+  | Pfeqs    (rd: ireg) (rs1 rs2: freg)             (**r compare equal *)
+  | Pflts    (rd: ireg) (rs1 rs2: freg)             (**r compare less-than *)
+  | Pfles    (rd: ireg) (rs1 rs2: freg)             (**r compare less-than/equal *)
+
+  | Pfsqrts  (rd: freg) (rs: freg)                  (**r square-root *)
+
+  | Pfmadds  (rd: freg) (rs1 rs2 rs3: freg)         (**r fused multiply-add *)
+  | Pfmsubs  (rd: freg) (rs1 rs2 rs3: freg)         (**r fused multiply-sub *)
+  | Pfnmadds (rd: freg) (rs1 rs2 rs3: freg)         (**r fused negated multiply-add *)
+  | Pfnmsubs (rd: freg) (rs1 rs2 rs3: freg)         (**r fused negated multiply-sub *)
+
+  | Pfcvtws  (rd: ireg) (rs: freg)                  (**r float32 -> int32 conversion *)
+  | Pfcvtwus (rd: ireg) (rs: freg)                  (**r float32 -> unsigned int32 conversion *)
+  | Pfcvtsw  (rd: freg) (rs: ireg0)                 (**r int32 -> float32 conversion *)
+  | Pfcvtswu (rd: freg) (rs: ireg0)                 (**r unsigned int32 -> float32 conversion *)
+
+  | Pfcvtls  (rd: ireg) (rs: freg)                  (**r float32 -> int64 conversion *)
+  | Pfcvtlus (rd: ireg) (rs: freg)                  (**r float32 -> unsigned int64 conversion *)
+  | Pfcvtsl  (rd: freg) (rs: ireg0)                 (**r int64 -> float32 conversion *)
+  | Pfcvtslu (rd: freg) (rs: ireg0)                 (**r unsigned int 64-> float32 conversion *)
+ | Ploadsi (rd: freg) (f: float32)                 (**r load an immediate single *)
+FEnd F.
+
+(* Standard extension for double-precision floating-point *)
+Family D.
+FInductive instruction : Type :=
+ (* 64-bit (double-precision) floating point *)
+  | Pfld     (rd: freg) (ra: ireg) (ofs: offset)    (**r load 64-bit float *)
+  | Pfld_a   (rd: freg) (ra: ireg) (ofs: offset)    (**r load any64 *)
+  | Pfsd     (rd: freg) (ra: ireg) (ofs: offset)    (**r store 64-bit float *)
+  | Pfsd_a   (rd: freg) (ra: ireg) (ofs: offset)    (**r store any64 *)
+
+  | Pfnegd   (rd: freg) (rs: freg)                  (**r negation *)
+  | Pfabsd   (rd: freg) (rs: freg)                  (**r absolute value *)
+
+  | Pfaddd   (rd: freg) (rs1 rs2: freg)             (**r addition *)
+  | Pfsubd   (rd: freg) (rs1 rs2: freg)             (**r subtraction *)
+  | Pfmuld   (rd: freg) (rs1 rs2: freg)             (**r multiplication *)
+  | Pfdivd   (rd: freg) (rs1 rs2: freg)             (**r division *)
+  | Pfmind   (rd: freg) (rs1 rs2: freg)             (**r minimum *)
+  | Pfmaxd   (rd: freg) (rs1 rs2: freg)             (**r maximum *)
+
+  | Pfeqd    (rd: ireg) (rs1 rs2: freg)             (**r compare equal *)
+  | Pfltd    (rd: ireg) (rs1 rs2: freg)             (**r compare less-than *)
+  | Pfled    (rd: ireg) (rs1 rs2: freg)             (**r compare less-than/equal *)
+
+  | Pfsqrtd  (rd: freg) (rs: freg)                  (**r square-root *)
+
+  | Pfmaddd  (rd: freg) (rs1 rs2 rs3: freg)         (**r fused multiply-add *)
+  | Pfmsubd  (rd: freg) (rs1 rs2 rs3: freg)         (**r fused multiply-sub *)
+  | Pfnmaddd (rd: freg) (rs1 rs2 rs3: freg)         (**r fused negated multiply-add *)
+  | Pfnmsubd (rd: freg) (rs1 rs2 rs3: freg)         (**r fused negated multiply-sub *)
+
+  | Pfcvtwd  (rd: ireg) (rs: freg)                  (**r float -> int32 conversion *)
+  | Pfcvtwud (rd: ireg) (rs: freg)                  (**r float -> unsigned int32 conversion *)
+  | Pfcvtdw  (rd: freg) (rs: ireg0)                 (**r int32 -> float conversion *)
+  | Pfcvtdwu (rd: freg) (rs: ireg0)                 (**r unsigned int32 -> float conversion *)
+
+  | Pfcvtld  (rd: ireg) (rs: freg)                  (**r float -> int64 conversion *)
+  | Pfcvtlud (rd: ireg) (rs: freg)                  (**r float -> unsigned int64 conversion *)
+  | Pfcvtdl  (rd: freg) (rs: ireg0)                 (**r int64 -> float conversion *)
+  | Pfcvtdlu (rd: freg) (rs: ireg0)                 (**r unsigned int64 -> float conversion *)
+
+  | Pfcvtds  (rd: freg) (rs: freg)                  (**r float32 -> float   *)
+  | Pfcvtsd  (rd: freg) (rs: freg)                  (**r float   -> float32 *)
+ | Ploadfi (rd: freg) (f: float)                   (**r load an immediate float *)
+FEnd D.
+
+(* Standard extension for integer multiplication and division *)
+Family M. 
+FInductive instruction : Type :=
+| Pmulw   (rd: ireg) (rs1 rs2: ireg0)              (**r integer multiply low *)
+| Pmulhw  (rd: ireg) (rs1 rs2: ireg0)              (**r integer multiply high signed *)
+| Pmulhuw (rd: ireg) (rs1 rs2: ireg0)              (**r integer multiply high unsigned *)
+| Pdivw   (rd: ireg) (rs1 rs2: ireg0)              (**r integer division *)
+| Pdivuw  (rd: ireg) (rs1 rs2: ireg0)              (**r unsigned integer division *)
+| Premw   (rd: ireg) (rs1 rs2: ireg0)              (**r integer remainder *)
+| Premuw  (rd: ireg) (rs1 rs2: ireg0)              (**r unsigned integer remainder *)
+(* 64-bit *)
+| Pmull   (rd: ireg) (rs1 rs2: ireg0)              (**r integer multiply low *)
+| Pmulhl  (rd: ireg) (rs1 rs2: ireg0)              (**r integer multiply high signed *)
+| Pmulhul (rd: ireg) (rs1 rs2: ireg0)              (**r integer multiply high unsigned *)
+| Pdivl   (rd: ireg) (rs1 rs2: ireg0)              (**r integer division *)
+| Pdivul  (rd: ireg) (rs1 rs2: ireg0)              (**r unsigned integer division *)
+| Preml   (rd: ireg) (rs1 rs2: ireg0)              (**r integer remainder *)
+| Premul  (rd: ireg) (rs1 rs2: ireg0)              (**r unsigned integer remainder *)
+FEnd M.
+
+(* Standard extension for vector operations *)
+Family V.
+FEnd V.
+
+FEnd RV.
+
+
 Trait Base.
 
 Family C.
