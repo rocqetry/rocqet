@@ -446,27 +446,20 @@ let compile_prec_computational_axiom_signature
 
 let normalize_parameters 
     ~(default_ctx_params : (Names.Id.t * CompiledModule.t) list)
-    ~(parameters : CompiledModule.t list) =
-  let default_params_len = List.length default_ctx_params in
-  let params_len = List.length parameters in
-  let compare_result = compare params_len default_params_len in
-  if compare_result = 0 then parameters
-  else if compare_result < 0 then
-    (* The base context has more params.
-       We need to reparameterize via adding dummy args *)    
-    default_ctx_params    
-    |> List.map (fun (real, fake) -> 
-        let real = Libnames.qualid_of_ident real in
-        if List.mem real parameters then real else fake)
-  else
-    (* if compare_result > 0 *)
-    (* The current context in which we about to include the module 
-       with parameters `default_ctx_param` has more parameters, so 
-       we are use our own arguments since this context subsumes *)
-    (* TODO: actually check that the names in `default_ctx_params` are in 
-        `parameters` *)
-    default_ctx_params
-    |> List.map (fun (self_name, _) -> Libnames.qualid_of_ident self_name)    
+    ~(parameters : CompiledModule.t list) =  
+  let is_in_context (param : Libnames.qualid) = 
+    (* remove the location to avoid wrong equality comparison *)
+    let parameters = parameters |> List.map (fun (p: Libnames.qualid) -> p.v) in
+    let param = param.v in 
+    List.mem param parameters
+  in 
+  (* Only use parameters that are in the context, 
+     other use the default param *)
+  default_ctx_params
+  |> List.map (fun (self_name, default) -> 
+     let self_name = Libnames.qualid_of_ident self_name in
+     if is_in_context self_name then self_name
+     else default)  
 
 let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
