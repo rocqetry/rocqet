@@ -454,7 +454,7 @@ FEnd exec_instr.
 FEnd M.
 
 (* Standard extension for single-precision floating-point *)
-Trait F extends Common. 
+Family F extends Common. 
 FInductive instruction : Type :=
 (* floating point register move *)
 | Pfmv   : freg -> freg -> instruction (**r move *)
@@ -2468,7 +2468,7 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
 FEnd Cminor.
 
 (* RISC-V *)
-Family Asm.
+Family Asm extends RV.RV64I, RV.F.
 (* Operations *)
 FInductive condition : Type :=
 | Ccomp : comparison -> condition       (**r signed integer comparison *)
@@ -2547,207 +2547,7 @@ Case Ocmp c :=
     match vl with 
     | v1 :: v2 :: nil => Some (Val.of_optbool (eval_condition c vl m))
     | _ => None end).
-FEnd eval_operation.   
-      
-MetaData offset.
-Inductive offset : Type :=
-| Ofsimm (ofs: ptrofs)
-| Ofslow (id: ident) (ofs: ptrofs).
-FEnd offset.    
-
-FDefinition label := positive.
-    
-FInductive instruction : Type :=
-| Pmv : ireg -> ireg -> instruction                    (**r integer move *)
-(* floating point register move *)
-| Pfmv : freg -> freg -> instruction                   (**r move *)    
-(* Unconditional jumps.  Links are always to X1/RA. *)
-| Pj_l : label -> instruction                          (**r jump to label *)
-| Pj_r : ireg -> signature -> instruction              (**r jump register *)
-(* Conditional branches, 32-bit comparisons *)
-| Pbeqw : ireg0 -> ireg0 -> label -> instruction       (**r branch-if-equal *)
-| Pbnew : ireg0 -> ireg0 -> label -> instruction       (**r branch-if-not-equal signed *)
-| Pbltw : ireg0 -> ireg0 -> label -> instruction       (**r branch-if-less signed *)
-| Pbgew : ireg0 -> ireg0 -> label -> instruction       (**r branch-if-greater-or-equal signed *)                
-(* Pseudo-instructions *)
-| Plabel : label -> instruction (**r define a code label *)    
-| Pnop : instruction. (**r nop instruction *)
-(* Paddiw *)
-(* Pluiw *)
-(* Paddil *)
-(* Ploadli*)
-(* Pfcvtdw *)
-(* Ploadfi *)
-(* Pfcvtsw *)
-(* Ploadsi *)
-
-                       
-FDefinition code := list instruction.
-MetaData function.
-Record function : Type := mkfunction { fn_sig: signature; fn_code: self__Asm.code }.
-FEnd function.
-
-FDefinition fundef := AST.fundef function.
-FDefinition program := AST.program fundef unit.    
-    
-(* Operational Semantics *)    
-FDefinition regset := Pregmap.t val.
-FDefinition genv := Genv.t fundef unit.
-
-Open Scope asm.
-          
-MetaData undef_regs.
-Fixpoint undef_regs (l: list preg) (rs: self__Asm.regset) : self__Asm.regset :=
-match l with
-| nil => rs
-| r :: l' => undef_regs l' (rs#r <- Vundef)
-end.
-FEnd undef_regs.
-          
-MetaData set_regs.
-Fixpoint set_regs (rl: list preg) (vl: list val) (rs: self__Asm.regset) : self__Asm.regset :=
-match rl, vl with
-| r1 :: rl', v1 :: vl' =>  set_regs rl' vl' (rs#r1 <- v1)
-| _, _ => rs
-end.
-FEnd set_regs.
-
-MetaData find_instr.
-Fixpoint find_instr (pos: Z) (c: self__Asm.code) {struct c} : option self__Asm.instruction :=
-match c with
-| nil => None
-| i :: il => if zeq pos 0 then Some i else find_instr (pos - 1) il
-end.
-FEnd find_instr.
-
-FRecursion is_label about instruction motive (fun (_ : instruction) => label -> bool) by _rect.
-Case Plabel lbl' := (fun lbl => peq lbl lbl'). 
-Case Pmv s d := (fun lbl => false).
-Case Pfmv s d := (fun lbl => false).
-Case Pj_l lbl' := (fun lbl => false).
-Case Pj_r i s := (fun lbl => false).
-Case Pbeqw i0 i1 lbl' := (fun lbl => false).
-Case Pbnew i0 i1 lbl' := (fun lbl => false).
-Case Pbltw i0 i1 lbl' := (fun lbl => false).
-Case Pbgew i0 i1 lbl' := (fun lbl => false).
-Case Pnop := (fun lbl => false).
-FEnd is_label.          
-          
-MetaData label_pos.
-Fixpoint label_pos (lbl: self__Asm.label) (pos: Z) (c: self__Asm.code) {struct c} : option Z :=
-match c with
-| nil => None
-| instr :: c' =>
-  if self__Asm.is_label instr lbl then Some (pos + 1) else label_pos lbl (pos + 1) c'
-end.
-FEnd label_pos.
-          
-MetaData outcome.
-Inductive outcome: Type :=
-| Next:  self__Asm.regset -> mem -> outcome
-| Stuck: outcome.
-FEnd outcome.
-          
-FDefinition nextinstr := fun (rs: regset) =>
-  Pregmap.set PC (Val.offset_ptr (rs PC) Ptrofs.one) rs.
-
-FDefinition goto_label := fun (f: self__Asm.function) (lbl: self__Asm.label) (rs: self__Asm.regset) (m: mem) =>
-match label_pos lbl 0 (self__Asm.fn_code f) with
-| None => self__Asm.Stuck
-| Some pos =>
-    match (rs PC) with
-    | Vptr b ofs => self__Asm.Next (Pregmap.set PC (Vptr b (Ptrofs.repr pos)) rs) m
-    | _          => self__Asm.Stuck
-    end
-end.
-
-MetaData low_half.
-Parameter low_half: self__Asm.genv -> ident -> ptrofs -> ptrofs.
-FEnd low_half.
-
-MetaData high_half.
-Parameter high_half: self__Asm.genv -> ident -> ptrofs -> val.
-FEnd high_half.
-                    
-FDefinition eval_offset : self__Asm.genv -> self__Asm.offset -> ptrofs := fun ge ofs =>
-match ofs with
-| self__Asm.Ofsimm n => n
-| self__Asm.Ofslow id delta => low_half ge id delta
-end.          
-
-FDefinition exec_load := fun (ge : genv) (chunk: memory_chunk) (rs: regset) (m: mem)
-    (d: preg) (a: ireg) (ofs: offset) =>
-match  Mem.loadv chunk m (Val.offset_ptr (rs a) (eval_offset ge ofs)) with
-| None => self__Asm.Stuck
-| Some v => self__Asm.Next (nextinstr (Pregmap.set d v rs)) m
-end.          
-          
-FDefinition exec_store := fun (ge : genv) (chunk: memory_chunk) (rs: regset) (m: mem)
-  (s: preg) (a: ireg) (ofs: offset) =>
-match Mem.storev chunk m (Val.offset_ptr (rs a) (eval_offset ge ofs)) (rs s) with
-| None => self__Asm.Stuck
-| Some m' => self__Asm.Next (nextinstr rs) m'
-end.
-
-FDefinition eval_branch := fun (f: function) (l: label) (rs: regset) (m: mem) (res: option bool) =>
-match res with
-| Some true  => goto_label f l rs m
-| Some false => self__Asm.Next (nextinstr rs) m
-| None => self__Asm.Stuck
-end.
-          
-FRecursion exec_instr about instruction motive (fun (_ : instruction) => genv -> function -> regset -> mem -> outcome) by _rect.
-Case Pmv d s := (fun ge f rs m =>  self__Asm.Next (nextinstr (rs#d <- (rs#s))) m).
-Case Pfmv d s := (fun ge f rs m =>  self__Asm.Next (nextinstr (rs#d <- (rs#s))) m).
-Case Pj_l lbl := (fun ge f rs m => goto_label f lbl rs m).
-Case Pj_r r sg := (fun ge f rs m => self__Asm.Next (rs#PC <- (rs#r)) m).
-Case Pbeqw s1 s2 l := (fun ge f rs m =>  eval_branch f l rs m (Val.cmpu_bool (Mem.valid_pointer m) Ceq rs##s1 rs##s2)).
-Case Pbnew s1 s2 l := (fun ge f rs m => eval_branch f l rs m (Val.cmpu_bool (Mem.valid_pointer m) Cne rs##s1 rs##s2)).
-Case Pbltw s1 s2 l := (fun ge f rs m => eval_branch f l rs m (Val.cmp_bool Clt rs##s1 rs##s2)).
-(* Case Pbltuw s1 s2 l := (fun ge f rs m => val_branch f l rs m (Val.cmpu_bool (Mem.valid_pointer m) Clt rs##s1 rs##s2)). *)
-Case Pbgew s1 s2 l := (fun ge f rs m =>  eval_branch f l rs m (Val.cmp_bool Cge rs##s1 rs##s2)).            
-Case Plabel lbl := (fun ge f rs m => self__Asm.Next (nextinstr rs) m).
-(** The following instructions and directives are not generated directly by Asmgen,
-    so we do not model them. *)
-Case Pnop := (fun ge f rs m => self__Asm.Stuck).
-FEnd exec_instr.
-
-(** Execution of the instruction at [rs PC]. *)
-
-MetaData state.
-Inductive state: Type :=
-| State: self__Asm.regset -> mem -> state.
-FEnd state.
-
-FInductive step: genv -> state -> trace -> state -> Prop :=
-| exec_step_internal:
-    forall ge b ofs f i rs m rs' m',
-    rs PC = Vptr b ofs ->
-    Genv.find_funct_ptr ge b = Some (AST.Internal f) ->
-    find_instr (Ptrofs.unsigned ofs) (self__Asm.fn_code f) = Some i ->
-    exec_instr i ge f rs m = self__Asm.Next rs' m' ->
-    step ge (self__Asm.State rs m) E0 (self__Asm.State rs' m').        
-
-MetaData initial_state.
-Inductive initial_state (p: self__Asm.program): self__Asm.state -> Prop :=
-| initial_state_intro: forall m0,
-    let ge := Genv.globalenv p in
-    let rs0 :=
-      (Pregmap.init Vundef)
-      # PC <- (Genv.symbol_address ge p.(AST.prog_main) Ptrofs.zero)
-      # SP <- Vnullptr
-      # RA <- Vnullptr in
-    Genv.init_mem p = Some m0 ->
-    initial_state p (self__Asm.State rs0 m0).
-FEnd initial_state.
-
-MetaData final_state.
-Inductive final_state: self__Asm.state -> int -> Prop :=
-| final_state_intro: forall rs m r,
-   rs PC = Vnullptr ->
-   rs X10 = Vint r ->
-    final_state (self__Asm.State rs m) r.
-FEnd final_state.
+FEnd eval_operation.      
      
 FEnd Asm.
 
@@ -5632,6 +5432,12 @@ Family Cfamtransl.
   FEnd Selection.  
 
 FEnd Base.
+
+
+Require Extraction.
+Cd "extraction".
+Separate Extraction X.C.
+Extraction Library X.
 
 Require Extraction.
 Extraction Language OCaml.
