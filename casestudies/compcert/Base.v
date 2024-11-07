@@ -5429,7 +5429,7 @@ Family Cfamtransl.
            Proof.
        FEnd Proof.
 
-  FEnd Selection.  
+  FEnd Selection.
 
 FEnd Base.
 
