@@ -5433,6 +5433,54 @@ Family Cfamtransl.
 
 FEnd Base.
 
+(* small extension *)
+Trait Comp_Switch extends Comp_Base. 
+FEnd Comp_Switch.
+
+(* small extension *)
+Trait Comp_Loop extends Comp_Base.
+FEnd Comp_Loop.
+
+(* requires work with cshmgen, selection, operation semantics *)
+Trait Comp_Op extends Comp_Base.
+FEnd Comp_op.
+
+(* small extension *)
+Trait Comp_Heap extends Comp_Base.
+FEnd Comp_Heap.
+
+(* small extension: Only C, Clight *)
+(* Struct/Union *)
+Trait Comp_Field extends Comp_Base.
+FEnd Comp_Field.
+
+(* small extension *)
+Trait Comp_Call extends Comp_Base.
+FEnd Comp_Call.
+
+(* small *)
+Trait Comp_External extends Comp_Base.
+FEnd Comp_External.
+
+(* small *)
+Trait Comp_Builtin extends Comp_Base.
+FEnd Comp_Builtin.
+
+(* ?? *)
+Trait Comp_Vector extends Comp_Base.
+FEnd Comp_Vector.
+
+Family Comp extends 
+  Comp_Switch, 
+  Comp_Loop, 
+  Comp_Op, 
+  Comp_Heap, 
+  Comp_Field, 
+  Comp_Call, 
+  Comp_External, 
+  Comp_Builtin. 
+FEnd Comp.
+
 
 Require Extraction.
 Cd "extraction".
