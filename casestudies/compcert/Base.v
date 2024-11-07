@@ -532,48 +532,73 @@ FEnd exec_instr.
 FEnd F.
 
 (* Standard extension for double-precision floating-point *)
-Family D.
+Family D extends F.
 FInductive instruction : Type :=
- (* 64-bit (double-precision) floating point *)
-  | Pfld     (rd: freg) (ra: ireg) (ofs: offset)    (**r load 64-bit float *)
-  | Pfld_a   (rd: freg) (ra: ireg) (ofs: offset)    (**r load any64 *)
-  | Pfsd     (rd: freg) (ra: ireg) (ofs: offset)    (**r store 64-bit float *)
-  | Pfsd_a   (rd: freg) (ra: ireg) (ofs: offset)    (**r store any64 *)
+| Pfld     : freg -> ireg -> offset -> instruction (**r load 64-bit float *)  
+| Pfsd     : freg -> ireg -> offset -> instruction (**r store 64-bit float *)  
+| Pfnegd   : freg -> freg -> instruction (**r negation *)
+| Pfabsd   : freg -> freg -> instruction (**r absolute value *)
+| Pfaddd   : freg -> freg -> freg -> instruction (**r addition *)
+| Pfsubd   : freg -> freg -> freg -> instruction (**r subtraction *)
+| Pfmuld   : freg -> freg -> freg -> instruction (**r multiplication *)
+| Pfdivd   : freg -> freg -> freg -> instruction (**r division *)
+| Pfmind   : freg -> freg -> freg -> instruction (**r minimum *)
+| Pfmaxd   : freg -> freg -> freg -> instruction (**r maximum *)
+| Pfeqd    : ireg -> freg -> freg -> instruction (**r compare equal *)
+| Pfltd    : ireg -> freg -> freg -> instruction (**r compare less-than *)
+| Pfled    : ireg -> freg -> freg -> instruction (**r compare less-than/equal *)
+| Pfsqrtd  : freg -> freg -> instruction (**r square-root *)
+| Pfmaddd  : freg -> freg -> freg -> freg -> instruction (**r fused multiply-add *)
+| Pfmsubd  : freg -> freg -> freg -> freg -> instruction (**r fused multiply-sub *)
+| Pfnmaddd : freg -> freg -> freg -> freg -> instruction (**r fused negated multiply-add *)
+| Pfnmsubd : freg -> freg -> freg -> freg -> instruction (**r fused negated multiply-sub *)
+| Pfcvtwd  : ireg -> freg -> instruction (**r float -> int32 conversion *)
+| Pfcvtwud : ireg -> freg -> instruction (**r float -> unsigned int32 conversion *)
+| Pfcvtdw  : freg -> ireg0 -> instruction (**r int32 -> float conversion *)
+| Pfcvtdwu : freg -> ireg0 -> instruction (**r unsigned int32 -> float conversion *)
+| Pfcvtld  : ireg -> freg -> instruction (**r float -> int64 conversion *)
+| Pfcvtlud : ireg -> freg -> instruction (**r float -> unsigned int64 conversion *)
+| Pfcvtdl  : freg -> ireg0 -> instruction (**r int64 -> float conversion *)
+| Pfcvtdlu : freg -> ireg0 -> instruction (**r unsigned int64 -> float conversion *)
+| Pfcvtds : freg -> freg -> instruction (**r float32 -> float   *)
+| Pfcvtsd : freg -> freg -> instruction (**r float   -> float32 *)
+| Ploadfi : freg -> float -> instruction. (**r load an immediate float *)
 
-  | Pfnegd   (rd: freg) (rs: freg)                  (**r negation *)
-  | Pfabsd   (rd: freg) (rs: freg)                  (**r absolute value *)
+FRecursion exec_instr.
+Case Pfld d a ofs := (fun ge f rs m =>  exec_load ge Mfloat64 rs m d a ofs).
+Case Pfsd s a ofs := (fun ge f rs m => exec_store ge Mfloat64 rs m s a ofs). 
+Case Pfnegd d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.negf rs#s))) m).
+Case Pfabsd d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.absf rs#s))) m).
+Case Pfaddd d s1 s2 := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.addf rs#s1 rs#s2))) m).
+Case Pfsubd d s1 s2 := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.subf rs#s1 rs#s2))) m).
+Case Pfmuld d s1 s2 := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.mulf rs#s1 rs#s2))) m).
+Case Pfdivd d s1 s2 := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.divf rs#s1 rs#s2))) m).
+Case Pfeqd d s1 s2 := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.cmpf Ceq rs#s1 rs#s2))) m).
+Case Pfltd d s1 s2 := (fun ge f rs m =>   self__D.Next (nextinstr (rs#d <- (Val.cmpf Clt rs#s1 rs#s2))) m).
+Case Pfled d s1 s2 := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.cmpf Cle rs#s1 rs#s2))) m).
+Case Ploadfi rd f := (fun ge _ rs m => self__D.Next (nextinstr (rs#X31 <- Vundef #rd <- (Vfloat f))) m).
+Case Pfcvtwd d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.maketotal (Val.intoffloat rs#s)))) m).
+Case Pfcvtwud d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.maketotal (Val.intuoffloat rs#s)))) m).
+Case Pfcvtdw d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.maketotal (Val.floatofint rs##s)))) m).
+Case Pfcvtdwu d s := (fun ge f rs m => self__D.Next (nextinstr (rs#d <- (Val.maketotal (Val.floatofintu rs##s)))) m).
+Case Pfcvtld d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.maketotal (Val.longoffloat rs#s)))) m).
+Case Pfcvtlud d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.maketotal (Val.longoffloat rs#s)))) m).
+Case Pfcvtdl d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.maketotal (Val.floatoflong rs###s)))) m).
+Case Pfcvtdlu d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.maketotal (Val.floatoflongu rs###s)))) m).
+Case Pfcvtds d s := (fun ge f rs m =>   self__D.Next (nextinstr (rs#d <- (Val.floatofsingle rs#s))) m).
+Case Pfcvtsd d s := (fun ge f rs m => self__D.Next (nextinstr (rs#d <- (Val.singleoffloat rs#s))) m).
 
-  | Pfaddd   (rd: freg) (rs1 rs2: freg)             (**r addition *)
-  | Pfsubd   (rd: freg) (rs1 rs2: freg)             (**r subtraction *)
-  | Pfmuld   (rd: freg) (rs1 rs2: freg)             (**r multiplication *)
-  | Pfdivd   (rd: freg) (rs1 rs2: freg)             (**r division *)
-  | Pfmind   (rd: freg) (rs1 rs2: freg)             (**r minimum *)
-  | Pfmaxd   (rd: freg) (rs1 rs2: freg)             (**r maximum *)
+(* not modeled *)
+Case Pfmind d s1 s2 := (fun ge f rs m => self__D.Stuck ).
+Case Pfmaxd d s1 s2 := (fun ge f rs m => self__D.Stuck).
+Case Pfsqrtd a b := (fun ge f rs m => self__D.Stuck).
+Case Pfmaddd a b c d := (fun ge f rs m => self__D.Stuck).
+Case Pfmsubd  a b c d := (fun ge f rs m => self__D.Stuck).
+Case Pfnmaddd a b c d  := (fun ge f rs m => self__D.Stuck).
+Case Pfnmsubd a b c d  := (fun ge f rs m => self__D.Stuck).
 
-  | Pfeqd    (rd: ireg) (rs1 rs2: freg)             (**r compare equal *)
-  | Pfltd    (rd: ireg) (rs1 rs2: freg)             (**r compare less-than *)
-  | Pfled    (rd: ireg) (rs1 rs2: freg)             (**r compare less-than/equal *)
+FEnd exec_instr.
 
-  | Pfsqrtd  (rd: freg) (rs: freg)                  (**r square-root *)
-
-  | Pfmaddd  (rd: freg) (rs1 rs2 rs3: freg)         (**r fused multiply-add *)
-  | Pfmsubd  (rd: freg) (rs1 rs2 rs3: freg)         (**r fused multiply-sub *)
-  | Pfnmaddd (rd: freg) (rs1 rs2 rs3: freg)         (**r fused negated multiply-add *)
-  | Pfnmsubd (rd: freg) (rs1 rs2 rs3: freg)         (**r fused negated multiply-sub *)
-
-  | Pfcvtwd  (rd: ireg) (rs: freg)                  (**r float -> int32 conversion *)
-  | Pfcvtwud (rd: ireg) (rs: freg)                  (**r float -> unsigned int32 conversion *)
-  | Pfcvtdw  (rd: freg) (rs: ireg0)                 (**r int32 -> float conversion *)
-  | Pfcvtdwu (rd: freg) (rs: ireg0)                 (**r unsigned int32 -> float conversion *)
-
-  | Pfcvtld  (rd: ireg) (rs: freg)                  (**r float -> int64 conversion *)
-  | Pfcvtlud (rd: ireg) (rs: freg)                  (**r float -> unsigned int64 conversion *)
-  | Pfcvtdl  (rd: freg) (rs: ireg0)                 (**r int64 -> float conversion *)
-  | Pfcvtdlu (rd: freg) (rs: ireg0)                 (**r unsigned int64 -> float conversion *)
-
-  | Pfcvtds  (rd: freg) (rs: freg)                  (**r float32 -> float   *)
-  | Pfcvtsd  (rd: freg) (rs: freg)                  (**r float   -> float32 *)
- | Ploadfi (rd: freg) (f: float)                   (**r load an immediate float *)
 FEnd D.
 
 (* Standard extension for vector operations *)
