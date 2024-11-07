@@ -2547,7 +2547,7 @@ Case Ocmp c :=
     match vl with 
     | v1 :: v2 :: nil => Some (Val.of_optbool (eval_condition c vl m))
     | _ => None end).
-FEnd eval_operation.      
+FEnd eval_operation.
      
 FEnd Asm.
 
@@ -4345,46 +4345,119 @@ FEnd immed32.
 FDefinition make_immed32 := fun (val: int) =>
   let lo := Int.sign_ext 12 val in
   if Int.eq val lo
-  then self__Stacking.Imm32_single val
-  else self__Stacking.Imm32_pair (Int.shru (Int.sub val lo) (Int.repr 12)) lo.
+  then self__Asmgen.Imm32_single val
+  else self__Asmgen.Imm32_pair (Int.shru (Int.sub val lo) (Int.repr 12)) lo.
 
-FDefinition load_hilo32 (r: ireg) (hi lo: int) k :=
-  if Int.eq lo Int.zero then Pluiw r hi :: k
-  else Pluiw r hi :: Paddiw r r lo :: k.
+FDefinition load_hilo32 := fun (r: ireg) (hi lo: int) k =>
+  if Int.eq lo Int.zero then Asm.Pluiw r hi :: k
+  else Asm.Pluiw r hi :: Asm.Paddiw r r lo :: k.
 
-FDefinition loadimm32 := fun (r: ireg) (n: int) (k: code) =>
+FDefinition loadimm32 := fun (r: ireg) (n: int) (k: Asm.code) =>
   match make_immed32 n with
-  | Imm32_single imm => Paddiw r X0 imm :: k
-  | Imm32_pair hi lo => load_hilo32 r hi lo k
+  | self__Asmgen.Imm32_single imm => Asm.Paddiw r X0 imm :: k
+  | self__Asmgen.Imm32_pair hi lo => load_hilo32 r hi lo k
   end.
 
+MetaData immed64.
 Inductive immed64 : Type :=
   | Imm64_single (imm: int64)
   | Imm64_pair   (hi: int64) (lo: int64)
   | Imm64_large  (imm: int64).
+FEnd immed64.
 
-Definition make_immed64 (val: int64) :=
+FDefinition make_immed64 := fun (val: int64) =>
   let lo := Int64.sign_ext 12 val in
-  if Int64.eq val lo then Imm64_single lo else
+  if Int64.eq val lo then self__Asmgen.Imm64_single lo else
   let hi := Int64.zero_ext 20 (Int64.shru (Int64.sub val lo) (Int64.repr 12)) in
   if Int64.eq val (Int64.add (Int64.sign_ext 32 (Int64.shl hi (Int64.repr 12))) lo)
-  then Imm64_pair hi lo
-  else Imm64_large val.
+  then self__Asmgen.Imm64_pair hi lo
+  else self__Asmgen.Imm64_large val.
 
-FDefinition loadimm64 := fun (r: ireg) (n: int64) (k: code) =>
+FDefinition load_hilo64 := fun (r: ireg) (hi lo: int64) k =>
+  if Int64.eq lo Int64.zero then Asm.Pluil r hi :: k
+  else Asm.Pluil r hi :: Asm.Paddil r r lo :: k.
+
+(* TODO: Add this: *)
+(*  | Ploadli (rd: ireg) (i: int64)                   (**r load an immediate int64 *) *)
+FDefinition loadimm64 := fun (r: ireg) (n: int64) (k: Asm.code) =>
   match make_immed64 n with
-  | Imm64_single imm => Paddil r X0 imm :: k
-  | Imm64_pair hi lo => load_hilo64 r hi lo k
-  | Imm64_large imm  => Ploadli r imm :: k
+  | self__Asmgen.Imm64_single imm => Asm.Paddil r X0 imm :: k
+  | self__Asmgen.Imm64_pair hi lo => load_hilo64 r hi lo k
+  | self__Asmgen.Imm64_large imm  => cheat (* Asm.Ploadli r imm :: k*)
   end.
 
-Definition addptrofs (rd rs: ireg) (n: ptrofs) (k: code) :=
+FDefinition opimm32 := 
+fun (op: ireg -> ireg0 -> ireg0 -> Asm.instruction)
+    (opimm: ireg -> ireg0 -> int -> Asm.instruction)
+    (rd rs: ireg) (n: int) (k: Asm.code) =>
+  match make_immed32 n with
+  | self__Asmgen.Imm32_single imm => opimm rd rs imm :: k
+  | self__Asmgen.Imm32_pair hi lo => load_hilo32 X31 hi lo (op rd rs X31 :: k)
+  end.
+
+(* TODO: Ploadi *)
+FDefinition opimm64 := 
+  fun (op: ireg -> ireg0 -> ireg0 -> Asm.instruction)
+      (opimm: ireg -> ireg0 -> int64 -> Asm.instruction)
+      (rd rs: ireg) (n: int64) (k: Asm.code) =>
+  match make_immed64 n with
+  | self__Asmgen.Imm64_single imm => opimm rd rs imm :: k
+  | self__Asmgen.Imm64_pair hi lo => load_hilo64 X31 hi lo (op rd rs X31 :: k)
+  | self__Asmgen.Imm64_large imm  => cheat (* Asm.Ploadli X31 imm :: op rd rs X31 :: k*)
+  end.
+
+FDefinition addimm32 := opimm32 Asm.Paddw Asm.Paddiw.
+FDefinition xorimm32 := opimm32 Asm.Pxorw Asm.Pxoriw.
+FDefinition sltimm32 := opimm32 Asm.Psltw Asm.Psltiw.
+FDefinition addimm64 := opimm64 Asm.Paddl Asm.Paddil.
+
+FDefinition addptrofs := fun (rd rs: ireg) (n: ptrofs) (k: Asm.code) =>
   if Ptrofs.eq_dec n Ptrofs.zero then
-    Pmv rd rs :: k
+    Asm.Pmv rd rs :: k
   else
     if Archi.ptr64
     then addimm64 rd rs (Ptrofs.to_int64 n) k
     else addimm32 rd rs (Ptrofs.to_int n) k.
+
+FDefinition transl_cond_int32s := fun (cmp: comparison) (rd: ireg) (r1 r2: ireg0) (k: Asm.code) =>
+  match cmp with
+  | Ceq => Asm.Pseqw rd r1 r2 :: k
+  | Cne => Asm.Psnew rd r1 r2 :: k
+  | Clt => Asm.Psltw rd r1 r2 :: k
+  | Cle => Asm.Psltw rd r2 r1 :: Asm.Pxoriw rd rd Int.one :: k
+  | Cgt => Asm.Psltw rd r2 r1 :: k
+  | Cge => Asm.Psltw rd r1 r2 :: Asm.Pxoriw rd rd Int.one :: k
+  end.
+
+FDefinition transl_condimm_int32s := fun (cmp: comparison) (rd: ireg) (r1: ireg) (n: int) (k: Asm.code) => 
+  if Int.eq n Int.zero then transl_cond_int32s cmp rd r1 X0 k else
+  match cmp with
+  | Ceq | Cne => xorimm32 rd r1 n (transl_cond_int32s cmp rd rd X0 k)
+  | Clt => sltimm32 rd r1 n k
+  | Cle => if Int.eq n (Int.repr Int.max_signed)
+           then loadimm32 rd Int.one k
+           else sltimm32 rd r1 (Int.add n Int.one) k
+  | _   => loadimm32 X31 n (transl_cond_int32s cmp rd r1 X31 k)
+  end.
+
+FRecursion transl_cond_op about Asm.condition motive (fun (_ : Asm.condition) => ireg -> list mreg -> Asm.code -> res Asm.code) by _rect.
+Case Ccomp c := 
+(fun rd args k => 
+  match args with 
+  | a1 :: a2 :: nil => 
+      do r1 <- ireg_of a1; do r2 <- ireg_of a2;
+      OK (transl_cond_int32s c rd r1 r2 k)
+  | _ =>  Error(msg "Asmgen.transl_cond_op")
+  end).
+Case Ccompimm c n :=
+(fun rd args k => 
+  match args with 
+  | a1 :: a2 :: nil => 
+       do r1 <- ireg_of a1;
+      OK (transl_condimm_int32s c rd r1 n k)
+  | _ =>  Error(msg "Asmgen.transl_cond_op")
+  end).
+FEnd transl_cond_op.
 
 FRecursion transl_op about Asm.operation motive (fun (_ : Asm.operation) => list mreg -> mreg -> Asm.code -> res Asm.code) by _rect.
 Case Omove :=
@@ -4399,118 +4472,187 @@ Case Omove :=
   | _ =>  Error(msg "Asmgen.transl_op")
   end).
 Case Ointconst n := 
-(fun arg res k => 
+(fun args res k => 
   match args with
   | nil => do rd <- ireg_of res; OK (loadimm32 rd n k)
-  | _ => Error(msg "Asmgen.transl_op")).
+  | _ => Error(msg "Asmgen.transl_op")
+  end).
 Case Olongconst n := 
-(fun arg res k => 
+(fun args res k => 
   match args with
   | nil => do rd <- ireg_of res; OK (loadimm64 rd n k)
-  | _ => Error(msg "Asmgen.transl_op")).
+  | _ => Error(msg "Asmgen.transl_op")
+  end).
 Case Ofloatconst f := 
 (fun args res k => 
   match args with
   | nil => 
       do rd <- freg_of res;
       OK (if Float.eq_dec f Float.zero
-          then Pfcvtdw rd X0 :: k
-          else Ploadfi rd f :: k)
-  | _ => Error(msg "Asmgen.transl_op")).
+          then cheat (* Asm.Pfcvtdw rd X0 :: k*) (* Use the D RISC-V extension *)
+          else cheat (* Asm.Ploadfi rd f :: k*) )
+  | _ => Error(msg "Asmgen.transl_op")
+  end).
 Case Osingleconst f := 
 (fun args res k => 
   match args with
   | nil => 
        do rd <- freg_of res;
       OK (if Float32.eq_dec f Float32.zero
-          then Pfcvtsw rd X0 :: k
-          else Ploadsi rd f :: k)
-  | _ => Error(msg "Asmgen.transl_op")).          
+          then Asm.Pfcvtsw rd X0 :: k
+          else Asm.Ploadsi rd f :: k)
+  | _ => Error(msg "Asmgen.transl_op")
+  end). 
 Case Oaddrstack n := 
 (fun args res k => 
   match args with
   | nil =>  do rd <- ireg_of res; OK (addptrofs rd SP n k)
-  | _ => Error(msg "Asmgen.transl_op")).
+  | _ => Error(msg "Asmgen.transl_op")
+  end).
+Case Ocmp cmp := (fun args res k => do rd <- ireg_of res; transl_cond_op cmp rd args k).
 
 FEnd transl_op.
 
-Definition transl_cbranch_int32s (cmp: comparison) (r1 r2: ireg0) (lbl: label) :=
+FDefinition transl_cbranch_int32s := fun (cmp: comparison) (r1 r2: ireg0) (lbl: Asm.label) =>
   match cmp with
-  | Ceq => Pbeqw r1 r2 lbl
-  | Cne => Pbnew r1 r2 lbl
-  | Clt => Pbltw r1 r2 lbl
-  | Cle => Pbgew r2 r1 lbl
-  | Cgt => Pbltw r2 r1 lbl
-  | Cge => Pbgew r1 r2 lbl
+  | Ceq => Asm.Pbeqw r1 r2 lbl
+  | Cne => Asm.Pbnew r1 r2 lbl
+  | Clt => Asm.Pbltw r1 r2 lbl
+  | Cle => Asm.Pbgew r2 r1 lbl
+  | Cgt => Asm.Pbltw r2 r1 lbl
+  | Cge => Asm.Pbgew r1 r2 lbl
   end.
 
-FRecursion transl_cbranch about condition motive (fun (_ : condition) => list mreg -> label -> Asm.code -> res Asm.code).
+FRecursion transl_cbranch about Asm.condition motive (fun (_ : Asm.condition) => list mreg -> Asm.label -> Asm.code -> res Asm.code) by _rect.
 Case Ccomp c := 
 (fun args lbl k => 
   match args with
   | a1 :: a2 :: nil =>
       do r1 <- ireg_of a1; do r2 <- ireg_of a2;
       OK (transl_cbranch_int32s c r1 r2 lbl :: k)
-  | _ => error (Errors.msg "Asmgen.transl_cbranch")
+  | _ =>  Error(msg "Asmgen.transl_cond_branch")
   end).
-Case Ccompimm := (fun c n => fun args lbl k => 
-    match args with
-    | a1 :: nil =>
+Case Ccompimm c n := 
+(fun args lbl k => 
+  match args with
+  | a1 :: nil =>
       do r1 <- ireg_of a1;
       OK (if Int.eq n Int.zero then
             transl_cbranch_int32s c r1 X0 lbl :: k
           else
             loadimm32 X31 n (transl_cbranch_int32s c r1 X31 lbl :: k))
-    | _ => error (Errors.msg "Asmgen.transl_cbranch")
-    end).
+  | _ => Error(msg "Asmgen.transl_cond_branch")
+  end).
 FEnd transl_cbranch.
 
-FRecursion translate_instr about Mach.instruction motive (fun (_ : Mach.instruction) => Mach.function -> bool -> Asm.code -> Asm.code).
-Case Mgetstack := (fun ofs ty dst => fun f ep k => loadind SP ofs ty dst k).
-Case Msetstack := (fun src ofs ty => fun f ep k => storeind SP src ofs ty k).
-Case Mgetparam := (fun ofs ty dst => fun f ep k => 
-                  do c <- loadind X30 ofs ty dst k;
-                 OK (if ep then c
-                           else loadind_ptr SP f.(fn_link_ofs) X30 c).
-Case Mop := (fun op args res => fun f ep k => transl_op op args res k).
-Case Mlabel := (fun lbl => fun f ep k => Asm.Plabel lbl :: k).
-Case Mgoto := (fun lbl => fun f ep k => Asm.Pj_l lbl :: k).
-Case Mcond := (fun cond args lbl => fun f ep k => transl_cbranch cond args lbl k).
-Case Mreturn := (fun f ep k => make_epilogue f (Pj_r RA f.(Mach.fn_sig) :: k)).
-FEnd translate_instr.
+FDefinition indexed_memory_access :=
+  fun (mk_instr: ireg -> Asm.offset -> Asm.instruction)
+      (base: ireg) (ofs: ptrofs) (k: Asm.code) =>
+  if Archi.ptr64 then
+    match make_immed64 (Ptrofs.to_int64 ofs) with
+    | self__Asmgen.Imm64_single imm =>
+        mk_instr base (Asm.Ofsimm (Ptrofs.of_int64 imm)) :: k
+    | self__Asmgen.Imm64_pair hi lo =>
+        Asm.Pluil X31 hi :: Asm.Paddl X31 base X31 :: mk_instr X31 (Asm.Ofsimm (Ptrofs.of_int64 lo)) :: k
+    | self__Asmgen.Imm64_large imm =>
+        cheat (* Asm.Ploadli X31 imm*) :: Asm.Paddl X31 base X31 :: mk_instr X31 (Asm.Ofsimm Ptrofs.zero) :: k
+    end
+  else
+    match make_immed32 (Ptrofs.to_int ofs) with
+    | self__Asmgen.Imm32_single imm =>
+        mk_instr base (Asm.Ofsimm (Ptrofs.of_int imm)) :: k
+    | self__Asmgen.Imm32_pair hi lo =>
+        Asm.Pluiw X31 hi :: Asm.Paddw X31 base X31 :: mk_instr X31 (Asm.Ofsimm (Ptrofs.of_int lo)) :: k
+    end.
 
-Definition it1_is_parent (before: bool) (i: Mach.instruction) : bool :=
-  match i with
-  | Msetstack src ofs ty => before
-  | Mgetparam ofs ty dst => negb (mreg_eq dst R30)
-  | Mop op args res => before && negb (mreg_eq res R30)
-  | _ => false
-  end.      
+FDefinition loadind := 
+  fun (base: ireg) (ofs: ptrofs) (ty: typ) (dst: mreg) (k: Asm.code) =>
+  match ty, preg_of dst with
+  | AST.Tint,    IR rd => OK (indexed_memory_access (Asm.Plw rd) base ofs k)
+  | AST.Tlong,   IR rd => OK (indexed_memory_access (Asm.Pld rd) base ofs k)
+  | AST.Tsingle, FR rd => OK (indexed_memory_access (Asm.Pfls rd) base ofs k)
+  | AST.Tfloat,  FR rd => cheat (* OK (indexed_memory_access (Asm.Pfld rd) base ofs k) use D extension *)
+  | AST.Tany32,  IR rd => cheat (* OK (indexed_memory_access (Asm.Plw_a rd) base ofs k) add any instructions to RV *)
+  | AST.Tany64,  IR rd => cheat (* OK (indexed_memory_access (Asm.Pld_a rd) base ofs k) *)
+  | AST.Tany64,  FR rd => cheat (* OK (indexed_memory_access (Asm.Pfld_a rd) base ofs k) *)
+  | _, _           => Error (msg "Asmgen.loadind")
+  end.
+
+FDefinition storeind := fun (src: mreg) (base: ireg) (ofs: ptrofs) (ty: typ) (k: Asm.code) => 
+  match ty, preg_of src with
+  | AST.Tint,    IR rd => OK (indexed_memory_access (Asm.Psw rd) base ofs k)
+  | AST.Tlong,   IR rd => OK (indexed_memory_access (Asm.Psd rd) base ofs k)
+  | AST.Tsingle, FR rd => OK (indexed_memory_access (Asm.Pfss rd) base ofs k)
+  | AST.Tfloat,  FR rd => cheat (* OK (indexed_memory_access (Asm.Pfsd rd) base ofs k)*)
+  | AST.Tany32,  IR rd => cheat (* OK (indexed_memory_access (Asm.psw_a rd) base ofs k)*)
+  | AST.Tany64,  IR rd => cheat (* OK (indexed_memory_access (Asm.Psd_a rd) base ofs k)*)
+  | AST.Tany64,  FR rd => cheat (* OK (indexed_memory_access (Asm.Pfsd_a rd) base ofs k)*)
+  | _, _           => Error (msg "Asmgen.storeind")
+  end.
+
+FDefinition loadind_ptr := fun (base: ireg) (ofs: ptrofs) (dst: ireg) (k: Asm.code) => 
+  indexed_memory_access (if Archi.ptr64 then Asm.Pld dst else Asm.Plw dst) base ofs k.
+
+FDefinition storeind_ptr := fun (src: ireg) (base: ireg) (ofs: ptrofs) (k: Asm.code) =>
+  indexed_memory_access (if Archi.ptr64 then Asm.Psd src else Asm.Psw src) base ofs k.
+
+FDefinition make_epilogue := fun (f: Mach.function) (k: Asm.code) =>
+  loadind_ptr SP (Mach.fn_retaddr_ofs f) RA
+    (cheat (* Pfreeframe add freeframe *) (Mach.fn_stacksize f) (Mach.fn_link_ofs f) :: k).
+
+FRecursion transl_instr about Mach.instruction motive (fun (_ : Mach.instruction) => Mach.function -> bool -> Asm.code -> res Asm.code) by _rect.
+Case Lgetstack ofs ty dst := (fun f ep k => loadind SP ofs ty dst k).
+Case Lsetstack src ofs ty := (fun f ep k =>  storeind src SP ofs ty k).
+Case Lgetparam ofs ty dst := 
+(fun f ep k => 
+    do c <- loadind X30 ofs ty dst k;
+      OK (if ep then c
+                else loadind_ptr SP (Mach.fn_link_ofs f) X30 c)).
+Case Lop op args res := (fun f ep k =>  transl_op op args res k).
+Case Llabel lbl := (fun f ep k =>  OK (Asm.Plabel lbl :: k)).
+Case Lgoto lbl := (fun f ep k => OK (Asm.Pj_l lbl :: k)).
+Case Lcond cond args lbl := (fun f ep k => transl_cbranch cond args lbl k).
+Case Lreturn := (fun f ep k => OK (make_epilogue f (Asm.Pj_r RA (Mach.fn_sig f) :: k))).
+FEnd transl_instr.
+
+FRecursion it1_is_parent about Mach.instruction motive (fun (_ : Mach.instruction) => bool -> bool) by _rect.
+Case Lgetstack ofs ty dst := (fun before => false).
+Case Lsetstack src ofs ty := (fun before => before).
+Case Lgetparam ofs ty dst := (fun before => negb (mreg_eq dst R30)).
+Case Lop op args res := (fun before => before && negb (mreg_eq res R30)).
+Case Llabel lbl := (fun before => false).
+Case Lgoto lbl := (fun before => false).
+Case Lcond cond args lbl := (fun before => false).
+Case Lreturn := (fun before => false).
+FEnd it1_is_parent.
       
 (** This is the naive definition that we no longer use because it
   is not tail-recursive.  It is kept as specification. *)
-
-Fixpoint transl_code (f: Mach.function) (il: list Mach.instruction) (it1p: bool) :=
+MetaData transl_code.
+Fixpoint transl_code (f: self__Base.Mach.function) (il: list self__Base.Mach.instruction) (it1p: bool) :=
   match il with
   | nil => OK nil
   | i1 :: il' =>
-      do k <- transl_code f il' (it1_is_parent it1p i1);
-      transl_instr f i1 it1p k
+      do k <- transl_code f il' (self__Asmgen.it1_is_parent i1 it1p);
+      self__Asmgen.transl_instr i1 f it1p k
   end.
+FEnd transl_code.
 
 (** This is an equivalent definition in continuation-passing style
   that runs in constant stack space. *)      
-
-Fixpoint transl_code_rec (f: Mach.function) (il: list Mach.instruction)
-                         (it1p: bool) (k: code -> res code) :=
+MetaData transl_code_rec.
+Fixpoint transl_code_rec (f: self__Base.Mach.function) (il: list self__Base.Mach.instruction)
+                         (it1p: bool) (k: self__Base.Asm.code -> res self__Base.Asm.code) :=
   match il with
   | nil => k nil
   | i1 :: il' =>
-      transl_code_rec f il' (it1_is_parent it1p i1)
-        (fun c1 => do c2 <- transl_instr f i1 it1p c1; k c2)
+      transl_code_rec f il' (self__Asmgen.it1_is_parent i1 it1p)
+        (fun c1 => do c2 <- self__Asmgen.transl_instr i1 f it1p c1; k c2)
   end.      
+FEnd transl_code_rec.
 
-Definition transl_code' (f: Mach.function) (il: list Mach.instruction) (it1p: bool) :=
+FDefinition transl_code' := 
+  fun (f: Mach.function) (il: list Mach.instruction) (it1p: bool) =>
   transl_code_rec f il it1p (fun c => OK c).
 
 (** Translation of a whole function.  Note that we must check
@@ -4518,22 +4660,22 @@ Definition transl_code' (f: Mach.function) (il: list Mach.instruction) (it1p: bo
   otherwise the offset part of the [PC] code pointer could wrap
   around, leading to incorrect executions. *)
 
-Definition transl_function (f: Mach.function) :=
-  do c <- transl_code' f f.(Mach.fn_code) true;
-  OK (mkfunction f.(Mach.fn_sig)
-        (Pallocframe f.(fn_stacksize) f.(fn_link_ofs) ::
-         storeind_ptr RA SP f.(fn_retaddr_ofs) (Pcfi_rel_offset (Ptrofs.to_int f.(fn_retaddr_ofs)):: c))).
+FDefinition transl_function := fun (f: Mach.function) =>
+  do c <- transl_code' f (Mach.fn_code f) true;
+  OK (Asm.mkfunction (Mach.fn_sig f)
+        (cheat (*Pallocframe*) (Mach.fn_stacksize f) (Mach.fn_link_ofs f) ::
+         storeind_ptr RA SP (Mach.fn_retaddr_ofs f) (cheat (* Pcfi_rel_offset*) (Ptrofs.to_int (Mach.fn_retaddr_ofs f)):: c))).
 
-Definition transf_function (f: Mach.function) : res Asm.function :=
+FDefinition transf_function : Mach.function -> res Asm.function := fun f =>
   do tf <- transl_function f;
-  if zlt Ptrofs.max_unsigned (list_length_z tf.(fn_code))
+  if zlt Ptrofs.max_unsigned (list_length_z (Asm.fn_code tf))
   then Error (msg "code size exceeded")
   else OK tf.
 
-Definition transf_fundef (f: Mach.fundef) : res Asm.fundef :=
+FDefinition transf_fundef : Mach.fundef -> res Asm.fundef := fun f =>
   transf_partial_fundef transf_function f.
 
-Definition transf_program (p: Mach.program) : res Asm.program :=
+FDefinition transf_program : Mach.program -> res Asm.program := fun p =>
   transform_partial_program transf_fundef p.
       
 FEnd Asmgen.
