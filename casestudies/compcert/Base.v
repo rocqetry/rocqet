@@ -4678,6 +4678,39 @@ FDefinition transf_fundef : Mach.fundef -> res Asm.fundef := fun f =>
 FDefinition transf_program : Mach.program -> res Asm.program := fun p =>
   transform_partial_program transf_fundef p.
       
+(* correctness *)
+
+(* 
+Inductive match_states: Mach.state -> Asm.state -> Prop :=
+  | match_states_intro:
+      forall s fb sp c ep ms m m' rs f tf tc
+        (STACKS: match_stack ge s)
+        (FIND: Genv.find_funct_ptr ge fb = Some (Internal f))
+        (MEXT: Mem.extends m m')
+        (AT: transl_code_at_pc ge (rs PC) fb f c ep tf tc)
+        (AG: agree ms sp rs)
+        (DXP: ep = true -> rs#X30 = parent_sp s),
+      match_states (Mach.State s fb sp c ms m)
+                   (Asm.State rs m')
+  | match_states_call:
+      forall s fb ms m m' rs
+        (STACKS: match_stack ge s)
+        (MEXT: Mem.extends m m')
+        (AG: agree ms (parent_sp s) rs)
+        (ATPC: rs PC = Vptr fb Ptrofs.zero)
+        (ATLR: rs RA = parent_ra s),
+      match_states (Mach.Callstate s fb ms m)
+                   (Asm.State rs m')
+  | match_states_return:
+      forall s ms m m' rs
+        (STACKS: match_stack ge s)
+        (MEXT: Mem.extends m m')
+        (AG: agree ms (parent_sp s) rs)
+        (ATPC: rs PC = parent_ra s),
+      match_states (Mach.Returnstate s ms m)
+                   (Asm.State rs m').
+*)
+
 FEnd Asmgen.
 
 (* A translation between C family languages *)
