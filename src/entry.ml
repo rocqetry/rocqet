@@ -134,3 +134,5 @@ let open_trait_with_base ~name ~base =
       }
 
 let final_family = Family.define_final_family
+
+let add_wildcard_handler = Recursion.add_wildcard_handler
