@@ -16,4 +16,8 @@ val add_handler :
   handler:Constrexpr.constr_expr ->
   unit
 
+val add_wildcard_handler : 
+  handler:Constrexpr.constr_expr -> 
+  unit
+
 val elegant : Names.Id.t -> (Names.Id.t * Constrexpr.constr_expr) list -> unit

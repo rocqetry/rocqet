@@ -99,3 +99,7 @@ val final_family :
   name:Names.Id.t -> 
   value : Libnames.qualid -> 
   unit
+
+val add_wildcard_handler : 
+  handler:Constrexpr.constr_expr 
+  -> unit
