@@ -372,6 +372,31 @@ let add_handler ~name ~arguments ~handler =
       in
       Ctx.add_handler name
 
+let add_wildcard_handler ~handler = 
+  let list_difference list1 list2 =
+    List.filter
+      (fun name -> list2 |> List.exists (Names.Id.equal name) |> not)
+      list1
+  in
+  
+  let Ctx.{ inductive; inductive_paths; implementing_handlers; defined_handlers; _ } = Ctx.get () in  
+  let inductive_names = inductive_paths |> List.map Naming.extract_path_base in    
+  let rest_handlers = list_difference implementing_handlers defined_handlers in 
+  
+  let cases = 
+    rest_handlers 
+    |> List.map (fun constructor -> 
+       let types =
+         Termutils.flatten_inductive_constructor_type ~inductive_names ~inductive ~constructor
+         |> List.concat_map (function Some x -> [Some x; Some x] | None -> [None])
+       in
+       constructor, types |> List.map (fun _ -> Naming.fresh_name ~prefix:"arg"))
+  in  
+  cases 
+  |> List.iter (fun (name, args) -> 
+       let handler = Termutils.mk_lambda args handler in 
+       add_handler ~name ~arguments:None ~handler)
+
 (* Extra utilities/functions to support a nice syntax for FRecursion *)
 
 let extract = function
