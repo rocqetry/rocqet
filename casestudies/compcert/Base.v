@@ -809,8 +809,6 @@ Inductive bitfield : Type :=
        FDefinition transl_program : Source.program -> res Target.program := fun p => 
          transform_partial_program transl_fundef p.
        
-       (* FOverride Definition match_callstack := cheat. *)
-       
        FDefinition match_prog : Source.program -> Target.program -> Prop :=
          fun p tp =>
              match_program (fun cu f tf => transl_fundef f = OK tf) eq p tp.
@@ -872,6 +870,16 @@ Inductive bitfield : Type :=
              PTree.get id e = Some(b, sz) -> Mem.perm m b ofs Max p -> 0 <= ofs < sz.
 
        Inherit callstack.
+
+       MetaData match_globalenvs.
+       Inductive match_globalenvs (ge: self__Cminorgen.Source.genv) (f: meminj) (bound: block): Prop :=
+       | mk_match_globalenvs
+           (DOMAIN: forall b, Plt b bound -> f b = Some(b, 0))
+           (IMAGE: forall b1 b2 delta, f b1 = Some(b2, delta) -> Plt b2 bound -> b1 = b2)
+           (SYMBOLS: forall id b, Genv.find_symbol ge id = Some b -> Plt b bound)
+           (FUNCTIONS: forall b fd, Genv.find_funct_ptr ge b = Some fd -> Plt b bound)
+           (VARINFOS: forall b gv, Genv.find_var_info ge b = Some gv -> Plt b bound).
+       FEnd match_globalenvs.
        
        MetaData match_callstack_.
        Inductive match_callstack_ (f: meminj) (m: mem) (tm: mem):
@@ -892,21 +900,9 @@ Inductive bitfield : Type :=
               match_callstack_ f m tm (self__Cminorgen.Frame tf e le te sp lo hi :: cs) bound tbound.
        FEnd match_callstack_.
 
-        (* FOverride Definition match_callstack := match_callstack_. *)
-       FOverride Definition match_callstack := cheat.
+       FOverride Definition match_callstack := match_callstack_.
        
        FOverride Definition match_mem := fun mi m1 m2 => Mem.inject mi m1 m2.
-       
-       MetaData match_globalenvs.
-       Inductive match_globalenvs (ge: self__Cminorgen.Source.genv) (f: meminj) (bound: block): Prop :=
-       | mk_match_globalenvs
-           (DOMAIN: forall b, Plt b bound -> f b = Some(b, 0))
-           (IMAGE: forall b1 b2 delta, f b1 = Some(b2, delta) -> Plt b2 bound -> b1 = b2)
-           (SYMBOLS: forall id b, Genv.find_symbol ge id = Some b -> Plt b bound)
-           (FUNCTIONS: forall b fd, Genv.find_funct_ptr ge b = Some fd -> Plt b bound)
-           (VARINFOS: forall b gv, Genv.find_var_info ge b = Some gv -> Plt b bound).
-       FEnd match_globalenvs.
-
       
        (* MetaData match_cont. *)
        (* Inductive match_cont: self__Cminorgen.Source.cont -> self__Cminorgen.Target.cont -> self__Cminorgen.compilenv -> self__Cminorgen.exit_env -> self__Cminorgen.callstack -> Prop := *)
@@ -979,29 +975,27 @@ Inductive bitfield : Type :=
          Let ge : Csharpminor.genv := Genv.globalenv prog.
          Let tge: genv := Genv.globalenv tprog. 
         *)
-
        
-       (* Commented out for performance *)
 
-       (* FRecursion seq_left_depth about Source.stmt motive (fun (_ : Source.stmt) => nat) by _rect. *)
-       (*       Case Sskip := O. *)
-       (*       Case Sset := (fun _ _ => O). *)
-       (*       Case Sseq := (fun s1 seq_left_depth_s1 s2 _ => S (seq_left_depth_s1)). *)
-       (*       Case Sifthenelse := (fun _ s1 _ s2 _ => O). *)
-       (*       Case Sloop := (fun s _ => O). *)
-       (*       Case Sblock := (fun s _ => O). *)
-       (*       Case Sexit := (fun _ => O). *)
-       (*       Case Sreturn := (fun e => O). *)
-       (*       Case Slabel := (fun _ s _ => O). *)
-       (*       Case Sgoto := (fun _ => O). *)
-       (* FEnd seq_left_depth. *)
+       FRecursion seq_left_depth about Source.stmt motive (fun (_ : Source.stmt) => nat) by _rect.
+             Case Sskip := O.
+             Case Sset := (fun _ _ => O).
+             Case Sseq := (fun s1 seq_left_depth_s1 s2 _ => S (seq_left_depth_s1)).
+             Case Sifthenelse := (fun _ s1 _ s2 _ => O).
+             Case Sloop := (fun s _ => O).
+             Case Sblock := (fun s _ => O).
+             Case Sexit := (fun _ => O).
+             Case Sreturn := (fun e => O).
+             Case Slabel := (fun _ s _ => O).
+             Case Sgoto := (fun _ => O).
+       FEnd seq_left_depth.
 
-       (* FOverride Definition measure := fun st => *)
-       (*    match st with *)
-       (*       | self__Cminorgen.Source.State fn s k e le m => seq_left_depth s *)
-       (*       | self__Cminorgen.Source.Callstate f args k m => O *)
-       (*       | self__Cminorgen.Source.Returnstate res k m => O *)
-       (*    end.      *)                   
+       FOverride Definition measure := fun st =>
+          match st with
+             | self__Cminorgen.Source.State fn s k e le m => seq_left_depth s
+             | self__Cminorgen.Source.Callstate f args k m => O
+             | self__Cminorgen.Source.Returnstate res k m => O
+          end.                   
 
        FInduction transl_step_correct.
        FProof.
@@ -1082,9 +1076,10 @@ Inductive bitfield : Type :=
              eapply self__Cminorgen.match_callstate with (f := Mem.flat_inj (Mem.nextblock m0)) (cs := @nil self__Cminorgen.frame).
              auto.
              eapply Genv.initmem_inject; eauto.
-             apply self__Cminorgen.mcs_nil with (Mem.nextblock m0). apply match_globalenvs_init; auto. extlia. extlia.        
-             constructor. red; auto.
-             constructor.
+             apply self__Cminorgen.mcs_nil with (Mem.nextblock m0). (*apply match_globalenvs_init;*) auto. extlia. extlia.        
+             apply self__Cminorgen.match_Kstop.
+             fsimpl; auto.
+             apply self__Cminorgen.match_values_nil.                                  
            Qed.
        CloseFLemma.
 
@@ -1092,8 +1087,10 @@ Inductive bitfield : Type :=
          forall S R r,
          match_states S R -> Source.final_state S r -> Target.final_state R r.
            FProofLemma.
-             intros. inv H0. inv H. inv MK. inv RESINJ. constructor. Qed.            
-       CloseFLemma.
+           intros. inv H0. inv H.
+           FInduction TK.
+           (*inv MK. inv RESINJ.*) constructor. Qed.            
+      CloseFLemma.
   FEnd Cminorgen.     
 
   
