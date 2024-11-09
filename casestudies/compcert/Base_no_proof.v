@@ -1531,7 +1531,6 @@ Case Sgoto lbl :=
   | Some n => ret n
   end).
 (* TODO: remove this, there is no set in CminorSel *)
-Case Sset := cheat.
 FEnd transl_stmt.
 
 FDefinition alloc_label : Cminor.label -> labelmap -> mon labelmap :=
@@ -1546,7 +1545,6 @@ Case Sifthenelse e s1 s2 := (fun lm => do lm' <- reserve_labels s2 lm; reserve_l
 Case Slabel lbl s1 := (fun lm => do lm' <- reserve_labels s1 lm; alloc_label lbl lm').
 Case Sskip := (fun lm => ret lm).
 Case Sassign i e := (fun lm => ret lm).
-Case Sset i e := (fun lm => ret lm).
 Case Sreturn a := (fun lm => ret lm).
 Case Sgoto lbl := (fun lm => ret lm).
 FEnd reserve_labels.
@@ -1850,13 +1848,14 @@ From NFPOP Require Import Locations.
 Family M.
 FRecursion destroyed_by_op about Asm.operation motive
   (fun (_ : Asm.operation) => list mreg) by _rect.
-Case Omove := nil.
+(*Case Omove := nil.
 Case Ointconst n := nil.
 Case Olongconst n := nil.
 Case Ofloatconst f := nil.
 Case Osingleconst s := nil.
 Case Oaddrstack addr := nil.
-Case Ocmp c := nil.
+Case Ocmp c := nil.*)
+Case _ := nil.
 FEnd destroyed_by_op.
 
 FDefinition destroyed_by_cond : Asm.condition -> list mreg := fun cond => nil. 
@@ -2928,6 +2927,7 @@ FDefinition addimm32 := opimm32 Asm.Paddw Asm.Paddiw.
 FDefinition xorimm32 := opimm32 Asm.Pxorw Asm.Pxoriw.
 FDefinition sltimm32 := opimm32 Asm.Psltw Asm.Psltiw.
 FDefinition addimm64 := opimm64 Asm.Paddl Asm.Paddil.
+FDefinition sltuimm32 := opimm32 Asm.Psltuw Asm.Psltiuw.
 
 FDefinition addptrofs := fun (rd rs: ireg) (n: ptrofs) (k: Asm.code) =>
   if Ptrofs.eq_dec n Ptrofs.zero then
@@ -2947,6 +2947,16 @@ FDefinition transl_cond_int32s := fun (cmp: comparison) (rd: ireg) (r1 r2: ireg0
   | Cge => Asm.Psltw rd r1 r2 :: Asm.Pxoriw rd rd Int.one :: k
   end.
 
+FDefinition transl_cond_int32u := fun (cmp: comparison) (rd: ireg) (r1 r2: ireg0) (k: Asm.code) =>
+  match cmp with
+  | Ceq => Asm.Pseqw rd r1 r2 :: k
+  | Cne => Asm.Psnew rd r1 r2 :: k
+  | Clt => Asm.Psltuw rd r1 r2 :: k
+  | Cle => Asm.Psltuw rd r2 r1 :: Asm.Pxoriw rd rd Int.one :: k
+  | Cgt => Asm.Psltuw rd r2 r1 :: k
+  | Cge => Asm.Psltuw rd r1 r2 :: Asm.Pxoriw rd rd Int.one :: k
+  end.
+
 FDefinition transl_condimm_int32s := fun (cmp: comparison) (rd: ireg) (r1: ireg) (n: int) (k: Asm.code) => 
   if Int.eq n Int.zero then transl_cond_int32s cmp rd r1 X0 k else
   match cmp with
@@ -2956,6 +2966,13 @@ FDefinition transl_condimm_int32s := fun (cmp: comparison) (rd: ireg) (r1: ireg)
            then loadimm32 rd Int.one k
            else sltimm32 rd r1 (Int.add n Int.one) k
   | _   => loadimm32 X31 n (transl_cond_int32s cmp rd r1 X31 k)
+  end.
+
+FDefinition transl_condimm_int32u := fun (cmp: comparison) (rd: ireg) (r1: ireg) (n: int) (k: Asm.code) =>
+  if Int.eq n Int.zero then transl_cond_int32u cmp rd r1 X0 k else
+  match cmp with
+  | Clt => sltuimm32 rd r1 n k
+  | _   => loadimm32 X31 n (transl_cond_int32u cmp rd r1 X31 k)
   end.
 
 FRecursion transl_cond_op about Asm.condition motive (fun (_ : Asm.condition) => ireg -> list mreg -> Asm.code -> res Asm.code) by _rect.
@@ -2973,6 +2990,14 @@ Case Ccompimm c n :=
   | a1 :: a2 :: nil => 
        do r1 <- ireg_of a1;
       OK (transl_condimm_int32s c rd r1 n k)
+  | _ =>  Error(msg "Asmgen.transl_cond_op")
+  end).
+Case Ccompuimm c n :=
+(fun rd args k => 
+  match args with 
+  | a1 :: a2 :: nil => 
+      do r1 <- ireg_of a1;
+      OK (transl_condimm_int32u c rd r1 n k)
   | _ =>  Error(msg "Asmgen.transl_cond_op")
   end).
 FEnd transl_cond_op.
@@ -3030,7 +3055,8 @@ Case Oaddrstack n :=
   | _ => Error(msg "Asmgen.transl_op")
   end).
 Case Ocmp cmp := (fun args res k => do rd <- ireg_of res; transl_cond_op cmp rd args k).
-
+(* [Omakelong], [Ohighlong]  should not occur *)
+Case Omakelong := (fun args res k =>  Error(msg "Asmgen.transl_op")).
 FEnd transl_op.
 
 FDefinition transl_cbranch_int32s := fun (cmp: comparison) (r1 r2: ireg0) (lbl: Asm.label) =>
@@ -3041,6 +3067,16 @@ FDefinition transl_cbranch_int32s := fun (cmp: comparison) (r1 r2: ireg0) (lbl: 
   | Cle => Asm.Pbgew r2 r1 lbl
   | Cgt => Asm.Pbltw r2 r1 lbl
   | Cge => Asm.Pbgew r1 r2 lbl
+  end.
+
+FDefinition transl_cbranch_int32u := fun (cmp: comparison) (r1 r2: ireg0) (lbl: Asm.label) =>
+  match cmp with
+  | Ceq => Asm.Pbeqw  r1 r2 lbl
+  | Cne => Asm.Pbnew  r1 r2 lbl
+  | Clt => Asm.Pbltuw r1 r2 lbl
+  | Cle => Asm.Pbgeuw r2 r1 lbl
+  | Cgt => Asm.Pbltuw r2 r1 lbl
+  | Cge => Asm.Pbgeuw r1 r2 lbl
   end.
 
 FRecursion transl_cbranch about Asm.condition motive (fun (_ : Asm.condition) => list mreg -> Asm.label -> Asm.code -> res Asm.code) by _rect.
@@ -3063,6 +3099,17 @@ Case Ccompimm c n :=
             loadimm32 X31 n (transl_cbranch_int32s c r1 X31 lbl :: k))
   | _ => Error(msg "Asmgen.transl_cond_branch")
   end).
+Case Ccompuimm c n :=
+(fun args lbl k => 
+  match args with
+  | a1 :: nil =>
+      do r1 <- ireg_of a1;
+      OK (if Int.eq n Int.zero then
+            transl_cbranch_int32u c r1 X0 lbl :: k
+          else
+            loadimm32 X31 n (transl_cbranch_int32u c r1 X31 lbl :: k))
+  | _ => Error(msg "Asmgen.transl_cond_branch")
+  end).  
 FEnd transl_cbranch.
 
 FDefinition indexed_memory_access :=
@@ -3196,52 +3243,23 @@ FDefinition transf_fundef : Mach.fundef -> res Asm.fundef := fun f =>
   transf_partial_fundef transf_function f.
 
 FDefinition transf_program : Mach.program -> res Asm.program := fun p =>
-  transform_partial_program transf_fundef p.
-      
-(* correctness *)
-
-(* 
-Inductive match_states: Mach.state -> Asm.state -> Prop :=
-  | match_states_intro:
-      forall s fb sp c ep ms m m' rs f tf tc
-        (STACKS: match_stack ge s)
-        (FIND: Genv.find_funct_ptr ge fb = Some (Internal f))
-        (MEXT: Mem.extends m m')
-        (AT: transl_code_at_pc ge (rs PC) fb f c ep tf tc)
-        (AG: agree ms sp rs)
-        (DXP: ep = true -> rs#X30 = parent_sp s),
-      match_states (Mach.State s fb sp c ms m)
-                   (Asm.State rs m')
-  | match_states_call:
-      forall s fb ms m m' rs
-        (STACKS: match_stack ge s)
-        (MEXT: Mem.extends m m')
-        (AG: agree ms (parent_sp s) rs)
-        (ATPC: rs PC = Vptr fb Ptrofs.zero)
-        (ATLR: rs RA = parent_ra s),
-      match_states (Mach.Callstate s fb ms m)
-                   (Asm.State rs m')
-  | match_states_return:
-      forall s ms m m' rs
-        (STACKS: match_stack ge s)
-        (MEXT: Mem.extends m m')
-        (AG: agree ms (parent_sp s) rs)
-        (ATPC: rs PC = parent_ra s),
-      match_states (Mach.Returnstate s ms m)
-                   (Asm.State rs m').
-*)
+  transform_partial_program transf_fundef p.     
 
 FEnd Asmgen.
 
 FEnd Base.
+
+Trait Comp_Loop extends Base.
+
+
+FEnd Comp_Loop.
 
 (* small extension *)
 Trait Comp_Switch extends Comp_Base. 
 FEnd Comp_Switch.
 
 (* small extension *)
-Trait Comp_Loop extends Comp_Base.
-FEnd Comp_Loop.
+
 
 (* requires work with cshmgen, selection, operation semantics *)
 Trait Comp_Op extends Comp_Base.
