@@ -405,19 +405,21 @@ FEnd Clight.
 
 (* C -> Clight *)
 Family SimplExpr.
+Family S extends C. FEnd S.
+Family T extends Clight. FEnd T.
 
 Local Open Scope gensym_monad_scope.
 
 MetaData makeseq_rec.
-Fixpoint makeseq_rec (s: self__Base.Clight.stmt) (l: list self__Base.Clight.stmt) : self__Base.Clight.stmt :=
+Fixpoint makeseq_rec (s: self__SimplExpr.T.stmt) (l: list self__SimplExpr.T.stmt) : self__SimplExpr.T.stmt :=
    match l with
    | nil => s
-   | s' :: l' => makeseq_rec (self__Base.Clight.Sseq s s') l'
+   | s' :: l' => makeseq_rec (self__SimplExpr.T.Sseq s s') l'
     end.
 FEnd makeseq_rec.
       
-FDefinition makeseq : list self__Base.Clight.stmt -> self__Base.Clight.stmt := fun l => 
-  makeseq_rec self__Base.Clight.Sskip l.
+FDefinition makeseq : list self__SimplExpr.T.stmt -> self__SimplExpr.T.stmt := fun l => 
+  makeseq_rec self__SimplExpr.T.Sskip l.
 
 MetaData set_destination.
 Inductive set_destination : Type :=
@@ -433,14 +435,14 @@ Inductive destination : Type :=
 FEnd destination.
 
 MetaData do_set. 
-Fixpoint do_set (sd: self__SimplExpr.set_destination) (a: self__Base.Clight.expr) : list self__Base.Clight.stmt :=
+Fixpoint do_set (sd: self__SimplExpr.set_destination) (a: self__SimplExpr.T.expr) : list self__SimplExpr.T.stmt :=
     match sd with
-    | self__SimplExpr.SDbase tycast ty tmp => self__Base.Clight.Sset tmp (self__Base.Clight.Ecast a tycast) :: nil
-    | self__SimplExpr.SDcons tycast ty tmp sd' => self__Base.Clight.Sset tmp (self__Base.Clight.Ecast a tycast) :: do_set sd' (self__Base.Clight.Etempvar tmp ty)
+    | self__SimplExpr.SDbase tycast ty tmp => self__SimplExpr.T.Sset tmp (self__SimplExpr.T.Ecast a tycast) :: nil
+    | self__SimplExpr.SDcons tycast ty tmp sd' => self__SimplExpr.T.Sset tmp (self__SimplExpr.T.Ecast a tycast) :: do_set sd' (self__SimplExpr.T.Etempvar tmp ty)
     end.
 FEnd do_set.
 
-FDefinition finish := fun (dst: destination) (sl: list Clight.stmt) (a: Clight.expr) => 
+FDefinition finish := fun (dst: destination) (sl: list T.stmt) (a: T.expr) => 
   match dst with
   | self__SimplExpr.For_val => (sl, a)
   | self__SimplExpr.For_effects => (sl, a)
@@ -456,9 +458,9 @@ FDefinition sd_head_type := fun (sd: set_destination) =>
 FDefinition temp_for_sd : type -> set_destination -> mon ident := fun ty sd => 
   if type_eq ty (sd_head_type sd) then ret (sd_temp sd) else gensym ty.
     
-FDefinition dummy_expr := Clight.Econst_int Int.zero type_int32s.
+FDefinition dummy_expr := T.Econst_int Int.zero type_int32s.
       
-FRecursion eval_simpl_expr about Clight.expr motive (fun (_ : Clight.expr) => option val) by _rect.          
+FRecursion eval_simpl_expr about T.expr motive (fun (_ : T.expr) => option val) by _rect.          
 Case Econst_float n ty := (Some(Vfloat n)).
 Case Econst_int n ty := (Some(Vint n)).
 Case Econst_single n ty := (Some(Vsingle n)).
@@ -466,40 +468,40 @@ Case Econst_long n ty := (Some(Vlong n)).
 Case Ecast b ty := 
   (match eval_simpl_expr b with
     | None => None
-    | Some v => Cop.sem_cast v (Clight.typeof b) ty Mem.empty
+    | Some v => Cop.sem_cast v (T.typeof b) ty Mem.empty
     end).
 Case Etempvar id ty := None.
 Case Esizeof ty' ty := None.
 Case Ealignof ty' ty := None.
 FEnd eval_simpl_expr.
 
-FDefinition makeif : Clight.expr -> Clight.stmt -> Clight.stmt -> Clight.stmt :=
+FDefinition makeif : T.expr -> T.stmt -> T.stmt -> T.stmt :=
   fun a s1 s2 =>
     match eval_simpl_expr a with
     | Some v =>
-        match Cop.bool_val v (Clight.typeof a) Mem.empty with
+        match Cop.bool_val v (T.typeof a) Mem.empty with
         | Some b => if b then s1 else s2
-        | None => Clight.Sifthenelse a s1 s2
+        | None => T.Sifthenelse a s1 s2
         end
-    | None => Clight.Sifthenelse a s1 s2
+    | None => T.Sifthenelse a s1 s2
     end.
       
-FRecursion transl_expr about C.expr motive (fun (_ : C.expr) => destination -> mon (list Clight.stmt * Clight.expr)) by _rect.
-Case Evar id ty := (fun dst => ret (finish dst nil (Clight.Etempvar id ty))).
+FRecursion transl_expr about S.expr motive (fun (_ : S.expr) => destination -> mon (list T.stmt * T.expr)) by _rect.
+Case Evar id ty := (fun dst => ret (finish dst nil (T.Etempvar id ty))).
 Case Eval v ty := 
   (fun dst => 
     match v with 
-    | Vint n => ret (finish dst nil (Clight.Econst_int n ty)) 
-    | Vlong n =>  ret (finish dst nil (Clight.Econst_long n ty))
-    | Vfloat n => ret (finish dst nil (Clight.Econst_float n ty))
-    | Vsingle n => ret (finish dst nil (Clight.Econst_single n ty))
+    | Vint n => ret (finish dst nil (T.Econst_int n ty)) 
+    | Vlong n =>  ret (finish dst nil (T.Econst_long n ty))
+    | Vfloat n => ret (finish dst nil (T.Econst_float n ty))
+    | Vsingle n => ret (finish dst nil (T.Econst_single n ty))
     | _ => error (msg "SimplExpr.transl_expr: Eval") end).
 Case Ecast r1 ty :=
   (fun dst => 
       match dst with
       | self__SimplExpr.For_val | self__SimplExpr.For_set _ =>
           do (sl1, a1) <- transl_expr r1 self__SimplExpr.For_val;
-          ret (finish dst sl1 (Clight.Ecast a1 ty))
+          ret (finish dst sl1 (T.Ecast a1 ty))
       | self__SimplExpr.For_effects =>
           transl_expr r1 self__SimplExpr.For_effects end).
 Case Ecomma r1 r2 ty := 
@@ -517,7 +519,7 @@ Case Econdition r1 r2 r3 ty :=
           do (sl2, a2) <- transl_expr r2 (self__SimplExpr.For_set sd);
           do (sl3, a3) <- transl_expr r3 (self__SimplExpr.For_set sd);
           ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
-               Clight.Etempvar t ty)
+               T.Etempvar t ty)
       | self__SimplExpr.For_effects =>
           do (sl2, a2) <- transl_expr r2 self__SimplExpr.For_effects;
           do (sl3, a3) <- transl_expr r3 self__SimplExpr.For_effects;
@@ -540,17 +542,17 @@ Case Eseqor r1 r2 ty :=
           let sd := self__SimplExpr.SDbase type_bool ty t in
           do (sl2, a2) <- transl_expr r2 (self__SimplExpr.For_set sd);
           ret (sl1 ++
-               makeif a1 (Clight.Sset t (Clight.Econst_int Int.one ty)) (makeseq sl2) :: nil,
-               Clight.Etempvar t ty)
+               makeif a1 (T.Sset t (T.Econst_int Int.one ty)) (makeseq sl2) :: nil,
+               T.Etempvar t ty)
       | self__SimplExpr.For_effects =>
           do (sl2, a2) <- transl_expr r2 self__SimplExpr.For_effects;
-          ret (sl1 ++ makeif a1 Clight.Sskip (makeseq sl2) :: nil, dummy_expr)
+          ret (sl1 ++ makeif a1 T.Sskip (makeseq sl2) :: nil, dummy_expr)
       | self__SimplExpr.For_set sd =>
           do t <- temp_for_sd ty sd;
           let sd' := self__SimplExpr.SDcons type_bool ty t sd in
           do (sl2, a2) <- transl_expr r2 (self__SimplExpr.For_set sd');
           ret (sl1 ++
-               makeif a1 (makeseq (do_set sd (Clight.Econst_int Int.one ty))) (makeseq sl2) :: nil,
+               makeif a1 (makeseq (do_set sd (T.Econst_int Int.one ty))) (makeseq sl2) :: nil,
                dummy_expr)
       end).
 Case Eseqand r1 r2 ty := 
@@ -562,82 +564,82 @@ Case Eseqand r1 r2 ty :=
           let sd := self__SimplExpr.SDbase type_bool ty t in
           do (sl2, a2) <- transl_expr r2 (self__SimplExpr.For_set sd);
           ret (sl1 ++
-               makeif a1 (makeseq sl2) (Clight.Sset t (Clight.Econst_int Int.zero ty)) :: nil,
-               Clight.Etempvar t ty)
+               makeif a1 (makeseq sl2) (T.Sset t (T.Econst_int Int.zero ty)) :: nil,
+               T.Etempvar t ty)
       | self__SimplExpr.For_effects =>
           do (sl2, a2) <- transl_expr r2 self__SimplExpr.For_effects;
-          ret (sl1 ++ makeif a1 (makeseq sl2) Clight.Sskip :: nil, dummy_expr)
+          ret (sl1 ++ makeif a1 (makeseq sl2) T.Sskip :: nil, dummy_expr)
       | self__SimplExpr.For_set sd =>
           do t <- temp_for_sd ty sd;
           let sd' := self__SimplExpr.SDcons type_bool ty t sd in
           do (sl2, a2) <- transl_expr r2 (self__SimplExpr.For_set sd');
           ret (sl1 ++
-               makeif a1 (makeseq sl2) (makeseq (do_set sd (Clight.Econst_int Int.zero ty))) :: nil,
+               makeif a1 (makeseq sl2) (makeseq (do_set sd (T.Econst_int Int.zero ty))) :: nil,
                dummy_expr)
       end).                          
-Case Esizeof ty' ty := (fun dst => ret (finish dst nil (Clight.Esizeof ty' ty))).
-Case Ealignof ty' ty := (fun dst => ret (finish dst nil (Clight.Ealignof ty' ty))).
+Case Esizeof ty' ty := (fun dst => ret (finish dst nil (T.Esizeof ty' ty))).
+Case Ealignof ty' ty := (fun dst => ret (finish dst nil (T.Ealignof ty' ty))).
 Case Eparen e tycast ty := (fun dst => error (msg "SimplExpr.transl_expr: paren")).
 FEnd transl_expr.
 
-FDefinition transl_expression : C.expr -> mon (Clight.stmt * Clight.expr) := fun r =>
+FDefinition transl_expression : S.expr -> mon (T.stmt * T.expr) := fun r =>
   do (sl, a) <- transl_expr r self__SimplExpr.For_val; ret (makeseq sl, a).
 
-FDefinition transl_expr_stmt : C.expr -> mon Clight.stmt := fun r =>
+FDefinition transl_expr_stmt : S.expr -> mon T.stmt := fun r =>
   do (sl, a) <- transl_expr r self__SimplExpr.For_effects; ret (makeseq sl).
 
-FDefinition transl_if : C.expr -> Clight.stmt -> Clight.stmt -> mon Clight.stmt  := fun r s1 s2 => 
+FDefinition transl_if : S.expr -> T.stmt -> T.stmt -> mon T.stmt  := fun r s1 s2 => 
   do (sl, a) <- transl_expr r self__SimplExpr.For_val;
   ret (makeseq (sl ++ makeif a s1 s2 :: nil)).
 
 Closing Fact is_Sskip:
-  forall s, {s = C.Sskip} + {s <> C.Sskip} by {  destruct s; ((left; reflexivity) || (right; congruence)) }.
+  forall s, {s = S.Sskip} + {s <> S.Sskip} by {  destruct s; ((left; reflexivity) || (right; congruence)) }.
 
-FRecursion transl_stmt about C.stmt motive (fun (_ : C.stmt) => mon Clight.stmt) by _rect.
-Case Sskip := (ret Clight.Sskip).
+FRecursion transl_stmt about S.stmt motive (fun (_ : S.stmt) => mon T.stmt) by _rect.
+Case Sskip := (ret T.Sskip).
 Case Sdo e := (transl_expr_stmt e).
 Case Sseq s1 s2 := 
   (do ts1 <- transl_stmt s1;
    do ts2 <- transl_stmt s2;
-   ret (Clight.Sseq ts1 ts2)). 
+   ret (T.Sseq ts1 ts2)). 
 Case Sifthenelse e s1 s2 := 
   (do ts1 <- transl_stmt s1;
    do ts2 <- transl_stmt s2;
    do (s', a) <- transl_expression e;
     if is_Sskip s1 && is_Sskip s2 then
-      ret (Clight.Sseq s' Clight.Sskip)
+      ret (T.Sseq s' T.Sskip)
     else
-      ret (Clight.Sseq s' (Clight.Sifthenelse a ts1 ts2))).
+      ret (T.Sseq s' (T.Sifthenelse a ts1 ts2))).
 Case Sreturn e := 
   (match e with
-    | None => ret (Clight.Sreturn None)
+    | None => ret (T.Sreturn None)
     | Some e =>
         do (s', a) <- transl_expression e;
-        ret (Clight.Sseq s' (Clight.Sreturn (Some a)))
+        ret (T.Sseq s' (T.Sreturn (Some a)))
     end).
 Case Slabel lbl s1 := 
   (do ts1 <- transl_stmt s1;
-    ret (Clight.Slabel lbl ts1)).
-Case Sgoto lbl := (ret (Clight.Sgoto lbl)).
+    ret (T.Slabel lbl ts1)).
+Case Sgoto lbl := (ret (T.Sgoto lbl)).
 FEnd transl_stmt.
 
-FDefinition transl_function : C.function -> res Clight.function := fun f => 
-  match transl_stmt f.(self__Base.C.fn_body) (initial_generator tt) with
+FDefinition transl_function : S.function -> res T.function := fun f => 
+  match transl_stmt (S.fn_body f) (initial_generator tt) with
   | Err msg =>
       Error msg
   | Res tbody g i =>
-      OK (Clight.mkfunction
-              f.(self__Base.C.fn_return)
-              f.(self__Base.C.fn_callconv)
-              f.(self__Base.C.fn_params)
-              f.(self__Base.C.fn_vars)
+      OK (T.mkfunction
+              (S.fn_return f)
+              (S.fn_callconv f)
+              (S.fn_params f)
+              (S.fn_vars f)
               g.(gen_trail)
               tbody)
-  end.      
+  end.
 
 Local Open Scope error_monad_scope.
 
-FDefinition transl_fundef : composite_env -> C.fundef -> res Clight.fundef := fun _ fd =>
+FDefinition transl_fundef : composite_env -> S.fundef -> res T.fundef := fun _ fd =>
     match fd with
     | Internal f =>
         do tf <- transl_function f; OK (Internal tf)
@@ -645,7 +647,7 @@ FDefinition transl_fundef : composite_env -> C.fundef -> res Clight.fundef := fu
       OK (External ef targs tres cc)           
     end.
      
-FDefinition transl_program : C.program -> res Clight.program := fun p =>     
+FDefinition transl_program : S.program -> res T.program := fun p =>     
   do p1 <- AST.transform_partial_program (transl_fundef p.(prog_comp_env)) p;
   OK {| prog_defs := AST.prog_defs p1;
         prog_public := AST.prog_public p1;
@@ -854,8 +856,8 @@ FOverride Definition function_sig := self__Cminor.fn_sig.
 
 FEnd Cminor.
 
-(* RISC-V *)
-Family Asm extends RV.RV64I, RV.D.
+Family Op.
+
 (* Operations *)
 FInductive condition : Type :=
 | Ccomp : comparison -> condition       (**r signed integer comparison *)
@@ -949,20 +951,24 @@ Case Omakelong :=
     | v1 :: v2 :: nil =>  Some (Val.longofwords v1 v2)
     | _ => None end).  
 FEnd eval_operation.
-     
+
+FEnd Op.
+
+(* RISC-V *)
+Family Asm extends RV.RV64I, RV.D.    
 FEnd Asm.
 
 Family CminorSel extends Cfam.
 FInductive expr : Type :=
 | Econdition : condexpr -> expr -> expr -> expr
-| Eop : Asm.operation -> exprlist -> expr
+| Eop : Op.operation -> exprlist -> expr
 | Elet : expr -> expr -> expr
 | Eletvar : nat -> expr
 with exprlist : Type :=
 | Enil: exprlist
 | Econs: expr -> exprlist -> exprlist
 with condexpr : Type :=
-| CEcond : Asm.condition -> exprlist -> condexpr
+| CEcond : Op.condition -> exprlist -> condexpr
 | CEcondition : condexpr -> condexpr -> condexpr -> condexpr
 | CElet: expr -> condexpr -> condexpr.
        
@@ -1091,20 +1097,20 @@ Family T extends CminorSel. FEnd T.
 Family SplitLong.
 
 FDefinition makelong : T.expr -> T.expr -> T.expr := fun h l => 
-  T.Eop Asm.Omakelong (T.Econs h (T.Econs l T.Enil)).
+  T.Eop Op.Omakelong (T.Econs h (T.Econs l T.Enil)).
 
 FDefinition longconst : int64 -> T.expr := fun n =>
-  makelong (T.Eop (Asm.Ointconst (Int64.hiword n)) T.Enil)
-           (T.Eop (Asm.Ointconst (Int64.loword n)) T.Enil).
+  makelong (T.Eop (Op.Ointconst (Int64.hiword n)) T.Enil)
+           (T.Eop (Op.Ointconst (Int64.loword n)) T.Enil).
 FEnd SplitLong.
 
 FDefinition longconst : int64 -> T.expr := fun n =>
-  if Archi.splitlong then SplitLong.longconst n else T.Eop (Asm.Olongconst n) T.Enil.
+  if Archi.splitlong then SplitLong.longconst n else T.Eop (Op.Olongconst n) T.Enil.
 
 FRecursion sel_constant about Constant.constant motive (fun (_ : Constant.constant) => T.expr) by _rect.
-Case Ointconst n := (T.Eop (Asm.Ointconst n) T.Enil).
-Case Ofloatconst f := (T.Eop (Asm.Ofloatconst f) T.Enil).
-Case Osingleconst f := (T.Eop (Asm.Osingleconst f) T.Enil).
+Case Ointconst n := (T.Eop (Op.Ointconst n) T.Enil).
+Case Ofloatconst f := (T.Eop (Op.Ofloatconst f) T.Enil).
+Case Osingleconst f := (T.Eop (Op.Osingleconst f) T.Enil).
 Case Olongconst n := (longconst n).
 FEnd sel_constant.
 
@@ -1113,18 +1119,18 @@ Case Econst cst := (OK (sel_constant cst)).
 FEnd transl_expr.
        
 FRecursion condexpr_of_expr_eop about
-  Asm.operation motive (fun (_ : Asm.operation) => T.expr -> T.exprlist -> T.condexpr) by _rect.
+  Op.operation motive (fun (_ : Op.operation) => T.expr -> T.exprlist -> T.condexpr) by _rect.
 Case Ocmp c := (fun _ args => T.CEcond c args).
-Case _ := (fun e _ => T.CEcond (Asm.Ccompuimm Cne Int.zero) (T.Econs e T.Enil)).
-FEnd condexpr_of_expr_eop. 
+Case _ := (fun e _ => T.CEcond (Op.Ccompuimm Cne Int.zero) (T.Econs e T.Enil)).
+FEnd condexpr_of_expr_eop.
        
 FRecursion condexpr_of_expr about T.expr motive (fun (_ : T.expr) => T.condexpr) by _rect.
 Case Eop op args := (condexpr_of_expr_eop op (T.Eop op args) args).
 Case Econdition a b c := (T.CEcondition a (condexpr_of_expr b) (condexpr_of_expr c)).
 Case Elet a b := (T.CElet a (condexpr_of_expr b)).
-Case Eletvar n := (T.CEcond (Asm.Ccompuimm Cne Int.zero) (T.Econs (T.Eletvar n) T.Enil)).
-Case Evar i := (T.CEcond (Asm.Ccompuimm Cne Int.zero) (T.Econs (T.Evar i) T.Enil)). 
-FEnd condexpr_of_expr.       
+Case Eletvar n := (T.CEcond (Op.Ccompuimm Cne Int.zero) (T.Econs (T.Eletvar n) T.Enil)).
+Case Evar i := (T.CEcond (Op.Ccompuimm Cne Int.zero) (T.Econs (T.Evar i) T.Enil)). 
+FEnd condexpr_of_expr.
        
 FRecursion transl_stmt.                            
 Case Sifthenelse e ifso ifnot := (
@@ -1154,8 +1160,8 @@ From NFPOP Require Import Registers.
       
 FInductive instruction: Type :=
 | Inop: node -> instruction
-| Iop: Asm.operation -> list reg -> reg -> node -> instruction          
-| Icond: Asm.condition -> list reg -> node -> node -> instruction
+| Iop: Op.operation -> list reg -> reg -> node -> instruction          
+| Icond: Op.condition -> list reg -> node -> node -> instruction
 | Ireturn: option reg -> instruction.
 
 FDefinition code: Type := PTree.t instruction.
@@ -1282,86 +1288,89 @@ From NFPOP Require Import RTLmonad.
 
 (* CminorSel -> RTL *)
 Family RTLgen.
-FDefinition res := fun (A : Type) => res A RTL.instruction.
-FDefinition mon := fun (A : Type) => mon A RTL.instruction.
-FDefinition state := state RTL.instruction.
+Family S extends CminorSel. FEnd S.
+Family T extends RTL. FEnd T.
+
+FDefinition res := fun (A : Type) => res A T.instruction.
+FDefinition mon := fun (A : Type) => mon A T.instruction.
+FDefinition state := state T.instruction.
 
 FLemma init_state_wf:
-  forall pc, Plt pc 1%positive \/ (PTree.empty RTL.instruction)!pc = None.
+  forall pc, Plt pc 1%positive \/ (PTree.empty T.instruction)!pc = None.
 FProofLemma. intros; right; apply PTree.gempty. Qed. CloseFLemma.
 
 FDefinition init_state : state :=
-  mkstate RTL.instruction 1%positive 1%positive (PTree.empty RTL.instruction) init_state_wf.
+  mkstate T.instruction 1%positive 1%positive (PTree.empty T.instruction) init_state_wf.
 
 FLemma add_instr_wf:
   forall s i pc,
-  let n := s.(st_nextnode RTL.instruction) in
-  Plt pc (Pos.succ n) \/ (PTree.set n i s.(st_code RTL.instruction))!pc = None.
+  let n := s.(st_nextnode T.instruction) in
+  Plt pc (Pos.succ n) \/ (PTree.set n i s.(st_code T.instruction))!pc = None.
 FProofLemma. apply cheat. Qed. CloseFLemma.
 
 FLemma add_instr_incr:
   forall s i,
-  let n := s.(st_nextnode RTL.instruction) in
-  state_incr RTL.instruction s (mkstate RTL.instruction s.(st_nextreg RTL.instruction)
+  let n := s.(st_nextnode T.instruction) in
+  state_incr T.instruction s (mkstate T.instruction s.(st_nextreg T.instruction)
                 (Pos.succ n)
-                (PTree.set n i s.(st_code RTL.instruction))
+                (PTree.set n i s.(st_code T.instruction))
                 (add_instr_wf s i)).
 FProofLemma. apply cheat. Qed. CloseFLemma.
 
-FDefinition add_instr : RTL.instruction -> mon RTL.node := fun (i: RTL.instruction) =>
+FDefinition add_instr : T.instruction -> mon T.node := fun (i: T.instruction) =>
   fun s =>
-    let n := s.(st_nextnode RTL.instruction) in
+    let n := s.(st_nextnode T.instruction) in
     OK n
-       (mkstate RTL.instruction s.(st_nextreg RTL.instruction) (Pos.succ n) (PTree.set n i s.(st_code RTL.instruction))
+       (mkstate T.instruction s.(st_nextreg T.instruction) (Pos.succ n) (PTree.set n i s.(st_code T.instruction))
                 (add_instr_wf s i))
        (add_instr_incr s i).
 
 FLemma reserve_instr_wf:
   forall s pc,
-    Plt pc (Pos.succ s.(st_nextnode RTL.instruction)) \/ s.(st_code RTL.instruction)!pc = None.
+    Plt pc (Pos.succ s.(st_nextnode T.instruction)) \/ s.(st_code T.instruction)!pc = None.
 FProofLemma. apply cheat. Qed. CloseFLemma.
 
 FLemma reserve_instr_incr:
   forall s,
-  let n := s.(st_nextnode RTL.instruction) in
-  state_incr RTL.instruction s (mkstate RTL.instruction s.(st_nextreg RTL.instruction)
+  let n := s.(st_nextnode T.instruction) in
+  state_incr T.instruction s (mkstate T.instruction s.(st_nextreg T.instruction)
                 (Pos.succ n)
-                s.(st_code RTL.instruction)
+                s.(st_code T.instruction)
                     (reserve_instr_wf s)).
 FProofLemma. apply cheat. Qed. CloseFLemma.
 
-FDefinition reserve_instr : mon RTL.node :=
+FDefinition reserve_instr : mon T.node :=
   fun (s: state) =>
-  let n := s.(st_nextnode RTL.instruction) in
+  let n := s.(st_nextnode T.instruction) in
   OK n
-     (mkstate RTL.instruction s.(st_nextreg RTL.instruction) (Pos.succ n) s.(st_code RTL.instruction) (reserve_instr_wf s))
+     (mkstate T.instruction s.(st_nextreg T.instruction) (Pos.succ n) s.(st_code T.instruction) (reserve_instr_wf s))
      (reserve_instr_incr s).
 
 FLemma update_instr_wf:
   forall s n i,
-  Plt n s.(st_nextnode RTL.instruction) ->
+  Plt n s.(st_nextnode T.instruction) ->
   forall pc,
-    Plt pc s.(st_nextnode RTL.instruction) \/ (PTree.set n i s.(st_code RTL.instruction))!pc = None.
+    Plt pc s.(st_nextnode T.instruction) \/ (PTree.set n i s.(st_code T.instruction))!pc = None.
 FProofLemma. apply cheat. Qed. CloseFLemma.
 
 FLemma update_instr_incr:
-  forall s n i (LT: Plt n s.(st_nextnode RTL.instruction)),
-  s.(st_code RTL.instruction)!n = None ->
-  state_incr RTL.instruction s
-             (mkstate RTL.instruction s.(st_nextreg RTL.instruction) s.(st_nextnode RTL.instruction) (PTree.set n i s.(st_code RTL.instruction))
+  forall s n i (LT: Plt n s.(st_nextnode T.instruction)),
+  s.(st_code T.instruction)!n = None ->
+  state_incr T.instruction s
+             (mkstate T.instruction s.(st_nextreg T.instruction) s.(st_nextnode T.instruction) (PTree.set n i s.(st_code T.instruction))
                      (update_instr_wf s n i LT)).
 FProofLemma. apply cheat. Qed. CloseFLemma.
 
 FLemma check_empty_node:
-  forall (s: state) (n: RTL.node), { s.(st_code RTL.instruction)!n = None } + { True }.
-FProofLemma.  intros. case (s.(st_code self__Base.RTL.instruction)!n); intros. right; auto. left; auto. Qed. CloseFLemma.
+  forall (s: state) (n: T.node), { s.(st_code T.instruction)!n = None } + { True }.
+FProofLemma.  intros. case (s.(st_code self__RTLgen.T.instruction)!n); intros. right; auto. left; auto. Qed. CloseFLemma.
 
-FDefinition update_instr : RTL.node -> RTL.instruction -> mon unit := fun (n: RTL.node) (i: RTL.instruction) => 
+FDefinition update_instr : T.node -> T.instruction -> mon unit := fun (n: T.node) (i: T.instruction) => 
   fun s =>
-    match plt n s.(st_nextnode RTL.instruction), check_empty_node s n with
+    match plt n s.(st_nextnode T.instruction), check_empty_node s n with
     | left L, left EMPTY =>
         OK tt
-           (mkstate RTL.instruction s.(st_nextreg RTL.instruction) s.(st_nextnode RTL.instruction) (PTree.set n i s.(st_code RTL.instruction))
+           (mkstate T.instruction s.(st_nextreg T.instruction) s.(st_nextnode T.instruction) (PTree.set n i s.(st_code T.instruction))
                     (update_instr_wf s n i L))
            (update_instr_incr s n i L EMPTY)
     | _, _ =>
@@ -1370,14 +1379,14 @@ FDefinition update_instr : RTL.node -> RTL.instruction -> mon unit := fun (n: RT
 
 FLemma new_reg_incr:
   forall s,
-  state_incr RTL.instruction s (mkstate RTL.instruction (Pos.succ s.(st_nextreg RTL.instruction))
-                        s.(st_nextnode RTL.instruction) s.(st_code RTL.instruction) s.(st_wf RTL.instruction)).
+  state_incr T.instruction s (mkstate T.instruction (Pos.succ s.(st_nextreg T.instruction))
+                        s.(st_nextnode T.instruction) s.(st_code T.instruction) s.(st_wf T.instruction)).
 FProofLemma. constructor; simpl. apply Ple_refl. apply Ple_succ. auto. Qed. CloseFLemma.
 
 FDefinition new_reg : mon reg :=
   fun s =>
-    OK s.(st_nextreg RTL.instruction)
-       (mkstate RTL.instruction (Pos.succ s.(st_nextreg RTL.instruction)) s.(st_nextnode RTL.instruction) s.(st_code RTL.instruction) s.(st_wf RTL.instruction))
+    OK s.(st_nextreg T.instruction)
+       (mkstate T.instruction (Pos.succ s.(st_nextreg T.instruction)) s.(st_nextnode T.instruction) s.(st_code T.instruction) s.(st_wf T.instruction))
        (new_reg_incr s).
 
 FDefinition init_mapping : mapping :=
@@ -1415,12 +1424,12 @@ FDefinition find_letvar : mapping -> nat -> mon reg := fun (map: mapping) (idx: 
   | Some r => ret r
   end.
 
-FDefinition add_move : reg -> reg -> RTL.node -> mon RTL.node := fun (rs rd: reg) (nd: RTL.node) => 
+FDefinition add_move : reg -> reg -> T.node -> mon T.node := fun (rs rd: reg) (nd: T.node) => 
   if Reg.eq rs rd
   then ret nd
-  else add_instr (RTL.Iop Asm.Omove (rs::nil) rd nd).
+  else add_instr (T.Iop Op.Omove (rs::nil) rd nd).
 
-FRecursion alloc_reg about CminorSel.expr motive (fun (_ : CminorSel.expr) => mapping -> mon reg) by _rect.
+FRecursion alloc_reg about S.expr motive (fun (_ : S.expr) => mapping -> mon reg) by _rect.
 Case Evar id := (fun map => find_var map id).
 Case Eletvar n := (fun map => find_letvar map n).
 Case Eop := (fun op args => fun map => new_reg).
@@ -1428,7 +1437,7 @@ Case Econdition c a0 a1 := (fun map => new_reg).
 Case Elet a b := (fun map => new_reg).
 FEnd alloc_reg.
 
-FRecursion alloc_regs about CminorSel.exprlist motive (fun (_ : CminorSel.exprlist) => mapping -> mon (list reg)) by _rect.
+FRecursion alloc_regs about S.exprlist motive (fun (_ : S.exprlist) => mapping -> mon (list reg)) by _rect.
 Case Enil := (fun map => ret nil).
 Case Econs a bl :=
 (fun map =>
@@ -1437,9 +1446,9 @@ Case Econs a bl :=
   ret (r :: rl)).
 FEnd alloc_regs.
 
-FRecursion transl_expr about CminorSel.expr motive (fun (_ : CminorSel.expr) => mapping -> reg -> RTL.node -> mon RTL.node)
-  with transl_exprlist about CminorSel.exprlist motive (fun (_ : CminorSel.exprlist) => mapping -> list reg -> RTL.node -> mon RTL.node)
-  with transl_condexpr about CminorSel.condexpr motive (fun (_ : CminorSel.condexpr) => mapping  -> RTL.node -> RTL.node -> mon RTL.node) by _rect.
+FRecursion transl_expr about S.expr motive (fun (_ : S.expr) => mapping -> reg -> T.node -> mon T.node)
+  with transl_exprlist about S.exprlist motive (fun (_ : S.exprlist) => mapping -> list reg -> T.node -> mon T.node)
+  with transl_condexpr about S.condexpr motive (fun (_ : S.condexpr) => mapping  -> T.node -> T.node -> mon T.node) by _rect.
 Case Evar v := (fun map rd nd => do r <- find_var map v; add_move r rd nd).
 Case Elet b c :=
 (fun map rd nd => 
@@ -1449,7 +1458,7 @@ Case Elet b c :=
 Case Eop op al :=
 (fun map rd nd => 
     do rl <- alloc_regs al map;
-    do no <- add_instr (RTL.Iop op rl rd nd);
+    do no <- add_instr (T.Iop op rl rd nd);
     transl_exprlist al map rl no).
 Case Econdition a b c :=
 (fun map rd nd => 
@@ -1472,7 +1481,7 @@ Case Econs b bs :=
 Case CEcond c al :=
 (fun map ntrue nfalse => 
    do rl <- alloc_regs al map;
-   do nt <- add_instr (RTL.Icond c rl ntrue nfalse);
+   do nt <- add_instr (T.Icond c rl ntrue nfalse);
    transl_exprlist al map rl nt).
 Case CEcondition a b c :=
 (fun map ntrue nfalse => 
@@ -1486,9 +1495,9 @@ Case CElet b c :=
    transl_expr b map r nc).
 FEnd transl_expr with transl_exprlist with transl_condexpr.
         
-FDefinition labelmap : Type := PTree.t RTL.node.
+FDefinition labelmap : Type := PTree.t T.node.
         
-FRecursion transl_stmt about CminorSel.stmt motive (fun (_ : CminorSel.stmt) => mapping -> RTL.node -> list RTL.node -> labelmap -> RTL.node -> option reg -> mon RTL.node) by _rect.
+FRecursion transl_stmt about S.stmt motive (fun (_ : S.stmt) => mapping -> T.node -> list T.node -> labelmap -> T.node -> option reg -> mon T.node) by _rect.
 Case Sskip := (fun map nd nexits ngoto nret rret => ret nd).
 Case Sassign v b :=
 (fun map nd nexits ngoto nret rret => 
@@ -1518,7 +1527,7 @@ Case Slabel lbl s' :=
   | None => error (Errors.msg "RTLgen: unbound label")
   | Some n =>
       do xx <-
-        (handle_error (update_instr n (RTL.Inop ns))
+        (handle_error (update_instr n (T.Inop ns))
                       (error (Errors.MSG "Multiply-defined label " ::
                               Errors.CTX lbl :: nil)));
       ret ns
@@ -1530,16 +1539,15 @@ Case Sgoto lbl :=
                   Errors.CTX lbl :: nil)
   | Some n => ret n
   end).
-(* TODO: remove this, there is no set in CminorSel *)
 FEnd transl_stmt.
 
-FDefinition alloc_label : Cminor.label -> labelmap -> mon labelmap :=
-  fun (lbl: Cminor.label) (map: labelmap) =>
+FDefinition alloc_label : S.label -> labelmap -> mon labelmap :=
+  fun (lbl: S.label) (map: labelmap) =>
   do n <- reserve_instr;
   ret (PTree.set lbl n map).   
 
-FRecursion reserve_labels about CminorSel.stmt
-  motive (fun (_ : CminorSel.stmt) => labelmap -> mon labelmap) by _rect.
+FRecursion reserve_labels about S.stmt
+  motive (fun (_ : S.stmt) => labelmap -> mon labelmap) by _rect.
 Case Sseq s1 s2 := (fun lm => do lm' <- reserve_labels s2 lm; reserve_labels s1 lm').
 Case Sifthenelse e s1 s2 := (fun lm => do lm' <- reserve_labels s2 lm; reserve_labels s1 lm').
 Case Slabel lbl s1 := (fun lm => do lm' <- reserve_labels s1 lm; alloc_label lbl lm').
@@ -1553,292 +1561,36 @@ FDefinition ret_reg : signature -> reg -> option reg :=
   fun (sig: signature) (rd: reg) =>
   if rettype_eq sig.(AST.sig_res) AST.Tvoid then None else Some rd.
 
-FDefinition transl_fun : CminorSel.function -> mon (RTL.node * list reg) :=
-  fun (f: CminorSel.function) => 
-  do ngoto <- reserve_labels f.(self__Base.CminorSel.fn_body) (PTree.empty RTL.node);
-  do (rparams, map1) <- add_vars init_mapping f.(self__Base.CminorSel.fn_params);
-  do (rvars, map2) <- add_vars map1 f.(self__Base.CminorSel.fn_vars);
+FDefinition transl_fun : S.function -> mon (T.node * list reg) :=
+  fun (f: S.function) => 
+  do ngoto <- reserve_labels (S.fn_body f) (PTree.empty T.node);
+  do (rparams, map1) <- add_vars init_mapping (S.fn_params f);
+  do (rvars, map2) <- add_vars map1 (S.fn_vars f);
   do rret <- new_reg;
-  let orret := ret_reg f.(self__Base.CminorSel.fn_sig) rret in
-  do nret <- add_instr (RTL.Ireturn orret);
-  do nentry <- transl_stmt f.(self__Base.CminorSel.fn_body) map2 nret nil ngoto nret orret;
+  let orret := ret_reg (S.fn_sig f) rret in
+  do nret <- add_instr (T.Ireturn orret);
+  do nentry <- transl_stmt (S.fn_body f) map2 nret nil ngoto nret orret;
   ret (nentry, rparams).
 
-FDefinition transl_function : CminorSel.function -> Errors.res RTL.function := 
-    fun (f: CminorSel.function) => 
+FDefinition transl_function : S.function -> Errors.res T.function := 
+    fun (f: S.function) => 
   match transl_fun f init_state with
   | Error msg => Errors.Error msg
   | OK (nentry, rparams) s i =>
-      Errors.OK (RTL.mkfunction
-                   f.(self__Base.CminorSel.fn_sig)
+      Errors.OK (T.mkfunction
+                   (S.fn_sig f)
                    rparams
-                   f.(self__Base.CminorSel.fn_stackspace)
-                   s.(st_code RTL.instruction)
+                   (S.fn_stackspace f)
+                   s.(st_code T.instruction)
                    nentry)
   end.
 
 FDefinition transl_fundef := transf_partial_fundef transl_function.
 
-FDefinition transl_program : CminorSel.program -> Errors.res RTL.program := 
-  fun (p: CminorSel.program) =>
-     transform_partial_program transl_fundef p.
-
-(*
-(* relational spec *)
-
-FDefinition reg_in_map : mapping -> reg -> Prop := fun (m: mapping) (r: reg) =>
-  (exists id, m.(map_vars)!id = Some r) \/ In r m.(map_letvars).
-
-MetaData tr_move.
-Inductive tr_move (c: self__Base.RTL.code): self__Base.RTL.node -> reg -> self__Base.RTL.node -> reg -> Prop :=
-| tr_move_0: forall n r,
-    tr_move c n r n r
-| tr_move_1: forall ns rs nd rd,
-    c!ns = Some (self__Base.RTL.Iop self__Base.Asm.Omove (rs :: nil) rd nd) ->
-    tr_move c ns rs nd rd.
-FEnd tr_move.
-
-MetaData reg_map_ok.
-Inductive reg_map_ok: mapping -> reg -> option AST.ident -> Prop :=
-| reg_map_ok_novar: forall map rd,
-    ~self__RTLgen.reg_in_map map rd ->
-    reg_map_ok map rd None
-| reg_map_ok_somevar: forall map rd id,
-    map.(map_vars)!id = Some rd ->
-    reg_map_ok map rd (Some id).
-
-Global Hint Resolve reg_map_ok_novar: rtlg.
-FEnd reg_map_ok. 
-                 
-FInductive tr_expr : RTL.code -> mapping -> list reg -> CminorSel.expr -> RTL.node -> RTL.node -> reg -> option AST.ident -> Prop :=
-| tr_Evar: forall c map pr id ns nd r rd dst,
-    map.(map_vars)!id = Some r ->
-    ((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr)) ->
-    tr_move c ns r nd rd ->
-    tr_expr c map pr (CminorSel.Evar id) ns nd rd dst            
-| tr_Eop: forall c map pr op al ns nd rd n1 rl dst,
-    tr_exprlist c map pr al ns n1 rl ->
-    c!n1 = Some (RTL.Iop op rl rd nd) ->
-    reg_map_ok map rd dst -> ~In rd pr ->
-    tr_expr c map pr (CminorSel.Eop op al) ns nd rd dst            
-| tr_Econdition: forall c map pr a ifso ifnot ns nd rd ntrue nfalse dst,
-    tr_condition c map pr a ns ntrue nfalse ->
-    tr_expr c map pr ifso ntrue nd rd dst ->
-    tr_expr c map pr ifnot nfalse nd rd dst ->
-    tr_expr c map pr (CminorSel.Econdition a ifso ifnot) ns nd rd dst
-| tr_Elet: forall c map pr b1 b2 ns nd rd n1 r dst,
-    ~reg_in_map map r ->
-    tr_expr c map pr b1 ns n1 r None ->
-    tr_expr c (add_letvar map r) pr b2 n1 nd rd dst ->
-    tr_expr c map pr (CminorSel.Elet b1 b2) ns nd rd dst
-| tr_Eletvar: forall c map pr n ns nd rd r dst,
-    List.nth_error map.(map_letvars) n = Some r ->
-    ((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr)) ->
-    tr_move c ns r nd rd ->
-    tr_expr c map pr (CminorSel.Eletvar n) ns nd rd dst
-with tr_condition : RTL.code -> mapping -> list reg -> CminorSel.condexpr -> RTL.node -> RTL.node -> RTL.node -> Prop :=
-| tr_CEcond: forall c map pr cond bl ns ntrue nfalse n1 rl,
-    tr_exprlist c map pr bl ns n1 rl ->
-    c!n1 = Some (RTL.Icond cond rl ntrue nfalse) ->
-    tr_condition c map pr (CminorSel.CEcond cond bl) ns ntrue nfalse
-| tr_CEcondition: forall c map pr a1 a2 a3 ns ntrue nfalse n2 n3,
-    tr_condition c map pr a1 ns n2 n3 ->
-    tr_condition c map pr a2 n2 ntrue nfalse ->
-    tr_condition c map pr a3 n3 ntrue nfalse ->
-    tr_condition c map pr (CminorSel.CEcondition a1 a2 a3) ns ntrue nfalse
-| tr_CElet: forall c map pr a b ns ntrue nfalse r n1,
-    ~reg_in_map map r ->
-    tr_expr c map pr a ns n1 r None ->
-    tr_condition c (add_letvar map r) pr b n1 ntrue nfalse ->
-    tr_condition c map pr (CminorSel.CElet a b) ns ntrue nfalse
-with tr_exprlist : RTL.code -> mapping -> list reg -> CminorSel.exprlist -> RTL.node -> RTL.node -> list reg -> Prop :=
-| tr_Enil: forall c map pr n,
-    tr_exprlist c map pr CminorSel.Enil n n nil
-| tr_Econs: forall c map pr a1 al ns nd r1 rl n1,
-    tr_expr c map pr a1 ns n1 r1 None ->
-    tr_exprlist c map (r1 :: pr) al n1 nd rl ->
-    tr_exprlist c map pr (CminorSel.Econs a1 al) ns nd (r1 :: rl).
-    
-FInductive tr_stmt : RTL.code -> mapping -> CminorSel.stmt -> RTL.node -> RTL.node -> list RTL.node -> labelmap -> RTL.node -> option reg -> Prop :=
-| tr_Sskip: forall c map ns nexits ngoto nret rret,
-    tr_stmt c map CminorSel.Sskip ns ns nexits ngoto nret rret            
-| tr_Sassign: forall c map id a ns nd nexits ngoto nret rret r,
-  map.(map_vars)!id = Some r ->
-  tr_expr c map nil a ns nd r (Some id) ->
-  tr_stmt c map (CminorSel.Sassign id a) ns nd nexits ngoto nret rret          
-| tr_Sseq: forall c map s1 s2 ns nd nexits ngoto nret rret n,
-  tr_stmt c map s2 n nd nexits ngoto nret rret ->
-  tr_stmt c map s1 ns n nexits ngoto nret rret ->
-  tr_stmt c map (CminorSel.Sseq s1 s2) ns nd nexits ngoto nret rret
-| tr_Sifthenelse: forall c map a strue sfalse ns nd nexits ngoto nret rret ntrue nfalse,
-  tr_stmt c map strue ntrue nd nexits ngoto nret rret ->
-  tr_stmt c map sfalse nfalse nd nexits ngoto nret rret ->
-  tr_condition c map nil a ns ntrue nfalse ->
-  tr_stmt c map (CminorSel.Sifthenelse a strue sfalse) ns nd nexits ngoto nret rret
-| tr_Sreturn_none: forall c map nret nd nexits ngoto rret,
-  tr_stmt c map (CminorSel.Sreturn None) nret nd nexits ngoto nret rret
-| tr_Sreturn_some: forall c map a ns nd nexits ngoto nret rret,
-  tr_expr c map nil a ns nret rret None ->
-  tr_stmt c map (CminorSel.Sreturn (Some a)) ns nd nexits ngoto nret (Some rret)
-| tr_Slabel: forall c map lbl s ns nd nexits ngoto nret rret n,
-  ngoto!lbl = Some n ->
-  c!n = Some (RTL.Inop ns) ->
-  tr_stmt c map s ns nd nexits ngoto nret rret ->
-  tr_stmt c map (CminorSel.Slabel lbl s) ns nd nexits ngoto nret rret
-| tr_Sgoto: forall c map lbl ns nd nexits ngoto nret rret,
-  ngoto!lbl = Some ns ->
-  tr_stmt c map (CminorSel.Sgoto lbl) ns nd nexits ngoto nret rret.   
-
-MetaData tr_function.
-Inductive tr_function: self__Base.CminorSel.function -> self__Base.RTL.function -> Prop :=
-| tr_function_intro:
-    forall f code rparams map1 s0 s1 i1 rvars map2 s2 i2 nentry ngoto nret rret orret,
-    self__RTLgen.add_vars self__RTLgen.init_mapping f.(self__Base.CminorSel.fn_params) s0 = OK (rparams, map1) s1 i1 ->
-    self__RTLgen.add_vars map1 f.(self__Base.CminorSel.fn_vars) s1 = OK (rvars, map2) s2 i2 ->
-    orret = self__RTLgen.ret_reg f.(self__Base.CminorSel.fn_sig) rret ->
-    self__RTLgen.tr_stmt code map2 f.(self__Base.CminorSel.fn_body) nentry nret nil ngoto nret orret ->
-    code!nret = Some(self__Base.RTL.Ireturn orret) ->
-    tr_function f (self__Base.RTL.mkfunction
-                    f.(self__Base.CminorSel.fn_sig)
-                    rparams
-                    f.(self__Base.CminorSel.fn_stackspace)
-                    code
-                    nentry).
-FEnd tr_function.
-
-(* Correctness of the spec *)
-(*
-Lemma tr_move_incr:
-  forall s1 s2, state_incr s1 s2 ->
-  forall ns rs nd rd,
-  tr_move s1.(st_code) ns rs nd rd ->
-  tr_move s2.(st_code) ns rs nd rd.
-Proof.
-
-Lemma tr_expr_incr:
-  forall s1 s2, state_incr s1 s2 ->
-  forall map pr a ns nd rd dst,
-  tr_expr s1.(st_code) map pr a ns nd rd dst ->
-  tr_expr s2.(st_code) map pr a ns nd rd dst
-with tr_condition_incr:
-  forall s1 s2, state_incr s1 s2 ->
-  forall map pr a ns ntrue nfalse,
-  tr_condition s1.(st_code) map pr a ns ntrue nfalse ->
-  tr_condition s2.(st_code) map pr a ns ntrue nfalse
-with tr_exprlist_incr:
-  forall s1 s2, state_incr s1 s2 ->
-  forall map pr al ns nd rl,
-  tr_exprlist s1.(st_code) map pr al ns nd rl ->
-  tr_exprlist s2.(st_code) map pr al ns nd rl.
-Proof.
-
-Lemma add_move_charact:
-  forall s ns rs nd rd s' i,
-  add_move rs rd nd s = OK ns s' i ->
-  tr_move s'.(st_code) ns rs nd rd.
-Proof.
-
-Lemma transl_expr_charact:
-  forall a map rd nd s ns s' pr INCR
-     (TR: transl_expr map a rd nd s = OK ns s' INCR)
-     (WF: map_valid map s)
-     (OK: target_reg_ok map pr a rd)
-     (VALID: regs_valid pr s)
-     (VALID2: reg_valid rd s),
-   tr_expr s'.(st_code) map pr a ns nd rd None
-
-with transl_exprlist_charact:
-  forall al map rl nd s ns s' pr INCR
-     (TR: transl_exprlist map al rl nd s = OK ns s' INCR)
-     (WF: map_valid map s)
-     (OK: target_regs_ok map pr al rl)
-     (VALID1: regs_valid pr s)
-     (VALID2: regs_valid rl s),
-   tr_exprlist s'.(st_code) map pr al ns nd rl
-
-with transl_condexpr_charact:
-  forall a map ntrue nfalse s ns s' pr INCR
-     (TR: transl_condexpr map a ntrue nfalse s = OK ns s' INCR)
-     (WF: map_valid map s)
-     (VALID: regs_valid pr s),
-   tr_condition s'.(st_code) map pr a ns ntrue nfalse.
-
-Proof.
-
-A variant of transl_expr_charact, for use when the destination register is the one associated with a variable.
-
-Lemma transl_expr_assign_charact:
-  forall id a map rd nd s ns s' INCR
-     (TR: transl_expr map a rd nd s = OK ns s' INCR)
-     (WF: map_valid map s)
-     (OK: reg_map_ok map rd (Some id)),
-   tr_expr s'.(st_code) map nil a ns nd rd (Some id).
-Proof.
-
-Lemma alloc_optreg_map_ok:
-  forall map optid s1 r s2 i,
-  map_valid map s1 ->
-  alloc_optreg map optid s1 = OK r s2 i ->
-  reg_map_ok map r optid.
-Proof.
-
-Lemma tr_exitexpr_incr:
-  forall s1 s2, state_incr s1 s2 ->
-  forall map a ns nexits,
-  tr_exitexpr s1.(st_code) map a ns nexits ->
-  tr_exitexpr s2.(st_code) map a ns nexits.
-Proof.
-
-Lemma tr_stmt_incr:
-  forall s1 s2, state_incr s1 s2 ->
-  forall map s ns nd nexits ngoto nret rret,
-  tr_stmt s1.(st_code) map s ns nd nexits ngoto nret rret ->
-  tr_stmt s2.(st_code) map s ns nd nexits ngoto nret rret.
-Proof.
-
-Lemma transl_exit_charact:
-  forall nexits n s ne s' incr,
-  transl_exit nexits n s = OK ne s' incr ->
-  nth_error nexits n = Some ne /\ s' = s.
-Proof.
-
-Lemma transl_jumptable_charact:
-  forall nexits tbl s nl s' incr,
-  transl_jumptable nexits tbl s = OK nl s' incr ->
-  tr_jumptable nexits tbl nl /\ s' = s.
-Proof.
-
-Lemma transl_exitexpr_charact:
-  forall nexits a map s ns s' INCR
-     (TR: transl_exitexpr map a nexits s = OK ns s' INCR)
-     (WF: map_valid map s),
-  tr_exitexpr s'.(st_code) map a ns nexits.
-Proof.
-
-Lemma convert_builtin_res_charact:
-  forall map oty res s res' s' INCR
-    (TR: convert_builtin_res map oty res s = OK res' s' INCR)
-    (WF: map_valid map s),
-  tr_builtin_res map res res'.
-Proof.
-
-Lemma transl_stmt_charact:
-  forall map stmt nd nexits ngoto nret rret s ns s' INCR
-    (TR: transl_stmt map stmt nd nexits ngoto nret rret s = OK ns s' INCR)
-    (WF: map_valid map s)
-    (OK: return_reg_ok s map rret),
-  tr_stmt s'.(st_code) map stmt ns nd nexits ngoto nret rret.
-Proof.
-
-Lemma transl_function_charact:
-  forall f tf,
-  transl_function f = Errors.OK tf ->
-  tr_function f tf.
-Proof.
-*)
-
-*)                 
-FEnd RTLgen.  
+FDefinition transl_program : S.program -> Errors.res T.program := 
+  fun (p: S.program) =>
+     transform_partial_program transl_fundef p.                 
+FEnd RTLgen.
 
 From NFPOP Require Import Machregs.
 
@@ -1846,8 +1598,8 @@ From NFPOP Require Import Conventions1.
 From NFPOP Require Import Locations.
 (* Some Machreg functions will defined here *)
 Family M.
-FRecursion destroyed_by_op about Asm.operation motive
-  (fun (_ : Asm.operation) => list mreg) by _rect.
+FRecursion destroyed_by_op about Op.operation motive
+  (fun (_ : Op.operation) => list mreg) by _rect.
 (*Case Omove := nil.
 Case Ointconst n := nil.
 Case Olongconst n := nil.
@@ -1858,7 +1610,7 @@ Case Ocmp c := nil.*)
 Case _ := nil.
 FEnd destroyed_by_op.
 
-FDefinition destroyed_by_cond : Asm.condition -> list mreg := fun cond => nil. 
+FDefinition destroyed_by_cond : Op.condition -> list mreg := fun cond => nil. 
 FEnd M.
 
 
@@ -1866,11 +1618,11 @@ Family LTL.
 FDefinition node := positive.
 
 FInductive instruction: Type :=
-| Lop : Asm.operation -> list mreg -> mreg -> instruction
+| Lop : Op.operation -> list mreg -> mreg -> instruction
 | Lgetstack : slot -> Z -> typ -> mreg -> instruction
 | Lsetstack : mreg -> slot -> Z -> typ -> instruction 
 | Lbranch : node -> instruction
-| Lcond : Asm.condition -> list mreg -> node -> node -> instruction
+| Lcond : Op.condition -> list mreg -> node -> node -> instruction
 | Lreturn : instruction.
        
 FDefinition bblock := list instruction.
@@ -1893,150 +1645,6 @@ FDefinition funsig := fun (fd: fundef) =>
   | AST.Internal f => self__LTL.fn_sig f
   | AST.External ef => ef_sig ef
   end.
-(*      
-FDefinition genv := Genv.t fundef unit.
-FDefinition locset := Locmap.t.
-
-FDefinition eval_operation := fun op => Asm.eval_operation op fundef unit.
-
-MetaData stackframe.
-Inductive stackframe : Type :=
-  | Stackframe:
-      forall (f: self__LTL.function)(* calling function *)
-             (sp: val)(* stack pointer in calling function *)
-             (ls: self__LTL.locset)(* location state in calling function *)
-             (bb: self__LTL.bblock),(* continuation in calling function *)
-        stackframe.
-FEnd stackframe.
-
-MetaData state.
-Inductive state : Type :=
-  | State:
-      forall (stack: list self__LTL.stackframe)(* call stack *)
-             (f: self__LTL.function)(* function currently executing *)
-             (sp: val)(* stack pointer *)
-             (pc: self__LTL.node)(* current program point *)
-             (ls: self__LTL.locset)(* location state *)
-             (m: mem),(* memory state *)
-      state
-  | Block:
-      forall (stack: list self__LTL.stackframe)(* call stack *)
-             (f: self__LTL.function)(* function currently executing *)
-             (sp: val)(* stack pointer *)
-             (bb: self__LTL.bblock)(* current basic block *)
-             (ls: self__LTL.locset)(* location state *)
-             (m: mem),(* memory state *)
-      state
-  | Callstate:
-      forall (stack: list self__LTL.stackframe)(* call stack *)
-             (f: self__LTL.fundef)(* function to call *)
-             (ls: self__LTL.locset)(* location state of caller *)
-             (m: mem),(* memory state *)
-      state
-  | Returnstate:
-      forall (stack: list self__LTL.stackframe)(* call stack *)
-             (ls: self__LTL.locset)(* location state of callee *)
-             (m: mem),(* memory state *)
-        state.
-FEnd state.
-
-FDefinition reglist : locset -> list mreg -> list val := fun rs rl => 
-  List.map (fun r => rs (R r)) rl.
-
-MetaData undef_regs.
-Fixpoint undef_regs (rl: list mreg) (rs: self__LTL.locset) : self__LTL.locset :=
-  match rl with
-  | nil => rs
-  | r1 :: rl => Locmap.set (R r1) Vundef (undef_regs rl rs)
-  end.
-FEnd undef_regs.
-
-FDefinition destroyed_by_getstack : slot -> list mreg := fun s => 
-  match s with
-  | Incoming => temp_for_parent_frame :: nil
-  | _ => nil
-  end.
-
-FDefinition parent_locset : list stackframe -> locset := fun stack => 
-  match stack with
-  | nil => Locmap.init Vundef
-  | self__LTL.Stackframe f sp ls bb :: stack' => ls
-  end.
-
-FDefinition return_regs : locset -> locset -> locset := fun caller callee => 
-  fun (l: loc) =>
-    match l with
-    | R r => if is_callee_save r then caller (R r) else callee (R r)
-    | S Outgoing ofs ty => Vundef
-    | S sl ofs ty => caller (S sl ofs ty)
-    end.
-
-FDefinition call_regs : locset -> locset := fun caller => 
-  fun (l: loc) =>
-    match l with
-    | R r => caller (R r)
-    | S Local ofs ty => Vundef
-    | S Incoming ofs ty => caller (S Outgoing ofs ty)
-    | S Outgoing ofs ty => Vundef
-    end.
-             
-FInductive step: genv -> state -> trace -> state -> Prop :=
-| exec_start_block: forall ge s f sp pc rs m bb,
-    (self__LTL.fn_code f)!pc = Some bb ->
-    step ge (self__LTL.State s f sp pc rs m)
-      E0 (self__LTL.Block s f sp bb rs m)
-| exec_Lop: forall ge s f sp op args res bb rs m v rs',
-    eval_operation op ge sp (reglist rs args) m = Some v ->
-    rs' = Locmap.set (R res) v (undef_regs (M.destroyed_by_op op) rs) ->
-    step ge (self__LTL.Block s f sp (Lop op args res :: bb) rs m)
-      E0 (self__LTL.Block s f sp bb rs' m)      
-| exec_Lgetstack: forall ge s f sp sl ofs ty dst bb rs m rs',
-    rs' = Locmap.set (R dst) (rs (S sl ofs ty)) (undef_regs (destroyed_by_getstack sl) rs) ->
-    step ge (self__LTL.Block s f sp (Lgetstack sl ofs ty dst :: bb) rs m)
-      E0 (self__LTL.Block s f sp bb rs' m)                   
-| exec_Lsetstack: forall ge s f sp src sl ofs ty bb rs m rs',
-    rs' = Locmap.set (S sl ofs ty) (rs (R src)) (undef_regs (destroyed_by_setstack ty) rs) ->
-    step ge (self__LTL.Block s f sp (Lsetstack src sl ofs ty :: bb) rs m)
-      E0 (self__LTL.Block s f sp bb rs' m)                   
-| exec_Lbranch: forall ge s f sp pc bb rs m,
-    step ge (self__LTL.Block s f sp (Lbranch pc :: bb) rs m)
-      E0 (self__LTL.State s f sp pc rs m)      
-| exec_Lcond: forall ge s f sp cond args pc1 pc2 bb rs b pc rs' m,
-    Asm.eval_condition cond (reglist rs args) m = Some b ->
-    pc = (if b then pc1 else pc2) ->
-    rs' = undef_regs (M.destroyed_by_cond cond) rs ->
-    step ge (self__LTL.Block s f sp (Lcond cond args pc1 pc2 :: bb) rs m)
-      E0 (self__LTL.State s f sp pc rs' m)                   
-| exec_Lreturn: forall ge s f sp bb rs m m',
-    Mem.free m sp 0 f.(self__LTL.fn_stacksize) = Some m' ->
-    step ge (self__LTL.Block s f (Vptr sp Ptrofs.zero) (Lreturn :: bb) rs m)
-      E0 (self__LTL.Returnstate s (return_regs (parent_locset s) rs) m')
-| exec_return: forall ge f sp rs1 bb s rs m,
-    step ge (self__LTL.Returnstate (self__LTL.Stackframe f sp rs1 bb :: s) rs m)
-      E0 (self__LTL.Block s f sp bb rs m)
- | exec_function_internal: forall ge s f rs m m' sp rs',
-      Mem.alloc m 0 f.(self__LTL.fn_stacksize) = (m', sp) ->
-      rs' = undef_regs destroyed_at_function_entry (call_regs rs) ->
-      step ge (self__LTL.Callstate s (AST.Internal f) rs m)
-        E0 (self__LTL.State s f (Vptr sp Ptrofs.zero) f.(self__LTL.fn_entrypoint) rs' m').      
-
-MetaData initial_state.
-Inductive initial_state (p: self__LTL.program): self__LTL.state -> Prop :=
-| initial_state_intro: forall b f m0,
-    let ge := Genv.globalenv p in
-    Genv.init_mem p = Some m0 ->
-    Genv.find_symbol ge p.(AST.prog_main) = Some b ->
-    Genv.find_funct_ptr ge b = Some f ->
-    self__LTL.funsig f = signature_main ->
-    initial_state p (self__LTL.Callstate nil f (Locmap.init Vundef) m0).
-FEnd initial_state.
-
-MetaData final_state.
-Inductive final_state: self__LTL.state -> int -> Prop :=
-| final_state_intro: forall rs m retcode,
-    Locmap.getpair (map_rpair R (loc_result signature_main)) rs = Vint retcode ->
-    final_state (self__LTL.Returnstate nil rs m) retcode.
-FEnd final_state.*)
 
 FRecursion successors_instr about instruction motive (fun (_ : instruction) =>  list node -> list node) by _rect.
 Case Lop op args dst := (fun rest => rest).
@@ -2061,8 +1669,8 @@ Family Lfam.
 FDefinition label := positive.
 
 FInductive instruction: Type :=
-| Lop : Asm.operation -> list mreg -> mreg -> instruction
-| Lcond : Asm.condition -> list mreg -> label -> instruction
+| Lop : Op.operation -> list mreg -> mreg -> instruction
+| Lcond : Op.condition -> list mreg -> label -> instruction
 | Llabel: label -> instruction
 | Lgoto: label -> instruction                                                     
 | Lreturn : instruction.
@@ -2082,117 +1690,6 @@ FDefinition funsig := fun (fd: fundef) =>
   | AST.Internal f => function_sig f
   | AST.External ef => ef_sig ef
   end.
-
-(*
-FDefinition genv := Genv.t fundef unit.
-FDefinition eval_operation := fun op => Asm.eval_operation op fundef unit.
-(* regset/locset *)
-FOpaque Definition storeset : Type := cheat.
-(* function/block *)
-FOpaque Definition func_ptr : Type := cheat.
-FOpaque Definition call_func_ptr : Type := cheat.
-(* return address / locset *)
-FOpaque Definition stack_state : Type := cheat.
-
-
-MetaData stackframe.
-Inductive stackframe : Type :=
-| Stackframe:
-    forall (f: self__Lfam.func_ptr)(* calling function *)
-           (sp: val)(* stack pointer in calling function *)
-           (ls: self__Lfam.stack_state)(* location state in calling function *)
-           (bb: self__Lfam.code), (* program point in calling function *)
-      stackframe.
-FEnd stackframe.
-
-MetaData state.
-Inductive state: Type :=
-| State:
-    forall (stack: list self__Lfam.stackframe)(* call stack *)
-           (f: self__Lfam.func_ptr)(* function currently executing *)
-           (sp: val)(* stack pointer *)
-           (c: self__Lfam.code)(* current program point *)
-           (rs: self__Lfam.storeset)(* location state *)
-           (m: mem),(* memory state *)
-    state
-| Callstate:
-    forall (stack: list self__Lfam.stackframe)(* call stack *)
-           (f: self__Lfam.call_func_ptr)(* function to call *)
-           (rs: self__Lfam.storeset)(* location state at point of call *)
-           (m: mem),(* memory state *)
-    state
-| Returnstate:
-    forall (stack: list self__Lfam.stackframe)(* call stack *)
-           (rs: self__Lfam.storeset)(* location state at point of return *)
-           (m: mem),(* memory state *)
-    state.
-FEnd state.
-
-FRecursion is_label about instruction motive (fun (_ : instruction) => label -> bool) by _rect.
-Case Lop op arg dst := (fun lbl => false).
-(*Case Lgetstack s i t dst := (fun lbl => false). 
-Case Lsetstack d s i t := (fun lbl => false). *)
-Case Lcond c args l := (fun lbl => false). 
-Case Llabel lbl' := (fun lbl => if peq lbl lbl' then true else false).
-Case Lgoto lbl' := (fun lbl => false).
-Case Lreturn := (fun lbl => false). 
-FEnd is_label.
-
-MetaData find_label.
-Fixpoint find_label (lbl: self__Lfam.label) (c: self__Lfam.code) {struct c} : option self__Lfam.code :=
-  match c with
-  | nil => None
-  | i1 :: il => if self__Lfam.is_label i1 lbl then Some il else find_label lbl il
-  end.
-FEnd find_label.
-
-(* FDefinition parent_locset : list stackframe -> locset := fun stack => 
-  match stack with
-  | nil => Locmap.init Vundef
-  | self__Lfam.Stackframe f sp ls c :: stack' => ls
-  end. *)
-
-FOpaque Definition reglist : storeset -> list mreg -> list val := cheat.
-FOpaque Definition undef_regs : list mreg -> storeset -> storeset := cheat.
-FOpaque Definition set_storeset : mreg -> val -> storeset -> storeset := cheat.
-FOpaque Definition find_func_ptr : genv -> func_ptr -> option fundef := cheat. 
-
-
-FInductive step: genv -> state -> trace -> state -> Prop :=          
-| exec_Llabel:
-    forall ge s f sp lbl b rs m,
-    step ge (self__Lfam.State s f sp (Llabel lbl :: b) rs m)
-      E0 (self__Lfam.State s f sp b rs m)
-| exec_Lgoto:
-    forall ge s fb f sp lbl b rs m b',
-    find_func_ptr ge fb = Some (AST.Internal f) -> 
-    find_label lbl (function_code f) = Some b' ->
-    step ge (self__Lfam.State s fb sp (Lgoto lbl :: b) rs m)
-      E0 (self__Lfam.State s fb sp b' rs m)
-| exec_Lop:
-    forall ge s f sp op args res b rs m v rs',
-    eval_operation op ge sp (reglist rs args) m = Some v ->
-    rs' = set_storeset res v (undef_regs (M.destroyed_by_op op) rs) ->
-    step ge (self__Lfam.State s f sp (Lop op args res :: b) rs m)
-      E0 (self__Lfam.State s f sp b rs' m)
-| exec_Lcond_true:
-    forall ge s (fb: func_ptr) (f: function) sp cond args lbl b rs m rs' b',
-    Asm.eval_condition cond (reglist rs args) m = Some true ->
-    rs' = undef_regs (M.destroyed_by_cond cond) rs ->
-    find_func_ptr ge fb = Some (AST.Internal f) -> 
-    find_label lbl (function_code f) = Some b' ->
-    step ge (self__Lfam.State s fb sp (Lcond cond args lbl :: b) rs m)
-      E0 (self__Lfam.State s fb sp b' rs' m)
-| exec_Lcond_false:
-    forall ge s f sp cond args lbl b rs m rs',
-    Asm.eval_condition cond (reglist rs args) m = Some false ->
-    rs' = undef_regs (M.destroyed_by_cond cond) rs ->
-    step ge (self__Lfam.State s f sp (Lcond cond args lbl :: b) rs m)
-      E0 (self__Lfam.State s f sp b rs' m)
-| exec_return:
-      forall ge s f sp rs0 c rs m,
-      step ge (self__Lfam.Returnstate (self__Lfam.Stackframe f sp rs0 c :: s) rs m)
-        E0 (self__Lfam.State s f sp c rs m).*)
 
 FEnd Lfam.
 
@@ -2216,74 +1713,6 @@ FOverride Definition function_sig := self__Linear.fn_sig.
 FOverride Definition function_stacksize := self__Linear.fn_stacksize.
 FOverride Definition function_code := self__Linear.fn_code.
 
-(*
-FOverride Definition storeset := Locmap.t.
-FOverride Definition func_ptr := function.
-FOverride Definition call_func_ptr := fundef.
-FOverride Definition stack_state := storeset.
-
-FRecursion is_label.
-Case Lgetstack s i t dst := (fun lbl => false).
-Case Lsetstack d s i t := (fun lbl => false).
-FEnd is_label.
-
-FOverride Definition reglist := LTL.reglist.
-FOverride Definition undef_regs := LTL.undef_regs.
-FOverride Definition set_storeset := fun dst => Locmap.set (R dst).
-FOverride Definition find_func_ptr := fun ge f => Some (AST.Internal f).
-
-FDefinition destroyed_by_getstack : slot -> list mreg := fun s => 
-  match s with
-  | Incoming => temp_for_parent_frame :: nil
-  | _ => nil
-  end.
-
-FDefinition parent_locset : list stackframe -> storeset := fun stack => 
-  match stack with
-  | nil => Locmap.init Vundef
-  | self__Linear.Stackframe f sp ls c :: stack' => ls
-  end.
-
-FInductive step: genv -> state -> trace -> state -> Prop :=
-| exec_Lgetstack:
-  forall ge s f sp sl ofs ty dst b rs m rs',
-    rs' = Locmap.set (R dst) (rs (S sl ofs ty)) (undef_regs (destroyed_by_getstack sl) rs) ->
-    step ge (self__Linear.State s f sp (Lgetstack sl ofs ty dst :: b) rs m)
-      E0 (self__Linear.State s f sp b rs' m)
-| exec_Lsetstack:
-  forall ge s f sp src sl ofs ty b rs m rs',
-    rs' = Locmap.set (S sl ofs ty) (rs (R src)) (undef_regs (destroyed_by_setstack ty) rs) ->
-    step ge (self__Linear.State s f sp (Lsetstack src sl ofs ty :: b) rs m)
-      E0 (self__Linear.State s f sp b rs' m)
-| exec_function_internal:
-    forall ge s f rs m rs' m' stk,
-    Mem.alloc m 0 (function_stacksize f) = (m', stk) ->
-    rs' = undef_regs destroyed_at_function_entry (LTL.call_regs rs) ->
-    step ge (self__Linear.Callstate s (AST.Internal f) rs m)
-      E0 (self__Linear.State s f (Vptr stk Ptrofs.zero) (function_code f) rs' m')
-| exec_Lreturn:
-      forall ge s f stk b rs m m',
-      Mem.free m stk 0 (function_stacksize f) = Some m' ->
-      step ge (self__Linear.State s f (Vptr stk Ptrofs.zero) (Lreturn :: b) rs m)
-        E0 (self__Linear.Returnstate s (LTL.return_regs (parent_locset s) rs) m').
-
-MetaData initial_state.
-Inductive initial_state (p: self__Linear.program): self__Linear.state -> Prop :=
-| initial_state_intro: forall b f m0,
-    let ge := Genv.globalenv p in
-    Genv.init_mem p = Some m0 ->
-    Genv.find_symbol ge p.(AST.prog_main) = Some b ->
-    Genv.find_funct_ptr ge b = Some f ->
-    self__Linear.funsig f = signature_main ->
-    initial_state p (self__Linear.Callstate nil f (Locmap.init Vundef) m0).
-FEnd initial_state.
-
-MetaData final_state.
-Inductive final_state: self__Linear.state -> int -> Prop :=
-| final_state_intro: forall rs m retcode,
-    Locmap.getpair (map_rpair R (loc_result signature_main)) rs = Vint retcode ->
-    final_state (self__Linear.Returnstate nil rs m) retcode.
-FEnd final_state.*)
 FEnd Linear.
 
 Family Mach extends Lfam.
@@ -2309,111 +1738,14 @@ FOverride Definition function_sig := self__Mach.fn_sig.
 FOverride Definition function_stacksize := self__Mach.fn_stacksize.
 FOverride Definition function_code := self__Mach.fn_code.
 
-From NFPOP Require Import Mregisters.        
-(*
-From NFPOP Require Import Mregisters.        
-FOverride Definition storeset := Regmap.t val.
-FOverride Definition func_ptr := block.
-FOverride Definition call_func_ptr := block.
-(* Asm return address in calling function *)
-FOverride Definition stack_state := val.
-
-FRecursion is_label.
-Case Lgetstack ptr t dst := (fun lbl => false).
-Case Lsetstack ptr i dst := (fun lbl => false).
-Case Lgetparam ptr i dst := (fun lbl => false).
-FEnd is_label.    
-
-FDefinition load_stack := fun (m: mem) (sp: val) (ty: typ) (ofs: ptrofs) =>
-  Mem.loadv (chunk_of_type ty) m (Val.offset_ptr sp ofs).
-
-FDefinition store_stack := fun (m: mem) (sp: val) (ty: typ) (ofs: ptrofs) (v: val) =>
-  Mem.storev (chunk_of_type ty) m (Val.offset_ptr sp ofs) v.
-
-FOverride Definition reglist := fun a b => a ## b.
-MetaData undef_regs_.
-Fixpoint undef_regs_ (rl: list mreg) (rs: self__Mach.storeset) {struct rl} : self__Mach.storeset :=
-  match rl with
-  | nil => rs
-  | r1 :: rl' => Regmap.set r1 Vundef (undef_regs_ rl' rs)
-  end.
-FEnd undef_regs_.
-FOverride Definition undef_regs := undef_regs_.
-FOverride Definition set_storeset := fun b c a => a # b <- c.
-FOverride Definition find_func_ptr := fun ge fb => Genv.find_funct_ptr ge fb.
-
-FDefinition parent_sp := fun (s: list stackframe) =>
-  match s with
-  | nil => Vnullptr
-  | self__Mach.Stackframe f sp ra c :: s' => sp
-  end.
-
-FDefinition parent_ra := fun (s: list stackframe) =>
-  match s with
-  | nil => Vnullptr
-  | self__Mach.Stackframe f sp ra c :: s' => ra
-  end.
-
-FInductive step: genv -> state -> trace -> state -> Prop :=
-| exec_Lgetstack:
-      forall ge s f sp ofs ty dst c rs m v,
-      load_stack m sp ty ofs = Some v ->
-      step ge (self__Mach.State s f sp (Lgetstack ofs ty dst :: c) rs m)
-        E0 (self__Mach.State s f sp c (rs#dst <- v) m)
-| exec_Lsetstack:
-      forall ge s f sp src ofs ty c rs m m' rs',
-      store_stack m sp ty ofs (rs src) = Some m' ->
-      rs' = undef_regs (destroyed_by_setstack ty) rs ->
-      step ge (self__Mach.State s f sp (Lsetstack src ofs ty :: c) rs m)
-        E0 (self__Mach.State s f sp c rs' m')
-| exec_Lgetparam:
-      forall ge s fb f sp ofs ty dst c rs m v rs',
-      Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
-      load_stack m sp Tptr f.(self__Mach.fn_link_ofs) = Some (parent_sp s) ->
-      load_stack m (parent_sp s) ty ofs = Some v ->
-      rs' = (rs # temp_for_parent_frame <- Vundef # dst <- v) ->
-      step ge (self__Mach.State s fb sp (Lgetparam ofs ty dst :: c) rs m)
-        E0 (self__Mach.State s fb sp c rs' m)
-| exec_function_internal:
-      forall ge s fb rs m f m1 m2 m3 stk rs',
-      Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
-      Mem.alloc m 0 f.(self__Mach.fn_stacksize) = (m1, stk) ->
-      let sp := Vptr stk Ptrofs.zero in
-      store_stack m1 sp Tptr f.(self__Mach.fn_link_ofs) (parent_sp s) = Some m2 ->
-      store_stack m2 sp Tptr f.(self__Mach.fn_retaddr_ofs) (parent_ra s) = Some m3 ->
-      rs' = undef_regs destroyed_at_function_entry rs ->
-      step ge (self__Mach.Callstate s fb rs m)
-        E0 (self__Mach.State s fb sp f.(self__Mach.fn_code) rs' m3)
-| exec_Lreturn:
-      forall ge s fb stk soff c rs m f m',
-      Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
-      load_stack m (Vptr stk soff) Tptr f.(self__Mach.fn_link_ofs) = Some (parent_sp s) ->
-      load_stack m (Vptr stk soff) Tptr f.(self__Mach.fn_retaddr_ofs) = Some (parent_ra s) ->
-      Mem.free m stk 0 f.(self__Mach.fn_stacksize) = Some m' ->
-      step ge (self__Mach.State s fb (Vptr stk soff) (Lreturn :: c) rs m)
-        E0 (self__Mach.Returnstate s rs m').
-
-MetaData initial_state.
-Inductive initial_state (p: self__Mach.program): self__Mach.state -> Prop :=
-  | initial_state_intro: forall fb m0,
-      let ge := Genv.globalenv p in
-      Genv.init_mem p = Some m0 ->
-      Genv.find_symbol ge p.(AST.prog_main) = Some fb ->
-      initial_state p (self__Mach.Callstate nil fb (Regmap.init Vundef) m0).
-FEnd initial_state.
-
-MetaData final_state.
-Inductive final_state: self__Mach.state -> int -> Prop :=
-  | final_state_intro: forall rs m r retcode,
-      loc_result signature_main = AST.One r ->
-      rs r = Vint retcode ->
-      final_state (self__Mach.Returnstate nil rs m) retcode.
-FEnd final_state.*)
+From NFPOP Require Import Mregisters.
 
 FEnd Mach.
 
 (* LTL -> Linear *)
 Family Linearize.
+Family S extends LTL. FEnd S.
+Family T extends Linear. FEnd T.
 
 From NFPOP Require Import Lattice.
 From NFPOP Require Import Kildall.
@@ -2422,21 +1754,21 @@ From NFPOP Require Import Kildall.
 
 Module DS := Dataflow_Solver(LBoolean)(NodeSetForward).
 
-FDefinition reachable_aux : LTL.function -> option (PMap.t bool) :=
-  fun (f: LTL.function) =>
+FDefinition reachable_aux : S.function -> option (PMap.t bool) :=
+  fun (f: S.function) =>
   DS.fixpoint
-    (LTL.fn_code f) LTL.successors_block
+    (S.fn_code f) S.successors_block
     (fun pc r => r)
-    f.(self__Base.LTL.fn_entrypoint) true.
+    (S.fn_entrypoint f) true.
 
-FDefinition reachable : LTL.function -> PMap.t bool := fun f =>
+FDefinition reachable : S.function -> PMap.t bool := fun f =>
   match reachable_aux f with
   | None => PMap.init true
   | Some rs => rs
   end.
 
 MetaData enumerate_aux.
-Parameter enumerate_aux: self__Base.LTL.function -> PMap.t bool -> list self__Base.LTL.node.
+Parameter enumerate_aux: self__Linearize.S.function -> PMap.t bool -> list self__Linearize.S.node.
 FEnd enumerate_aux.
 
 Module Nodeset := FSetAVL.Make(OrderedPositive).
@@ -2445,7 +1777,7 @@ From NFPOP Require Import Errors.
 Open Scope error_monad_scope.
 
 MetaData nodeset_of_list.
-Fixpoint nodeset_of_list (l: list self__Base.LTL.node) (s: Nodeset.t)
+Fixpoint nodeset_of_list (l: list self__Linearize.S.node) (s: Nodeset.t)
                          {struct l}: res Nodeset.t :=
   match l with
   | nil => OK s
@@ -2458,14 +1790,14 @@ FEnd nodeset_of_list.
 
 FDefinition check_reachable_aux := 
      fun (reach: PMap.t bool) (s: Nodeset.t)
-     (ok: bool) (pc: LTL.node) (bb: LTL.bblock) =>
+     (ok: bool) (pc: S.node) (bb: S.bblock) =>
   if reach!!pc then ok && Nodeset.mem pc s else ok.
 
 FDefinition check_reachable := 
-     fun (f: LTL.function) (reach: PMap.t bool) (s: Nodeset.t) =>
-  PTree.fold (check_reachable_aux reach s) f.(self__Base.LTL.fn_code) true.
+     fun (f: S.function) (reach: PMap.t bool) (s: Nodeset.t) =>
+  PTree.fold (check_reachable_aux reach s) (S.fn_code f) true.
 
-FDefinition enumerate : LTL.function -> res (list LTL.node) := fun f => 
+FDefinition enumerate : S.function -> res (list S.node) := fun f => 
   let reach := reachable f in
   let enum := enumerate_aux f reach in
   do s <- nodeset_of_list enum Nodeset.empty;
@@ -2473,7 +1805,7 @@ FDefinition enumerate : LTL.function -> res (list LTL.node) := fun f =>
   then OK enum
   else Error (msg "Linearize: wrong enumeration").
 
-FRecursion starts_with_label about Linear.instruction motive (fun (_ : Linear.instruction) => Linear.label -> bool) by _rect.
+FRecursion starts_with_label about T.instruction motive (fun (_ : T.instruction) => T.label -> bool) by _rect.
 Case Llabel lbl' := (fun lbl => peq lbl lbl').
 Case Lop op args res := (fun lbl => false).
 Case Lgetstack sl ofs ty r := (fun lbl => false).
@@ -2484,147 +1816,70 @@ Case Lgoto lbl' := (fun lbl => false).
 FEnd starts_with_label.
 
 MetaData starts_with.
-Fixpoint starts_with (lbl: self__Base.Linear.label) (k: self__Base.Linear.code) {struct k} : bool :=
+Fixpoint starts_with (lbl: self__Linearize.T.label) (k: self__Linearize.T.code) {struct k} : bool :=
      match k with
      | i :: k' => if self__Linearize.starts_with_label i lbl then true else starts_with lbl k'
      | _ => false
      end.
 FEnd starts_with.
               
-FDefinition add_branch : Linear.label -> Linear.code -> Linear.code := fun (s: Linear.label) (k: Linear.code) =>
-   if starts_with s k then k else Linear.Lgoto s :: k.
+FDefinition add_branch : T.label -> T.code -> T.code := fun (s: T.label) (k: T.code) =>
+   if starts_with s k then k else T.Lgoto s :: k.
 
-FRecursion translate_instr about LTL.instruction motive (fun (_ : LTL.instruction) => (Linear.code -> Linear.code) -> Linear.code -> Linear.code) by _rect.
-Case Lop op args res := (fun f k => Linear.Lop op args res :: f k).
-Case Lgetstack sl ofs ty r := (fun f k => Linear.Lgetstack sl ofs ty r :: f k).
-Case Lsetstack r sl ofs ty := (fun f k => Linear.Lsetstack r sl ofs ty :: f k).
+FRecursion translate_instr about S.instruction motive (fun (_ : S.instruction) => (T.code -> T.code) -> T.code -> T.code) by _rect.
+Case Lop op args res := (fun f k => T.Lop op args res :: f k).
+Case Lgetstack sl ofs ty r := (fun f k => T.Lgetstack sl ofs ty r :: f k).
+Case Lsetstack r sl ofs ty := (fun f k => T.Lsetstack r sl ofs ty :: f k).
 Case Lbranch s := (fun f k => add_branch s k).
 Case Lcond cond args s1 s2 :=
-(fun f k => if starts_with s1 k then Linear.Lcond (Asm.negate_condition cond) args s2 :: add_branch s1 k else Linear.Lcond cond args s1 :: add_branch s2 k).
-Case Lreturn := (fun f k => Linear.Lreturn :: f k).
+(fun f k => if starts_with s1 k then T.Lcond (Op.negate_condition cond) args s2 :: add_branch s1 k else T.Lcond cond args s1 :: add_branch s2 k).
+Case Lreturn := (fun f k => T.Lreturn :: f k).
 FEnd translate_instr.
        
 MetaData linearize_block.
-Fixpoint linearize_block (b: self__Base.LTL.bblock) (k: self__Base.Linear.code) : self__Base.Linear.code :=
+Fixpoint linearize_block (b: self__Linearize.S.bblock) (k: self__Linearize.T.code) : self__Linearize.T.code :=
    match b with
    | nil => k
    | i :: b' => self__Linearize.translate_instr i (linearize_block b') k
    end.
 FEnd linearize_block.
 
-FDefinition linearize_node : LTL.function -> LTL.node -> Linear.code -> Linear.code :=
-  fun (f: LTL.function) (pc: LTL.node) (k: Linear.code) =>
-  match f.(self__Base.LTL.fn_code)!pc with
+FDefinition linearize_node : S.function -> S.node -> T.code -> T.code :=
+  fun (f: S.function) (pc: S.node) (k: T.code) =>
+  match (S.fn_code f)!pc with
   | None => k
-  | Some b => Linear.Llabel pc :: linearize_block b k
+  | Some b => T.Llabel pc :: linearize_block b k
   end.
 
-FDefinition linearize_body : LTL.function -> list LTL.node -> Linear.code :=
-  fun (f: LTL.function) (enum: list LTL.node) =>
+FDefinition linearize_body : S.function -> list S.node -> T.code :=
+  fun (f: S.function) (enum: list S.node) =>
   list_fold_right (linearize_node f) enum nil.
 
-FDefinition transf_function : LTL.function -> res Linear.function := fun f =>
+FDefinition transf_function : S.function -> res T.function := fun f =>
   do enum <- enumerate f;
-  OK (Linear.mkfunction
-       (LTL.fn_sig f)
-       (LTL.fn_stacksize f)
-       (add_branch (LTL.fn_entrypoint f) (linearize_body f enum))).
+  OK (T.mkfunction
+       (S.fn_sig f)
+       (S.fn_stacksize f)
+       (add_branch (S.fn_entrypoint f) (linearize_body f enum))).
 
-FDefinition transf_fundef : LTL.fundef -> res Linear.fundef := fun f =>
+FDefinition transf_fundef : S.fundef -> res T.fundef := fun f =>
   AST.transf_partial_fundef transf_function f.
 
-FDefinition transf_program : LTL.program -> res Linear.program := fun p =>
+FDefinition transf_program : S.program -> res T.program := fun p =>
   transform_partial_program transf_fundef p.
-
-(* correctness *)
-
-(*
-Inductive match_stackframes: LTL.stackframe -> Linear.stackframe -> Prop :=
-  | match_stackframe_intro:
-      forall f sp bb ls tf c,
-      transf_function f = OK tf ->
-      (forall pc, In pc (successors_block bb) -> (reachable f)!!pc = true) ->
-      is_tail c tf.(fn_code) ->
-      match_stackframes
-        (LTL.Stackframe f sp ls bb)
-        (Linear.Stackframe tf sp ls (linearize_block bb c)).
-
-Inductive match_states: LTL.state -> Linear.state -> Prop :=
-  | match_states_add_branch:
-      forall s f sp pc ls m tf ts c
-        (STACKS: list_forall2 match_stackframes s ts)
-        (TRF: transf_function f = OK tf)
-        (REACH: (reachable f)!!pc = true)
-        (TAIL: is_tail c tf.(fn_code)),
-      match_states (LTL.State s f sp pc ls m)
-                   (Linear.State ts tf sp (add_branch pc c) ls m)
-  | match_states_cond_taken:
-      forall s f sp pc ls m tf ts cond args c
-        (STACKS: list_forall2 match_stackframes s ts)
-        (TRF: transf_function f = OK tf)
-        (REACH: (reachable f)!!pc = true)
-        (JUMP: eval_condition cond (reglist ls args) m = Some true),
-      match_states (LTL.State s f sp pc (undef_regs (destroyed_by_cond cond) ls) m)
-                   (Linear.State ts tf sp (Lcond cond args pc :: c) ls m)
-  | match_states_jumptable:
-      forall s f sp pc ls m tf ts arg tbl c n
-        (STACKS: list_forall2 match_stackframes s ts)
-        (TRF: transf_function f = OK tf)
-        (REACH: (reachable f)!!pc = true)
-        (ARG: ls (R arg) = Vint n)
-        (JUMP: list_nth_z tbl (Int.unsigned n) = Some pc),
-      match_states (LTL.State s f sp pc (undef_regs destroyed_by_jumptable ls) m)
-                   (Linear.State ts tf sp (Ljumptable arg tbl :: c) ls m)
-  | match_states_block:
-      forall s f sp bb ls m tf ts c
-        (STACKS: list_forall2 match_stackframes s ts)
-        (TRF: transf_function f = OK tf)
-        (REACH: forall pc, In pc (successors_block bb) -> (reachable f)!!pc = true)
-        (TAIL: is_tail c tf.(fn_code)),
-      match_states (LTL.Block s f sp bb ls m)
-                   (Linear.State ts tf sp (linearize_block bb c) ls m)
-  | match_states_call:
-      forall s f ls m tf ts,
-      list_forall2 match_stackframes s ts ->
-      transf_fundef f = OK tf ->
-      match_states (LTL.Callstate s f ls m)
-                   (Linear.Callstate ts tf ls m)
-  | match_states_return:
-      forall s ls m ts,
-      list_forall2 match_stackframes s ts ->
-      match_states (LTL.Returnstate s ls m)
-                   (Linear.Returnstate ts ls m).
-
-Theorem transf_step_correct:
-  forall s1 t s2, LTL.step ge s1 t s2 ->
-  forall s1' (MS: match_states s1 s1'),
-  (exists s2', plus Linear.step tge s1' t s2' /\ match_states s2 s2')
-  \/ (measure s2 < measure s1 /\ t = E0 /\ match_states s2 s1')%nat.
-Proof.
-
-Lemma transf_initial_states:
-  forall st1, LTL.initial_state prog st1 ->
-  exists st2, Linear.initial_state tprog st2 /\ match_states st1 st2.
-Proof.
-
-Lemma transf_final_states:
-  forall st1 st2 r,
-  match_states st1 st2 -> LTL.final_state st1 r -> Linear.final_state st2 r.
-Proof.
-
-
-*)
 
 FEnd Linearize.
    
 (* Linear -> Mach *)
 Family Stacking.
+Family S extends Linear. FEnd S.
+Family T extends Mach. FEnd T.
 
 From NFPOP Require Import Bounds.
 (* Fields in bounds that depend on late bound names *)
 
-FRecursion record_regs_of_instr about Linear.instruction motive
-  (fun (_ : Linear.instruction) => RegSet.t -> Regset.t) by _rect.
+FRecursion record_regs_of_instr about S.instruction motive
+  (fun (_ : S.instruction) => RegSet.t -> Regset.t) by _rect.
 Case Lreturn := cheat. (* (fun u => u).*)
 Case Lgetstack sl ofs ty r := cheat. (* (fun u => record_reg u r).*)
 Case Lsetstack r sl ofs ty := cheat. (* (fun u => record_reg u r).*)
@@ -2634,11 +1889,11 @@ Case Lgoto lbl := cheat. (* (fun u => u). *)
 Case Lcond cond args lbl := cheat. (* (fun u => u). *)
 FEnd record_regs_of_instr.
 
-FDefinition record_regs_of_function : Linear.function -> RegSet.t := fun f =>
-  fold_left (fun u i => cheat (* record_regs_of_instr i u*)) (Linear.fn_code f) RegSet.empty.
+FDefinition record_regs_of_function : S.function -> RegSet.t := fun f =>
+  fold_left (fun u i => cheat (* record_regs_of_instr i u*)) (S.fn_code f) RegSet.empty.
 
-FRecursion slots_of_instr about Linear.instruction motive
-  (fun (_ : Linear.instruction) => list (slot * Z * typ)) by _rect.
+FRecursion slots_of_instr about S.instruction motive
+  (fun (_ : S.instruction) => list (slot * Z * typ)) by _rect.
 Case Lreturn := nil.
 Case Lgetstack sl ofs ty r := ((sl, ofs, ty) :: nil).
 Case Lsetstack r sl ofs ty := ((sl, ofs, ty) :: nil).
@@ -2648,8 +1903,8 @@ Case Lgoto lbl := nil.
 Case Lcond cond args lbl := nil.
 FEnd slots_of_instr.
 
-FRecursion outgoing_space about Linear.instruction motive
-  (fun (_ : Linear.instruction) => Z) by _rect.
+FRecursion outgoing_space about S.instruction motive
+  (fun (_ : S.instruction) => Z) by _rect.
 Case Lreturn := 0.
 Case Lgetstack sl ofs ty r := 0.
 Case Lsetstack r sl ofs ty := 0.
@@ -2659,21 +1914,21 @@ Case Lgoto lbl := 0.
 Case Lcond cond args lbl := 0.
 FEnd outgoing_space.
 
-FDefinition max_over_instrs : (Linear.instruction -> Z) -> Linear.function -> Z := fun valu f =>
-  max_over_list valu (Linear.fn_code f).
+FDefinition max_over_instrs : (S.instruction -> Z) -> S.function -> Z := fun valu f =>
+  max_over_list valu (S.fn_code f).
 
-FDefinition max_over_slots_of_instr : (slot * Z * typ -> Z) -> Linear.instruction -> Z := fun valu i =>
+FDefinition max_over_slots_of_instr : (slot * Z * typ -> Z) -> S.instruction -> Z := fun valu i =>
   max_over_list valu (slots_of_instr i).
 
-FDefinition max_over_slots_of_funct : (slot * Z * typ -> Z) -> Linear.function -> Z := fun valu f =>
+FDefinition max_over_slots_of_funct : (slot * Z * typ -> Z) -> S.function -> Z := fun valu f =>
   max_over_instrs (max_over_slots_of_instr valu) f.
 
 MetaData function_bounds.
-Program Definition function_bounds (f: self__Base.Linear.function) := {|
+Program Definition function_bounds (f: self__Stacking.S.function) := {|
   used_callee_save := RegSet.elements (self__Stacking.record_regs_of_function f);
   bound_local := self__Stacking.max_over_slots_of_funct local_slot f;
   bound_outgoing := Z.max (self__Stacking.max_over_instrs self__Stacking.outgoing_space f) (self__Stacking.max_over_slots_of_funct outgoing_slot f);
-  bound_stack_data := Z.max (self__Base.Linear.fn_stacksize f) 0
+  bound_stack_data := Z.max (self__Stacking.S.fn_stacksize f) 0
 |}.
 Next Obligation.
   apply cheat.
@@ -2698,156 +1953,102 @@ FDefinition offset_local := fun (fe: frame_env) (x: Z) => fe.(fe_ofs_local) + 4 
 
 FDefinition offset_arg := fun (x: Z) => fe_ofs_arg + 4 * x.
 
-FDefinition transl_op := fun (fe: frame_env) (op: Asm.operation) =>
-    Asm.shift_stack_operation op fe.(fe_stack_data).
+FDefinition transl_op := fun (fe: frame_env) (op: Op.operation) =>
+    Op.shift_stack_operation op fe.(fe_stack_data).
 
 MetaData save_callee_save_rec.
-Fixpoint save_callee_save_rec (rl: list mreg) (ofs: Z) (k: self__Base.Mach.code) :=
+Fixpoint save_callee_save_rec (rl: list mreg) (ofs: Z) (k: self__Stacking.T.code) :=
   match rl with
   | nil => k
   | r :: rl =>
       let ty := mreg_type r in
       let sz := AST.typesize ty in
       let ofs1 := align ofs sz in
-      self__Base.Mach.Lsetstack r (Ptrofs.repr ofs1) ty :: save_callee_save_rec rl (ofs1 + sz) k
+      self__Stacking.T.Lsetstack r (Ptrofs.repr ofs1) ty :: save_callee_save_rec rl (ofs1 + sz) k
   end.
 FEnd save_callee_save_rec.
 
-FDefinition save_callee_save := fun (fe: frame_env) (k: Mach.code) =>
+FDefinition save_callee_save := fun (fe: frame_env) (k: T.code) =>
   save_callee_save_rec fe.(fe_used_callee_save) fe.(fe_ofs_callee_save) k.
 
 MetaData restore_callee_save_rec.
-Fixpoint restore_callee_save_rec (rl: list mreg) (ofs: Z) (k: self__Base.Mach.code) :=
+Fixpoint restore_callee_save_rec (rl: list mreg) (ofs: Z) (k: self__Stacking.T.code) :=
   match rl with
   | nil => k
   | r :: rl =>
       let ty := mreg_type r in
       let sz := AST.typesize ty in
       let ofs1 := align ofs sz in
-      self__Base.Mach.Lgetstack (Ptrofs.repr ofs1) ty r :: restore_callee_save_rec rl (ofs1 + sz) k
+      self__Stacking.T.Lgetstack (Ptrofs.repr ofs1) ty r :: restore_callee_save_rec rl (ofs1 + sz) k
   end.
 FEnd restore_callee_save_rec.
 
-FDefinition restore_callee_save := fun (fe: frame_env) (k: Mach.code) =>
+FDefinition restore_callee_save := fun (fe: frame_env) (k: T.code) =>
   restore_callee_save_rec fe.(fe_used_callee_save) fe.(fe_ofs_callee_save) k.
 
-FRecursion transl_instr about Linear.instruction motive (fun (_ : Linear.instruction) => frame_env -> Mach.code -> Mach.code) by _rect.
+FRecursion transl_instr about S.instruction motive (fun (_ : S.instruction) => frame_env -> T.code -> T.code) by _rect.
 Case Lgetstack sl ofs ty r :=
 (fun fe k => 
 match sl with
 | Local =>
-    Mach.Lgetstack (Ptrofs.repr (offset_local fe ofs)) ty r :: k
+    T.Lgetstack (Ptrofs.repr (offset_local fe ofs)) ty r :: k
 | Incoming =>
-    Mach.Lgetparam (Ptrofs.repr (offset_arg ofs)) ty r :: k
+    T.Lgetparam (Ptrofs.repr (offset_arg ofs)) ty r :: k
 | Outgoing =>
-    Mach.Lgetstack (Ptrofs.repr (offset_arg ofs)) ty r :: k
+    T.Lgetstack (Ptrofs.repr (offset_arg ofs)) ty r :: k
 end).
 Case Lsetstack r sl ofs ty :=
 (fun fe k => 
   match sl with
   | Local =>
-      Mach.Lsetstack r (Ptrofs.repr (offset_local fe ofs)) ty :: k
+      T.Lsetstack r (Ptrofs.repr (offset_local fe ofs)) ty :: k
   | Incoming =>
       k
   | Outgoing =>
-      Mach.Lsetstack r (Ptrofs.repr (offset_arg ofs)) ty :: k
+      T.Lsetstack r (Ptrofs.repr (offset_arg ofs)) ty :: k
   end).
-Case Lop op args res := (fun fe k =>  Mach.Lop (transl_op fe op) args res :: k).
-Case Llabel lbl := (fun fe k => Mach.Llabel lbl :: k).
-Case Lgoto lbl := (fun fe k => Mach.Lgoto lbl :: k).
-Case Lcond cond args lbl := (fun fe k => Mach.Lcond cond args lbl :: k).
-Case Lreturn := (fun fe k =>  restore_callee_save fe (Mach.Lreturn :: k)).
+Case Lop op args res := (fun fe k =>  T.Lop (transl_op fe op) args res :: k).
+Case Llabel lbl := (fun fe k => T.Llabel lbl :: k).
+Case Lgoto lbl := (fun fe k => T.Lgoto lbl :: k).
+Case Lcond cond args lbl := (fun fe k => T.Lcond cond args lbl :: k).
+Case Lreturn := (fun fe k =>  restore_callee_save fe (T.Lreturn :: k)).
 FEnd transl_instr.
 
-FDefinition transl_code : frame_env -> list Linear.instruction -> Mach.code := fun fe il =>     
+FDefinition transl_code : frame_env -> list S.instruction -> T.code := fun fe il =>     
   list_fold_right (fun i k => transl_instr i fe k) il nil.
 
-FDefinition transl_body := fun (f: Linear.function) (fe: frame_env) =>
-  save_callee_save fe (transl_code fe (Linear.fn_code f)).
+FDefinition transl_body := fun (f: S.function) (fe: frame_env) =>
+  save_callee_save fe (transl_code fe (S.fn_code f)).
 
 Local Open Scope string_scope.
 
-FDefinition transf_function : Linear.function -> res Mach.function := fun f =>
+FDefinition transf_function : S.function -> res T.function := fun f =>
   let fe := make_env (function_bounds f) in
   (* Don't type check linear *)
   (*if negb (wt_function f) then
-    Error (msg "Ill-formed Linear code")*)
+    Error (msg "Ill-formed S code")*)
   if zlt Ptrofs.max_unsigned fe.(fe_size) then
     Error (msg "Too many spilled variables, stack size exceeded")
   else
-    OK (Mach.mkfunction
-         f.(self__Base.Linear.fn_sig)
+    OK (T.mkfunction
+         (S.fn_sig f)
          (transl_body f fe)
          fe.(fe_size)
          (Ptrofs.repr fe.(fe_ofs_link))
          (Ptrofs.repr fe.(fe_ofs_retaddr))).
 
-FDefinition transf_fundef : Linear.fundef -> res Mach.fundef := fun f =>
+FDefinition transf_fundef : S.fundef -> res T.fundef := fun f =>
   AST.transf_partial_fundef transf_function f.
 
-FDefinition transf_program : Linear.program -> res Mach.program := fun p =>
+FDefinition transf_program : S.program -> res T.program := fun p =>
   transform_partial_program transf_fundef p.
-
-(* correctness *)
-(*
-Inductive match_states: Linear.state -> Mach.state -> Prop :=
-  | match_states_intro:
-      forall cs f sp c ls m cs' fb sp' rs m' j tf
-        (STACKS: match_stacks j cs cs' f.(Linear.fn_sig))
-        (TRANSL: transf_function f = OK tf)
-        (FIND: Genv.find_funct_ptr tge fb = Some (Internal tf))
-        (AGREGS: agree_regs j ls rs)
-        (AGLOCS: agree_locs f ls (parent_locset cs))
-        (INJSP: j sp = Some(sp', fe_stack_data (make_env (function_bounds f))))
-        (TAIL: is_tail c (Linear.fn_code f))
-        (SEP: m' |= frame_contents f j sp' ls (parent_locset cs) (parent_sp cs') (parent_ra cs')
-                 ** stack_contents j cs cs'
-                 ** minjection j m
-                 ** globalenv_inject ge j),
-      match_states (Linear.State cs f (Vptr sp Ptrofs.zero) c ls m)
-                   (Mach.State cs' fb (Vptr sp' Ptrofs.zero) (transl_code (make_env (function_bounds f)) c) rs m')
-  | match_states_call:
-      forall cs f ls m cs' fb rs m' j tf
-        (STACKS: match_stacks j cs cs' (Linear.funsig f))
-        (TRANSL: transf_fundef f = OK tf)
-        (FIND: Genv.find_funct_ptr tge fb = Some tf)
-        (AGREGS: agree_regs j ls rs)
-        (SEP: m' |= stack_contents j cs cs'
-                 ** minjection j m
-                 ** globalenv_inject ge j),
-      match_states (Linear.Callstate cs f ls m)
-                   (Mach.Callstate cs' fb rs m')
-  | match_states_return:
-      forall cs ls m cs' rs m' j sg
-        (STACKS: match_stacks j cs cs' sg)
-        (AGREGS: agree_regs j ls rs)
-        (SEP: m' |= stack_contents j cs cs'
-                 ** minjection j m
-                 ** globalenv_inject ge j),
-      match_states (Linear.Returnstate cs ls m)
-                  (Mach.Returnstate cs' rs m').
-
-Theorem transf_step_correct:
-  forall s1 t s2, Linear.step ge s1 t s2 ->
-  forall (WTS: wt_state s1) s1' (MS: match_states s1 s1'),
-  exists s2', plus step tge s1' t s2' /\ match_states s2 s2'.
-Proof.
-
-Lemma transf_initial_states:
-  forall st1, Linear.initial_state prog st1 ->
-  exists st2, Mach.initial_state tprog st2 /\ match_states st1 st2.
-Proof.
-
-Lemma transf_final_states:
-  forall st1 st2 r,
-  match_states st1 st2 -> Linear.final_state st1 r -> Mach.final_state st2 r.
-Proof.
-*)
 
 FEnd Stacking.
 
 (* Mach -> Asm *)
 Family Asmgen.
+Family S extends Mach. FEnd S.
+Family T extends Asm. FEnd T.
 
 FDefinition ireg_of : mreg -> res ireg := fun r =>
   match preg_of r with IR mr => OK mr | _ => Error(msg "Asmgen.ireg_of") end.
@@ -2868,12 +2069,12 @@ FDefinition make_immed32 := fun (val: int) =>
   else self__Asmgen.Imm32_pair (Int.shru (Int.sub val lo) (Int.repr 12)) lo.
 
 FDefinition load_hilo32 := fun (r: ireg) (hi lo: int) k =>
-  if Int.eq lo Int.zero then Asm.Pluiw r hi :: k
-  else Asm.Pluiw r hi :: Asm.Paddiw r r lo :: k.
+  if Int.eq lo Int.zero then T.Pluiw r hi :: k
+  else T.Pluiw r hi :: T.Paddiw r r lo :: k.
 
-FDefinition loadimm32 := fun (r: ireg) (n: int) (k: Asm.code) =>
+FDefinition loadimm32 := fun (r: ireg) (n: int) (k: T.code) =>
   match make_immed32 n with
-  | self__Asmgen.Imm32_single imm => Asm.Paddiw r X0 imm :: k
+  | self__Asmgen.Imm32_single imm => T.Paddiw r X0 imm :: k
   | self__Asmgen.Imm32_pair hi lo => load_hilo32 r hi lo k
   end.
 
@@ -2893,71 +2094,71 @@ FDefinition make_immed64 := fun (val: int64) =>
   else self__Asmgen.Imm64_large val.
 
 FDefinition load_hilo64 := fun (r: ireg) (hi lo: int64) k =>
-  if Int64.eq lo Int64.zero then Asm.Pluil r hi :: k
-  else Asm.Pluil r hi :: Asm.Paddil r r lo :: k.
+  if Int64.eq lo Int64.zero then T.Pluil r hi :: k
+  else T.Pluil r hi :: T.Paddil r r lo :: k.
 
 
-FDefinition loadimm64 := fun (r: ireg) (n: int64) (k: Asm.code) =>
+FDefinition loadimm64 := fun (r: ireg) (n: int64) (k: T.code) =>
   match make_immed64 n with
-  | self__Asmgen.Imm64_single imm => Asm.Paddil r X0 imm :: k
+  | self__Asmgen.Imm64_single imm => T.Paddil r X0 imm :: k
   | self__Asmgen.Imm64_pair hi lo => load_hilo64 r hi lo k
-  | self__Asmgen.Imm64_large imm  => Asm.Ploadli r imm :: k
+  | self__Asmgen.Imm64_large imm  => T.Ploadli r imm :: k
   end.
 
 FDefinition opimm32 := 
-fun (op: ireg -> ireg0 -> ireg0 -> Asm.instruction)
-    (opimm: ireg -> ireg0 -> int -> Asm.instruction)
-    (rd rs: ireg) (n: int) (k: Asm.code) =>
+fun (op: ireg -> ireg0 -> ireg0 -> T.instruction)
+    (opimm: ireg -> ireg0 -> int -> T.instruction)
+    (rd rs: ireg) (n: int) (k: T.code) =>
   match make_immed32 n with
   | self__Asmgen.Imm32_single imm => opimm rd rs imm :: k
   | self__Asmgen.Imm32_pair hi lo => load_hilo32 X31 hi lo (op rd rs X31 :: k)
   end.
 
 FDefinition opimm64 := 
-  fun (op: ireg -> ireg0 -> ireg0 -> Asm.instruction)
-      (opimm: ireg -> ireg0 -> int64 -> Asm.instruction)
-      (rd rs: ireg) (n: int64) (k: Asm.code) =>
+  fun (op: ireg -> ireg0 -> ireg0 -> T.instruction)
+      (opimm: ireg -> ireg0 -> int64 -> T.instruction)
+      (rd rs: ireg) (n: int64) (k: T.code) =>
   match make_immed64 n with
   | self__Asmgen.Imm64_single imm => opimm rd rs imm :: k
   | self__Asmgen.Imm64_pair hi lo => load_hilo64 X31 hi lo (op rd rs X31 :: k)
-  | self__Asmgen.Imm64_large imm  => Asm.Ploadli X31 imm :: op rd rs X31 :: k
+  | self__Asmgen.Imm64_large imm  => T.Ploadli X31 imm :: op rd rs X31 :: k
   end.
 
-FDefinition addimm32 := opimm32 Asm.Paddw Asm.Paddiw.
-FDefinition xorimm32 := opimm32 Asm.Pxorw Asm.Pxoriw.
-FDefinition sltimm32 := opimm32 Asm.Psltw Asm.Psltiw.
-FDefinition addimm64 := opimm64 Asm.Paddl Asm.Paddil.
-FDefinition sltuimm32 := opimm32 Asm.Psltuw Asm.Psltiuw.
+FDefinition addimm32 := opimm32 T.Paddw T.Paddiw.
+FDefinition xorimm32 := opimm32 T.Pxorw T.Pxoriw.
+FDefinition sltimm32 := opimm32 T.Psltw T.Psltiw.
+FDefinition addimm64 := opimm64 T.Paddl T.Paddil.
+FDefinition sltuimm32 := opimm32 T.Psltuw T.Psltiuw.
 
-FDefinition addptrofs := fun (rd rs: ireg) (n: ptrofs) (k: Asm.code) =>
+FDefinition addptrofs := fun (rd rs: ireg) (n: ptrofs) (k: T.code) =>
   if Ptrofs.eq_dec n Ptrofs.zero then
-    Asm.Pmv rd rs :: k
+    T.Pmv rd rs :: k
   else
     if Archi.ptr64
     then addimm64 rd rs (Ptrofs.to_int64 n) k
     else addimm32 rd rs (Ptrofs.to_int n) k.
 
-FDefinition transl_cond_int32s := fun (cmp: comparison) (rd: ireg) (r1 r2: ireg0) (k: Asm.code) =>
+FDefinition transl_cond_int32s := fun (cmp: comparison) (rd: ireg) (r1 r2: ireg0) (k: T.code) =>
   match cmp with
-  | Ceq => Asm.Pseqw rd r1 r2 :: k
-  | Cne => Asm.Psnew rd r1 r2 :: k
-  | Clt => Asm.Psltw rd r1 r2 :: k
-  | Cle => Asm.Psltw rd r2 r1 :: Asm.Pxoriw rd rd Int.one :: k
-  | Cgt => Asm.Psltw rd r2 r1 :: k
-  | Cge => Asm.Psltw rd r1 r2 :: Asm.Pxoriw rd rd Int.one :: k
+  | Ceq => T.Pseqw rd r1 r2 :: k
+  | Cne => T.Psnew rd r1 r2 :: k
+  | Clt => T.Psltw rd r1 r2 :: k
+  | Cle => T.Psltw rd r2 r1 :: T.Pxoriw rd rd Int.one :: k
+  | Cgt => T.Psltw rd r2 r1 :: k
+  | Cge => T.Psltw rd r1 r2 :: T.Pxoriw rd rd Int.one :: k
   end.
 
-FDefinition transl_cond_int32u := fun (cmp: comparison) (rd: ireg) (r1 r2: ireg0) (k: Asm.code) =>
+FDefinition transl_cond_int32u := fun (cmp: comparison) (rd: ireg) (r1 r2: ireg0) (k: T.code) =>
   match cmp with
-  | Ceq => Asm.Pseqw rd r1 r2 :: k
-  | Cne => Asm.Psnew rd r1 r2 :: k
-  | Clt => Asm.Psltuw rd r1 r2 :: k
-  | Cle => Asm.Psltuw rd r2 r1 :: Asm.Pxoriw rd rd Int.one :: k
-  | Cgt => Asm.Psltuw rd r2 r1 :: k
-  | Cge => Asm.Psltuw rd r1 r2 :: Asm.Pxoriw rd rd Int.one :: k
+  | Ceq => T.Pseqw rd r1 r2 :: k
+  | Cne => T.Psnew rd r1 r2 :: k
+  | Clt => T.Psltuw rd r1 r2 :: k
+  | Cle => T.Psltuw rd r2 r1 :: T.Pxoriw rd rd Int.one :: k
+  | Cgt => T.Psltuw rd r2 r1 :: k
+  | Cge => T.Psltuw rd r1 r2 :: T.Pxoriw rd rd Int.one :: k
   end.
 
-FDefinition transl_condimm_int32s := fun (cmp: comparison) (rd: ireg) (r1: ireg) (n: int) (k: Asm.code) => 
+FDefinition transl_condimm_int32s := fun (cmp: comparison) (rd: ireg) (r1: ireg) (n: int) (k: T.code) => 
   if Int.eq n Int.zero then transl_cond_int32s cmp rd r1 X0 k else
   match cmp with
   | Ceq | Cne => xorimm32 rd r1 n (transl_cond_int32s cmp rd rd X0 k)
@@ -2968,14 +2169,14 @@ FDefinition transl_condimm_int32s := fun (cmp: comparison) (rd: ireg) (r1: ireg)
   | _   => loadimm32 X31 n (transl_cond_int32s cmp rd r1 X31 k)
   end.
 
-FDefinition transl_condimm_int32u := fun (cmp: comparison) (rd: ireg) (r1: ireg) (n: int) (k: Asm.code) =>
+FDefinition transl_condimm_int32u := fun (cmp: comparison) (rd: ireg) (r1: ireg) (n: int) (k: T.code) =>
   if Int.eq n Int.zero then transl_cond_int32u cmp rd r1 X0 k else
   match cmp with
   | Clt => sltuimm32 rd r1 n k
   | _   => loadimm32 X31 n (transl_cond_int32u cmp rd r1 X31 k)
   end.
 
-FRecursion transl_cond_op about Asm.condition motive (fun (_ : Asm.condition) => ireg -> list mreg -> Asm.code -> res Asm.code) by _rect.
+FRecursion transl_cond_op about Op.condition motive (fun (_ : Op.condition) => ireg -> list mreg -> T.code -> res T.code) by _rect.
 Case Ccomp c := 
 (fun rd args k => 
   match args with 
@@ -3004,14 +2205,14 @@ FEnd transl_cond_op.
 
 From NFPOP Require Import Prelude.
 
-FRecursion transl_op about Asm.operation motive (fun (_ : Asm.operation) => list mreg -> mreg -> Asm.code -> res Asm.code) by _rect.
+FRecursion transl_op about Op.operation motive (fun (_ : Op.operation) => list mreg -> mreg -> T.code -> res T.code) by _rect.
 Case Omove :=
 (fun args res k =>
   match args with 
   | a1 :: nil =>
       match preg_of res, preg_of a1 with
-      | IR r, IR a => OK (Asm.Pmv r a :: k)
-      | FR r, FR a => OK (Asm.Pfmv r a :: k)
+      | IR r, IR a => OK (T.Pmv r a :: k)
+      | FR r, FR a => OK (T.Pfmv r a :: k)
       |  _  ,  _   => Error(msg "Asmgen.Omove")
       end
   | _ =>  Error(msg "Asmgen.transl_op")
@@ -3034,8 +2235,8 @@ Case Ofloatconst f :=
   | nil => 
       do rd <- freg_of res;
       OK (if Float.eq_dec f Float.zero
-          then Asm.Pfcvtdw rd X0 :: k
-          else cheat Asm.Ploadfi rd f :: k)
+          then T.Pfcvtdw rd X0 :: k
+          else cheat T.Ploadfi rd f :: k)
   | _ => Error(msg "Asmgen.transl_op")
   end).
 Case Osingleconst f := 
@@ -3044,8 +2245,8 @@ Case Osingleconst f :=
   | nil => 
        do rd <- freg_of res;
       OK (if Float32.eq_dec f Float32.zero
-          then Asm.Pfcvtsw rd X0 :: k
-          else Asm.Ploadsi rd f :: k)
+          then T.Pfcvtsw rd X0 :: k
+          else T.Ploadsi rd f :: k)
   | _ => Error(msg "Asmgen.transl_op")
   end).
 Case Oaddrstack n := 
@@ -3059,27 +2260,27 @@ Case Ocmp cmp := (fun args res k => do rd <- ireg_of res; transl_cond_op cmp rd 
 Case Omakelong := (fun args res k =>  Error(msg "Asmgen.transl_op")).
 FEnd transl_op.
 
-FDefinition transl_cbranch_int32s := fun (cmp: comparison) (r1 r2: ireg0) (lbl: Asm.label) =>
+FDefinition transl_cbranch_int32s := fun (cmp: comparison) (r1 r2: ireg0) (lbl: T.label) =>
   match cmp with
-  | Ceq => Asm.Pbeqw r1 r2 lbl
-  | Cne => Asm.Pbnew r1 r2 lbl
-  | Clt => Asm.Pbltw r1 r2 lbl
-  | Cle => Asm.Pbgew r2 r1 lbl
-  | Cgt => Asm.Pbltw r2 r1 lbl
-  | Cge => Asm.Pbgew r1 r2 lbl
+  | Ceq => T.Pbeqw r1 r2 lbl
+  | Cne => T.Pbnew r1 r2 lbl
+  | Clt => T.Pbltw r1 r2 lbl
+  | Cle => T.Pbgew r2 r1 lbl
+  | Cgt => T.Pbltw r2 r1 lbl
+  | Cge => T.Pbgew r1 r2 lbl
   end.
 
-FDefinition transl_cbranch_int32u := fun (cmp: comparison) (r1 r2: ireg0) (lbl: Asm.label) =>
+FDefinition transl_cbranch_int32u := fun (cmp: comparison) (r1 r2: ireg0) (lbl: T.label) =>
   match cmp with
-  | Ceq => Asm.Pbeqw  r1 r2 lbl
-  | Cne => Asm.Pbnew  r1 r2 lbl
-  | Clt => Asm.Pbltuw r1 r2 lbl
-  | Cle => Asm.Pbgeuw r2 r1 lbl
-  | Cgt => Asm.Pbltuw r2 r1 lbl
-  | Cge => Asm.Pbgeuw r1 r2 lbl
+  | Ceq => T.Pbeqw  r1 r2 lbl
+  | Cne => T.Pbnew  r1 r2 lbl
+  | Clt => T.Pbltuw r1 r2 lbl
+  | Cle => T.Pbgeuw r2 r1 lbl
+  | Cgt => T.Pbltuw r2 r1 lbl
+  | Cge => T.Pbgeuw r1 r2 lbl
   end.
 
-FRecursion transl_cbranch about Asm.condition motive (fun (_ : Asm.condition) => list mreg -> Asm.label -> Asm.code -> res Asm.code) by _rect.
+FRecursion transl_cbranch about Op.condition motive (fun (_ : Op.condition) => list mreg -> T.label -> T.code -> res T.code) by _rect.
 Case Ccomp c := 
 (fun args lbl k => 
   match args with
@@ -3113,76 +2314,76 @@ Case Ccompuimm c n :=
 FEnd transl_cbranch.
 
 FDefinition indexed_memory_access :=
-  fun (mk_instr: ireg -> Asm.offset -> Asm.instruction)
-      (base: ireg) (ofs: ptrofs) (k: Asm.code) =>
+  fun (mk_instr: ireg -> T.offset -> T.instruction)
+      (base: ireg) (ofs: ptrofs) (k: T.code) =>
   if Archi.ptr64 then
     match make_immed64 (Ptrofs.to_int64 ofs) with
     | self__Asmgen.Imm64_single imm =>
-        mk_instr base (Asm.Ofsimm (Ptrofs.of_int64 imm)) :: k
+        mk_instr base (T.Ofsimm (Ptrofs.of_int64 imm)) :: k
     | self__Asmgen.Imm64_pair hi lo =>
-        Asm.Pluil X31 hi :: Asm.Paddl X31 base X31 :: mk_instr X31 (Asm.Ofsimm (Ptrofs.of_int64 lo)) :: k
+        T.Pluil X31 hi :: T.Paddl X31 base X31 :: mk_instr X31 (T.Ofsimm (Ptrofs.of_int64 lo)) :: k
     | self__Asmgen.Imm64_large imm =>
-        Asm.Ploadli X31 imm :: Asm.Paddl X31 base X31 :: mk_instr X31 (Asm.Ofsimm Ptrofs.zero) :: k
+        T.Ploadli X31 imm :: T.Paddl X31 base X31 :: mk_instr X31 (T.Ofsimm Ptrofs.zero) :: k
     end
   else
     match make_immed32 (Ptrofs.to_int ofs) with
     | self__Asmgen.Imm32_single imm =>
-        mk_instr base (Asm.Ofsimm (Ptrofs.of_int imm)) :: k
+        mk_instr base (T.Ofsimm (Ptrofs.of_int imm)) :: k
     | self__Asmgen.Imm32_pair hi lo =>
-        Asm.Pluiw X31 hi :: Asm.Paddw X31 base X31 :: mk_instr X31 (Asm.Ofsimm (Ptrofs.of_int lo)) :: k
+        T.Pluiw X31 hi :: T.Paddw X31 base X31 :: mk_instr X31 (T.Ofsimm (Ptrofs.of_int lo)) :: k
     end.
 
 FDefinition loadind := 
-  fun (base: ireg) (ofs: ptrofs) (ty: typ) (dst: mreg) (k: Asm.code) =>
+  fun (base: ireg) (ofs: ptrofs) (ty: typ) (dst: mreg) (k: T.code) =>
   match ty, preg_of dst with
-  | AST.Tint,    IR rd => OK (indexed_memory_access (Asm.Plw rd) base ofs k)
-  | AST.Tlong,   IR rd => OK (indexed_memory_access (Asm.Pld rd) base ofs k)
-  | AST.Tsingle, FR rd => OK (indexed_memory_access (Asm.Pfls rd) base ofs k)
-  | AST.Tfloat,  FR rd => OK (indexed_memory_access (Asm.Pfld rd) base ofs k)
-  | AST.Tany32,  IR rd => OK (indexed_memory_access (Asm.Plw_a rd) base ofs k)
-  | AST.Tany64,  IR rd => OK (indexed_memory_access (Asm.Pld_a rd) base ofs k)
-  | AST.Tany64,  FR rd => OK (indexed_memory_access (Asm.Pfld_a rd) base ofs k)
+  | AST.Tint,    IR rd => OK (indexed_memory_access (T.Plw rd) base ofs k)
+  | AST.Tlong,   IR rd => OK (indexed_memory_access (T.Pld rd) base ofs k)
+  | AST.Tsingle, FR rd => OK (indexed_memory_access (T.Pfls rd) base ofs k)
+  | AST.Tfloat,  FR rd => OK (indexed_memory_access (T.Pfld rd) base ofs k)
+  | AST.Tany32,  IR rd => OK (indexed_memory_access (T.Plw_a rd) base ofs k)
+  | AST.Tany64,  IR rd => OK (indexed_memory_access (T.Pld_a rd) base ofs k)
+  | AST.Tany64,  FR rd => OK (indexed_memory_access (T.Pfld_a rd) base ofs k)
   | _, _           => Error (msg "Asmgen.loadind")
   end.
 
-FDefinition storeind := fun (src: mreg) (base: ireg) (ofs: ptrofs) (ty: typ) (k: Asm.code) => 
+FDefinition storeind := fun (src: mreg) (base: ireg) (ofs: ptrofs) (ty: typ) (k: T.code) => 
   match ty, preg_of src with
-  | AST.Tint,    IR rd => OK (indexed_memory_access (Asm.Psw rd) base ofs k)
-  | AST.Tlong,   IR rd => OK (indexed_memory_access (Asm.Psd rd) base ofs k)
-  | AST.Tsingle, FR rd => OK (indexed_memory_access (Asm.Pfss rd) base ofs k)
-  | AST.Tfloat,  FR rd => OK (indexed_memory_access (Asm.Pfsd rd) base ofs k)
-  | AST.Tany32,  IR rd => OK (indexed_memory_access (Asm.Psw_a rd) base ofs k)
-  | AST.Tany64,  IR rd => OK (indexed_memory_access (Asm.Psd_a rd) base ofs k)
-  | AST.Tany64,  FR rd => OK (indexed_memory_access (Asm.Pfsd_a rd) base ofs k)
+  | AST.Tint,    IR rd => OK (indexed_memory_access (T.Psw rd) base ofs k)
+  | AST.Tlong,   IR rd => OK (indexed_memory_access (T.Psd rd) base ofs k)
+  | AST.Tsingle, FR rd => OK (indexed_memory_access (T.Pfss rd) base ofs k)
+  | AST.Tfloat,  FR rd => OK (indexed_memory_access (T.Pfsd rd) base ofs k)
+  | AST.Tany32,  IR rd => OK (indexed_memory_access (T.Psw_a rd) base ofs k)
+  | AST.Tany64,  IR rd => OK (indexed_memory_access (T.Psd_a rd) base ofs k)
+  | AST.Tany64,  FR rd => OK (indexed_memory_access (T.Pfsd_a rd) base ofs k)
   | _, _           => Error (msg "Asmgen.storeind")
   end.
 
-FDefinition loadind_ptr := fun (base: ireg) (ofs: ptrofs) (dst: ireg) (k: Asm.code) => 
-  indexed_memory_access (if Archi.ptr64 then Asm.Pld dst else Asm.Plw dst) base ofs k.
+FDefinition loadind_ptr := fun (base: ireg) (ofs: ptrofs) (dst: ireg) (k: T.code) => 
+  indexed_memory_access (if Archi.ptr64 then T.Pld dst else T.Plw dst) base ofs k.
 
-FDefinition storeind_ptr := fun (src: ireg) (base: ireg) (ofs: ptrofs) (k: Asm.code) =>
-  indexed_memory_access (if Archi.ptr64 then Asm.Psd src else Asm.Psw src) base ofs k.
+FDefinition storeind_ptr := fun (src: ireg) (base: ireg) (ofs: ptrofs) (k: T.code) =>
+  indexed_memory_access (if Archi.ptr64 then T.Psd src else T.Psw src) base ofs k.
 
-FDefinition make_epilogue := fun (f: Mach.function) (k: Asm.code) =>
-  loadind_ptr SP (Mach.fn_retaddr_ofs f) RA
-    (cheat Asm.Pfreeframe (Mach.fn_stacksize f) (Mach.fn_link_ofs f) :: k).
+FDefinition make_epilogue := fun (f: S.function) (k: T.code) =>
+  loadind_ptr SP (S.fn_retaddr_ofs f) RA
+    (cheat T.Pfreeframe (S.fn_stacksize f) (S.fn_link_ofs f) :: k).
 
-FRecursion transl_instr about Mach.instruction motive (fun (_ : Mach.instruction) => Mach.function -> bool -> Asm.code -> res Asm.code) by _rect.
+FRecursion transl_instr about S.instruction motive (fun (_ : S.instruction) => S.function -> bool -> T.code -> res T.code) by _rect.
 Case Lgetstack ofs ty dst := (fun f ep k => loadind SP ofs ty dst k).
 Case Lsetstack src ofs ty := (fun f ep k =>  storeind src SP ofs ty k).
 Case Lgetparam ofs ty dst := 
 (fun f ep k => 
     do c <- loadind X30 ofs ty dst k;
       OK (if ep then c
-                else loadind_ptr SP (Mach.fn_link_ofs f) X30 c)).
+                else loadind_ptr SP (S.fn_link_ofs f) X30 c)).
 Case Lop op args res := (fun f ep k =>  transl_op op args res k).
-Case Llabel lbl := (fun f ep k =>  OK (Asm.Plabel lbl :: k)).
-Case Lgoto lbl := (fun f ep k => OK (Asm.Pj_l lbl :: k)).
+Case Llabel lbl := (fun f ep k =>  OK (T.Plabel lbl :: k)).
+Case Lgoto lbl := (fun f ep k => OK (T.Pj_l lbl :: k)).
 Case Lcond cond args lbl := (fun f ep k => transl_cbranch cond args lbl k).
-Case Lreturn := (fun f ep k => OK (make_epilogue f (Asm.Pj_r RA (Mach.fn_sig f) :: k))).
+Case Lreturn := (fun f ep k => OK (make_epilogue f (T.Pj_r RA (S.fn_sig f) :: k))).
 FEnd transl_instr.
 
-FRecursion it1_is_parent about Mach.instruction motive (fun (_ : Mach.instruction) => bool -> bool) by _rect.
+FRecursion it1_is_parent about S.instruction motive (fun (_ : S.instruction) => bool -> bool) by _rect.
 Case Lgetstack ofs ty dst := (fun before => false).
 Case Lsetstack src ofs ty := (fun before => before).
 Case Lgetparam ofs ty dst := (fun before => negb (mreg_eq dst R30)).
@@ -3196,7 +2397,7 @@ FEnd it1_is_parent.
 (** This is the naive definition that we no longer use because it
   is not tail-recursive.  It is kept as specification. *)
 (*MetaData transl_code.
-Fixpoint transl_code (f: self__Base.Mach.function) (il: list self__Base.Mach.instruction) (it1p: bool) :=
+Fixpoint transl_code (f: self__Base.S.function) (il: list self__Base.S.instruction) (it1p: bool) :=
   match il with
   | nil => OK nil
   | i1 :: il' =>
@@ -3208,8 +2409,8 @@ FEnd transl_code.*)
 (** This is an equivalent definition in continuation-passing style
   that runs in constant stack space. *)      
 MetaData transl_code_rec.
-Fixpoint transl_code_rec (f: self__Base.Mach.function) (il: list self__Base.Mach.instruction)
-                         (it1p: bool) (k: self__Base.Asm.code -> res self__Base.Asm.code) :=
+Fixpoint transl_code_rec (f: self__Asmgen.S.function) (il: list self__Asmgen.S.instruction)
+                         (it1p: bool) (k: self__Asmgen.T.code -> res self__Asmgen.T.code) :=
   match il with
   | nil => k nil
   | i1 :: il' =>
@@ -3219,7 +2420,7 @@ Fixpoint transl_code_rec (f: self__Base.Mach.function) (il: list self__Base.Mach
 FEnd transl_code_rec.
 
 FDefinition transl_code' := 
-  fun (f: Mach.function) (il: list Mach.instruction) (it1p: bool) =>
+  fun (f: S.function) (il: list S.instruction) (it1p: bool) =>
   transl_code_rec f il it1p (fun c => OK c).
 
 (** Translation of a whole function.  Note that we must check
@@ -3227,22 +2428,22 @@ FDefinition transl_code' :=
   otherwise the offset part of the [PC] code pointer could wrap
   around, leading to incorrect executions. *)
 
-FDefinition transl_function := fun (f: Mach.function) =>
-  do c <- transl_code' f (Mach.fn_code f) true;
-  OK (Asm.mkfunction (Mach.fn_sig f)
-        (cheat Asm.Pallocframe (Mach.fn_stacksize f) (Mach.fn_link_ofs f) ::
-         storeind_ptr RA SP (Mach.fn_retaddr_ofs f) (cheat Asm.Pcfi_rel_offset (Ptrofs.to_int (Mach.fn_retaddr_ofs f)):: c))).
+FDefinition transl_function := fun (f: S.function) =>
+  do c <- transl_code' f (S.fn_code f) true;
+  OK (T.mkfunction (S.fn_sig f)
+        (cheat T.Pallocframe (S.fn_stacksize f) (S.fn_link_ofs f) ::
+         storeind_ptr RA SP (S.fn_retaddr_ofs f) (cheat T.Pcfi_rel_offset (Ptrofs.to_int (S.fn_retaddr_ofs f)):: c))).
 
-FDefinition transf_function : Mach.function -> res Asm.function := fun f =>
+FDefinition transf_function : S.function -> res T.function := fun f =>
   do tf <- transl_function f;
-  if zlt Ptrofs.max_unsigned (list_length_z (Asm.fn_code tf))
+  if zlt Ptrofs.max_unsigned (list_length_z (T.fn_code tf))
   then Error (msg "code size exceeded")
   else OK tf.
 
-FDefinition transf_fundef : Mach.fundef -> res Asm.fundef := fun f =>
+FDefinition transf_fundef : S.fundef -> res T.fundef := fun f =>
   transf_partial_fundef transf_function f.
 
-FDefinition transf_program : Mach.program -> res Asm.program := fun p =>
+FDefinition transf_program : S.program -> res T.program := fun p =>
   transform_partial_program transf_fundef p.     
 
 FEnd Asmgen.
@@ -3251,6 +2452,59 @@ FEnd Base.
 
 Trait Comp_Loop extends Base.
 
+Trait C_Swhile extends C.
+FInductive stmt : Type :=  
+  | Swhile : expr -> stmt -> stmt(* while loop *)  
+  | Sbreak : stmt(* break stmt *)
+  | Scontinue : stmt. (* continue statement *)  
+FEnd C_Swhile.
+
+Trait C_Sdowhile extends C.
+FInductive stmt : Type :=  
+| Sdowhile : expr -> stmt -> stmt. (* do loop *)
+FEnd C_Sdowhile.
+
+Trait C_Sfor extends C.
+FInductive stmt : Type :=  
+| Sfor: stmt -> expr -> stmt -> stmt -> stmt. (* for loop *)
+FEnd C_Sfor.
+
+Family C extends C_Swhile, C_Sdowhile, C_Sfor.
+FEnd C.
+
+Trait Clight_Sloop extends Clight.
+FInductive stmt : Type := 
+  | Sloop: stmt -> stmt -> stmt (* infinite loop *)
+  | Sbreak : stmt (* break statement *)
+  | Scontinue : stmt. (* continue statement *) 
+FEnd Clight_Sloop.
+
+Family Clight extends Clight_Sloop.
+FEnd Clight.
+
+Trait SimplExpr_Swhile extends SimplExpr.
+Family S extends C_Swhile. FEnd S.
+
+FRecursion transl_stmt.
+Swhile : expr -> stmt -> stmt(* while loop *)
+Sbreak : stmt(* break stmt *)
+Scontinue : stmt. (* continue statement *)                             
+FEnd transl_stmt.
+
+FEnd transl_stmt.
+
+
+FEnd SimplExpr_Swhile.
+
+Trait SimplExpr_Sdowhile.
+
+Trait SimplExpr_Sfor.
+
+Family SimplExpr extend
+  SimplExpr_Sfor,
+  SimplExpr_Sdowhile,
+  SimplExpr_Swhile.
+FEnd SimplExpr.
 
 FEnd Comp_Loop.
 
