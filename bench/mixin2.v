@@ -1400,8 +1400,34 @@ Qed. FEnd preservation.
 
 FEnd STLC_fix.
 
+Family STLC_fix_isorec extends STLC, STLC_isorec, STLC_fix.
+FEnd STLC_fix_isorec.
 
-Family STLC_all extends STLC, STLC_prod, STLC_isorec, STLC_fix, STLC_sum.
+Family STLC_prod_isorec extends STLC, STLC_isorec, STLC_prod.
+
+   (* TODO: Requiring this for substT to work 
+      is actually a bug with InductiveAxioms *)
+   Inherit ty.
+     
+   FRecursion substT.
+      Case ty_prod := (fun _ recs1 _ recs2 x t => ty_prod (recs1 x t) (recs2 x t)).      
+   FEnd substT.
+FEnd STLC_prod_isorec.
+
+Family STLC_fix_prod_isorec extends STLC, STLC_fix, STLC_prod_isorec.
+FEnd STLC_fix_prod_isorec.
+
+Family STLC_sum_fix_prod_isorec extends STLC, STLC_sum, STLC_fix_prod_isorec.
+
+Inherit ty.
+
+FRecursion substT.      
+      Case ty_sum := (fun _ recs1 _ recs2 x t => ty_sum (recs1 x t) (recs2 x t)).
+FEnd substT.
+
+FEnd STLC_sum_fix_prod_isorec.
+
+(*Family STLC_all extends STLC, STLC_prod, STLC_isorec, STLC_fix, STLC_sum.
 
    (* TODO: Requiring this for substT to work 
       is actually a bug with InductiveAxioms *)
@@ -1411,6 +1437,6 @@ Family STLC_all extends STLC, STLC_prod, STLC_isorec, STLC_fix, STLC_sum.
       Case ty_prod := (fun _ recs1 _ recs2 x t => ty_prod (recs1 x t) (recs2 x t)).
       Case ty_sum := (fun _ recs1 _ recs2 x t => ty_sum (recs1 x t) (recs2 x t)).
    FEnd substT.
-FEnd STLC_all.
+FEnd STLC_all.*)
 
 End STLC_Families.
