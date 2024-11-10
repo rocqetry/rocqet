@@ -681,660 +681,8 @@ Inductive bitfield : Type :=
           
        FOverride Definition alloc_fenv := fun sp m f sp' m' => 
           Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp).      
-  FEnd Cminor.  
-  
-  (* Cminor with processor-dependent instructions *)
-  Family CminorSel extends Cfam.
-       FInductive expr : Type :=
-          | Evar : ident -> expr          
-          | Econdition : condexpr -> expr -> expr -> expr
-          | Eop : Asm.operation -> exprlist -> expr
-          | Elet : expr -> expr -> expr
-          | Eletvar : nat -> expr
-       with exprlist : Type :=
-          | Enil: exprlist
-          | Econs: expr -> exprlist -> exprlist
-       with condexpr : Type :=
-          | CEcond : Asm.condition -> exprlist -> condexpr
-          | CEcondition : condexpr -> condexpr -> condexpr -> condexpr
-          | CElet: expr -> condexpr -> condexpr.
+  FEnd Cminor.
        
-       Inherit stmt.
-
-       MetaData function.
-       Record function : Type := mkfunction {
-          fn_sig: signature;
-          fn_params: list ident;
-          fn_vars: list ident;
-          fn_stackspace: Z;
-          fn_body: self__CminorSel.stmt
-       }.
-       FEnd function.
-       
-       FDefinition letenv := list val.       
-       (* stack pointer *)
-       (* Vptr sp Ptrofs.zero *)
-       FOverride Definition fenv := block.
-   
-       FOverride Definition free_fenv := fun m sp f =>
-          Mem.free m sp 0 f.(self__Cminor.fn_stackspace).
-          
-       FOverride Definition alloc_fenv := fun sp m f sp' m' => 
-          Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp).
-          
-       FDefinition eval_operation := fun op => Asm.eval_operation op fundef unit.                     
-                    
-       FInductive eval_expr: genv -> val -> env -> mem -> letenv -> expr -> val -> Prop :=
-           | eval_Evar: forall ge sp e m le id v,
-               PTree.get id e = Some v ->
-               eval_expr ge sp e m le (Evar id) v
-           | eval_Eop: forall ge sp e m le op al vl v,
-               eval_exprlist ge sp e m le al vl ->
-               Asm.eval_operation ge sp op vl m = Some v ->
-               eval_expr ge sp e m le (Eop op al) v
-           | eval_Econdition: forall ge sp e m le a b c va v,
-               eval_condexpr ge sp e m le a va ->
-               eval_expr ge sp e m le (if va then b else c) v ->
-               eval_expr ge sp e m le (Econdition a b c) v
-           | eval_Elet: forall ge sp e m le a b v1 v2,
-               eval_expr ge sp e m le a v1 ->
-               eval_expr ge sp e m (v1 :: le) b v2 ->
-               eval_expr ge sp e m le (Elet a b) v2
-           | eval_Eletvar: forall ge sp e m le n v,
-               nth_error le n = Some v ->
-               eval_expr ge sp e m le (Eletvar n) v
-       with eval_exprlist: genv -> val -> env -> mem -> letenv -> self__CminorSel.exprlist -> list val -> Prop :=
-          | eval_Enil: forall ge sp e m le,
-              eval_exprlist ge sp e m le Enil nil
-          | eval_Econs: forall ge sp e m le a1 al v1 vl,
-              eval_expr ge sp e m le a1 v1 -> eval_exprlist ge sp e m le al vl ->
-              eval_exprlist ge sp e m le (Econs a1 al) (v1 :: vl)
-       with eval_condexpr: genv -> val -> env -> mem -> letenv -> self__CminorSel.condexpr -> bool -> Prop :=
-          | eval_CEcond: forall ge sp e m le cond al vl vb,
-              eval_exprlist ge sp e m le al vl ->
-              Asm.eval_condition cond vl m = Some vb ->
-              eval_condexpr ge sp e m le (CEcond cond al) vb
-          | eval_CEcondition: forall ge sp e m le a b c va v,
-              eval_condexpr ge sp e m le a va ->
-              eval_condexpr ge sp e m le (if va then b else c) v ->
-              eval_condexpr ge sp e m le (CEcondition a b c) v
-          | eval_CElet: forall ge sp e m le a b v1 v2,
-              eval_expr ge sp e m le a v1 ->
-              eval_condexpr ge sp e m (v1 :: le) b v2 ->
-              eval_condexpr ge sp e m le (CElet a b) v2.       
-  FEnd CminorSel.
-
-  Family Selection extends Cfamtransl.
-      Family Source extends Cminor.
-      FEnd Source.
-
-      Family Target extends Cminor.
-      FEnd Target.
-      
-
-  FEnd Selection
-  
-         
-  Family C extends Cfam.
-      
-      FInductive expr : Type :=
-        | Eval : val -> type -> expr (* constant *)
-        | Evar : ident -> type -> expr (* variable *)        
-        | Ecast : expr -> type -> expr (* type cast (ty)r *)
-        | Eseqand : expr -> expr -> type -> expr (* sequential "and" r1 && r2 *)
-        | Eseqor : expr -> expr -> type -> expr (* sequential "or" r1 || r2 *)
-        | Econdition : expr -> expr -> expr -> type -> expr (* conditional r1 ? r2 : r3 *)
-        | Esizeof : type -> type -> expr (* size of a type *)
-        | Ealignof : type -> type -> expr (* natural alignment of a type *)        
-        | Ecomma : expr -> expr -> type -> expr (* sequence expression r1, r2 *)                
-        | Eparen : expr -> type -> type -> expr. 
-        
-        FRecursion typeof : (e : expr) -> type.
-          Case Eval v ty := ty.
-          Case Evar x ty := ty.          
-          Case Ecast r ty := ty. 
-          Case Eseqand r1 r2 ty := ty. 
-          Case Eseqor r1 r2 ty := ty. 
-          Case Econdition r1 r2 r3 ty := ty.
-          Case Esizeof ty' ty := ty.
-          Case Ealignof ty' ty := ty.          
-          Case Ecomma r1 r2 ty := ty.
-          Case Eparen e ty' ty := ty.
-        FEnd typeof.
-
-      FDefinition label := ident.
-      
-      FInductive statement : Type :=        
-        | Sdo : expr -> statement(* evaluate expression for side effects *)        
-        | Sifthenelse : expr -> statement -> statement -> statement(* conditional *)
-        | Swhile : expr -> statement -> statement(* while loop *)
-        | Sdowhile : expr -> statement -> statement(* do loop *)
-        | Sfor: statement -> expr -> statement -> statement -> statement(* for loop *)
-        | Sbreak : statement(* break statement *)
-        | Scontinue : statement(* continue statement *)
-        | Sreturn : option expr -> statement. (* return statement *)
-      
-      MetaData function.
-      Record function : Type := mkfunction {
-        fn_return: self__Imp.type;
-        fn_callconv: calling_convention;
-        fn_params: list (ident * self__Imp.type);
-        fn_vars: list (ident * self__Imp.type);
-        fn_body: self__C.statement
-      }.
-      FEnd function.
-
-      FDefinition var_names := fun (vars: list(ident * type)) =>
-        List.map (@fst ident type) vars.
-
-      FDefinition fundef := AST.fundef function.
-
-      FDefinition type_of_function : function -> type := fun f => 
-         self__Imp.Tfunction (self__Imp.type_of_params (self__C.fn_params f)) 
-           (self__C.fn_return f) (self__C.fn_callconv f).
-       
-       FDefinition type_of_fundef : fundef -> type := fun f =>
-          match f with
-          | Internal fd => type_of_function fd
-          | _ => cheat (* TODO: We don't have External in the base compiler *)
-          end.
-
-      FDefinition program := AST.program fundef type.
-
-      FOverride Definition fenv := PTree.t (block * Z).
-      FOverride Definition empty_fenv := PTree.empty (block * Z).                    
-
-      FDefinition block_of_binding := fun (id_b_sz: ident * (block * Z)) => 
-           match id_b_sz with (id, (b, sz)) => (b, 0, sz) end.
-
-      FDefinition blocks_of_env : fenv -> list (block * Z * Z) := fun e => 
-          List.map block_of_binding (PTree.elements e).          
-
-      FOverride Definition free_fenv := fun m e f =>
-         Mem.free_list m (blocks_of_env e).                  
-
-      FInductive cont: Type :=              
-          | Kdo: cont -> cont(* Kdo k = after x in x; *)              
-          | Kifthenelse: statement -> statement -> cont -> cont(* Kifthenelse s1 s2 k = after x in if (x) { s1 } else { s2 } *)
-          | Kwhile1: expr -> statement -> cont -> cont(* Kwhile1 x s k = after x in while(x) s *)
-          | Kwhile2: expr -> statement -> cont -> cont(* Kwhile x s k = after s in while (x) s *)
-          | Kdowhile1: expr -> statement -> cont -> cont(* Kdowhile1 x s k = after s in do s while (x) *)
-          | Kdowhile2: expr -> statement -> cont -> cont(* Kdowhile2 x s k = after x in do s while (x) *)
-          | Kfor2: expr -> statement -> statement -> cont -> cont(* Kfor2 e2 e3 s k = after e2 in for(e1;e2;e3) s *)
-          | Kfor3: expr -> statement -> statement -> cont -> cont(* Kfor3 e2 e3 s k = after s in for(e1;e2;e3) s *)
-          | Kfor4: expr -> statement -> statement -> cont -> cont(* Kfor4 e2 e3 s k = after e3 in for(e1;e2;e3) s *)              
-          | Kreturn: cont -> cont. (* Kreturn k = after e in return e; *)              
-
-      FRecursion call_cont about cont motive (fun (c : cont) => cont) by _rect.            
-          Case Kdo k := k.            
-          Case Kifthenelse s1 s2 k := (call_cont k).
-          Case Kwhile1 e s k := (call_cont k).
-          Case Kwhile2 e s k := (call_cont k).
-          Case Kdowhile1 e s k := (call_cont k).
-          Case Kdowhile2 e s k := (call_cont k).
-          Case Kfor2 e2 e3 s k := (call_cont k).
-          Case Kfor3 e2 e3 s k := (call_cont k).
-          Case Kfor4 e2 e3 s k := (call_cont k).
-          Case Kreturn k := (call_cont k).            
-      FEnd call_cont.
-
-        FRecursion is_call_cont about cont motive (fun (c : cont) => Prop) by _rect.          
-          Case Kdo k := False.          
-          Case Kifthenelse s1 s2 k := False.
-          Case Kwhile1 e s k := False.
-          Case Kwhile2 e s k := False.
-          Case Kdowhile1 e s k := False.
-          Case Kdowhile2 e s k := False.
-          Case Kfor2 e2 e3 s k := False.
-          Case Kfor3 e2 e3 s k := False.
-          Case Kfor4 e2 e3 s k := False.
-          Case Kreturn k := False.          
-        FEnd is_call_cont.
-
-        FInductive state: Type :=          
-          | ExprState : (* reduction of an expression *)
-               function ->
-               expr ->
-               cont ->
-               env ->
-               mem -> state          
-          | Stuckstate : state. (* undefined behavior occurred *)
-        
-        FRecursion find_label about statement motive (fun (_ : statement) => label -> cont -> option (statement * cont)) by _rect.          
-          Case Sdo r := (fun lbl k => None).                    
-          Case Swhile a s1 := (fun lbl k => find_label s1 lbl (Kwhile2 a s1 k)).
-          Case Sdowhile a s1 := (fun lbl k => find_label s1 lbl (Kdowhile1 a s1 k)).
-          Case Sfor a1 a2 a3 s1 := 
-              (fun lbl k => match find_label a1 lbl (Kseq (Sfor Sskip a2 a3 s1) k) with 
-                            | Some sk => Some sk 
-                            | None => match find_label s1 lbl (Kfor3 a2 a3 s1 k) with 
-                                      | Some sk => Some sk 
-                                      | None => find_label a3 lbl (Kfor4 a2 a3 s1 k) end end).
-          Case Sbreak := (fun lbl k => None).
-          Case Scontinue := (fun lbl k => None).          
-        FEnd find_label.
-                
-        MetaData bool_val.
-        Axiom bool_val : val -> self__Imp.type -> mem -> option bool.
-        FEnd bool_val.
-
-        MetaData sizeof.
-           Axiom sizeof : (* self__Sem.composite_env -> *) self__Imp.type -> Z. 
-        FEnd sizeof.      
-                
-        MetaData alignof.
-        Axiom alignof : (* self__Imp.Clight.Sem.composite_env ->*) self__Imp.type -> Z.
-        FEnd alignof.
-
-        MetaData sem_cast.
-            Axiom sem_cast : val -> self__Imp.type -> self__Imp.type -> mem -> option val.
-        FEnd sem_cast.                
-
-        FInductive eval_simple_rvalue: genv -> env -> mem -> expr -> val -> Prop :=
-           | esr_val: forall ge e m v ty,
-               eval_simple_rvalue ge e m (Eval v ty) v                                   
-           | esr_cast: forall ge e m ty r1 v1 v,
-               eval_simple_rvalue ge e m r1 v1 ->
-               sem_cast v1 (typeof r1) ty m = Some v ->
-               eval_simple_rvalue ge e m (Ecast r1 ty) v
-           | esr_sizeof: forall ge e m ty1 ty,
-               eval_simple_rvalue ge e m (Esizeof ty1 ty) (Vptrofs (Ptrofs.repr (sizeof (* ge *) ty1)))                                  
-           | esr_alignof: forall ge e m ty1 ty,
-               eval_simple_rvalue ge e m (Ealignof ty1 ty) (Vptrofs (Ptrofs.repr (alignof (* ge *) ty1))).        
-                
-        FRecursion is_val about expr motive (fun (e : expr) => Prop) by _rect.
-            Case Eval v ty := True.
-            Case Evar x ty := False.
-            Case Ecast r ty := False.
-            Case Eseqand r1 r2 ty := False.
-            Case Eseqor r1 r2 ty := False.
-            Case Econdition r1 r2 r3 ty := False.
-            Case Esizeof ty' ty := False.
-            Case Ealignof ty' ty := True.
-            Case Ecomma r1 r2 ty := False.
-            Case Eparen e ty' ty := False.
-        FEnd is_val.
-        
-        MetaData kind.
-        Inductive kind : Type := LV | RV.
-        FEnd kind.
-        
-        FInductive leftcontext: kind -> kind -> (expr -> expr) -> Prop :=
-        | lctx_top: forall k,
-            leftcontext k k (fun x => x)  
-        | lctx_cast: forall k F ty,
-            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Ecast (F x) ty)
-        | lctx_seqand: forall k F r2 ty,
-            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Eseqand (F x) r2 ty)
-        | lctx_seqor: forall k F r2 ty,
-            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Eseqor (F x) r2 ty)
-        | lctx_condition: forall k F r2 r3 ty,
-            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Econdition (F x) r2 r3 ty)
-        | lctx_comma: forall k F e2 ty,
-            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Ecomma (F x) e2 ty)
-        | lctx_paren: forall k F tycast ty,
-            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Eparen (F x) tycast ty).
-
-        FInductive estep: genv -> state -> trace -> state -> Prop :=
-             | step_expr: forall ge f r k e m v ty,
-                 eval_simple_rvalue ge e m r v ->
-                 is_val r ->
-                 ty = typeof r ->
-                 estep ge (ExprState f r k e m)
-                    E0 (ExprState f (Eval v ty) k e m)               
-             | step_seqand_true: forall ge f F r1 r2 ty k e m v,
-                 leftcontext self__Sem.RV self__Sem.RV F ->
-                 eval_simple_rvalue ge e m r1 v ->
-                 bool_val v (typeof r1) m = Some true ->
-                 estep ge (ExprState f (F (Eseqand r1 r2 ty)) k e m)
-                    E0 (ExprState f (F (Eparen r2 self__Imp.type_bool ty)) k e m)
-             | step_seqand_false: forall ge f F r1 r2 ty k e m v,
-                 leftcontext self__Sem.RV self__Sem.RV F ->
-                 eval_simple_rvalue ge e m r1 v ->
-                 bool_val v (typeof r1) m = Some false ->
-                 estep ge (ExprState f (F (Eseqand r1 r2 ty)) k e m)
-                    E0 (ExprState f (F (Eval (Vint Int.zero) ty)) k e m)
-             | step_seqor_true: forall ge f F r1 r2 ty k e m v,
-                 leftcontext self__Sem.RV self__Sem.RV F ->
-                 eval_simple_rvalue ge e m r1 v ->
-                 bool_val v (typeof r1) m = Some true ->
-                 estep ge (ExprState f (F (Eseqor r1 r2 ty)) k e m)
-                    E0 (ExprState f (F (Eval (Vint Int.one) ty)) k e m)
-             | step_seqor_false: forall ge f F r1 r2 ty k e m v,
-                 leftcontext self__Sem.RV self__Sem.RV F ->
-                 eval_simple_rvalue ge e m r1 v ->
-                 bool_val v (typeof r1) m = Some false ->
-                 estep ge (ExprState f (F (Eseqor r1 r2 ty)) k e m)
-                    E0 (ExprState f (F (Eparen r2 self__Imp.type_bool ty)) k e m)
-             | step_condition: forall ge f F r1 r2 r3 ty k e m v b,
-                 leftcontext self__Sem.RV self__Sem.RV F ->
-                 eval_simple_rvalue ge e m r1 v ->
-                 bool_val v (typeof r1) m = Some b ->
-                 estep ge (ExprState f (F (Econdition r1 r2 r3 ty)) k e m)
-                    E0 (ExprState f (F (Eparen (if b then r2 else r3) ty ty)) k e m)
-             | step_comma: forall ge f F r1 r2 ty k e m v,
-                 leftcontext self__Sem.RV self__Sem.RV F ->
-                 eval_simple_rvalue ge e m r1 v ->
-                 ty = typeof r2 ->
-                 estep ge (ExprState f (F (Ecomma r1 r2 ty)) k e m)
-                    E0 (ExprState f (F r2) k e m)
-             | step_paren: forall ge f F r tycast ty k e m v1 v,
-                 leftcontext self__Sem.RV self__Sem.RV F ->
-                 eval_simple_rvalue ge e m r v1 ->
-                 sem_cast v1 (typeof r) tycast m = Some v ->
-                 estep ge (ExprState f (F (Eparen r tycast ty)) k e m)
-                    E0 (ExprState f (F (Eval v ty)) k e m).
-        
-        FInductive sstep: genv -> state -> trace -> state -> Prop :=
-            | step_do_1: forall ge f x k e m,
-                sstep ge (State f (Sdo x) k e m)
-                  E0 (ExprState f x (Kdo k) e m)
-            | step_do_2: forall ge f v ty k e m,
-                sstep ge (ExprState f (Eval v ty) (Kdo k) e m)
-                  E0 (State f Sskip k e m)
-            | step_seq: forall ge f s1 s2 k e m,
-                sstep ge (State f (Ssequence s1 s2) k e m)
-                  E0 (State f s1 (Kseq s2 k) e m)
-            | step_skip_seq: forall ge f s k e m,
-                sstep ge (State f Sskip (Kseq s k) e m)
-                  E0 (State f s k e m)
-            | step_continue_seq: forall ge f s k e m,
-                sstep ge (State f Scontinue (Kseq s k) e m)
-                  E0 (State f Scontinue k e m)
-            | step_break_seq: forall ge f s k e m,
-                sstep ge (State f Sbreak (Kseq s k) e m)
-                  E0 (State f Sbreak k e m)
-            | step_ifthenelse_1: forall ge f a s1 s2 k e m,
-                sstep ge (State f (Sifthenelse a s1 s2) k e m)
-                  E0 (ExprState f a (Kifthenelse s1 s2 k) e m)
-            | step_ifthenelse_2: forall ge f v ty s1 s2 k e m b,
-                bool_val v ty m = Some b ->
-                sstep ge (ExprState f (Eval v ty) (Kifthenelse s1 s2 k) e m)
-                  E0 (State f (if b then s1 else s2) k e m)
-            | step_while: forall ge f x s k e m,
-                sstep ge (State f (Swhile x s) k e m)
-                  E0 (ExprState f x (Kwhile1 x s k) e m)
-            | step_while_false: forall ge f v ty x s k e m,
-                bool_val v ty m = Some false ->
-                sstep ge (ExprState f (Eval v ty) (Kwhile1 x s k) e m)
-                  E0 (State f Sskip k e m)
-            | step_while_true: forall ge f v ty x s k e m ,
-                bool_val v ty m = Some true ->
-                sstep ge (ExprState f (Eval v ty) (Kwhile1 x s k) e m)
-                  E0 (State f s (Kwhile2 x s k) e m)
-            | step_skip_or_continue_while: forall ge f s0 x s k e m,
-                s0 = Sskip \/ s0 = Scontinue ->
-                sstep ge (State f s0 (Kwhile2 x s k) e m)
-                  E0 (State f (Swhile x s) k e m)
-            | step_break_while: forall ge f x s k e m,
-                sstep ge (State f Sbreak (Kwhile2 x s k) e m)
-                  E0 (State f Sskip k e m)
-            | step_dowhile: forall ge f a s k e m,
-                sstep ge (State f (Sdowhile a s) k e m)
-                  E0 (State f s (Kdowhile1 a s k) e m)
-            | step_skip_or_continue_dowhile: forall ge f s0 x s k e m,
-                s0 = Sskip \/ s0 = Scontinue ->
-                sstep ge (State f s0 (Kdowhile1 x s k) e m)
-                  E0 (ExprState f x (Kdowhile2 x s k) e m)
-            | step_dowhile_false: forall ge f v ty x s k e m,
-                bool_val v ty m = Some false ->
-                sstep ge (ExprState f (Eval v ty) (Kdowhile2 x s k) e m)
-                  E0 (State f Sskip k e m)
-            | step_dowhile_true: forall ge f v ty x s k e m,
-                bool_val v ty m = Some true ->
-                sstep ge (ExprState f (Eval v ty) (Kdowhile2 x s k) e m)
-                  E0 (State f (Sdowhile x s) k e m)
-            | step_break_dowhile: forall ge f a s k e m,
-                sstep ge (State f Sbreak (Kdowhile1 a s k) e m)
-                  E0 (State f Sskip k e m)
-            | step_for_start: forall ge f a1 a2 a3 s k e m,
-                a1 <> Sskip ->
-                sstep ge (State f (Sfor a1 a2 a3 s) k e m)
-                  E0 (State f a1 (Kseq (Sfor Sskip a2 a3 s) k) e m)
-            | step_for: forall ge f a2 a3 s k e m,
-                sstep ge (State f (Sfor Sskip a2 a3 s) k e m)
-                  E0 (ExprState f a2 (Kfor2 a2 a3 s k) e m)
-            | step_for_false: forall ge f v ty a2 a3 s k e m,
-                bool_val v ty m = Some false ->
-                sstep ge (ExprState f (Eval v ty) (Kfor2 a2 a3 s k) e m)
-                  E0 (State f Sskip k e m)
-            | step_for_true: forall ge f v ty a2 a3 s k e m,
-                bool_val v ty m = Some true ->
-                sstep ge (ExprState f (Eval v ty) (Kfor2 a2 a3 s k) e m)
-                  E0 (State f s (Kfor3 a2 a3 s k) e m)
-            | step_skip_or_continue_for3: forall ge f x a2 a3 s k e m,
-                x = Sskip \/ x = Scontinue ->
-                sstep ge (State f x (Kfor3 a2 a3 s k) e m)
-                  E0 (State f a3 (Kfor4 a2 a3 s k) e m)
-            | step_break_for3: forall ge f a2 a3 s k e m,
-                sstep ge (State f Sbreak (Kfor3 a2 a3 s k) e m)
-                  E0 (State f Sskip k e m)
-            | step_skip_for4: forall ge f a2 a3 s k e m,
-                sstep ge (State f Sskip (Kfor4 a2 a3 s k) e m)
-                  E0 (State f (Sfor Sskip a2 a3 s) k e m).                     
-
-            FDefinition step :  genv -> state -> trace -> state -> Prop := fun ge S t S' => 
-              estep ge S t S' \/ sstep ge S t S'.
-                           
-  FEnd C.
-      
-  Family Clight extends Cfam.
-       
-       FInductive expr : Type :=          
-          | Econst_int: int -> type -> expr(* integer literal *)
-          | Econst_float: float -> type -> expr(* double float literal *)
-          | Econst_single: float32 -> type -> expr(* single float literal *)
-          | Econst_long: int64 -> type -> expr(* long integer literal *)                                            
-          | Etempvar: ident -> type -> expr (* temporary variable *)          
-          | Esizeof: type -> type -> expr (* size of a type *)
-          | Ecast: expr -> type -> expr
-          | Ealignof: type -> type -> expr. (* alignment of a type *)                                         
-       
-       FRecursion typeof : (e : expr) -> type. 
-          Case Econst_int i ty := ty. 
-          Case Econst_float f ty := ty. 
-          Case Econst_single s ty := ty. 
-          Case Econst_long l ty := ty. 
-          Case Etempvar v ty := ty.
-          Case Esizeof ty' ty := ty.
-          Case Ealignof ty' ty := ty.
-          Case Ecast e ty := ty.
-       FEnd typeof.
-       
-       FDefinition label := ident.
-       FInductive stmt : Type :=                                            
-           | Sloop: stmt -> stmt -> stmt (* infinite loop *)
-           | Sbreak : stmt (* break stmt *)
-           | Scontinue : stmt. (* continue stmt *)
-
-       FDefinition Swhile := fun (e: expr) (s: stmt) =>
-         Sloop (Ssequence (Sifthenelse e Sskip Sbreak) s) Sskip.
-
-       FDefinition Sdowhile := fun (s: stmt) (e: expr) => 
-         Sloop s (Sifthenelse e Sskip Sbreak).
-
-       FDefinition Sfor := fun (s1: stmt) (e2: expr) (s3: stmt) (s4: stmt) =>
-         Ssequence s1 (Sloop (Ssequence (Sifthenelse e2 Sskip Sbreak) s3) s4).
-              
-       MetaData function.
-       Record function : Type := mkfunction {
-         fn_return: self__Imp.type;
-         fn_callconv: calling_convention;
-         fn_params: list (ident * self__Imp.type);
-         fn_vars: list (ident * self__Imp.type);
-         fn_temps: list (ident * self__Imp.type);
-         fn_body: self__Clight.stmt
-       }.
-       FEnd function.       
-              
-       FDefinition fundef := AST.fundef function.
-       
-       FDefinition type_of_function : function -> type := fun f => 
-         self__Imp.Tfunction (self__Imp.type_of_params (self__Clight.fn_params f)) 
-           (self__Clight.fn_return f) (self__Clight.fn_callconv f).
-       
-       FDefinition type_of_fundef : fundef -> type := fun f =>
-          match f with
-          | Internal fd => type_of_function fd
-          | _ => cheat (* TODO: We don't have External in the base compiler *)
-          end.              
-              
-       FOverride Definition fenv := PTree.t (block * Z).
-       FOverride Definition empty_fenv := PTree.empty (block * Z).                    
-
-       FDefinition block_of_binding := fun (id_b_sz: ident * (block * Z)) => 
-           match id_b_sz with (id, (b, sz)) => (b, 0, sz) end.
-
-       FDefinition blocks_of_env : fenv -> list (block * Z * Z) := fun e => 
-          List.map block_of_binding (PTree.elements e).          
-
-       FOverride Definition free_fenv := fun m e f =>
-         Mem.free_list m (blocks_of_env e).       
-
-       MetaData sem_cast.
-       Axiom sem_cast : val -> self__Imp.type -> self__Imp.type -> mem -> option val.
-       FEnd sem_cast.
-                        
-       FInductive eval_expr : genv -> env -> temp_env -> mem -> expr -> val -> Prop :=
-          | eval_Econst_int: forall ge e le m i ty,
-              eval_expr ge e le m (Econst_int i ty) (Vint i)
-          | eval_Econst_float: forall ge e le m f ty,
-              eval_expr ge e le m (Econst_float f ty) (Vfloat f)
-          | eval_Econst_single: forall ge e le m f ty,
-              eval_expr ge e le m (Econst_single f ty) (Vsingle f)
-          | eval_Econst_long: forall ge e le m i ty,
-              eval_expr ge e le m (Econst_long i ty) (Vlong i)
-          | eval_Ecast: forall ge e le m a ty v1 v,
-             eval_expr ge e le m a v1 ->
-             sem_cast v1 (typeof a) ty m = Some v ->
-             eval_expr ge e le m (Ecast a ty) v
-          | eval_Etempvar: forall ge e le m id ty v,
-              PTree.get id le = Some v ->
-              eval_expr ge e le m (Etempvar id ty) v.
-
-       FInductive cont: Type :=            
-          | Kloop1: stmt -> stmt -> cont -> cont(* Kloop1 s1 s2 k = after s1 in Sloop s1 s2 *)
-          | Kloop2: stmt -> stmt -> cont -> cont. (* Kloop2 s1 s2 k = after s2 in Sloop s1 s2 *)                
-
-       FRecursion call_cont about cont motive (fun (c : cont) => cont) by _rect.       
-            Case Kloop1 := (fun s1 s2 k call_cont_k => call_cont_k).
-            Case Kloop2 := (fun s1 s2 k call_cont_k => call_cont_k). 
-       FEnd call_cont.
-            
-       FRecursion is_call_cont about cont motive (fun (c : cont) => Prop) by _rect.                   
-            Case Kloop1 s1 s2 k := False. 
-            Case Kloop2 s1 s2 k := False.
-       FEnd is_call_cont.                      
-            
-       FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect.            
-            Case Sloop := (fun s1 find_label_s1 s2 find_label_s2 => 
-                             fun lbl k =>
-                             match find_label_s1 lbl (Kloop1 s1 s2 k) with 
-                             | Some sk => Some sk 
-                             | None => find_label_s2 lbl (Kloop2 s1 s2 k) end).            
-            Case Sbreak := (fun lbl k => None).                
-            Case Scontinue := (fun lbl k => None).
-       FEnd find_label.
-
-       MetaData bool_val.
-       Axiom bool_val : val -> self__Imp.type -> mem -> option bool. 
-       FEnd bool_val.
-
-       MetaData sizeof.
-       Axiom sizeof : (* self__Sem.composite_env -> *) self__Imp.type -> Z.
-       FEnd sizeof.
-             
-       FDefinition block_of_binding := fun (id_b_ty: ident * (block * type)) =>
-         match id_b_ty with (id, (b, ty)) => (b, 0, sizeof ty) end.
-
-       FDefinition blocks_of_env : env -> list (block * Z * Z)  := fun e => 
-         List.map block_of_binding (PTree.elements e).                      
-                  
-       FInductive step : genv -> state -> trace -> state -> Prop :=               
-               | step_continue_seq: forall ge f s k e le m,
-                   step ge (State f Scontinue (Kseq s k) e le m)
-                     E0 (State f Scontinue k e le m)
-               | step_break_seq: forall ge f s k e le m,
-                   step ge (State f Sbreak (Kseq s k) e le m)
-                     E0 (State f Sbreak k e le m)             
-               | step_ifthenelse: forall ge f a s1 s2 k e le m v1 b,
-                   eval_expr ge e le m a v1 ->
-                   bool_val v1 (typeof a) m = Some b ->
-                   step ge (State f (Sifthenelse a s1 s2) k e le m)
-                     E0 (State f (if b then s1 else s2) k e le m)
-               | step_loop: forall ge f s1 s2 k e le m,
-                   step ge (State f (Sloop s1 s2) k e le m)
-                     E0 (State f s1 (Kloop1 s1 s2 k) e le m)
-               | step_skip_or_continue_loop1: forall ge f s1 s2 k e le m x,
-                   x = Sskip \/ x = Scontinue ->
-                   step ge (State f x (Kloop1 s1 s2 k) e le m)
-                     E0 (State f s2 (Kloop2 s1 s2 k) e le m)
-               | step_break_loop1: forall ge f s1 s2 k e le m,
-                   step ge (State f Sbreak (Kloop1 s1 s2 k) e le m)
-                     E0 (State f Sskip k e le m)
-               | step_skip_loop2: forall ge f s1 s2 k e le m,
-                   step ge (State f Sskip (Kloop2 s1 s2 k) e le m)
-                     E0 (State f (Sloop s1 s2) k e le m)
-               | step_break_loop2: forall ge f s1 s2 k e le m,
-                   step ge (State f Sbreak (Kloop2 s1 s2 k) e le m)
-                     E0 (State f Sskip k e le m). 
-  
-  FEnd Clight.      
-  
-  Family Csharpminor extends Cfam.
-       
-       Inherit stmt.
-       
-       MetaData fn.
-       Record fn : Type := mkfunction {
-         fn_sig: signature;
-         fn_params: list ident;
-         fn_vars: list (ident * Z);
-         fn_temps: list ident;
-         fn_body: self__Csharpminor.stmt
-       }.
-       FEnd fn.
-       
-       FOverride Definition function := fn.
-       FOverride Definition function_body := self__Csharpminor.fn_body.
-       FOverride Definition function_locals := self__Csharpminor.fn_temps.
-       FOverride Definition function_params := self__Csharpminor.fn_params.
-       FOverride Definition function_sig := self__Csharpminor.fn_sig.
-       
-       FOverride Definition fenv := PTree.t (block * Z).
-       FOverride Definition empty_fenv := PTree.empty (block * Z).                    
-
-       FDefinition block_of_binding := fun (id_b_sz: ident * (block * Z)) => 
-           match id_b_sz with (id, (b, sz)) => (b, 0, sz) end.
-
-       FDefinition blocks_of_env : fenv -> list (block * Z * Z) := fun e => 
-          List.map block_of_binding (PTree.elements e).          
-
-       FOverride Definition free_fenv := fun m e f =>
-         Mem.free_list m (blocks_of_env e).          
-   
-       MetaData alloc_variables.
-         Inductive alloc_variables: self__Sem.fenv -> mem ->
-                        list (ident * Z) ->
-                        self__Sem.fenv -> mem -> Prop :=
-         | alloc_variables_nil:
-           forall e m,
-             alloc_variables e m nil e m
-         | alloc_variables_cons:
-           forall e m id sz vars m1 b1 m2 e2,
-             Mem.alloc m 0 sz = (m1, b1) ->
-             alloc_variables (PTree.set id (b1, sz) e) m1 vars e2 m2 ->
-             alloc_variables e m ((id, sz) :: vars) e2 m2.
-       FEnd alloc_variables.
-         
-       FOverride Definition alloc_fenv := fun e m f e' m' => 
-         list_norepet (map fst f.(self__Csharpminor.fn_vars)) /\
-         list_norepet f.(self__Csharpminor.fn_params) /\
-         list_disjoint f.(self__Csharpminor.fn_params) f.(self__Csharpminor.fn_temps) /\
-         alloc_variables self__Sem.empty_fenv m (self__Csharpminor.fn_vars f) e m'.       
-
-  FEnd Csharpminor.
-  
   (* RISC-V *)
   Family Asm.
       (* Operations *)
@@ -1916,6 +1264,833 @@ Inductive bitfield : Type :=
         FEnd final_state.
       FEnd Sem.         
    FEnd Asm.
+
+  
+  (* Cminor with processor-dependent instructions *)
+  Family CminorSel extends Cfam.                
+       FInductive expr : Type :=
+          | Evar : ident -> expr          
+          | Econdition : condexpr -> expr -> expr -> expr
+          | Eop : Asm.operation -> exprlist -> expr
+          | Elet : expr -> expr -> expr
+          | Eletvar : nat -> expr
+       with exprlist : Type :=
+          | Enil: exprlist
+          | Econs: expr -> exprlist -> exprlist
+       with condexpr : Type :=
+          | CEcond : Asm.condition -> exprlist -> condexpr
+          | CEcondition : condexpr -> condexpr -> condexpr -> condexpr
+          | CElet: expr -> condexpr -> condexpr.
+       
+       Inherit stmt.
+
+       MetaData function.
+       Record function : Type := mkfunction {
+          fn_sig: signature;
+          fn_params: list ident;
+          fn_vars: list ident;
+          fn_stackspace: Z;
+          fn_body: self__CminorSel.stmt
+       }.
+       FEnd function.
+       
+       FDefinition letenv := list val.       
+       (* stack pointer *)
+       (* Vptr sp Ptrofs.zero *)
+       FOverride Definition fenv := block.
+   
+       FOverride Definition free_fenv := fun m sp f =>
+          Mem.free m sp 0 f.(self__Cminor.fn_stackspace).
+          
+       FOverride Definition alloc_fenv := fun sp m f sp' m' => 
+          Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp).
+          
+       FDefinition eval_operation := fun op => Asm.eval_operation op fundef unit.                     
+                    
+       FInductive eval_expr: genv -> val -> env -> mem -> letenv -> expr -> val -> Prop :=
+           | eval_Evar: forall ge sp e m le id v,
+               PTree.get id e = Some v ->
+               eval_expr ge sp e m le (Evar id) v
+           | eval_Eop: forall ge sp e m le op al vl v,
+               eval_exprlist ge sp e m le al vl ->
+               Asm.eval_operation ge sp op vl m = Some v ->
+               eval_expr ge sp e m le (Eop op al) v
+           | eval_Econdition: forall ge sp e m le a b c va v,
+               eval_condexpr ge sp e m le a va ->
+               eval_expr ge sp e m le (if va then b else c) v ->
+               eval_expr ge sp e m le (Econdition a b c) v
+           | eval_Elet: forall ge sp e m le a b v1 v2,
+               eval_expr ge sp e m le a v1 ->
+               eval_expr ge sp e m (v1 :: le) b v2 ->
+               eval_expr ge sp e m le (Elet a b) v2
+           | eval_Eletvar: forall ge sp e m le n v,
+               nth_error le n = Some v ->
+               eval_expr ge sp e m le (Eletvar n) v
+       with eval_exprlist: genv -> val -> env -> mem -> letenv -> self__CminorSel.exprlist -> list val -> Prop :=
+          | eval_Enil: forall ge sp e m le,
+              eval_exprlist ge sp e m le Enil nil
+          | eval_Econs: forall ge sp e m le a1 al v1 vl,
+              eval_expr ge sp e m le a1 v1 -> eval_exprlist ge sp e m le al vl ->
+              eval_exprlist ge sp e m le (Econs a1 al) (v1 :: vl)
+       with eval_condexpr: genv -> val -> env -> mem -> letenv -> self__CminorSel.condexpr -> bool -> Prop :=
+          | eval_CEcond: forall ge sp e m le cond al vl vb,
+              eval_exprlist ge sp e m le al vl ->
+              Asm.eval_condition cond vl m = Some vb ->
+              eval_condexpr ge sp e m le (CEcond cond al) vb
+          | eval_CEcondition: forall ge sp e m le a b c va v,
+              eval_condexpr ge sp e m le a va ->
+              eval_condexpr ge sp e m le (if va then b else c) v ->
+              eval_condexpr ge sp e m le (CEcondition a b c) v
+          | eval_CElet: forall ge sp e m le a b v1 v2,
+              eval_expr ge sp e m le a v1 ->
+              eval_condexpr ge sp e m (v1 :: le) b v2 ->
+              eval_condexpr ge sp e m le (CElet a b) v2.       
+  FEnd CminorSel.
+
+  Family Selection extends Cfamtransl.
+      Family Source extends Cminor.
+      FEnd Source.
+
+      Family Target extends Cminor.
+      FEnd Target.
+      
+             FDefinition longconst : int64 -> expr := fun n =>
+          if Archi.splitlong then SplitLong.longconst n else CminorSel.Eop (Asm.Olongconst n) CminorSel.Enil.
+
+       FRecurcion sel_constant about Cminor.constant motive (fun (_ : Cminor.constant) => CminorSel.expr).
+           Case Ointconst := (fun n => CminorSel.Eop (Asm.Ointconst n) CminorSel.Enil).
+           Case Ofloatconst := (fun n => CminorSel.Eop (Asm.Ofloatconst f) CminorSel.Enil).
+           Case Osingleconst := (fun n =>  CminorSel.Eop (Asm.Osingleconst f) CminorSel.Enil).
+           Case Olongconst := (fun n => longconst n).
+       FEnd sel_constant.
+
+       FRecursion sel_expr about Cminor.expr motive (fun (_ : Cminor.expr) => CminorSel.expr).          
+           Case Evar := (fun id => CminorSel.Evar id).
+           Case Econst := (fun cst => sel_constant cst).           
+       FEnd sel_expr.
+       
+       FRecursion select_condition about Asm.operation motive (fun (_ : Asm.operation) => CminorSel.exprlist -> condition) by _rect.
+           Case Ocmp := (fun c args => CminorSel.CEcond c args).
+       FEnd select_condition.
+       
+       FRecursion condexpr_of_expr about CminorSel.expr motive (fun (_ : Cminor.expr) => CminorSel.condexpr) by _rect.
+           Case Eop op args := select_condition op args.
+           Case Econdition a b c := (CminorSel.CEcondition a (condexpr_of_expr b) (condexpr_of_expr c))
+           Case Elet a b := (CElet a (condexpr_of_expr b)).
+           Case Eletvar n := (CminorSel.CEcond (Asm.Ccompuimm Cne Int.zero) (CminorSel.Econs e Cminor.Enil)).
+           Case Evar i := (CminorSel.CEcond (Asm.Ccompuimm Cne Int.zero) (CminorSel.Econs e Cminor.Enil)).
+       FEnd condexpr_of_expr.
+
+       Function condexpr_of_expr (e: expr) : condexpr :=
+           match e with
+           | Eop (Ocmp c) el => CEcond c el
+           | Econdition a b c => CEcondition a (condexpr_of_expr b) (condexpr_of_expr c)
+           | Elet a b => CElet a (condexpr_of_expr b)
+           | _ => CEcond (Ccompuimm Cne Int.zero) (e ::: Enil)
+           end.
+       
+       FRecursion sel_stmt about Cminor.stmt 
+                            motive (fun (_ : Cminor.stmt) => res CminorSel.stmt) by _rect.
+          Case Sskip := (OK CminorSel.Sskip).
+          Case Sassign id e := (OK (CminorSel.Sassign id (sel_expr e))).
+          Case Sseq s1 s2 := (
+                 do s1' <- sel_stmt s1 ; 
+                 do s2' <- sel_stmt s2 ;
+                 OK (CminorSel.Sseq s1' s2')).
+          Case Sifthenelse e ifso ifnot := (
+               (* For simplicity, don't use the
+                  "if conversion heuristics" present in CompCert *)                      
+                 do ifso' <- sel_stmt ifso ;
+                 do ifnot' <- sel_stmt ifnot ;
+                 OK (Sifthenelse (condexpr_of_expr (sel_expr e)) ifso' ifnot')).
+          Case Sloop body := (do body' <- sel_stmt body; OK (CminorSel.Sloop body')).
+          Case Sblock s := (do body' <- sel_stmt body; OK (CminorSel.Sblock body')). 
+          Case Sexit := (OK (CminorSel.Sexit n)).
+          Case Sreturn e := (match e with 
+                             | None => OK (CminorSel.Sreturn None) 
+                             | Some e => OK (CminorSel.Sreturn (Some (sel_expr e)))).
+          Case Slabel lbl body := (do body' <- sel_stmt body; OK (CminorSel.Slabel lbl body')) 
+          Case Sgoto := (OK (CminorSel.Sgoto lbl)).
+        FEnd sel_stmt.
+
+       FDefinition sel_function : Cminor.function -> res function := fun f =>             
+             do body' <- sel_stmt f.(self__Imp.Cminor.fn_body);
+             OK (self__Imp.CminorSel.mkfunction
+                   f.(self__Imp.Cminor.fn_sig)
+                   f.(self__Imp.Cminor.fn_params)
+                   f.(self__Imp.Cminor.fn_vars)
+                   f.(self__Imp.Cminor.fn_stackspace)
+                   body').
+
+       FDefinition sel_fundef : Cminor.fundef -> res fundef := fun f =>
+         transf_partial_fundef (sel_function) f.
+
+       FDefinition sel_program : Cminor.program -> res program := fun p =>         
+        transform_partial_program (sel_fundef) p.       
+       
+        Inductive match_cont: Cminor.program -> helper_functions -> known_idents -> typenv -> Cminor.cont -> CminorSel.cont -> Prop :=
+            | match_cont_seq: forall cunit hf ki env s s' k k',
+                sel_stmt (prog_defmap cunit) ki env s = OK s' ->
+                match_cont cunit hf ki env k k' ->
+                match_cont cunit hf ki env (Cminor.Kseq s k) (Kseq s' k')
+            | match_cont_block: forall cunit hf ki env k k',
+                match_cont cunit hf ki env k k' ->
+                match_cont cunit hf ki env (Cminor.Kblock k) (Kblock k')
+            | match_cont_other: forall cunit hf ki env k k',
+                match_call_cont k k' ->
+                match_cont cunit hf ki env k k'
+        with match_call_cont: Cminor.cont -> CminorSel.cont -> Prop :=
+            | match_cont_stop:
+                match_call_cont Cminor.Kstop Kstop
+            | match_cont_call: forall cunit hf env id f sp e k f' e' k',
+                linkorder cunit prog ->
+                helper_functions_declared cunit hf ->
+                sel_function (prog_defmap cunit) hf f = OK f' ->
+                type_function f = OK env ->
+                match_cont cunit hf (known_id f) env k k' ->
+                env_lessdef e e' ->
+                match_call_cont (Cminor.Kcall id f sp e k) (Kcall id f' sp e' k').
+
+       Inductive match_states: Cminor.state -> CminorSel.state -> Prop :=
+        | match_state: forall cunit hf f f' s k s' k' sp e m e' m' env
+            (LINK: linkorder cunit prog)
+            (HF: helper_functions_declared cunit hf)
+            (TF: sel_function (prog_defmap cunit) hf f = OK f')
+            (TYF: type_function f = OK env)
+            (TS: sel_stmt (prog_defmap cunit) (known_id f) env s = OK s')
+            (MC: match_cont cunit hf (known_id f) env k k')
+            (LD: env_lessdef e e')
+            (ME: Mem.extends m m'),
+            match_states
+            (Cminor.State f s k sp e m)
+            (State f' s' k' sp e' m')
+        | match_callstate: forall cunit f f' args args' k k' m m'
+            (LINK: linkorder cunit prog)
+            (TF: match_fundef cunit f f')
+            (MC: match_call_cont k k')
+            (LD: Val.lessdef_list args args')
+            (ME: Mem.extends m m'),
+            match_states
+            (Cminor.Callstate f args k m)
+            (Callstate f' args' k' m')
+        | match_returnstate: forall v v' k k' m m'
+            (MC: match_call_cont k k')
+            (LD: Val.lessdef v v')
+            (ME: Mem.extends m m'),
+            match_states
+            (Cminor.Returnstate v k m)
+            (Returnstate v' k' m')
+        | match_builtin_1: forall cunit hf ef args optid f sp e k m al f' e' k' m' env
+            (LINK: linkorder cunit prog)
+            (HF: helper_functions_declared cunit hf)
+            (TF: sel_function (prog_defmap cunit) hf f = OK f')
+            (TYF: type_function f = OK env)
+            (MC: match_cont cunit hf (known_id f) env k k')
+            (EA: Cminor.eval_exprlist ge sp e m al args)
+            (LDE: env_lessdef e e')
+            (ME: Mem.extends m m'),
+            match_states
+            (Cminor.Callstate (External ef) args (Cminor.Kcall optid f sp e k) m)
+            (State f' (sel_builtin optid ef al) k' sp e' m')
+        | match_builtin_2: forall cunit hf v v' optid f sp e k m f' e' m' k' env
+            (LINK: linkorder cunit prog)
+            (HF: helper_functions_declared cunit hf)
+            (TF: sel_function (prog_defmap cunit) hf f = OK f')
+            (TYF: type_function f = OK env)
+            (MC: match_cont cunit hf (known_id f) env k k')
+            (LDV: Val.lessdef v v')
+            (LDE: env_lessdef (set_optvar optid v e) e')
+            (ME: Mem.extends m m'),
+            match_states
+            (Cminor.Returnstate v (Cminor.Kcall optid f sp e k) m)
+            (State f' Sskip k' sp e' m').
+
+        Definition measure (s: Cminor.state) : nat :=
+            match s with
+            | Cminor.Callstate _ _ _ _ => 0%nat
+            | Cminor.State _ _ _ _ _ _ => 1%nat
+            | Cminor.Returnstate _ _ _ => 2%nat
+            end.
+
+        Lemma sel_step_correct:
+            forall S1 t S2, Cminor.step ge S1 t S2 ->
+            forall T1, match_states S1 T1 -> wt_state S1 ->
+            (exists T2, plus step tge T1 t T2 /\ match_states S2 T2)
+            \/ (measure S2 < measure S1 /\ t = E0 /\ match_states S2 T1)%nat
+            \/ (exists T2 n, step tge T1 t T2 /\ eventually n S2 (fun S3 => match_states S3 T2)).
+        Proof.
+        
+        Lemma sel_initial_states:
+            forall S, Cminor.initial_state prog S ->
+            exists R, initial_state tprog R /\ match_states S R.
+        Proof.
+        
+        Lemma sel_final_states:
+            forall S R r,
+            match_states S R -> Cminor.final_state S r -> final_state R r.
+        Proof.
+
+  FEnd Selection.
+         
+  Family C extends Cfam.
+      
+      FInductive expr : Type :=
+        | Eval : val -> type -> expr (* constant *)
+        | Evar : ident -> type -> expr (* variable *)        
+        | Ecast : expr -> type -> expr (* type cast (ty)r *)
+        | Eseqand : expr -> expr -> type -> expr (* sequential "and" r1 && r2 *)
+        | Eseqor : expr -> expr -> type -> expr (* sequential "or" r1 || r2 *)
+        | Econdition : expr -> expr -> expr -> type -> expr (* conditional r1 ? r2 : r3 *)
+        | Esizeof : type -> type -> expr (* size of a type *)
+        | Ealignof : type -> type -> expr (* natural alignment of a type *)        
+        | Ecomma : expr -> expr -> type -> expr (* sequence expression r1, r2 *)                
+        | Eparen : expr -> type -> type -> expr. 
+        
+        FRecursion typeof : (e : expr) -> type.
+          Case Eval v ty := ty.
+          Case Evar x ty := ty.          
+          Case Ecast r ty := ty. 
+          Case Eseqand r1 r2 ty := ty. 
+          Case Eseqor r1 r2 ty := ty. 
+          Case Econdition r1 r2 r3 ty := ty.
+          Case Esizeof ty' ty := ty.
+          Case Ealignof ty' ty := ty.          
+          Case Ecomma r1 r2 ty := ty.
+          Case Eparen e ty' ty := ty.
+        FEnd typeof.
+
+      FDefinition label := ident.
+      
+      FInductive statement : Type :=        
+        | Sdo : expr -> statement(* evaluate expression for side effects *)        
+        | Sifthenelse : expr -> statement -> statement -> statement(* conditional *)
+        | Swhile : expr -> statement -> statement(* while loop *)
+        | Sdowhile : expr -> statement -> statement(* do loop *)
+        | Sfor: statement -> expr -> statement -> statement -> statement(* for loop *)
+        | Sbreak : statement(* break statement *)
+        | Scontinue : statement(* continue statement *)
+        | Sreturn : option expr -> statement. (* return statement *)
+      
+      MetaData function.
+      Record function : Type := mkfunction {
+        fn_return: self__Imp.type;
+        fn_callconv: calling_convention;
+        fn_params: list (ident * self__Imp.type);
+        fn_vars: list (ident * self__Imp.type);
+        fn_body: self__C.statement
+      }.
+      FEnd function.
+
+      FDefinition var_names := fun (vars: list(ident * type)) =>
+        List.map (@fst ident type) vars.
+
+      FDefinition fundef := AST.fundef function.
+
+      FDefinition type_of_function : function -> type := fun f => 
+         self__Imp.Tfunction (self__Imp.type_of_params (self__C.fn_params f)) 
+           (self__C.fn_return f) (self__C.fn_callconv f).
+       
+       FDefinition type_of_fundef : fundef -> type := fun f =>
+          match f with
+          | Internal fd => type_of_function fd
+          | _ => cheat (* TODO: We don't have External in the base compiler *)
+          end.
+
+      FDefinition program := AST.program fundef type.
+
+      FOverride Definition fenv := PTree.t (block * Z).
+      FOverride Definition empty_fenv := PTree.empty (block * Z).                    
+
+      FDefinition block_of_binding := fun (id_b_sz: ident * (block * Z)) => 
+           match id_b_sz with (id, (b, sz)) => (b, 0, sz) end.
+
+      FDefinition blocks_of_env : fenv -> list (block * Z * Z) := fun e => 
+          List.map block_of_binding (PTree.elements e).          
+
+      FOverride Definition free_fenv := fun m e f =>
+         Mem.free_list m (blocks_of_env e).                  
+
+      FInductive cont: Type :=              
+          | Kdo: cont -> cont(* Kdo k = after x in x; *)              
+          | Kifthenelse: statement -> statement -> cont -> cont(* Kifthenelse s1 s2 k = after x in if (x) { s1 } else { s2 } *)
+          | Kwhile1: expr -> statement -> cont -> cont(* Kwhile1 x s k = after x in while(x) s *)
+          | Kwhile2: expr -> statement -> cont -> cont(* Kwhile x s k = after s in while (x) s *)
+          | Kdowhile1: expr -> statement -> cont -> cont(* Kdowhile1 x s k = after s in do s while (x) *)
+          | Kdowhile2: expr -> statement -> cont -> cont(* Kdowhile2 x s k = after x in do s while (x) *)
+          | Kfor2: expr -> statement -> statement -> cont -> cont(* Kfor2 e2 e3 s k = after e2 in for(e1;e2;e3) s *)
+          | Kfor3: expr -> statement -> statement -> cont -> cont(* Kfor3 e2 e3 s k = after s in for(e1;e2;e3) s *)
+          | Kfor4: expr -> statement -> statement -> cont -> cont(* Kfor4 e2 e3 s k = after e3 in for(e1;e2;e3) s *)              
+          | Kreturn: cont -> cont. (* Kreturn k = after e in return e; *)              
+
+      FRecursion call_cont about cont motive (fun (c : cont) => cont) by _rect.            
+          Case Kdo k := k.            
+          Case Kifthenelse s1 s2 k := (call_cont k).
+          Case Kwhile1 e s k := (call_cont k).
+          Case Kwhile2 e s k := (call_cont k).
+          Case Kdowhile1 e s k := (call_cont k).
+          Case Kdowhile2 e s k := (call_cont k).
+          Case Kfor2 e2 e3 s k := (call_cont k).
+          Case Kfor3 e2 e3 s k := (call_cont k).
+          Case Kfor4 e2 e3 s k := (call_cont k).
+          Case Kreturn k := (call_cont k).            
+      FEnd call_cont.
+
+        FRecursion is_call_cont about cont motive (fun (c : cont) => Prop) by _rect.          
+          Case Kdo k := False.          
+          Case Kifthenelse s1 s2 k := False.
+          Case Kwhile1 e s k := False.
+          Case Kwhile2 e s k := False.
+          Case Kdowhile1 e s k := False.
+          Case Kdowhile2 e s k := False.
+          Case Kfor2 e2 e3 s k := False.
+          Case Kfor3 e2 e3 s k := False.
+          Case Kfor4 e2 e3 s k := False.
+          Case Kreturn k := False.          
+        FEnd is_call_cont.
+
+        FInductive state: Type :=          
+          | ExprState : (* reduction of an expression *)
+               function ->
+               expr ->
+               cont ->
+               env ->
+               mem -> state          
+          | Stuckstate : state. (* undefined behavior occurred *)
+        
+        FRecursion find_label about statement motive (fun (_ : statement) => label -> cont -> option (statement * cont)) by _rect.          
+          Case Sdo r := (fun lbl k => None).                    
+          Case Swhile a s1 := (fun lbl k => find_label s1 lbl (Kwhile2 a s1 k)).
+          Case Sdowhile a s1 := (fun lbl k => find_label s1 lbl (Kdowhile1 a s1 k)).
+          Case Sfor a1 a2 a3 s1 := 
+              (fun lbl k => match find_label a1 lbl (Kseq (Sfor Sskip a2 a3 s1) k) with 
+                            | Some sk => Some sk 
+                            | None => match find_label s1 lbl (Kfor3 a2 a3 s1 k) with 
+                                      | Some sk => Some sk 
+                                      | None => find_label a3 lbl (Kfor4 a2 a3 s1 k) end end).
+          Case Sbreak := (fun lbl k => None).
+          Case Scontinue := (fun lbl k => None).          
+        FEnd find_label.
+                
+        MetaData bool_val.
+        Axiom bool_val : val -> self__Imp.type -> mem -> option bool.
+        FEnd bool_val.
+
+        MetaData sizeof.
+           Axiom sizeof : (* self__Sem.composite_env -> *) self__Imp.type -> Z. 
+        FEnd sizeof.      
+                
+        MetaData alignof.
+        Axiom alignof : (* self__Imp.Clight.Sem.composite_env ->*) self__Imp.type -> Z.
+        FEnd alignof.
+
+        MetaData sem_cast.
+            Axiom sem_cast : val -> self__Imp.type -> self__Imp.type -> mem -> option val.
+        FEnd sem_cast.                
+
+        FInductive eval_simple_rvalue: genv -> env -> mem -> expr -> val -> Prop :=
+           | esr_val: forall ge e m v ty,
+               eval_simple_rvalue ge e m (Eval v ty) v                                   
+           | esr_cast: forall ge e m ty r1 v1 v,
+               eval_simple_rvalue ge e m r1 v1 ->
+               sem_cast v1 (typeof r1) ty m = Some v ->
+               eval_simple_rvalue ge e m (Ecast r1 ty) v
+           | esr_sizeof: forall ge e m ty1 ty,
+               eval_simple_rvalue ge e m (Esizeof ty1 ty) (Vptrofs (Ptrofs.repr (sizeof (* ge *) ty1)))                                  
+           | esr_alignof: forall ge e m ty1 ty,
+               eval_simple_rvalue ge e m (Ealignof ty1 ty) (Vptrofs (Ptrofs.repr (alignof (* ge *) ty1))).        
+                
+        FRecursion is_val about expr motive (fun (e : expr) => Prop) by _rect.
+            Case Eval v ty := True.
+            Case Evar x ty := False.
+            Case Ecast r ty := False.
+            Case Eseqand r1 r2 ty := False.
+            Case Eseqor r1 r2 ty := False.
+            Case Econdition r1 r2 r3 ty := False.
+            Case Esizeof ty' ty := False.
+            Case Ealignof ty' ty := True.
+            Case Ecomma r1 r2 ty := False.
+            Case Eparen e ty' ty := False.
+        FEnd is_val.
+        
+        MetaData kind.
+        Inductive kind : Type := LV | RV.
+        FEnd kind.
+        
+        FInductive leftcontext: kind -> kind -> (expr -> expr) -> Prop :=
+        | lctx_top: forall k,
+            leftcontext k k (fun x => x)  
+        | lctx_cast: forall k F ty,
+            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Ecast (F x) ty)
+        | lctx_seqand: forall k F r2 ty,
+            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Eseqand (F x) r2 ty)
+        | lctx_seqor: forall k F r2 ty,
+            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Eseqor (F x) r2 ty)
+        | lctx_condition: forall k F r2 r3 ty,
+            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Econdition (F x) r2 r3 ty)
+        | lctx_comma: forall k F e2 ty,
+            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Ecomma (F x) e2 ty)
+        | lctx_paren: forall k F tycast ty,
+            leftcontext k self__Sem.RV F -> leftcontext k self__Sem.RV (fun x => Eparen (F x) tycast ty).
+
+        FInductive estep: genv -> state -> trace -> state -> Prop :=
+             | step_expr: forall ge f r k e m v ty,
+                 eval_simple_rvalue ge e m r v ->
+                 is_val r ->
+                 ty = typeof r ->
+                 estep ge (ExprState f r k e m)
+                    E0 (ExprState f (Eval v ty) k e m)               
+             | step_seqand_true: forall ge f F r1 r2 ty k e m v,
+                 leftcontext self__Sem.RV self__Sem.RV F ->
+                 eval_simple_rvalue ge e m r1 v ->
+                 bool_val v (typeof r1) m = Some true ->
+                 estep ge (ExprState f (F (Eseqand r1 r2 ty)) k e m)
+                    E0 (ExprState f (F (Eparen r2 self__Imp.type_bool ty)) k e m)
+             | step_seqand_false: forall ge f F r1 r2 ty k e m v,
+                 leftcontext self__Sem.RV self__Sem.RV F ->
+                 eval_simple_rvalue ge e m r1 v ->
+                 bool_val v (typeof r1) m = Some false ->
+                 estep ge (ExprState f (F (Eseqand r1 r2 ty)) k e m)
+                    E0 (ExprState f (F (Eval (Vint Int.zero) ty)) k e m)
+             | step_seqor_true: forall ge f F r1 r2 ty k e m v,
+                 leftcontext self__Sem.RV self__Sem.RV F ->
+                 eval_simple_rvalue ge e m r1 v ->
+                 bool_val v (typeof r1) m = Some true ->
+                 estep ge (ExprState f (F (Eseqor r1 r2 ty)) k e m)
+                    E0 (ExprState f (F (Eval (Vint Int.one) ty)) k e m)
+             | step_seqor_false: forall ge f F r1 r2 ty k e m v,
+                 leftcontext self__Sem.RV self__Sem.RV F ->
+                 eval_simple_rvalue ge e m r1 v ->
+                 bool_val v (typeof r1) m = Some false ->
+                 estep ge (ExprState f (F (Eseqor r1 r2 ty)) k e m)
+                    E0 (ExprState f (F (Eparen r2 self__Imp.type_bool ty)) k e m)
+             | step_condition: forall ge f F r1 r2 r3 ty k e m v b,
+                 leftcontext self__Sem.RV self__Sem.RV F ->
+                 eval_simple_rvalue ge e m r1 v ->
+                 bool_val v (typeof r1) m = Some b ->
+                 estep ge (ExprState f (F (Econdition r1 r2 r3 ty)) k e m)
+                    E0 (ExprState f (F (Eparen (if b then r2 else r3) ty ty)) k e m)
+             | step_comma: forall ge f F r1 r2 ty k e m v,
+                 leftcontext self__Sem.RV self__Sem.RV F ->
+                 eval_simple_rvalue ge e m r1 v ->
+                 ty = typeof r2 ->
+                 estep ge (ExprState f (F (Ecomma r1 r2 ty)) k e m)
+                    E0 (ExprState f (F r2) k e m)
+             | step_paren: forall ge f F r tycast ty k e m v1 v,
+                 leftcontext self__Sem.RV self__Sem.RV F ->
+                 eval_simple_rvalue ge e m r v1 ->
+                 sem_cast v1 (typeof r) tycast m = Some v ->
+                 estep ge (ExprState f (F (Eparen r tycast ty)) k e m)
+                    E0 (ExprState f (F (Eval v ty)) k e m).
+        
+        FInductive sstep: genv -> state -> trace -> state -> Prop :=
+            | step_do_1: forall ge f x k e m,
+                sstep ge (State f (Sdo x) k e m)
+                  E0 (ExprState f x (Kdo k) e m)
+            | step_do_2: forall ge f v ty k e m,
+                sstep ge (ExprState f (Eval v ty) (Kdo k) e m)
+                  E0 (State f Sskip k e m)
+            | step_seq: forall ge f s1 s2 k e m,
+                sstep ge (State f (Ssequence s1 s2) k e m)
+                  E0 (State f s1 (Kseq s2 k) e m)
+            | step_skip_seq: forall ge f s k e m,
+                sstep ge (State f Sskip (Kseq s k) e m)
+                  E0 (State f s k e m)
+            | step_continue_seq: forall ge f s k e m,
+                sstep ge (State f Scontinue (Kseq s k) e m)
+                  E0 (State f Scontinue k e m)
+            | step_break_seq: forall ge f s k e m,
+                sstep ge (State f Sbreak (Kseq s k) e m)
+                  E0 (State f Sbreak k e m)
+            | step_ifthenelse_1: forall ge f a s1 s2 k e m,
+                sstep ge (State f (Sifthenelse a s1 s2) k e m)
+                  E0 (ExprState f a (Kifthenelse s1 s2 k) e m)
+            | step_ifthenelse_2: forall ge f v ty s1 s2 k e m b,
+                bool_val v ty m = Some b ->
+                sstep ge (ExprState f (Eval v ty) (Kifthenelse s1 s2 k) e m)
+                  E0 (State f (if b then s1 else s2) k e m)
+            | step_while: forall ge f x s k e m,
+                sstep ge (State f (Swhile x s) k e m)
+                  E0 (ExprState f x (Kwhile1 x s k) e m)
+            | step_while_false: forall ge f v ty x s k e m,
+                bool_val v ty m = Some false ->
+                sstep ge (ExprState f (Eval v ty) (Kwhile1 x s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_while_true: forall ge f v ty x s k e m ,
+                bool_val v ty m = Some true ->
+                sstep ge (ExprState f (Eval v ty) (Kwhile1 x s k) e m)
+                  E0 (State f s (Kwhile2 x s k) e m)
+            | step_skip_or_continue_while: forall ge f s0 x s k e m,
+                s0 = Sskip \/ s0 = Scontinue ->
+                sstep ge (State f s0 (Kwhile2 x s k) e m)
+                  E0 (State f (Swhile x s) k e m)
+            | step_break_while: forall ge f x s k e m,
+                sstep ge (State f Sbreak (Kwhile2 x s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_dowhile: forall ge f a s k e m,
+                sstep ge (State f (Sdowhile a s) k e m)
+                  E0 (State f s (Kdowhile1 a s k) e m)
+            | step_skip_or_continue_dowhile: forall ge f s0 x s k e m,
+                s0 = Sskip \/ s0 = Scontinue ->
+                sstep ge (State f s0 (Kdowhile1 x s k) e m)
+                  E0 (ExprState f x (Kdowhile2 x s k) e m)
+            | step_dowhile_false: forall ge f v ty x s k e m,
+                bool_val v ty m = Some false ->
+                sstep ge (ExprState f (Eval v ty) (Kdowhile2 x s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_dowhile_true: forall ge f v ty x s k e m,
+                bool_val v ty m = Some true ->
+                sstep ge (ExprState f (Eval v ty) (Kdowhile2 x s k) e m)
+                  E0 (State f (Sdowhile x s) k e m)
+            | step_break_dowhile: forall ge f a s k e m,
+                sstep ge (State f Sbreak (Kdowhile1 a s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_for_start: forall ge f a1 a2 a3 s k e m,
+                a1 <> Sskip ->
+                sstep ge (State f (Sfor a1 a2 a3 s) k e m)
+                  E0 (State f a1 (Kseq (Sfor Sskip a2 a3 s) k) e m)
+            | step_for: forall ge f a2 a3 s k e m,
+                sstep ge (State f (Sfor Sskip a2 a3 s) k e m)
+                  E0 (ExprState f a2 (Kfor2 a2 a3 s k) e m)
+            | step_for_false: forall ge f v ty a2 a3 s k e m,
+                bool_val v ty m = Some false ->
+                sstep ge (ExprState f (Eval v ty) (Kfor2 a2 a3 s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_for_true: forall ge f v ty a2 a3 s k e m,
+                bool_val v ty m = Some true ->
+                sstep ge (ExprState f (Eval v ty) (Kfor2 a2 a3 s k) e m)
+                  E0 (State f s (Kfor3 a2 a3 s k) e m)
+            | step_skip_or_continue_for3: forall ge f x a2 a3 s k e m,
+                x = Sskip \/ x = Scontinue ->
+                sstep ge (State f x (Kfor3 a2 a3 s k) e m)
+                  E0 (State f a3 (Kfor4 a2 a3 s k) e m)
+            | step_break_for3: forall ge f a2 a3 s k e m,
+                sstep ge (State f Sbreak (Kfor3 a2 a3 s k) e m)
+                  E0 (State f Sskip k e m)
+            | step_skip_for4: forall ge f a2 a3 s k e m,
+                sstep ge (State f Sskip (Kfor4 a2 a3 s k) e m)
+                  E0 (State f (Sfor Sskip a2 a3 s) k e m).                     
+
+            FDefinition step :  genv -> state -> trace -> state -> Prop := fun ge S t S' => 
+              estep ge S t S' \/ sstep ge S t S'.
+                           
+  FEnd C.
+      
+  Family Clight extends Cfam.
+       
+       FInductive expr : Type :=          
+          | Econst_int: int -> type -> expr(* integer literal *)
+          | Econst_float: float -> type -> expr(* double float literal *)
+          | Econst_single: float32 -> type -> expr(* single float literal *)
+          | Econst_long: int64 -> type -> expr(* long integer literal *)                                            
+          | Etempvar: ident -> type -> expr (* temporary variable *)          
+          | Esizeof: type -> type -> expr (* size of a type *)
+          | Ecast: expr -> type -> expr
+          | Ealignof: type -> type -> expr. (* alignment of a type *)                                         
+       
+       FRecursion typeof : (e : expr) -> type. 
+          Case Econst_int i ty := ty. 
+          Case Econst_float f ty := ty. 
+          Case Econst_single s ty := ty. 
+          Case Econst_long l ty := ty. 
+          Case Etempvar v ty := ty.
+          Case Esizeof ty' ty := ty.
+          Case Ealignof ty' ty := ty.
+          Case Ecast e ty := ty.
+       FEnd typeof.
+       
+       FDefinition label := ident.
+       FInductive stmt : Type :=                                            
+           | Sloop: stmt -> stmt -> stmt (* infinite loop *)
+           | Sbreak : stmt (* break stmt *)
+           | Scontinue : stmt. (* continue stmt *)
+
+       FDefinition Swhile := fun (e: expr) (s: stmt) =>
+         Sloop (Ssequence (Sifthenelse e Sskip Sbreak) s) Sskip.
+
+       FDefinition Sdowhile := fun (s: stmt) (e: expr) => 
+         Sloop s (Sifthenelse e Sskip Sbreak).
+
+       FDefinition Sfor := fun (s1: stmt) (e2: expr) (s3: stmt) (s4: stmt) =>
+         Ssequence s1 (Sloop (Ssequence (Sifthenelse e2 Sskip Sbreak) s3) s4).
+              
+       MetaData function.
+       Record function : Type := mkfunction {
+         fn_return: self__Imp.type;
+         fn_callconv: calling_convention;
+         fn_params: list (ident * self__Imp.type);
+         fn_vars: list (ident * self__Imp.type);
+         fn_temps: list (ident * self__Imp.type);
+         fn_body: self__Clight.stmt
+       }.
+       FEnd function.       
+              
+       FDefinition fundef := AST.fundef function.
+       
+       FDefinition type_of_function : function -> type := fun f => 
+         self__Imp.Tfunction (self__Imp.type_of_params (self__Clight.fn_params f)) 
+           (self__Clight.fn_return f) (self__Clight.fn_callconv f).
+       
+       FDefinition type_of_fundef : fundef -> type := fun f =>
+          match f with
+          | Internal fd => type_of_function fd
+          | _ => cheat (* TODO: We don't have External in the base compiler *)
+          end.              
+              
+       FOverride Definition fenv := PTree.t (block * Z).
+       FOverride Definition empty_fenv := PTree.empty (block * Z).                    
+
+       FDefinition block_of_binding := fun (id_b_sz: ident * (block * Z)) => 
+           match id_b_sz with (id, (b, sz)) => (b, 0, sz) end.
+
+       FDefinition blocks_of_env : fenv -> list (block * Z * Z) := fun e => 
+          List.map block_of_binding (PTree.elements e).          
+
+       FOverride Definition free_fenv := fun m e f =>
+         Mem.free_list m (blocks_of_env e).       
+
+       MetaData sem_cast.
+       Axiom sem_cast : val -> self__Imp.type -> self__Imp.type -> mem -> option val.
+       FEnd sem_cast.
+                        
+       FInductive eval_expr : genv -> env -> temp_env -> mem -> expr -> val -> Prop :=
+          | eval_Econst_int: forall ge e le m i ty,
+              eval_expr ge e le m (Econst_int i ty) (Vint i)
+          | eval_Econst_float: forall ge e le m f ty,
+              eval_expr ge e le m (Econst_float f ty) (Vfloat f)
+          | eval_Econst_single: forall ge e le m f ty,
+              eval_expr ge e le m (Econst_single f ty) (Vsingle f)
+          | eval_Econst_long: forall ge e le m i ty,
+              eval_expr ge e le m (Econst_long i ty) (Vlong i)
+          | eval_Ecast: forall ge e le m a ty v1 v,
+             eval_expr ge e le m a v1 ->
+             sem_cast v1 (typeof a) ty m = Some v ->
+             eval_expr ge e le m (Ecast a ty) v
+          | eval_Etempvar: forall ge e le m id ty v,
+              PTree.get id le = Some v ->
+              eval_expr ge e le m (Etempvar id ty) v.
+
+       FInductive cont: Type :=            
+          | Kloop1: stmt -> stmt -> cont -> cont(* Kloop1 s1 s2 k = after s1 in Sloop s1 s2 *)
+          | Kloop2: stmt -> stmt -> cont -> cont. (* Kloop2 s1 s2 k = after s2 in Sloop s1 s2 *)                
+
+       FRecursion call_cont about cont motive (fun (c : cont) => cont) by _rect.       
+            Case Kloop1 := (fun s1 s2 k call_cont_k => call_cont_k).
+            Case Kloop2 := (fun s1 s2 k call_cont_k => call_cont_k). 
+       FEnd call_cont.
+            
+       FRecursion is_call_cont about cont motive (fun (c : cont) => Prop) by _rect.                   
+            Case Kloop1 s1 s2 k := False. 
+            Case Kloop2 s1 s2 k := False.
+       FEnd is_call_cont.                      
+            
+       FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect.            
+            Case Sloop := (fun s1 find_label_s1 s2 find_label_s2 => 
+                             fun lbl k =>
+                             match find_label_s1 lbl (Kloop1 s1 s2 k) with 
+                             | Some sk => Some sk 
+                             | None => find_label_s2 lbl (Kloop2 s1 s2 k) end).            
+            Case Sbreak := (fun lbl k => None).                
+            Case Scontinue := (fun lbl k => None).
+       FEnd find_label.
+
+       MetaData bool_val.
+       Axiom bool_val : val -> self__Imp.type -> mem -> option bool. 
+       FEnd bool_val.
+
+       MetaData sizeof.
+       Axiom sizeof : (* self__Sem.composite_env -> *) self__Imp.type -> Z.
+       FEnd sizeof.
+             
+       FDefinition block_of_binding := fun (id_b_ty: ident * (block * type)) =>
+         match id_b_ty with (id, (b, ty)) => (b, 0, sizeof ty) end.
+
+       FDefinition blocks_of_env : env -> list (block * Z * Z)  := fun e => 
+         List.map block_of_binding (PTree.elements e).                      
+                  
+       FInductive step : genv -> state -> trace -> state -> Prop :=               
+               | step_continue_seq: forall ge f s k e le m,
+                   step ge (State f Scontinue (Kseq s k) e le m)
+                     E0 (State f Scontinue k e le m)
+               | step_break_seq: forall ge f s k e le m,
+                   step ge (State f Sbreak (Kseq s k) e le m)
+                     E0 (State f Sbreak k e le m)             
+               | step_ifthenelse: forall ge f a s1 s2 k e le m v1 b,
+                   eval_expr ge e le m a v1 ->
+                   bool_val v1 (typeof a) m = Some b ->
+                   step ge (State f (Sifthenelse a s1 s2) k e le m)
+                     E0 (State f (if b then s1 else s2) k e le m)
+               | step_loop: forall ge f s1 s2 k e le m,
+                   step ge (State f (Sloop s1 s2) k e le m)
+                     E0 (State f s1 (Kloop1 s1 s2 k) e le m)
+               | step_skip_or_continue_loop1: forall ge f s1 s2 k e le m x,
+                   x = Sskip \/ x = Scontinue ->
+                   step ge (State f x (Kloop1 s1 s2 k) e le m)
+                     E0 (State f s2 (Kloop2 s1 s2 k) e le m)
+               | step_break_loop1: forall ge f s1 s2 k e le m,
+                   step ge (State f Sbreak (Kloop1 s1 s2 k) e le m)
+                     E0 (State f Sskip k e le m)
+               | step_skip_loop2: forall ge f s1 s2 k e le m,
+                   step ge (State f Sskip (Kloop2 s1 s2 k) e le m)
+                     E0 (State f (Sloop s1 s2) k e le m)
+               | step_break_loop2: forall ge f s1 s2 k e le m,
+                   step ge (State f Sbreak (Kloop2 s1 s2 k) e le m)
+                     E0 (State f Sskip k e le m). 
+  
+  FEnd Clight.      
+  
+  Family Csharpminor extends Cfam.
+       
+       Inherit stmt.
+       
+       MetaData fn.
+       Record fn : Type := mkfunction {
+         fn_sig: signature;
+         fn_params: list ident;
+         fn_vars: list (ident * Z);
+         fn_temps: list ident;
+         fn_body: self__Csharpminor.stmt
+       }.
+       FEnd fn.
+       
+       FOverride Definition function := fn.
+       FOverride Definition function_body := self__Csharpminor.fn_body.
+       FOverride Definition function_locals := self__Csharpminor.fn_temps.
+       FOverride Definition function_params := self__Csharpminor.fn_params.
+       FOverride Definition function_sig := self__Csharpminor.fn_sig.
+       
+       FOverride Definition fenv := PTree.t (block * Z).
+       FOverride Definition empty_fenv := PTree.empty (block * Z).                    
+
+       FDefinition block_of_binding := fun (id_b_sz: ident * (block * Z)) => 
+           match id_b_sz with (id, (b, sz)) => (b, 0, sz) end.
+
+       FDefinition blocks_of_env : fenv -> list (block * Z * Z) := fun e => 
+          List.map block_of_binding (PTree.elements e).          
+
+       FOverride Definition free_fenv := fun m e f =>
+         Mem.free_list m (blocks_of_env e).          
+   
+       MetaData alloc_variables.
+         Inductive alloc_variables: self__Sem.fenv -> mem ->
+                        list (ident * Z) ->
+                        self__Sem.fenv -> mem -> Prop :=
+         | alloc_variables_nil:
+           forall e m,
+             alloc_variables e m nil e m
+         | alloc_variables_cons:
+           forall e m id sz vars m1 b1 m2 e2,
+             Mem.alloc m 0 sz = (m1, b1) ->
+             alloc_variables (PTree.set id (b1, sz) e) m1 vars e2 m2 ->
+             alloc_variables e m ((id, sz) :: vars) e2 m2.
+       FEnd alloc_variables.
+         
+       FOverride Definition alloc_fenv := fun e m f e' m' => 
+         list_norepet (map fst f.(self__Csharpminor.fn_vars)) /\
+         list_norepet f.(self__Csharpminor.fn_params) /\
+         list_disjoint f.(self__Csharpminor.fn_params) f.(self__Csharpminor.fn_temps) /\
+         alloc_variables self__Sem.empty_fenv m (self__Csharpminor.fn_vars f) e m'.       
+
+  FEnd Csharpminor.
 
   (* Linear family languages *)
   Family Lfam.
