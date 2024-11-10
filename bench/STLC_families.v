@@ -1420,14 +1420,48 @@ eauto using self__STLC_fix.ht_fix.
 Qed. FEnd preservation.
 
 FEnd STLC_fix.
-(* each four statement below is a piece together
-    the current plugin implementation requires a lot of memory
-    so I cannot just run all 12 statements together
-  In my machine I can run 4 statements together, 
-    so I group them into three groups
- *)
-Family STLC_all extends STLC, STLC_bool, STLC_prod, STLC_fix.
 
-FEnd STLC_all.
+Family STLC_bool_prod extends STLC, STLC_bool, STLC_prod.
+FEnd STLC_bool_prod.
+
+Family STLC_bool_prod_sum extends STLC, STLC_sum, STLC_bool_prod.
+FEnd STLC_bool_prod_sum.
+
+Family STLC_bool_prod_sum_fix extends STLC, STLC_bool_prod_sum, STLC_fix.
+FEnd STLC_bool_prod_sum_fix.
+
+
+Family STLC_bool_prod_fix extends STLC, STLC_bool_prod, STLC_fix.
+FEnd STLC_bool_prod_fix.
+
+Family STLC_bool_sum extends STLC, STLC_bool, STLC_sum.
+FEnd STLC_bool_sum.
+
+Family STLC_bool_sum_fix extends STLC, STLC_bool_sum, STLC_fix.
+FEnd STLC_bool_sum_fix.
+
+Family STLC_bool_fix extends STLC, STLC_bool, STLC_fix.
+FEnd STLC_bool_fix.
+
+Family STLC_prod_sum extends STLC, STLC_prod , STLC_sum.
+FEnd STLC_prod_sum.
+
+
+Family STLC_prod_sum extends STLC, STLC_prod, STLC_sum.
+FEnd STLC_prod_sum.
+
+Family STLC_prod_fix extends STLC, STLC_prod, STLC_fix.
+FEnd STLC_prod_fix.
+
+Family STLC_prod_sum_fix extends STLC, STLC_prod_sum, STLC_fix.
+FEnd STLC_prod_sum_fix.
+
+Family STLC_sum_fix extends STLC, STLC_sum, STLC_fix.
+FEnd STLC_sum_fix.
+
+
+(*Family STLC_all extends STLC, STLC_bool, STLC_prod, STLC_fix.
+
+FEnd STLC_all.*)
 
 End STLC_Families.
