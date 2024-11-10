@@ -11,7 +11,7 @@ let lookup_base context base =
     let elem = Inheritance.lookup_field_in_base ~field:base ~context in
     match elem with 
     | Some (FamilyDefinition { linkage; _ }) -> Some linkage 
-    | _ -> None  
+    | _ -> Errors.fail ~info:"Unbound family definition"
 
 let open_with_base ~name ~base =  
   match Context.get_store () with 
@@ -57,7 +57,13 @@ let open_with_base ~name ~base =
      let base = 
         let path = Libnames.qualid_of_ident base in
         match Context.lookup None path with 
-        | Some linkage -> Some linkage
+        | Some linkage -> 
+           let linkage =
+              Linkage.path_subtitution linkage
+                ~source:(Naming.self_version linkage.name)
+                ~target:(Naming.self_version name)
+           in
+           Some linkage
         | None -> Errors.fail ~info:"Unbound family name"
      in
      let linkage =
