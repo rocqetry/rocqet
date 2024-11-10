@@ -280,6 +280,7 @@ Check Z.Psw_a.
 
 Trait Base.
 
+
 Family C.
 FInductive expr : Type :=
 | Eval : val -> type -> expr (* constant *)
@@ -723,8 +724,13 @@ FOverride Definition function_sig := self__Csharpminor.fn_sig.
 
 FEnd Csharpminor.
 
+
 (* Clight -> Csharpminor *)
 Family Cshmgen.
+
+(*Family S extends Clight. FEnd S.
+Family T extends Csharpminor. FEnd T. *)
+
 FDefinition make_intconst := fun (n: int) => Csharpminor.Econst (Constant.Ointconst n).
 FDefinition make_longconst := fun (f: int64) => Csharpminor.Econst (Constant.Olongconst f).
 FDefinition make_floatconst := fun (f: float) => Csharpminor.Econst (Constant.Ofloatconst f).
@@ -830,8 +836,6 @@ FDefinition transl_program : Clight.program -> res Csharpminor.program := fun p 
   transform_partial_program2 (transl_fundef p.(prog_comp_env)) transl_globvar p.
 
 FEnd Cshmgen.
-
-
 
 Family Cminor extends Cfam.
 
@@ -1185,102 +1189,6 @@ FDefinition funsig := fun (fd: fundef) =>
   | AST.Internal f => self__RTL.fn_sig f
   | AST.External ef => ef_sig ef
   end.
-
-(*
-(* operational semantics *)             
-FDefinition genv := Genv.t fundef unit.
-FDefinition regset := Regmap.t val.
-
-FDefinition eval_operation := fun op => Asm.eval_operation op fundef unit.
-
-MetaData init_regs.
-Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : self__RTL.regset :=
-  match rl, vl with
-  | r1 :: rs, v1 :: vs => Regmap.set r1 v1 (init_regs vs rs)
-  | _, _ => Regmap.init Vundef
-  end.
-FEnd init_regs.
-
-MetaData stackframe.
-Inductive stackframe : Type :=
-  | Stackframe:
-      forall (res: reg)(* where to store the result *)
-             (f: self__RTL.function)(* calling function *)
-             (sp: val)(* stack pointer in calling function *)
-             (pc: self__RTL.node)(* program point in calling function *)
-             (rs: self__RTL.regset),(* register state in calling function *)
-      stackframe.
-FEnd stackframe.
-
-MetaData state.
-Inductive state : Type :=
-  | State:
-      forall (stack: list self__RTL.stackframe)(* call stack *)
-             (f: self__RTL.function)(* current function *)
-             (sp: val)(* stack pointer *)
-             (pc: self__RTL.node)(* current program point in c *)
-             (rs: self__RTL.regset)(* register state *)
-             (m: mem),(* memory state *)
-      state
-  | Callstate:
-      forall (stack: list self__RTL.stackframe)(* call stack *)
-             (f: self__RTL.fundef)(* function to call *)
-             (args: list val)(* arguments to the call *)
-             (m: mem),(* memory state *)
-      state
-  | Returnstate:
-      forall (stack: list self__RTL.stackframe)(* call stack *)
-             (v: val)(* return value for the call *)
-             (m: mem),(* memory state *)
-      state.           
-FEnd state.          
-           
-FInductive step: genv -> state -> trace -> state -> Prop :=
-| exec_Inop:
-    forall ge s f sp pc rs m pc',
-    (self__RTL.fn_code f)!pc = Some(Inop pc') ->
-    step ge (self__RTL.State s f sp pc rs m)
-      E0 (self__RTL.State s f sp pc' rs m)
-| exec_Iop:
-    forall ge s f sp pc rs m op args res pc' v,
-    (self__RTL.fn_code f)!pc = Some(Iop op args res pc') ->
-    eval_operation op ge sp rs##args m = Some v ->
-    step ge (self__RTL.State s f sp pc rs m)
-      E0 (self__RTL.State s f sp pc' (rs#res <- v) m)
-| exec_Icond:
-    forall ge s f sp pc rs m cond args ifso ifnot b pc',
-    (self__RTL.fn_code f)!pc = Some(Icond cond args ifso ifnot) ->
-    Asm.eval_condition cond rs##args m = Some b ->
-    pc' = (if b then ifso else ifnot) ->
-    step ge (self__RTL.State s f sp pc rs m)
-      E0 (self__RTL.State s f sp pc' rs m)
-| exec_Ireturn:
-    forall ge s f stk pc rs m or m',
-    (self__RTL.fn_code f)!pc = Some(Ireturn or) ->
-    Mem.free m stk 0 f.(self__RTL.fn_stacksize) = Some m' ->
-    step ge (self__RTL.State s f (Vptr stk Ptrofs.zero) pc rs m)
-      E0 (self__RTL.Returnstate s (regmap_optget or Vundef rs) m')
-| exec_return:
-    forall ge res f sp pc rs s vres m,
-    step ge (self__RTL.Returnstate (self__RTL.Stackframe res f sp pc rs :: s) vres m)
-      E0 (self__RTL.State s f sp pc (rs#res <- vres) m).
-
-MetaData initial_state.
-Inductive initial_state (p: self__RTL.program): self__RTL.state -> Prop :=
-| initial_state_intro: forall b f m0,
-    let ge := Genv.globalenv p in
-    Genv.init_mem p = Some m0 ->
-    Genv.find_symbol ge p.(AST.prog_main) = Some b ->
-    Genv.find_funct_ptr ge b = Some f ->
-    self__RTL.funsig f = signature_main ->
-    initial_state p (self__RTL.Callstate nil f nil m0).
-FEnd initial_state.
-
-MetaData final_state.
-Inductive final_state: self__RTL.state -> int -> Prop :=
-   | final_state_intro: forall r m,
-      final_state (self__RTL.Returnstate nil (Vint r) m) r.
-FEnd final_state.      *)
 
 FEnd RTL.
 
@@ -2451,6 +2359,12 @@ FEnd Asmgen.
 FEnd Base.
 
 Trait Comp_Loops extends Base.
+
+Family Csharpminor.
+FEnd Csharpminor.
+
+Family Cshmgen.
+
 
 Trait C_Swhile extends C.
 FInductive stmt : Type :=  
