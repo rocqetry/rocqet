@@ -2450,7 +2450,7 @@ FEnd Asmgen.
 
 FEnd Base.
 
-Trait Comp_Loop extends Base.
+Trait Comp_Loops extends Base.
 
 Trait C_Swhile extends C.
 FInductive stmt : Type :=  
@@ -2482,34 +2482,203 @@ FEnd Clight_Sloop.
 Family Clight extends Clight_Sloop.
 FEnd Clight.
 
+From NFPOP Require Import Mon.
+Local Open Scope gensym_monad_scope.
+
 Trait SimplExpr_Swhile extends SimplExpr.
 Family S extends C_Swhile. FEnd S.
 
 FRecursion transl_stmt.
-Swhile : expr -> stmt -> stmt(* while loop *)
-Sbreak : stmt(* break stmt *)
-Scontinue : stmt. (* continue statement *)                             
+Case Swhile e s1 :=
+(do s' <- transl_if e T.Sskip T.Sbreak;
+ do ts1 <- transl_stmt s1;
+ ret (T.Sloop (T.Sseq s' ts1) T.Sskip)).
+Case Sbreak := (ret T.Sbreak).                     
+Case Scontinue := (ret T.Scontinue).
 FEnd transl_stmt.
-
-FEnd transl_stmt.
-
 
 FEnd SimplExpr_Swhile.
 
-Trait SimplExpr_Sdowhile.
+Trait SimplExpr_Sdowhile extends SimplExpr.
+Family S extends C_Sdowhile. FEnd S.
 
-Trait SimplExpr_Sfor.
+FRecursion transl_stmt.
+Case Sdowhile e s1 :=
+(do s' <- transl_if e T.Sskip T.Sbreak;
+ do ts1 <- transl_stmt s1;
+ ret (T.Sloop ts1 s')).  
+FEnd transl_stmt.
 
-Family SimplExpr extend
+FEnd SimplExpr_Sdowhile.
+
+Trait SimplExpr_Sfor extends SimplExpr.
+Family S extends C_Sfor. FEnd S.
+
+FRecursion transl_stmt.
+Case Sfor s1 e2 s3 s4 :=
+(do ts1 <- transl_stmt s1;
+ do s' <- transl_if e2 T.Sskip T.Sbreak;
+ do ts3 <- transl_stmt s3;
+ do ts4 <- transl_stmt s4;
+ if is_Sskip s1 then
+   ret (T.Sloop (T.Sseq s' ts4) ts3)
+ else
+   ret (T.Sseq ts1 (T.Sloop (T.Sseq s' ts4) ts3))).
+FEnd transl_stmt.
+
+FEnd SimplExpr_Sfor.
+
+Family SimplExpr extends
   SimplExpr_Sfor,
   SimplExpr_Sdowhile,
   SimplExpr_Swhile.
 FEnd SimplExpr.
 
-FEnd Comp_Loop.
+
+
+Family Cfam.
+
+FInductive stmt : Type :=
+| Sloop: stmt -> stmt
+| Sblock: stmt -> stmt
+| Sexit: nat -> stmt.
+
+FEnd Cfam.
+
+Trait Cshmgen_Sloop extends Cshmgen.
+Family S extends Clight_Sloop. FEnd S.
+
+FRecursion transl_stmt.
+Case Sloop :=
+(fun ce tyret nbrk ncnt =>
+  do ts1 <- transl_statement ce tyret 1%nat 0%nat s1;
+  do ts2 <- transl_statement ce tyret 0%nat (S ncnt) s2;
+  OK (Sblock (Sloop (Sseq (Sblock ts1) ts2)))).
+Case Sbreak := (fun ce tyret nbrk ncnt => OK (Sexit nbrk)).
+Case Scontinue :=  (fun ce tyret nbrk ncnt => OK (Sexit ncnt)).
+FEnd transl_stmt.
+
+FEnd Cshmgen_Sloop.
+
+Family Cshmgen extends Cshmgen_Sloop.
+FEnd Cshmgen.
+
+Family Cfamtransl.
+
+FRecursion transl_stmt.
+Case Sloop := (do ts <- transl_stmt cenv xenv s; OK (Sloop ts))
+Case Sblock := (do ts <- transl_stmt cenv (true :: xenv) s; OK (Sblock ts))    
+Case Sexit :=  (OK (Sexit (shift_exit xenv n)))
+FEnd transl_stmt.
+
+FEnd Cfamtransl.
+
+Trait RTL_jumptable extends RTL.
+FInductive instruction: Type :=
+| Ijumptable: reg -> list node -> instruction  
+FEnd RTL_jumptable.
+
+Family RTL extends RTL_jumptable.
+FEnd RTL.
+
+Family RTLgen_jumptable extends RTLgen.
+Family S extends RTL_jumptable. FEnd S.
+
+FRecursion transl_stmt.
+Case Sloop sbody :=
+(fun map nd nexits ngoto nret rret =>
+  do n1 <- reserve_instr;
+  do n2 <- transl_stmt map sbody n1 nexits ngoto nret rret;
+  do xx <- update_instr n1 (Inop n2);
+  add_instr (Inop n2)).
+Case Sblock sbody  :=
+(fun map nd nexits ngoto nret rret =>
+   transl_stmt sbody map nd (nd :: nexits) ngoto nret rret).
+Case Sexit n :=  (fun map nd nexits ngoto nret rret => transl_exit nexits n).
+FEnd transl_stmt.
+FEnd RTLgen_jumptable.
+
+Family RTLgen extends RTLgen_jumptable.
+FEnd RTLgen.
+
+Trait LTL_jumptable extends LTL.
+FInductive instruction: Type :=
+| Ljumptable : mreg -> list node -> instruction.
+FEnd LTL_jumptable.
+
+Family Lfam.
+FInductive instruction: Type :=
+| Ljumptable : mreg -> list node -> instruction.
+FEnd Lfam.
+
+(* nanopassesn*)
+Trait Linearize_jumptable extends Linearize.
+Family S extends LTL_jumptable. FEnd S.
+FRecursion translate_instr.
+Case Ljumptable args lbl := (fun f k => T.Ljumptable arg tbl :: k).
+FEnd translate_instr.
+
+FEnd Linearize_jumptable.
+
+Trait Stacking_jumptable extends Stacking.
+FRecursion transl_instr.
+Case Ljumptable arg tbl := (fun fe k => T.Ljumptable arg tbl :: k).
+FEnd transl_instr.
+FEnd Stacking_jumptable.
+
+Trait Asmgen_jumptable extends Asmgen.
+FRecursion transl_instr.
+Case Ljumptable arg tbl :=
+(fun f ep k =>
+   do r <- ireg_of arg;
+   OK (T.Pbtbl r tbl :: k)).
+FEnd transl_instr.
+FEnd Asmgen_jumptable.
+
+(* compose nanopasses into main pass *)
+Family Linear extends Linearize_jumptable.
+FEnd Linear.
+
+Family Stacking extends Stacking_jumptable.
+FEnd Stacking.
+
+Family Asmgen extends Asmgen_jumptable.
+FEnd Asmgen.
+
+FEnd Comp_Loops.
 
 (* small extension *)
-Trait Comp_Switch extends Comp_Base. 
+Trait Comp_Switch extends Comp_Loops.
+
+Family C_Switch extends C.
+FEnd C_Switch.
+
+Family Clight_Switch extends Clight.
+FEnd Clight_Switch.
+
+Trait SimplExpr_Switch extends SimplExpr.
+Family S extends Comp_Switch. FEnd S.
+
+FRecursion transl_stmt.
+FEnd transl_stmt.
+
+FEnd SimplExpr_Switch.
+
+Trait Csharpminor_Switch extends.
+FEnd Csharpminor_Switch.
+
+Trait Cminor_Switch extends Cminor.
+FEnd Cminor_Switch.
+
+Trait CminorSel_Switch extends CminorSel.
+FEnd CminorSel_Switch.
+
+Trait Cminorgen_Switch extends Cminorgen.
+FEnd Cminorgen_Switch.
+
+Trait Selection_Switch extends Selection.
+FEnd Selection_Switch.
+
 FEnd Comp_Switch.
 
 (* small extension *)
@@ -2517,6 +2686,28 @@ FEnd Comp_Switch.
 
 (* requires work with cshmgen, selection, operation semantics *)
 Trait Comp_Op extends Comp_Base.
+
+Trait C_Ops extends C.
+FEnd C_Ops.
+
+Family Clight_Ops extends Clight.
+FEnd Clight_Ops.
+
+(* extended with ops *)
+Family Op.
+FEnd Op.
+
+Family Selection_Ops extends Selection.
+FEnd Selection_Ops.
+
+
+Trait Asmgen_Ops extends Asmgen.
+
+FRecursion transl_op.
+FEnd transl_op.
+
+FEnd Asmgen_Ops
+
 FEnd Comp_op.
 
 (* small extension *)
