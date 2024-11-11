@@ -727,14 +727,13 @@ FEnd Csharpminor.
 
 (* Clight -> Csharpminor *)
 Family Cshmgen.
+Family S extends Clight. FEnd S.
+Family T extends Csharpminor. FEnd T.
 
-(*Family S extends Clight. FEnd S.
-Family T extends Csharpminor. FEnd T. *)
-
-FDefinition make_intconst := fun (n: int) => Csharpminor.Econst (Constant.Ointconst n).
-FDefinition make_longconst := fun (f: int64) => Csharpminor.Econst (Constant.Olongconst f).
-FDefinition make_floatconst := fun (f: float) => Csharpminor.Econst (Constant.Ofloatconst f).
-FDefinition make_singleconst := fun (f: float32) => Csharpminor.Econst (Constant.Osingleconst f).
+FDefinition make_intconst := fun (n: int) => T.Econst (Constant.Ointconst n).
+FDefinition make_longconst := fun (f: int64) => T.Econst (Constant.Olongconst f).
+FDefinition make_floatconst := fun (f: float) => T.Econst (Constant.Ofloatconst f).
+FDefinition make_singleconst := fun (f: float32) => T.Econst (Constant.Osingleconst f).
 FDefinition make_ptrofsconst := fun (n: Z) =>
   if Archi.ptr64 then make_longconst (Int64.repr n) else make_intconst (Int.repr n).            
 
@@ -750,77 +749,77 @@ FDefinition alignof : composite_env -> type -> res Z := fun ce t =>
 
 (* TODO: they rely on binary/unary ops *)
 (* To be overriden in a compiler that supports operations *)
-FOpaque Definition make_cast : type -> type -> Csharpminor.expr -> res Csharpminor.expr :=
+FOpaque Definition make_cast : type -> type -> T.expr -> res T.expr :=
   fun _ _ e => OK e.
-FOpaque Definition make_boolean : Csharpminor.expr -> type -> Csharpminor.expr :=
+FOpaque Definition make_boolean : T.expr -> type -> T.expr :=
   fun e _ => e.
 
-FRecursion transl_expr about Clight.expr motive (fun (_ : Clight.expr) => composite_env -> res Csharpminor.expr) by _rect.
+FRecursion transl_expr about S.expr motive (fun (_ : S.expr) => composite_env -> res T.expr) by _rect.
 Case Econst_int n ty := (fun ce => OK(make_intconst n)). 
 Case Econst_float n ty := (fun ce => OK(make_floatconst n)).
 Case Econst_single n ty := (fun ce => OK(make_singleconst n)).
 Case Econst_long n ty := (fun ce => OK(make_longconst n)).
-Case Etempvar id ty := (fun ce => OK(Csharpminor.Evar id)). 
+Case Etempvar id ty := (fun ce => OK(T.Evar id)). 
 Case Esizeof ty' ty := (fun ce => do sz <- sizeof ce ty'; OK(make_ptrofsconst sz)).
 Case Ealignof ty' ty := (fun ce => do al <- alignof ce ty'; OK(make_ptrofsconst al)).
-Case Ecast b ty := (fun ce => do tb <- transl_expr b ce; make_cast (Clight.typeof b) ty tb).
+Case Ecast b ty := (fun ce => do tb <- transl_expr b ce; make_cast (S.typeof b) ty tb).
 FEnd transl_expr.
       
-FRecursion transl_stmt about Clight.stmt motive (fun (_ : Clight.stmt) => composite_env -> type -> nat -> nat -> res Csharpminor.stmt) by _rect.
-Case Sskip := (fun ce tyret nbrk ncnt => OK Csharpminor.Sskip).   
+FRecursion transl_stmt about S.stmt motive (fun (_ : S.stmt) => composite_env -> type -> nat -> nat -> res T.stmt) by _rect.
+Case Sskip := (fun ce tyret nbrk ncnt => OK T.Sskip).   
 Case Sset x b :=
 (fun ce tyret nbrk ncnt => 
   do tb <- transl_expr b ce;
-  OK (Csharpminor.Sassign x tb)).
+  OK (T.Sassign x tb)).
 Case Sseq s1 s2 :=
 (fun ce tyret nbrk ncnt => 
   do ts1 <- transl_stmt s1 ce tyret nbrk ncnt;
   do ts2 <- transl_stmt s2 ce tyret nbrk ncnt;
-  OK (Csharpminor.Sseq ts1 ts2)).
+  OK (T.Sseq ts1 ts2)).
 Case Sifthenelse e s1 s2 :=
 (fun ce tyret nbrk ncnt => 
   do te <- transl_expr e ce;
   do ts1 <- transl_stmt s1 ce tyret nbrk ncnt;
   do ts2 <- transl_stmt s2 ce tyret nbrk ncnt;
-  OK (Csharpminor.Sifthenelse (make_boolean te (Clight.typeof e)) ts1 ts2)).
+  OK (T.Sifthenelse (make_boolean te (S.typeof e)) ts1 ts2)).
 Case Sreturn e :=
 (fun ce tyret nbrk ncnt =>
    match e with
-   | None => OK (Csharpminor.Sreturn None)
+   | None => OK (T.Sreturn None)
    | Some e => 
        do te <- transl_expr e ce;
-       do te' <- make_cast (Clight.typeof e) tyret te;
-       OK (Csharpminor.Sreturn (Some te'))
+       do te' <- make_cast (S.typeof e) tyret te;
+       OK (T.Sreturn (Some te'))
    end).
 Case Slabel lbl s :=
 (fun ce tyret nbrk ncnt => 
   do ts <- transl_stmt s ce tyret nbrk ncnt;
-  OK (Csharpminor.Slabel lbl ts)).
-Case Sgoto lbl := (fun ce tyret nbrk ncnt => OK (Csharpminor.Sgoto lbl)).
+  OK (T.Slabel lbl ts)).
+Case Sgoto lbl := (fun ce tyret nbrk ncnt => OK (T.Sgoto lbl)).
 FEnd transl_stmt.
 
 (* Translation of functions *)
 FDefinition transl_var := fun (ce: composite_env) (v: ident * type) =>
   do sz <- sizeof ce (snd v); OK (fst v, sz).
       
-FDefinition signature_of_function := fun (f: Clight.function) =>
-  {| sig_args := map typ_of_type (map snd (Clight.fn_params f));
-    sig_res  := rettype_of_type (Clight.fn_return f);
-    sig_cc   := Clight.fn_callconv f |}.
+FDefinition signature_of_function := fun (f: S.function) =>
+  {| sig_args := map typ_of_type (map snd (S.fn_params f));
+    sig_res  := rettype_of_type (S.fn_return f);
+    sig_cc   := S.fn_callconv f |}.
       
-FDefinition transl_function : composite_env -> Clight.function -> res Csharpminor.function :=
-  fun (ce: composite_env) (f: Clight.function)  =>
-  do tbody <- transl_stmt (Clight.fn_body f) ce f.(self__Base.Clight.fn_return) 1%nat 0%nat;
-  do tvars <- mmap (transl_var ce) (self__Base.Clight.fn_vars f);
-  OK (Csharpminor.mkfunction
+FDefinition transl_function : composite_env -> S.function -> res T.function :=
+  fun (ce: composite_env) (f: S.function)  =>
+  do tbody <- transl_stmt (S.fn_body f) ce (S.fn_return f) 1%nat 0%nat;
+  do tvars <- mmap (transl_var ce) (S.fn_vars f);
+  OK (T.mkfunction
         (signature_of_function f)
-        (map fst (Clight.fn_params f))
+        (map fst (S.fn_params f))
         tvars
-        (map fst (Clight.fn_temps f))
+        (map fst (S.fn_temps f))
         tbody).      
 
-FDefinition transl_fundef : composite_env -> ident -> Clight.fundef -> res Csharpminor.fundef :=
-  fun (ce: composite_env) (id: ident) (f: Clight.fundef) =>
+FDefinition transl_fundef : composite_env -> ident -> S.fundef -> res T.fundef :=
+  fun (ce: composite_env) (id: ident) (f: S.fundef) =>
   match f with
   | Internal g =>
       do tg <- transl_function ce g; OK(AST.Internal tg)
@@ -832,7 +831,7 @@ FDefinition transl_fundef : composite_env -> ident -> Clight.fundef -> res Cshar
 
 FDefinition transl_globvar := fun (id: ident) (ty: type) => OK tt.
 
-FDefinition transl_program : Clight.program -> res Csharpminor.program := fun p => 
+FDefinition transl_program : S.program -> res T.program := fun p => 
   transform_partial_program2 (transl_fundef p.(prog_comp_env)) transl_globvar p.
 
 FEnd Cshmgen.
@@ -2360,12 +2359,6 @@ FEnd Base.
 
 Trait Comp_Loops extends Base.
 
-Family Csharpminor.
-FEnd Csharpminor.
-
-Family Cshmgen.
-
-
 Trait C_Swhile extends C.
 FInductive stmt : Type :=  
   | Swhile : expr -> stmt -> stmt(* while loop *)  
@@ -2448,8 +2441,6 @@ Family SimplExpr extends
   SimplExpr_Swhile.
 FEnd SimplExpr.
 
-
-
 Family Cfam.
 
 FInductive stmt : Type :=
@@ -2459,17 +2450,21 @@ FInductive stmt : Type :=
 
 FEnd Cfam.
 
+From NFPOP Require Import Errors.
+Local Open Scope error_monad_scope.
+
 Trait Cshmgen_Sloop extends Cshmgen.
 Family S extends Clight_Sloop. FEnd S.
 
 FRecursion transl_stmt.
-Case Sloop :=
+
+Case Sloop s1 s2 :=
 (fun ce tyret nbrk ncnt =>
-  do ts1 <- transl_statement ce tyret 1%nat 0%nat s1;
-  do ts2 <- transl_statement ce tyret 0%nat (S ncnt) s2;
-  OK (Sblock (Sloop (Sseq (Sblock ts1) ts2)))).
-Case Sbreak := (fun ce tyret nbrk ncnt => OK (Sexit nbrk)).
-Case Scontinue :=  (fun ce tyret nbrk ncnt => OK (Sexit ncnt)).
+  do ts1 <- transl_stmt s1 ce tyret 1%nat 0%nat;
+  do ts2 <- transl_stmt s2 ce tyret 0%nat ((1 + ncnt)%nat);
+  OK (T.Sblock (T.Sloop (T.Sseq (T.Sblock ts1) ts2)))).
+Case Sbreak := (fun ce tyret nbrk ncnt => OK (T.Sexit nbrk)).
+Case Scontinue := (fun ce tyret nbrk ncnt => OK (T.Sexit ncnt)).
 FEnd transl_stmt.
 
 FEnd Cshmgen_Sloop.
@@ -2480,81 +2475,125 @@ FEnd Cshmgen.
 Family Cfamtransl.
 
 FRecursion transl_stmt.
-Case Sloop := (do ts <- transl_stmt cenv xenv s; OK (Sloop ts))
-Case Sblock := (do ts <- transl_stmt cenv (true :: xenv) s; OK (Sblock ts))    
-Case Sexit :=  (OK (Sexit (shift_exit xenv n)))
+Case Sloop body := (do ts <- transl_stmt body; OK (T.Sloop ts)).
+Case Sblock body := (do ts <- transl_stmt body; OK (T.Sblock ts)).
+Case Sexit n := (OK (T.Sexit n)).
 FEnd transl_stmt.
 
 FEnd Cfamtransl.
 
 Trait RTL_jumptable extends RTL.
 FInductive instruction: Type :=
-| Ijumptable: reg -> list node -> instruction  
+| Ijumptable: reg -> list node -> instruction.  
 FEnd RTL_jumptable.
 
 Family RTL extends RTL_jumptable.
 FEnd RTL.
 
-Family RTLgen_jumptable extends RTLgen.
-Family S extends RTL_jumptable. FEnd S.
+From NFPOP Require Import RTLmonad.
+
+Trait RTLgen_Sloop extends RTLgen.
+
+Inherit labelmap.
+
+FDefinition transl_exit : list T.node -> nat -> mon T.node := fun nexits n =>
+  match nth_error nexits n with
+  | None => error (Errors.msg "RTLgen: wrong exit")
+  | Some ne => ret ne
+  end.
 
 FRecursion transl_stmt.
 Case Sloop sbody :=
 (fun map nd nexits ngoto nret rret =>
   do n1 <- reserve_instr;
-  do n2 <- transl_stmt map sbody n1 nexits ngoto nret rret;
-  do xx <- update_instr n1 (Inop n2);
-  add_instr (Inop n2)).
-Case Sblock sbody  :=
+  do n2 <- transl_stmt sbody map n1 nexits ngoto nret rret;
+  do xx <- update_instr n1 (T.Inop n2);
+  add_instr (T.Inop n2)).
+Case Sblock sbody :=
 (fun map nd nexits ngoto nret rret =>
    transl_stmt sbody map nd (nd :: nexits) ngoto nret rret).
-Case Sexit n :=  (fun map nd nexits ngoto nret rret => transl_exit nexits n).
+Case Sexit n := (fun map nd nexits ngoto nret rret => transl_exit nexits n).
 FEnd transl_stmt.
-FEnd RTLgen_jumptable.
 
-Family RTLgen extends RTLgen_jumptable.
+FRecursion reserve_labels.
+Case Sloop s1 := (fun lm => reserve_labels s1 lm).
+Case Sblock s1 := (fun lm => reserve_labels s1 lm).
+Case Sexit n := (fun lm => ret lm).
+FEnd reserve_labels.
+
+FEnd RTLgen_Sloop.
+
+Family RTLgen extends RTLgen_Sloop.
 FEnd RTLgen.
 
 Trait LTL_jumptable extends LTL.
 FInductive instruction: Type :=
 | Ljumptable : mreg -> list node -> instruction.
+
+FRecursion successors_instr.
+Case Ljumptable a tbl := (fun rest => tbl).
+FEnd successors_instr.
 FEnd LTL_jumptable.
 
 Family Lfam.
 FInductive instruction: Type :=
-| Ljumptable : mreg -> list node -> instruction.
+| Ljumptable : mreg -> list label -> instruction.
 FEnd Lfam.
 
 (* nanopassesn*)
 Trait Linearize_jumptable extends Linearize.
 Family S extends LTL_jumptable. FEnd S.
+
+FRecursion starts_with_label.
+Case _ := (fun lbl => false).
+FEnd starts_with_label.
+
 FRecursion translate_instr.
-Case Ljumptable args lbl := (fun f k => T.Ljumptable arg tbl :: k).
+Case Ljumptable args tbl := (fun f k => T.Ljumptable args tbl :: k).
 FEnd translate_instr.
 
 FEnd Linearize_jumptable.
 
+Family Linearize extends Linearize_jumptable.
+FEnd Linearize.
+
 Trait Stacking_jumptable extends Stacking.
+
+FRecursion record_regs_of_instr.
+Case Ljumptable arg tbl := cheat.
+FEnd record_regs_of_instr.
+
+FRecursion slots_of_instr.
+Case Ljumptable arg tbl := nil.
+FEnd slots_of_instr.
+
+FRecursion outgoing_space.
+Case _ := 0.
+FEnd outgoing_space.
+
 FRecursion transl_instr.
 Case Ljumptable arg tbl := (fun fe k => T.Ljumptable arg tbl :: k).
 FEnd transl_instr.
 FEnd Stacking_jumptable.
 
+Family Stacking extends Stacking_jumptable.
+FEnd Stacking.
+
 Trait Asmgen_jumptable extends Asmgen.
 FRecursion transl_instr.
+From NFPOP Require Import Errors.
+Local Open Scope error_monad_scope.
 Case Ljumptable arg tbl :=
 (fun f ep k =>
    do r <- ireg_of arg;
    OK (T.Pbtbl r tbl :: k)).
 FEnd transl_instr.
+
+FRecursion it1_is_parent.
+Case _ := (fun before => false).
+FEnd it1_is_parent.
+
 FEnd Asmgen_jumptable.
-
-(* compose nanopasses into main pass *)
-Family Linear extends Linearize_jumptable.
-FEnd Linear.
-
-Family Stacking extends Stacking_jumptable.
-FEnd Stacking.
 
 Family Asmgen extends Asmgen_jumptable.
 FEnd Asmgen.
@@ -2564,31 +2603,114 @@ FEnd Comp_Loops.
 (* small extension *)
 Trait Comp_Switch extends Comp_Loops.
 
-Family C_Switch extends C.
+Trait C_Switch extends C.
+FInductive stmt : Type := 
+| Sswitch : expr -> lbl_stmts -> stmt (* switch statement *)
+with lbl_stmts : Type :=(* cases of a switch *)
+| LSnil: lbl_stmts
+| LScons: option Z -> stmt -> lbl_stmts -> lbl_stmts.
+
 FEnd C_Switch.
 
-Family Clight_Switch extends Clight.
+Family C extends C_Switch.
+FEnd C.
+
+Trait Clight_Switch extends Clight.
+FInductive stmt : Type := 
+| Sswitch : expr -> lbl_stmts -> stmt (* switch statement *)
+with lbl_stmts : Type :=(* cases of a switch *)
+| LSnil: lbl_stmts
+| LScons: option Z -> stmt -> lbl_stmts -> lbl_stmts.
 FEnd Clight_Switch.
 
+Family Clight extends Clight_Switch.
+FEnd Clight.
+
+From NFPOP Require Import Mon.
+Local Open Scope gensym_monad_scope.
+
 Trait SimplExpr_Switch extends SimplExpr.
-Family S extends Comp_Switch. FEnd S.
+Family S extends C_Switch. FEnd S.
 
 FRecursion transl_stmt.
+Case Sswitch e ls := 
+(do (s', a) <- transl_expression e;
+  (* do tls <- transl_lblstmt ls;*)
+ ret (T.Sseq s' (T.Sswitch a cheat))).
 FEnd transl_stmt.
 
 FEnd SimplExpr_Switch.
 
-Trait Csharpminor_Switch extends.
+Family SimplExpr extends SimplExpr_Switch.
+FEnd SimplExpr.
+
+Trait Csharpminor_Switch extends Csharpminor.
+FInductive stmt : Type := 
+| Sswitch: bool -> expr -> lbl_stmts -> stmt
+with lbl_stmts : Type :=(* cases of a switch *)
+| LSnil: lbl_stmts
+| LScons: option Z -> stmt -> lbl_stmts -> lbl_stmts.
 FEnd Csharpminor_Switch.
 
+Family Csharpminor extends Csharpminor_Switch.
+FEnd Csharpminor.
+
+Trait Cshmgen_Switch extends Cshmgen.
+Family S extends Clight_Switch. FEnd S.
+
+From NFPOP Require Import Errors.
+Local Open Scope error_monad_scope.
+FRecursion transl_stmt.
+Case Sswitch a sl := 
+(fun ce tyret nbrk ncnt =>
+   do ta <- transl_expr a ce;
+   (* do tsl <- transl_lbl_stmt ce tyret 0%nat (S ncnt) sl;*)   
+    match classify_switch (S.typeof a) with
+    | switch_case_i => OK (T.Sblock (T.Sswitch false ta cheat (*tsl*)))
+    | switch_case_l => OK (T.Sblock (T.Sswitch true ta cheat (*tsl*) ))
+    | switch_default => Error(msg "Cshmgen.transl_stmt(switch)")
+    end).
+FEnd transl_stmt.
+FEnd Cshmgen_Switch.
+
+Family Cshmgen extends Cshmgen_Switch.
+FEnd Cshmgen.
+
 Trait Cminor_Switch extends Cminor.
+FInductive stmt : Type := 
+| Sswitch: bool -> expr -> list (Z * nat) -> nat -> stmt.
 FEnd Cminor_Switch.
 
+Family Cminor extends Cminor_Switch.
+FEnd Cminor.
+
 Trait CminorSel_Switch extends CminorSel.
+
+Inherit expr.
+
+MetaData exitexpr.
+Inductive exitexpr : Type :=
+  | XEexit: nat -> exitexpr
+  | XEjumptable: self__CminorSel_Switch.expr -> list nat -> exitexpr
+  | XEcondition: condexpr -> exitexpr -> exitexpr -> exitexpr
+  | XElet: self__CminorSel_Switch.expr -> exitexpr -> exitexpr.
+
+
+FInductive stmt : Type := 
+| Sswitch: exitexpr -> stmt
 FEnd CminorSel_Switch.
 
+Family CminorSel extends CminorSel_Switch.
+FEnd CminorSel.
+
 Trait Cminorgen_Switch extends Cminorgen.
+Family S extends Csharpminor_Switch.
+
 FEnd Cminorgen_Switch.
+
+
+
+
 
 Trait Selection_Switch extends Selection.
 FEnd Selection_Switch.
