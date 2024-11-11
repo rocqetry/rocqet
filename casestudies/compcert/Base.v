@@ -114,6 +114,8 @@ Inductive bitfield : Type :=
        FOpaque Definition function_locals : function -> list ident := cheat.
        FOpaque Definition function_params : function -> list ident := cheat.       
        FOpaque Definition function_sig : function -> signature := cheat. 
+
+       FOpaque Definition letenv : Type := cheat.
        
        FDefinition fundef := AST.fundef function.       
        FDefinition program : Type := AST.program fundef unit.              
@@ -229,14 +231,14 @@ Inductive bitfield : Type :=
          Case Osingleconst := (fun n => Some (Vsingle n)).
          Case Olongconst := (fun n => Some (Vlong n)).
        FEnd eval_constant.
-               
-       FInductive eval_expr : fenv -> env -> mem -> expr -> val -> Prop :=
-           | eval_Evar: forall e le m id v,
-               PTree.get id le = Some v ->
-               eval_expr e le m (Evar id) v                  
-           | eval_Econst: forall e le m cst v,
+
+       FInductive eval_expr : fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
+           | eval_Evar: forall fe e m le id v,
+               PTree.get id e = Some v ->
+               eval_expr fe e m le (Evar id) v                  
+           | eval_Econst: forall fe e m le cst v,
                eval_constant cst = Some v ->
-               eval_expr e le m (Econst cst) v.
+               eval_expr fe e m le (Econst cst) v.
                            
        FInductive step : genv -> state -> trace -> state -> Prop :=
               | step_skip_seq: forall ge f s k e le m,
@@ -250,15 +252,15 @@ Inductive bitfield : Type :=
                   free_fenv m e f = Some m' ->
                   step ge (self__Cfam.State f Sskip k e le m)
                     E0 (self__Cfam.Returnstate Vundef k m')
-              | step_set: forall ge f id a k e le m v,
-                  eval_expr e le m a v ->
+              | step_set: forall ge f id a k e le m v lete,
+                  eval_expr e le m lete a v ->
                   step ge (self__Cfam.State f (Sset id a) k e le m)
                     E0 (self__Cfam.State f Sskip k e (PTree.set id v le) m)
               | step_seq: forall ge f s1 s2 k e le m,
                   step ge (self__Cfam.State f (Sseq s1 s2) k e le m)
                     E0 (self__Cfam.State f s1 (Kseq s2 k) e le m)
-              | step_ifthenelse: forall ge f a s1 s2 k e le m v b,
-                  eval_expr e le m a v ->
+              | step_ifthenelse: forall ge f a s1 s2 k e le m v b lete,
+                  eval_expr e le m lete a v ->
                   Val.bool_of_val v b ->
                   step ge (self__Cfam.State f (Sifthenelse a s1 s2) k e le m)
                     E0 (self__Cfam.State f (if b then s1 else s2) k e le m)
@@ -272,8 +274,8 @@ Inductive bitfield : Type :=
                   free_fenv m e f = Some m' ->
                   step ge (self__Cfam.State f (Sreturn None) k e le m)
                     E0 (self__Cfam.Returnstate Vundef (call_cont k) m')            
-              | step_return_1: forall ge f a k e le m v m',
-                  eval_expr e le m a v ->
+              | step_return_1: forall ge f a k e le m v m' lete,
+                  eval_expr e le m lete a v ->
                   free_fenv m e f = Some m' ->
                   step ge (self__Cfam.State f (Sreturn (Some a)) k e le m)
                     E0 (self__Cfam.Returnstate v (call_cont k) m')            
@@ -441,7 +443,7 @@ Inductive bitfield : Type :=
       FEnd match_states.
              
       FInduction transl_expr_correct about Source.eval_expr motive 
-         (fun  e le m a v (_ : Source.eval_expr e le m a v) => 
+         (fun  e le m lete a v (_ : Source.eval_expr e le m lete a v) => 
             forall f m tm tf te sp lo hi cs
                 (MINJ: match_mem f m tm)
                 (MATCH: match_callstack f m tm
@@ -449,8 +451,8 @@ Inductive bitfield : Type :=
                          (Mem.nextblock m) (Mem.nextblock tm)),                
                     forall ta
                 (TR: transl_expr a = OK ta),
-              exists tv,
-                 Target.eval_expr sp te tm ta tv
+              exists tv tlete,
+                 Target.eval_expr sp te tm tlete ta tv
               /\ match_value f v tv).
       FProof.
         + intros. apply cheat.
@@ -1267,9 +1269,8 @@ Inductive bitfield : Type :=
 
   
   (* Cminor with processor-dependent instructions *)
-  Family CminorSel extends Cfam.                
-       FInductive expr : Type :=
-          | Evar : ident -> expr          
+   Family CminorSel extends Cfam.
+       FInductive expr : Type :=          
           | Econdition : condexpr -> expr -> expr -> expr
           | Eop : Asm.operation -> exprlist -> expr
           | Elet : expr -> expr -> expr
@@ -1284,67 +1285,70 @@ Inductive bitfield : Type :=
        
        Inherit stmt.
 
-       MetaData function.
-       Record function : Type := mkfunction {
+       MetaData fn.
+       Record fn : Type := mkfunction {
           fn_sig: signature;
           fn_params: list ident;
           fn_vars: list ident;
           fn_stackspace: Z;
           fn_body: self__CminorSel.stmt
        }.
-       FEnd function.
+       FEnd fn.
+
+       FOverride Definition function := fn.
+       FOverride Definition function_body := self__CminorSel.fn_body.
+       FOverride Definition function_locals := self__CminorSel.fn_vars.
+       FOverride Definition function_params := self__CminorSel.fn_params.
+       FOverride Definition function_sig := self__CminorSel.fn_sig.
        
-       FDefinition letenv := list val.       
+       FOverride Definition letenv := list val.
        (* stack pointer *)
        (* Vptr sp Ptrofs.zero *)
        FOverride Definition fenv := block.
    
        FOverride Definition free_fenv := fun m sp f =>
-          Mem.free m sp 0 f.(self__Cminor.fn_stackspace).
+          Mem.free m sp 0 f.(self__CminorSel.fn_stackspace).
           
        FOverride Definition alloc_fenv := fun sp m f sp' m' => 
-          Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp).
+          Mem.alloc m 0 f.(self__CminorSel.fn_stackspace) = (m', sp).
           
-       FDefinition eval_operation := fun op => Asm.eval_operation op fundef unit.                     
-                    
-       FInductive eval_expr: genv -> val -> env -> mem -> letenv -> expr -> val -> Prop :=
-           | eval_Evar: forall ge sp e m le id v,
-               PTree.get id e = Some v ->
-               eval_expr ge sp e m le (Evar id) v
-           | eval_Eop: forall ge sp e m le op al vl v,
-               eval_exprlist ge sp e m le al vl ->
-               Asm.eval_operation ge sp op vl m = Some v ->
-               eval_expr ge sp e m le (Eop op al) v
-           | eval_Econdition: forall ge sp e m le a b c va v,
-               eval_condexpr ge sp e m le a va ->
-               eval_expr ge sp e m le (if va then b else c) v ->
-               eval_expr ge sp e m le (Econdition a b c) v
-           | eval_Elet: forall ge sp e m le a b v1 v2,
-               eval_expr ge sp e m le a v1 ->
-               eval_expr ge sp e m (v1 :: le) b v2 ->
-               eval_expr ge sp e m le (Elet a b) v2
-           | eval_Eletvar: forall ge sp e m le n v,
-               nth_error le n = Some v ->
-               eval_expr ge sp e m le (Eletvar n) v
-       with eval_exprlist: genv -> val -> env -> mem -> letenv -> self__CminorSel.exprlist -> list val -> Prop :=
-          | eval_Enil: forall ge sp e m le,
-              eval_exprlist ge sp e m le Enil nil
-          | eval_Econs: forall ge sp e m le a1 al v1 vl,
-              eval_expr ge sp e m le a1 v1 -> eval_exprlist ge sp e m le al vl ->
-              eval_exprlist ge sp e m le (Econs a1 al) (v1 :: vl)
-       with eval_condexpr: genv -> val -> env -> mem -> letenv -> self__CminorSel.condexpr -> bool -> Prop :=
-          | eval_CEcond: forall ge sp e m le cond al vl vb,
-              eval_exprlist ge sp e m le al vl ->
-              Asm.eval_condition cond vl m = Some vb ->
-              eval_condexpr ge sp e m le (CEcond cond al) vb
-          | eval_CEcondition: forall ge sp e m le a b c va v,
-              eval_condexpr ge sp e m le a va ->
-              eval_condexpr ge sp e m le (if va then b else c) v ->
-              eval_condexpr ge sp e m le (CEcondition a b c) v
-          | eval_CElet: forall ge sp e m le a b v1 v2,
-              eval_expr ge sp e m le a v1 ->
-              eval_condexpr ge sp e m (v1 :: le) b v2 ->
-              eval_condexpr ge sp e m le (CElet a b) v2.       
+       FDefinition eval_operation := fun op => Asm.eval_operation op fundef unit.
+       
+       FInductive eval_expr: val -> env -> mem -> letenv -> expr -> val -> Prop :=
+             | eval_Eop: forall sp e m le op al vl v ge,        
+               eval_exprlist sp e m le al vl ->
+               eval_operation op ge sp vl m = Some v ->
+                 eval_expr sp e m le (Eop op al) v
+           (* | eval_Econdition: forall sp e m le a b c va v, *)
+           (*     eval_condexpr sp e m le a va -> *)
+           (*     eval_expr sp e m le (if va then b else c) v -> *)
+           (*     eval_expr sp e m le (Econdition a b c) v *)
+           (* | eval_Elet: forall sp e m le a b v1 v2, *)
+           (*     eval_expr sp e m le a v1 -> *)
+           (*     eval_expr sp e m (v1 :: le) b v2 -> *)
+           (*     eval_expr sp e m le (Elet a b) v2 *)
+           (* | eval_Eletvar: forall sp e m le n v, *)
+           (*     nth_error le n = Some v -> *)
+           (*     eval_expr sp e m le (Eletvar n) v *)
+       with eval_exprlist: val -> env -> mem -> letenv -> self__CminorSel.exprlist -> list val -> Prop := cheat.
+          | eval_Enil: forall sp e m le,
+              eval_exprlist sp e m le Enil nil
+          | eval_Econs: forall sp e m le a1 al v1 vl,
+              eval_expr sp e m le a1 v1 -> eval_exprlist sp e m le al vl ->
+              eval_exprlist sp e m le (Econs a1 al) (v1 :: vl)
+       (* with eval_condexpr: val -> env -> mem -> letenv -> self__CminorSel.condexpr -> bool -> Prop := cheat.  *)
+          (* | eval_CEcond: forall sp e m le cond al vl vb, *)
+          (*     eval_exprlist sp e m le al vl -> *)
+          (*     Asm.eval_condition cond vl m = Some vb -> *)
+          (*     eval_condexpr sp e m le (CEcond cond al) vb *)
+          (* | eval_CEcondition: forall sp e m le a b c va v, *)
+          (*     eval_condexpr sp e m le a va -> *)
+          (*     eval_condexpr sp e m le (if va then b else c) v -> *)
+          (*     eval_condexpr sp e m le (CEcondition a b c) v *)
+          (* | eval_CElet: forall sp e m le a b v1 v2, *)
+          (*     eval_expr sp e m le a v1 -> *)
+          (*     eval_condexpr sp e m (v1 :: le) b v2 -> *)
+          (*     eval_condexpr sp e m le (CElet a b) v2.        *)
   FEnd CminorSel.
 
   Family Selection extends Cfamtransl.
