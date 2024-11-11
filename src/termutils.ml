@@ -364,7 +364,7 @@ let handler_type_for_recursion
                (*let inductive_names =
                  inductive_paths |> List.map Naming.extract_path_base
                in*)
-               let inductive_names = recursor.handlers |> Names.Id.Map.domain |> Names.Id.Set.to_list in
+               let inductive_names = recursor.handlers |> Names.Id.Map.domain |> Names.Id.Set.elements in
                let names =
                  case_name :: inductive_names |> Names.Id.Set.of_list
                in               
