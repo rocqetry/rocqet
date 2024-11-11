@@ -2692,33 +2692,470 @@ MetaData exitexpr.
 Inductive exitexpr : Type :=
   | XEexit: nat -> exitexpr
   | XEjumptable: self__CminorSel_Switch.expr -> list nat -> exitexpr
-  | XEcondition: condexpr -> exitexpr -> exitexpr -> exitexpr
+  | XEcondition: self__CminorSel_Switch.condexpr -> exitexpr -> exitexpr -> exitexpr
   | XElet: self__CminorSel_Switch.expr -> exitexpr -> exitexpr.
-
+FEnd exitexpr.
 
 FInductive stmt : Type := 
-| Sswitch: exitexpr -> stmt
+| Sswitch: exitexpr -> stmt.
 FEnd CminorSel_Switch.
 
 Family CminorSel extends CminorSel_Switch.
 FEnd CminorSel.
 
-Trait Cminorgen_Switch extends Cminorgen.
-Family S extends Csharpminor_Switch.
+(*Trait Cminorgen_Switch extends Cminorgen.
+Family S extends Csharpminor_Switch.*)
 
-FEnd Cminorgen_Switch.
+Family Cminorgen.
+Family S extends Csharpminor. FEnd S.
+Family T extends Cminor. FEnd T.
+
+FDefinition exit_env := list bool.
+
+FRecursion switch_table about S.lbl_stmts motive (fun (_ : S.lbl_stmts) => nat -> list (Z * nat) * nat) by _rect.
+Case LSnil := (fun k => (nil, k)).
+Case LScons lbl stmt rem :=
+(fun k =>
+   match lbl with
+   | None => let (tbl, dfl) := switch_table rem ((1 + k)%nat) in (tbl, k)
+   | Some ni => let (tbl, dfl) := switch_table rem ((1 + k)%nat) in ((ni, k) :: tbl, dfl)
+   end).
+FEnd switch_table.
+
+FRecursion switch_env about S.lbl_stmts motive (fun (_ : S.lbl_stmts) => exit_env -> exit_env) by _rect.
+Case LSnil := (fun e => e).
+Case LScons a b ls' := (fun e => false :: switch_env ls' e).
+FEnd switch_env.
 
 
+FRecursion transl_stmt.
+Case Sswitch long e ls :=
+  (let (tbl, dfl) := switch_table ls O in
+  do te <- transl_expr (*cenv*) e;
+  cheat (*transl_lblstmt cenv*) (switch_env ls cheat (*xenv*)) ls (T.Sswitch long te tbl dfl)).
+FEnd transl_stmt.
 
+FEnd Cminorgen.
 
+(*FEnd Cminorgen_Switch.
+
+Family Cminorgen extends Cminorgen_Switch.
+FEnd Cminorgen. *)
+
+From NFPOP Require Import Switch.
 
 Trait Selection_Switch extends Selection.
+Family S extends Cminor. FEnd S.
+Family T extends CminorSel. FEnd T.
+
+MetaData compile_switch.
+Parameter compile_switch: Z -> nat -> table -> comptree.
+FEnd compile_switch.
+
+Inherit condexpr_of_expr.
+
+MetaData sel_switch.
+
+Section SEL_SWITCH.
+Variable make_cmp_eq: self__Selection_Switch.T.expr -> Z -> self__Selection_Switch.T.expr.
+Variable make_cmp_ltu: self__Selection_Switch.T.expr -> Z -> self__Selection_Switch.T.expr.
+Variable make_sub: self__Selection_Switch.T.expr -> Z -> self__Selection_Switch.T.expr.
+Variable make_to_int: self__Selection_Switch.T.expr -> self__Selection_Switch.T.expr.
+
+Fixpoint sel_switch  
+  (arg: nat) (t: comptree): self__Selection_Switch.T.exitexpr :=
+  match t with
+  | CTaction act =>
+      self__Selection_Switch.T.XEexit act
+  | CTifeq key act t' =>
+      self__Selection_Switch.T.XEcondition (self__Selection_Switch.condexpr_of_expr (make_cmp_eq (self__Selection_Switch.T.Eletvar arg) key))
+                  (self__Selection_Switch.T.XEexit act)
+                  (sel_switch arg t')
+  | CTiflt key t1 t2 =>
+      self__Selection_Switch.T.XEcondition (self__Selection_Switch.condexpr_of_expr (make_cmp_ltu (self__Selection_Switch.T.Eletvar arg) key))
+                  (sel_switch arg t1)
+                  (sel_switch arg t2)
+  | CTjumptable ofs sz tbl t' =>
+      self__Selection_Switch.T.XElet (make_sub (self__Selection_Switch.T.Eletvar arg) ofs)
+        (self__Selection_Switch.T.XEcondition (self__Selection_Switch.condexpr_of_expr (make_cmp_ltu (self__Selection_Switch.T.Eletvar O) sz))
+                     (self__Selection_Switch.T.XEjumptable (make_to_int (self__Selection_Switch.T.Eletvar 0%nat)) tbl)
+                     (sel_switch ((1 + arg)%nat) t'))
+  end.
+End SEL_SWITCH.
+FEnd sel_switch.
+
+(*Nondetfunction compimm (default: comparison -> int -> condition)
+                       (sem: comparison -> int -> int -> bool)
+                       (c: comparison) (e1: expr) (n2: int) :=
+  match c, e1 with
+  | c, Eop (Ointconst n1) Enil =>
+      Eop (Ointconst (if sem c n1 n2 then Int.one else Int.zero)) Enil
+  | Ceq, Eop (Ocmp c) el =>
+      if Int.eq_dec n2 Int.zero then
+        Eop (Ocmp (negate_condition c)) el
+      else if Int.eq_dec n2 Int.one then
+        Eop (Ocmp c) el
+      else
+        Eop (Ointconst Int.zero) Enil
+  | Cne, Eop (Ocmp c) el =>
+      if Int.eq_dec n2 Int.zero then
+        Eop (Ocmp c) el
+      else if Int.eq_dec n2 Int.one then
+        Eop (Ocmp (negate_condition c)) el
+      else
+        Eop (Ointconst Int.one) Enil
+  | _, _ =>
+       Eop (Ocmp (default c n2)) (e1 ::: Enil)
+  end.
+
+Nondetfunction comp (c: comparison) (e1: expr) (e2: expr) :=
+  match e1, e2 with
+  | Eop (Ointconst n1) Enil, t2 =>
+      compimm Ccompimm Int.cmp (swap_comparison c) t2 n1
+  | t1, Eop (Ointconst n2) Enil =>
+      compimm Ccompimm Int.cmp c t1 n2
+  | _, _ =>
+      Eop (Ocmp (Ccomp c)) (e1 ::: e2 ::: Enil)
+  end.
+
+Nondetfunction compu (c: comparison) (e1: expr) (e2: expr) :=
+  match e1, e2 with
+  | Eop (Ointconst n1) Enil, t2 =>
+      compimm Ccompuimm Int.cmpu (swap_comparison c) t2 n1
+  | t1, Eop (Ointconst n2) Enil =>
+      compimm Ccompuimm Int.cmpu c t1 n2
+  | _, _ =>
+      Eop (Ocmp (Ccompu c)) (e1 ::: e2 ::: Enil)
+  end.
+
+Nondetfunction sub (e1: expr) (e2: expr) :=
+  match e1, e2 with
+  | t1, Eop (Ointconst n2) Enil =>
+      addimm (Int.neg n2) t1
+  | Eop (Oaddimm n1) (t1:::Enil), Eop (Oaddimm n2) (t2:::Enil) =>
+      addimm (Int.sub n1 n2) (Eop Osub (t1:::t2:::Enil))
+  | Eop (Oaddimm n1) (t1:::Enil), t2 =>
+      addimm n1 (Eop Osub (t1:::t2:::Enil))
+  | t1, Eop (Oaddimm n2) (t2:::Enil) =>
+      addimm (Int.neg n2) (Eop Osub (t1:::t2:::Enil))
+  | _, _ => Eop Osub (e1:::e2:::Enil)
+  end.
+
+FDefinition sel_switch_int :=
+  sel_switch
+    (fun arg n => comp Ceq arg (Eop (Ointconst (Int.repr n)) Enil))
+    (fun arg n => compu Clt arg (Eop (Ointconst (Int.repr n)) Enil))
+    (fun arg ofs => sub arg (Eop (Ointconst (Int.repr ofs)) Enil))
+    (fun arg => arg).
+
+FDefinition sel_switch_long :=
+  sel_switch
+    (fun arg n => cmpl Ceq arg (longconst (Int64.repr n)))
+    (fun arg n => cmplu Clt arg (longconst (Int64.repr n)))
+    (fun arg ofs => subl arg (longconst (Int64.repr ofs)))
+    lowlong.*)
+
+FRecursion transl_stmt.
+Case Sswitch t e cases dfl := cheat.
+  (*(do te <- transl_expr e;
+   let t := compile_switch Int64.modulus dfl cases in
+   if validate_switch Int64.modulus dfl cases t
+   then OK (T.Sswitch (T.XElet te (sel_switch_long O t)))
+   else Error (msg "Selection: bad switch (long)")) *)
+FEnd transl_stmt.
 FEnd Selection_Switch.
+
+Family Selection extends Selection_Switch.
+FEnd Selection.
+
+Trait RTLgen_Switch extends RTLgen.
+
+Inherit labelmap.
+
+From NFPOP Require Import RTLmonad.
+
+Inherit transl_exit.
+
+MetaData transl_jumptable.
+Fixpoint transl_jumptable (nexits: list self__RTLgen_Switch.T.node) (tbl: list nat) : self__RTLgen_Switch.mon (list self__RTLgen_Switch.T.node) :=
+  match tbl with
+  | nil => ret nil
+  | t1 :: tl =>
+      do n1 <- self__RTLgen_Switch.transl_exit nexits t1;
+      do nl <- transl_jumptable nexits tl;
+      ret (n1 :: nl)
+  end.
+FEnd transl_jumptable.
+
+MetaData transl_exitexpr.
+Fixpoint transl_exitexpr (map: mapping) (a: self__RTLgen_Switch.S.exitexpr) (nexits: list self__RTLgen_Switch.T.node)
+                         {struct a} : self__RTLgen_Switch.mon self__RTLgen_Switch.T.node :=
+  match a with
+  | self__RTLgen_Switch.S.XEexit n =>
+      self__RTLgen_Switch.transl_exit nexits n
+  | self__RTLgen_Switch.S.XEjumptable a tbl =>
+      do r <- self__RTLgen_Switch.alloc_reg a map;
+      do tbl' <- self__RTLgen_Switch.transl_jumptable nexits tbl;
+      do n1 <- self__RTLgen_Switch.add_instr (self__RTLgen_Switch.T.Ijumptable r tbl');
+         self__RTLgen_Switch.transl_expr a map r n1
+  | self__RTLgen_Switch.S.XEcondition a b c =>
+      do nc <- transl_exitexpr map c nexits;
+      do nb <- transl_exitexpr map b nexits;
+         self__RTLgen_Switch.transl_condexpr a map nb nc
+  | self__RTLgen_Switch.S.XElet a b =>
+      do r <- self__RTLgen_Switch.new_reg;
+      do n1 <- transl_exitexpr (self__RTLgen_Switch.add_letvar map r) b nexits;
+         self__RTLgen_Switch.transl_expr a map r n1
+  end.
+FEnd transl_exitexpr.
+
+FRecursion transl_stmt.
+Case Sswitch a := (fun map nd nexits ngoto nret rret => transl_exitexpr map a nexits).
+FEnd transl_stmt.
+
+FRecursion reserve_labels.
+Case Sswitch a := (fun lm => ret lm).
+FEnd reserve_labels.
+FEnd RTLgen_Switch.
+
+Family RTLgen extends RTLgen_Switch.
+FEnd RTLgen.
 
 FEnd Comp_Switch.
 
-(* small extension *)
+Trait Comp_Heap extends Base.
 
+Trait C_Eaddrof extends C.
+FInductive expr : Type :=
+| Eaddrof : expr -> type -> expr. 
+
+FRecursion typeof.
+Case Eaddrof e ty := ty.
+FEnd typeof.
+FEnd C_Eaddrof.
+
+Trait C_Ederef extends C.
+FInductive expr : Type :=
+| Ederef : expr -> type -> expr. 
+
+FRecursion typeof.
+Case Ederef e ty := ty.
+FEnd typeof.
+FEnd C_Ederef.
+
+Trait C_Evalof extends C.
+FInductive expr : Type :=
+| Evalof : expr -> type -> expr. (* l-value used as a r-value *)
+
+FRecursion typeof.
+Case Evalof e ty := ty.
+FEnd typeof.
+FEnd C_Evalof.
+
+Trait C_Eassign extends C.
+FInductive expr : Type :=
+| Eassign : expr -> expr -> type -> expr. (* assignment l = r *)
+
+FRecursion typeof.
+Case Eassign e1 e2 ty := ty.
+FEnd typeof.
+FEnd C_Eassign.
+
+Family C extends 
+  C_Eassign,
+  C_Evalof,
+  C_Ederef,
+  C_Eaddrof.
+FEnd C.
+
+Trait Clight_Evar extends Clight.
+FInductive expr : Type :=
+| Evar: ident -> type -> expr.(* variable *)
+
+FRecursion typeof.
+Case Evar i t := t.
+FEnd typeof.
+FEnd Clight_Evar.
+
+Trait Clight_Ederef extends Clight.
+FInductive expr : Type :=
+| Ederef: expr -> type -> expr. (* pointer dereference (unary *)
+
+FRecursion typeof.
+Case Ederef i t := t.
+FEnd typeof.
+FEnd Clight_Ederef.
+
+Trait Clight_Eaddrof extends Clight.
+FInductive expr : Type :=
+| Eaddrof: expr -> type -> expr. (* address-of operator (&) *)
+
+FRecursion typeof.
+Case Eaddrof e t := t.
+FEnd typeof.
+FEnd Clight_Eaddrof.
+
+Trait Clight_Sassign extends Clight.
+FInductive stmt : Type :=
+| Sassign : expr -> expr -> stmt. (* assignment lvalue = rvalue *)
+FEnd Clight_Sassign.
+
+Family Clight extends 
+  Clight_Sassign, 
+  Clight_Eaddrof,
+  Clight_Ederef,
+  Clight_Evar.
+FEnd Clight.
+
+Trait SimplExpr_Eassign extends SimplExpr.
+Family S extends C_Eassign. FEnd S.
+
+FRecursion eval_simpl_expr.
+Case _ := None.
+FEnd eval_simpl_expr.
+
+From NFPOP Require Import Mon.
+Local Open Scope gensym_monad_scope.
+
+FRecursion is_bitfield_access about T.expr motive (fun (_ : T.expr) => mon bitfield) by _rect.
+Case _ := (ret Full).
+FEnd is_bitfield_access.
+
+FDefinition chunk_for_volatile_type : type -> bitfield -> option memory_chunk := fun ty bf =>
+  if type_is_volatile ty then
+    match access_mode ty with
+    | By_value chunk =>
+        match bf with
+        | Full => Some chunk
+        | Bits _ _ _ _ => None
+        end
+    | _ => None
+    end
+  else None.
+
+FDefinition make_assign : bitfield -> T.expr -> T.expr -> T.stmt := fun bf l r =>
+  match chunk_for_volatile_type (T.typeof l) bf with
+  | None =>
+      T.Sassign l r
+  | Some chunk =>
+      let ty := T.typeof l in
+      let typtr := Tpointer ty noattr in
+      cheat
+      (*cheat (*Sbuiltin*) None (EF_vstore chunk) (typtr :: (ty :: nil))
+                    (T.Eaddrof l typtr :: r :: nil) *)
+  end.
+
+
+FDefinition make_normalize := fun (sz: intsize) (sg: signedness) (width: Z) (r: T.expr) => r.
+(*  let intconst (n: Z) := Econst_int (Int.repr n) type_int32s in
+  if intsize_eq sz IBool || signedness_eq sg Unsigned then
+    let mask := two_p width - 1 in
+    Ebinop Oand r (intconst mask) (typeof r)
+  else
+    let amount := Int.zwordsize - width in
+    Ebinop Oshr
+           (Ebinop Oshl r (intconst amount) type_int32s)
+           (intconst amount)
+           (typeof r).*)
+
+FDefinition make_assign_value := fun (bf: bitfield) (r: T.expr) =>
+  match bf with
+  | Full => r
+  | Bits sz sg pos width => make_normalize sz sg width r
+  end.
+
+FRecursion transl_expr.
+Case Eassign l1 r2 ty := 
+(fun dst => 
+ do (sl1, a1) <- transl_expr l1 self__SimplExpr_Eassign.For_val;
+ do (sl2, a2) <- transl_expr r2 self__SimplExpr_Eassign.For_val;
+ do bf <- is_bitfield_access a1;
+ let ty1 := S.typeof l1 in
+ let ty2 := S.typeof r2 in
+ match dst with
+ | self__SimplExpr_Eassign.For_val | self__SimplExpr_Eassign.For_set _ =>
+     do t <- gensym ty1;
+     ret (finish dst
+            (sl1 ++ sl2 ++ T.Sset t (T.Ecast a2 ty1) :: make_assign bf a1 (T.Etempvar t ty1) :: nil)
+            (make_assign_value bf (T.Etempvar t ty1)))
+ | self__SimplExpr_Eassign.For_effects =>
+     ret (sl1 ++ sl2 ++ make_assign bf a1 a2 :: nil,
+          dummy_expr)
+ end).
+FEnd transl_expr.
+FEnd SimplExpr_Eassign.
+
+Trait SimplExpr_Evalof extends Clight_Sassign.
+Family S extends C_Evalof. FEnd S.
+
+FRecursion eval_simpl_expr.
+Case _ := None.
+FEnd eval_simpl_expr.
+
+FDefinition make_set := fun (bf: bitfield) (id: ident) (l: T.expr) =>
+  match chunk_for_volatile_type (T.typeof l) bf with
+  | None => T.Sset id l
+  | Some chunk => cheat
+      (*let typtr := Tpointer (typeof l) noattr in
+      Sbuiltin (Some id) (EF_vload chunk) (Tcons typtr Tnil) ((Eaddrof l typtr):: nil) *)
+  end.
+
+FDefinition transl_valof (ty: type) (l: expr) : mon (list T.stmt * T.expr) :=
+  if type_is_volatile ty
+  then do t <- gensym ty;
+       do bf <- is_bitfield_access l;
+       ret (make_set bf t l :: nil, Etempvar t ty)
+  else ret (nil, l).
+
+FRecursion transl_expr.
+Case Evalof l ty := 
+(fun dst => 
+   do (sl1, a1) <- transl_expr For_val l;
+   do (sl2, a2) <- transl_valof (S.typeof l) a1;
+   ret (finish dst (sl1 ++ sl2) a2))
+
+Family C extends 
+  C_Evalof,
+  C_Ederef,
+  C_Eaddrof.
+FEnd C.
+
+(* Csharpminor/Cminor *)
+Inductive expr : Type :=
+| Eaddrof : ident -> expr(* taking the address of a variable *)
+| Eload : memory_chunk -> expr -> expr.(* memory read *)
+                               
+Inductive stmt : Type :=
+| Sstore : memory_chunk -> expr -> expr -> stmt.
+
+(*CminorSel *)
+Inductive expr : Type :=
+| Eload : memory_chunk -> addressing -> exprlist -> expr
+| Sstore : memory_chunk -> addressing -> exprlist -> expr -> stmt. 
+
+(*RTL*)
+Inductive instruction: Type :=
+| Iload: memory_chunk -> addressing -> list reg -> reg -> node -> instruction
+| Istore: memory_chunk -> addressing -> list reg -> reg -> node -> instruction
+
+(* LTL *)
+Inductive instruction: Type :=
+| Lload (chunk: memory_chunk) (addr: addressing) (args: list mreg) (dst: mreg)
+| Lstore (chunk: memory_chunk) (addr: addressing) (args: list mreg) (src: mreg)
+
+(* Linear/Mach*)
+Inductive instruction: Type :=
+| Lload: memory_chunk -> addressing -> list mreg -> mreg -> instruction
+| Lstore: memory_chunk -> addressing -> list mreg -> mreg -> instruction
+FEnd Comp_Heap.
+
+Trait Comp_Field extends Comp_Base.
+FEnd Comp_Field.
+
+Trait Comp_Call extends Comp_Base.
+FEnd Comp_Call.
+
+(* small extension *)
 
 (* requires work with cshmgen, selection, operation semantics *)
 Trait Comp_Op extends Comp_Base.
@@ -2746,18 +3183,10 @@ FEnd Asmgen_Ops
 
 FEnd Comp_op.
 
-(* small extension *)
-Trait Comp_Heap extends Comp_Base.
-FEnd Comp_Heap.
-
 (* small extension: Only C, Clight *)
 (* Struct/Union *)
-Trait Comp_Field extends Comp_Base.
-FEnd Comp_Field.
 
 (* small extension *)
-Trait Comp_Call extends Comp_Base.
-FEnd Comp_Call.
 
 (* small *)
 Trait Comp_External extends Comp_Base.
