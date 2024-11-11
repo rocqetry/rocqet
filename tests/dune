@@ -42,4 +42,5 @@
   ;Same_Diff_Reparam
   ;Default_handler
   ;Path_subst_hard
+  ;Inherit_mutual 
   ))
