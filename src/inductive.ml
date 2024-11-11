@@ -26,7 +26,7 @@ let add_inductive_axiom ~name ~ty =
   Context.add_field ~name ~elem
 
 (* Extract the constructors *)
-let constructors inductive =
+let constructors inductive =  
   inductive |> VernacInductive.extract_all_names_with_type |> List.split |> snd
   |> List.concat
 

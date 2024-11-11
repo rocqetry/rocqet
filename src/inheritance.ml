@@ -589,15 +589,23 @@ let inherit_name ~(name : Names.Id.t) =
         in
         Errors.fail ~info
     | Some (InductiveDefinition { inductive; _ } as element) ->           
-       let names =          
-         inductive 
-         |> VernacInductive.extract_all_names 
-         |> List.concat_map (fun (ind, ctrs) -> ind :: ctrs)          
-         |> List.map (fun axiom -> 
-                let axiom = Naming.inductive_axiom_name axiom in
-                match find_element axiom base.fields with
-                | Some element -> (axiom, element)
-                | None -> Errors.fail ~info:"Couldn't find inductive axiom")              
+       let names =
+         let find_axiom name =
+           let axiom = Naming.inductive_axiom_name name in
+            match find_element axiom base.fields with
+            | Some element -> (axiom, element)
+            | None -> Errors.fail ~info:"Couldn't find inductive axiom"
+         in
+         (* Same order we derive inductives from inductive.ml *)
+         let ind_names =
+           inductive |> VernacInductive.extract_all_names_with_type |> List.split |> fst |> List.map fst |> List.map find_axiom
+         in 
+         let constructor_names =
+           inductive |> VernacInductive.extract_all_names_with_type |> List.split |> snd
+           |> List.concat |> List.map fst 
+           |> List.map find_axiom
+         in        
+         ind_names @ constructor_names
        in
        let names = (name, element) :: names in
        List.fold_left 
