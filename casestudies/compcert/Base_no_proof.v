@@ -3085,53 +3085,242 @@ Case Eassign l1 r2 ty :=
 FEnd transl_expr.
 FEnd SimplExpr_Eassign.
 
-Trait SimplExpr_Evalof extends Clight_Sassign.
+Trait SimplExpr_Evalof extends SimplExpr.
 Family S extends C_Evalof. FEnd S.
 
 FRecursion eval_simpl_expr.
 Case _ := None.
 FEnd eval_simpl_expr.
 
-FDefinition make_set := fun (bf: bitfield) (id: ident) (l: T.expr) =>
-  match chunk_for_volatile_type (T.typeof l) bf with
-  | None => T.Sset id l
-  | Some chunk => cheat
-      (*let typtr := Tpointer (typeof l) noattr in
-      Sbuiltin (Some id) (EF_vload chunk) (Tcons typtr Tnil) ((Eaddrof l typtr):: nil) *)
-  end.
+FDefinition make_set := fun (bf: bitfield) (id: ident) (l: T.expr) => T.Sskip. (* dummy *)
 
-FDefinition transl_valof (ty: type) (l: expr) : mon (list T.stmt * T.expr) :=
+FRecursion is_bitfield_access about T.expr motive (fun (_ : T.expr) => mon bitfield) by _rect.
+Case _ := (ret Full).
+FEnd is_bitfield_access.
+
+FDefinition transl_valof : type -> T.expr -> mon (list T.stmt * T.expr) := fun ty l =>
   if type_is_volatile ty
   then do t <- gensym ty;
        do bf <- is_bitfield_access l;
-       ret (make_set bf t l :: nil, Etempvar t ty)
+       ret (make_set bf t l :: nil, T.Etempvar t ty)
   else ret (nil, l).
 
 FRecursion transl_expr.
 Case Evalof l ty := 
 (fun dst => 
-   do (sl1, a1) <- transl_expr For_val l;
+   do (sl1, a1) <- transl_expr l self__SimplExpr_Evalof.For_val;
    do (sl2, a2) <- transl_valof (S.typeof l) a1;
-   ret (finish dst (sl1 ++ sl2) a2))
+   ret (finish dst (sl1 ++ sl2) a2)).
+FEnd transl_expr.
 
-Family C extends 
-  C_Evalof,
-  C_Ederef,
-  C_Eaddrof.
-FEnd C.
+FEnd SimplExpr_Evalof.
 
-(* Csharpminor/Cminor *)
-Inductive expr : Type :=
-| Eaddrof : ident -> expr(* taking the address of a variable *)
-| Eload : memory_chunk -> expr -> expr.(* memory read *)
-                               
-Inductive stmt : Type :=
+Trait SimplExpr_Ederef extends SimplExpr.
+Family S extends C_Ederef. FEnd S.
+
+FRecursion eval_simpl_expr.
+Case _ := None.
+FEnd eval_simpl_expr.
+
+FRecursion transl_expr. 
+Case Ederef r ty :=
+  (fun dst => do (sl, a) <- transl_expr r self__SimplExpr_Ederef.For_val;
+  ret (finish dst sl (T.Ederef a ty))).
+FEnd transl_expr.
+
+FEnd SimplExpr_Ederef.
+
+Trait SimplExpr_Eaddrof extends SimplExpr.
+Family S extends C_Eaddrof. FEnd S.
+
+FRecursion eval_simpl_expr.
+Case _ := None.
+FEnd eval_simpl_expr.
+
+FRecursion transl_expr. 
+Case Eaddrof l ty :=
+   (fun dst => do (sl, a) <- transl_expr l self__SimplExpr_Eaddrof.For_val;
+      ret (finish dst sl (T.Eaddrof a ty))).
+FEnd transl_expr.
+
+FEnd SimplExpr_Eaddrof. 
+
+Family SimplExpr 
+  extends 
+  SimplExpr_Eaddrof, 
+  SimplExpr_Ederef, 
+  SimplExpr_Eassign, 
+  SimplExpr_Evalof.
+FEnd SimplExpr.
+
+Trait Csharpminor_Eaddrof extends Csharpminor.
+FInductive expr : Type :=
+| Eaddrof : ident -> expr. (* taking the address of a variable *)
+FEnd Csharpminor_Eaddrof.
+
+Trait Csharpminor_Eload extends Csharpminor.
+FInductive expr : Type :=
+| Eload : memory_chunk -> expr -> expr. (* memory read *)
+FEnd Csharpminor_Eload.
+
+Trait Csharpminor_Sstore extends Csharpminor.                                
+FInductive stmt : Type :=
 | Sstore : memory_chunk -> expr -> expr -> stmt.
+FEnd Csharpminor_Sstore.
 
+Family Csharpminor extends 
+  Csharpminor_Sstore, 
+  Csharpminor_Eload, 
+  Csharpminor_Eaddrof.
+FEnd Csharpminor.
+
+Trait Cshmgen_Sassign extends Cshmgen.
+Family S extends Clight_Sassign. FEnd S.
+
+Inherit alignof.
+From NFPOP Require Import Errors.
+Local Open Scope error_monad_scope.
+
+FDefinition make_store_bitfield : intsize -> signedness -> Z -> Z -> T.expr -> T.expr -> res T.stmt := 
+fun sz signedness pos width addr val => cheat.
+  (*if zle 0 pos && zlt 0 width && zle (pos + width) (bitsize_carrier sz) then
+    let amount := first_bit sz pos width in
+    let mask := Int.shl (Int.repr (two_p width - 1)) (Int.repr amount) in
+    let e1 := Eload (chunk_for_carrier sz) addr in
+    let e2 := Ebinop Oshl val (make_intconst (Int.repr amount)) in
+    let e3 := Ebinop Oor (Ebinop Oand e2 (make_intconst mask))
+                         (Ebinop Oand e1 (make_intconst (Int.not mask))) in
+    OK (Sstore (chunk_for_carrier sz) addr e3)
+  else
+    Error(msg "Cshmgen.make_store_bitfield"). *)
+
+FDefinition make_memcpy : composite_env -> T.expr -> T.expr -> type -> res T.stmt := 
+  fun ce dst src ty => 
+  do sz <- sizeof ce ty;
+  cheat.
+  (*OK (Sbuiltin None (EF_memcpy sz (Ctypes.alignof_blockcopy ce ty))
+                    (dst :: src :: nil)). *)
+
+FDefinition make_store := fun (ce: composite_env) (addr: T.expr) (ty: type) (bf: bitfield) (rhs: T.expr) =>
+  match bf with
+  | Full =>
+      match access_mode ty with
+      | By_value chunk => OK (T.Sstore chunk addr rhs)
+      | By_copy => make_memcpy ce addr rhs ty
+      | _ => Error (msg "Cshmgen.make_store")
+      end
+  | Bits sz sg pos width =>
+      make_store_bitfield sz sg pos width addr rhs
+  end.
+
+FRecursion transl_stmt.
+Case Sassign b c :=
+(fun ce tyret nbrk ncnt => 
+   do (tb, bf) <- cheat (*transl_lvalue ce b*);
+   do tc <- transl_expr c ce;
+   do tc' <- make_cast (S.typeof c) (S.typeof b) tc;
+   make_store ce tb (S.typeof b) bf tc').
+FEnd transl_stmt.
+
+FEnd Cshmgen_Sassign.
+
+Trait Cshmgen_Eaddrof extends Cshmgen.
+Family S extends Clight_Eaddrof. FEnd S.
+
+FRecursion transl_expr.
+Case Eaddrof b c :=
+(fun ce => 
+   do (tb, bf) <- cheat; (* transl_lvalue ce b;*)
+   match bf with
+   | Full => OK tb
+   | Bits _ _ _ _ => Error (msg "Cshmgen.transl_expr: addrof bitfield")
+   end).
+FEnd transl_expr.
+
+FEnd Cshmgen_Eaddrof.
+
+Trait Cshmgen_Ederef_Evar extends Cshmgen.
+Family S extends Clight_Ederef, Clight_Evar. FEnd S.
+
+Inherit alignof.
+
+FDefinition make_extract_bitfield 
+ : intsize -> signedness -> Z -> Z -> T.expr -> res T.expr := 
+fun sz sg pos width =>                                 
+  cheat.
+  (*if zle 0 pos && zlt 0 width && zle (pos + width) (bitsize_carrier sz) then
+    let amount1 := Int.repr (Int.zwordsize - first_bit sz pos width - width) in
+    let amount2 := Int.repr (Int.zwordsize - width) in
+    let e1 := Eload (chunk_for_carrier sz) addr in
+    let e2 := Ebinop Oshl e1 (make_intconst amount1) in
+    let e3 := Ebinop (if intsize_eq sz IBool
+                      || signedness_eq sg Unsigned then Oshru else Oshr)
+                     e2 (make_intconst amount2) in
+    OK e3
+  else
+    Error(msg "Cshmgen.extract_bitfield").*)
+
+FDefinition make_load := fun (addr: T.expr) (ty_res: type) (bf: bitfield) =>
+  match bf with
+  | Full =>
+      match access_mode ty_res with
+      | By_value chunk => OK (T.Eload chunk addr)
+      | By_reference => OK addr
+      | By_copy => OK addr
+      | By_nothing => Error (msg "Cshmgen.make_load")
+      end
+  | Bits sz sg pos width =>
+      make_extract_bitfield sz sg pos width addr
+  end.
+
+FRecursion transl_expr.
+Case Ederef b ty :=
+(fun ce => 
+  do tb <- transl_expr b ce;
+      make_load tb ty Full).
+Case Evar id ty :=
+   (fun ce => make_load (T.Eaddrof id) ty Full).
+FEnd transl_expr.
+
+FEnd Cshmgen_Ederef_Evar.
+
+Family Cshmgen extends 
+  Cshmgen_Ederef_Evar, 
+  Cshmgen_Eaddrof, 
+  Cshmgen_Sassign.
+FEnd Cshmgen.
+
+Family Cminor.
+FInductive expr : Type :=
+| Eaddrof : ident -> expr (* taking the address of a variable *)
+| Eload : memory_chunk -> expr -> expr. (* memory read *)
+
+FInductive stmt : Type :=
+| Sstore : memory_chunk -> expr -> expr -> stmt.
+FEnd Cminor.
+
+Family CminorSel.
 (*CminorSel *)
-Inductive expr : Type :=
+FInductive expr : Type :=
 | Eload : memory_chunk -> addressing -> exprlist -> expr
 | Sstore : memory_chunk -> addressing -> exprlist -> expr -> stmt. 
+
+FEnd CminorSel.
+
+Family Cminorgen.
+
+Definition var_addr (cenv: compilenv) (id: ident): expr :=
+  match PTree.get id cenv with
+  | Some ofs => Econst (Oaddrstack (Ptrofs.repr ofs))
+  | None => Econst (Oaddrsymbol id Ptrofs.zero)
+  end. 
+
+FRecursion transl_expr.
+Case Eaddrof i e :=
+Case Eload :=
+FEnd transl_expr.
+
+FEnd Cminorgen.
 
 (*RTL*)
 Inductive instruction: Type :=
@@ -3202,8 +3391,7 @@ FEnd Comp_Vector.
 
 Family Comp extends 
   Comp_Switch, 
-  Comp_Loop, 
-  Comp_Op, 
+  Comp_Loop,  
   Comp_Heap, 
   Comp_Field, 
   Comp_Call, 
