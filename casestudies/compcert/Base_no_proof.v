@@ -4528,10 +4528,464 @@ FEnd Asmgen.
 
 FEnd Comp_Heap.
 
-Trait Comp_Field extends Comp_Base.
+Trait Comp_Field extends Base.
+Family C.
+FInductive expr : Type :=
+| Efield : expr -> ident -> type -> expr. 
+
+FRecursion typeof.
+Case Efield e i ty := ty.
+FEnd typeof.
+FEnd C.
+
+Family Clight.
+FInductive expr : Type :=
+| Efield: expr -> ident -> type -> expr. (* access to a member of a struct or union *)
+
+FRecursion typeof.
+Case Efield e i ty := ty.
+FEnd typeof.
+
+FEnd Clight.
+
+Family SimplExpr.
+Family S extends C. FEnd S.
+Family T extends Clight. FEnd T.
+
+FRecursion eval_simpl_expr.
+Case Efield e i ty := None.
+FEnd eval_simpl_expr.
+
+From NFPOP Require Import Mon.
+Local Open Scope gensym_monad_scope.
+FRecursion transl_expr.
+Case Efield r f ty :=
+  (fun dst =>
+    do (sl, a) <- transl_expr r self__SimplExpr.For_val;
+    ret (finish dst sl (T.Efield a f ty))).
+FEnd transl_expr.
+FEnd SimplExpr.
+
+Family Cshmgen.
+Family S extends Clight. FEnd S.
+Family T extends Csharpminor. FEnd T.
+(* This family (Comp_Efield) should extend the heap extension *)
+From NFPOP Require Import Errors.
+Local Open Scope error_monad_scope.
+
+
+Inherit alignof.
+
+FDefinition make_extract_bitfield 
+ : intsize -> signedness -> Z -> Z -> T.expr -> res T.expr := 
+fun sz sg pos width addr => cheat. (*we need the Eload expr *)
+
+FDefinition make_load := fun (addr: T.expr) (ty_res: type) (bf: bitfield) =>
+  match bf with
+  | Full =>
+      cheat
+  | Bits sz sg pos width =>
+      make_extract_bitfield sz sg pos width addr
+  end.
+
+FDefinition make_field_access
+  := fun (ce: composite_env) (ty: type) (f: ident) (a: T.expr) =>
+  do (ofs, bf) <-
+    match ty with
+    | Tstruct id _ =>
+        match ce!id with
+        | None => Error (MSG "Undefined struct " :: CTX id :: nil)
+        | Some co => field_offset ce f (co_members co)
+        end
+    | Tunion id _ =>
+        match ce!id with
+        | None => Error (MSG "Undefined union " :: CTX id :: nil)
+        | Some co => union_field_offset ce f (co_members co)
+        end
+    | _ =>
+        Error(msg "Cshmgen.make_field_access")
+    end;
+  let a' :=
+    if Archi.ptr64
+    then T.Ebinop Oaddl a (make_longconst (Int64.repr ofs))
+    else T.Ebinop Oadd a (make_intconst (Int.repr ofs)) in
+  OK (a', bf).
+
+FRecursion transl_expr.
+Case Efield b i ty := 
+  (fun ce =>
+     do tb <- transl_expr b ce;
+     do (addr, bf) <- make_field_access ce (S.typeof b) i tb;
+    make_load addr ty bf).
+FEnd transl_expr.
+
+FEnd Cshmgen.
+
 FEnd Comp_Field.
 
-Trait Comp_Call extends Comp_Base.
+Trait Comp_Call extends Base.
+
+Family C.
+FInductive expr : Type :=
+| Ecall : expr -> exprlist -> type -> expr
+with exprlist : Type :=
+| Enil : exprlist
+| Econs : expr -> exprlist -> exprlist.
+
+FRecursion typeof.
+Case Ecall e args t := t.
+FEnd typeof.
+
+FEnd C.
+
+Family Clight.
+FInductive stmt : Type :=
+| Scall: option ident -> expr -> list expr -> stmt. (* function call *)
+
+FEnd Clight.
+
+From NFPOP Require Import Mon.
+Local Open Scope gensym_monad_scope.
+
+Family SimplExpr.
+Family S extends C. FEnd S.
+Family T extends Clight. FEnd T.
+
+FRecursion transl_expr.
+Case Ecall r1 rl2 ty :=
+  (fun dst =>
+   do (sl1, a1) <- transl_expr r1 self__SimplExpr.For_val;
+   do (sl2, al2) <- cheat (*transl_exprlist rl2*);
+   match dst with
+   | self__SimplExpr.For_val | self__SimplExpr.For_set _ =>
+       do t <- gensym ty;
+       ret (finish dst (sl1 ++ sl2 ++ T.Scall (Some t) a1 al2 :: nil)
+                       (T.Etempvar t ty))
+   | self__SimplExpr.For_effects =>
+       ret (sl1 ++ sl2 ++ T.Scall None a1 al2 :: nil, dummy_expr)
+   end).
+FEnd transl_expr.
+
+FEnd SimplExpr.
+
+Family Csharpminor.
+FInductive stmt : Type :=
+| Scall : option ident -> signature -> expr -> list expr -> stmt.
+FEnd Csharpminor.
+
+Family Cshmgen.
+Family S extends Clight. FEnd S.
+Family T extends Csharpminor. FEnd T.
+
+FDefinition make_normalization := fun (t: type) (a: T.expr) =>
+  match t with
+  | Tint IBool _ _ => T.Eunop Ocast8unsigned a
+  | Tint I8 Signed _ => T.Eunop Ocast8signed a
+  | Tint I8 Unsigned _ => T.Eunop Ocast8unsigned a
+  | Tint I16 Signed _ => T.Eunop Ocast16signed a
+  | Tint I16 Unsigned _ => T.Eunop Ocast16unsigned a
+  | _ => a
+  end.
+
+From NFPOP Require Import Conventions1.
+FDefinition return_value_needs_normalization := fun (_: rettype) => false.
+
+FDefinition make_funcall :=
+  fun (x: option ident) (tres: type) (sg: signature)
+      (fn: T.expr) (args: list T.expr) =>
+  match x, return_value_needs_normalization sg.(sig_res) with
+  | Some id, true =>
+      T.Sseq (T.Scall x sg fn args)
+             (T.Sassign id (make_normalization tres (T.Evar id)))
+  | _, _ =>
+      T.Scall x sg fn args
+  end.
+
+MetaData typlist_of_arglist.
+Fixpoint typlist_of_arglist (al: list self__Cshmgen.S.expr) (tyl: list type)
+                            {struct al}: list AST.typ :=
+  match al, tyl with
+  | nil, _ => nil
+  | a1 :: a2, ty1 :: ty2 =>
+      typ_of_type ty1 :: typlist_of_arglist a2 ty2
+  | a1 :: a2, nil =>
+      typ_of_type (default_argument_conversion (self__Cshmgen.S.typeof a1)) :: typlist_of_arglist a2 nil
+  end.
+FEnd typlist_of_arglist.
+
+From NFPOP Require Import Errors.
+Local Open Scope error_monad_scope.
+FRecursion transl_stmt.
+Case Scall x b cl := 
+  (fun ce tyret nbrk ncnt =>
+     match classify_fun (S.typeof b) with
+      | fun_case_f args res cconv =>
+          do tb <- transl_expr b ce;
+          do tcl <- cheat (*transl_arglist ce cl args*); (*from builtin*)
+          let sg := {| sig_args := typlist_of_arglist cl args;
+                       sig_res  := rettype_of_type res;
+                       sig_cc   := cconv |} in
+          OK (make_funcall x res sg tb tcl)
+      | _ => Error(msg "Cshmgen.transl_stmt(call)")
+      end).
+FEnd transl_stmt.
+
+FEnd Cshmgen.
+
+Family Cminor.
+FInductive stmt : Type :=
+| Scall : option ident -> signature -> expr -> list expr -> stmt
+| Stailcall: signature -> expr -> list expr -> stmt.
+FEnd Cminor.
+
+Family CminorSel.
+FInductive stmt : Type :=
+| Scall : option ident -> signature -> expr + ident -> exprlist -> stmt
+| Stailcall: signature -> expr + ident -> exprlist -> stmt.                                                           
+FEnd CminorSel.
+
+Family Cminorgen.
+Family S extends Csharpminor. FEnd S.
+Family T extends Cminor. FEnd T.
+
+Inherit transl_expr.
+
+MetaData transl_exprlist.
+Fixpoint transl_exprlist (cenv: self__Cminorgen.compilenv) (el: list self__Cminorgen.S.expr)
+                     {struct el}: res (list self__Cminorgen.T.expr) :=
+  match el with
+  | nil =>
+      OK nil
+  | e1 :: e2 =>
+      do te1 <- self__Cminorgen.transl_expr e1 (*cenv*);
+      do te2 <- transl_exprlist cenv e2;
+      OK (te1 :: te2)
+  end.
+FEnd transl_exprlist.
+
+FRecursion transl_stmt.
+Case Scall optid sig e el :=
+  (do te <- transl_expr e;
+   do tel <- transl_exprlist cheat (*cenv*) el;
+   OK (T.Scall optid sig te tel)).
+FEnd transl_stmt.
+FEnd Cminorgen.
+
+Family Selection.
+Family S extends Cminor. FEnd S.
+Family T extends CminorSel. FEnd T.
+
+Inherit transl_expr.
+
+MetaData sel_exprlist.
+Fixpoint sel_exprlist (al: list self__Selection.S.expr) : res self__Selection.T.exprlist :=
+  match al with
+  | nil => OK self__Selection.T.Enil
+  | a :: bl =>
+      do ta <- (self__Selection.transl_expr a);
+      do tbl <- (sel_exprlist bl);
+      OK (self__Selection.T.Econs ta tbl)
+  end.
+FEnd sel_exprlist.
+
+FDefinition expr_is_addrof_ident : T.expr -> option ident := fun e => cheat.
+  (* extend Cminor ops with Oaddrsymbol *)
+  (*match e with
+  | Cminor.Econst (Cminor.Oaddrsymbol id ofs) =>
+      if Ptrofs.eq ofs Ptrofs.zero then Some id else None
+  | _ => None
+  end.*)
+
+MetaData call_kind.
+Inductive call_kind : Type :=
+  | Call_default
+  | Call_imm (id: ident)
+  | Call_builtin (ef: external_function).
+FEnd call_kind.
+
+FDefinition classify_call : T.expr -> call_kind := fun e =>
+  match expr_is_addrof_ident e with
+  | None => self__Selection.Call_default
+  | Some id => self__Selection.Call_imm id
+      (* simplify things *)                                        
+      (*match defmap!id with
+      | Some(Gfun(External ef)) => if ef_inline ef then Call_builtin ef else Call_imm id
+      | _ => Call_imm id
+      end*)
+  end.
+
+FRecursion transl_stmt.
+Case Scall optid sg fn args :=
+  (do tfn <- transl_expr fn;
+  do targs <- sel_exprlist args;
+  OK (match classify_call tfn with
+  | self__Selection.Call_default => T.Scall optid sg (inl _ tfn) targs
+  | self__Selection.Call_imm id => T.Scall optid sg (inr _ id) targs
+  | self__Selection.Call_builtin ef => (* sel_builtin optid ef args*) cheat (* needs builtin *)
+      end)).
+Case Stailcall sg fn args := 
+  ( do targs <- (sel_exprlist args);
+    do tfn <- (transl_expr fn);
+    OK (match classify_call tfn with
+   | self__Selection.Call_imm id => T.Stailcall sg (inr _ id) targs
+   | _ => T.Stailcall sg (inl _ tfn) targs
+   end)).
+FEnd transl_stmt.
+
+FEnd Selection.
+
+Family RTL.
+FInductive instruction: Type :=
+| Icall: signature -> reg + ident -> list reg -> reg -> node -> instruction
+| Itailcall: signature -> reg + ident -> list reg -> instruction.
+
+
+FEnd RTL.
+
+Family RTLgen.
+Family S extends CminorSel. FEnd S.
+Family T extends RTL. FEnd T.
+
+Inherit alloc_regs.
+From NFPOP Require Import RTLmonad.
+
+FDefinition alloc_optreg : mapping -> option ident -> mon reg := fun map dest =>
+  match dest with
+  | Some id => find_var map id
+  | None => new_reg
+  end.
+
+FRecursion transl_stmt.
+Case Scall optid sig expr_ident cl :=
+ (fun map nd nexits ngoto nret rret =>
+    match expr_ident with
+     | inl b => 
+        do rf <- alloc_reg b map;
+        do rargs <- alloc_regs cl map;
+        do r <- alloc_optreg map optid;
+        do n1 <- add_instr (T.Icall sig (inl _ rf) rargs r nd);
+        do n2 <- transl_exprlist cl map rargs n1;
+        transl_expr b map rf n2
+    | (inr id) =>
+        do rargs <- alloc_regs cl map;
+        do r <- alloc_optreg map optid;
+        do n1 <- add_instr (T.Icall sig (inr _ id) rargs r nd);
+        transl_exprlist cl map rargs n1
+     end).
+Case Stailcall sig expr_ident cl :=
+(fun map nd nexits ngoto nret rret =>
+     match expr_ident with 
+     | inl b =>
+         do rf <- alloc_reg b map;
+         do rargs <- alloc_regs cl map;
+         do n1 <- add_instr (T.Itailcall sig (inl _ rf) rargs);
+         do n2 <- transl_exprlist cl map rargs n1;
+         transl_expr b map rf n2
+     | (inr id) =>
+         do rargs <- alloc_regs cl map;
+         do n1 <- add_instr (T.Itailcall sig (inr _ id) rargs);
+         transl_exprlist cl map rargs n1
+     end).         
+FEnd transl_stmt.
+
+FRecursion reserve_labels.
+Case _ := (fun lm => ret lm).
+FEnd reserve_labels.
+
+FEnd RTLgen.
+
+Family LTL.
+FInductive instruction: Type :=
+| Lcall : signature -> mreg + ident -> instruction
+| Ltailcall : signature -> mreg + ident -> instruction. 
+
+FRecursion successors_instr.
+Case _ := (fun rest => rest).
+FEnd successors_instr.
+FEnd LTL.
+
+Family Lfam.
+FInductive instruction: Type :=
+| Lcall: signature -> mreg + ident -> instruction
+| Ltailcall: signature -> mreg + ident -> instruction.
+FEnd Lfam.
+
+Family Linear extends Lfam. FEnd Linear.
+Family Mach extends Lfam. FEnd Mach.
+
+Family Linearize.
+Family S extends LTL. FEnd S.
+Family T extends Linear. FEnd T.
+
+FRecursion starts_with_label.
+Case _ := (fun lbl => false).
+FEnd starts_with_label.
+
+FRecursion translate_instr.
+Case Lcall sig ros := 
+  (fun f k => T.Lcall sig ros :: f k).
+Case Ltailcall sig ros := 
+ (fun f k => T.Ltailcall sig ros :: k).
+FEnd translate_instr.
+
+FEnd Linearize.
+
+Family Stacking.
+Family S extends Linear. FEnd S.
+Family T extends Mach. FEnd T.
+
+FRecursion record_regs_of_instr.
+Case _ := cheat. (*todo!*)
+FEnd record_regs_of_instr.
+
+FRecursion slots_of_instr.
+Case _ := nil.
+FEnd slots_of_instr.
+
+FRecursion outgoing_space.
+Case _ := 0.
+FEnd outgoing_space.
+
+FRecursion transl_instr.
+Case Lcall sig ros :=
+ (fun fe k => T.Lcall sig ros :: k).
+Case Ltailcall sig ros :=
+  (fun fe k => restore_callee_save fe (T.Ltailcall sig ros :: k)).
+FEnd transl_instr.
+
+FEnd Stacking.
+
+Family Asmgen.
+Family S extends Mach. FEnd S.
+From NFPOP Require Import Errors.
+Open Scope error_monad_scope.
+
+FRecursion transl_instr.
+Case Lcall sig reg_or_ident := 
+  (fun f ep k =>
+     match reg_or_ident with
+     | (inl r) =>
+         do r1 <- ireg_of r;
+         OK (Asm.Pjal_r r1 sig :: k)
+     | (inr symb) =>
+         OK (Asm.Pjal_s symb sig :: k)
+     end).
+Case Ltailcall sig reg_or_ident := 
+  (fun f ep k =>
+     match reg_or_ident with 
+     | (inl r) =>
+         do r1 <- ireg_of r;
+         OK (make_epilogue f (Asm.Pj_r r1 sig :: k))
+     | (inr symb) => OK (make_epilogue f (Asm.Pj_s symb sig :: k))           
+     end).    
+FEnd transl_instr.
+
+FRecursion it1_is_parent.
+Case _ := (fun before => false).
+FEnd it1_is_parent.
+
+FEnd Asmgen.
+
 FEnd Comp_Call.
 
 (* small extension *)

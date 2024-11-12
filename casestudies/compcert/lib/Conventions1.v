@@ -434,5 +434,5 @@ Qed.*)
 
 (** No normalization needed. *)
 
-(* Definition return_value_needs_normalization (t: xtype) := false.
-Definition parameter_needs_normalization (t: xtype) := false.*)
+Definition return_value_needs_normalization (t: rettype) := false.
+Definition parameter_needs_normalization (t: rettype) := false.
