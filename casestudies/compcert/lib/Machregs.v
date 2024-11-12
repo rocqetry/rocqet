@@ -21,7 +21,7 @@ Require Import Decidableplus.
 Require Import Maps.
 Require Import AST.
 Require Import Integers.
-(* Require Import Op. *)
+Require Import Op.
 
 (** ** Machine registers *)
 
@@ -164,19 +164,19 @@ Definition register_by_name (s: string) : option mreg :=
 
 (** ** Destroyed registers, preferred registers *)
 
-(* Definition destroyed_by_op (op: operation): list mreg :=
+Definition destroyed_by_op (op: operation): list mreg :=
   match op with
   | Ointoffloat | Ointuoffloat | Ointofsingle | Ointuofsingle
   | Olongoffloat | Olonguoffloat | Olongofsingle | Olonguofsingle
       => F6 :: nil
   | _ => nil
-  end. *)
+  end.
 
-(* Definition destroyed_by_load (chunk: memory_chunk) (addr: addressing): list mreg := nil. *)
+Definition destroyed_by_load (chunk: memory_chunk) (addr: addressing): list mreg := nil. 
 
-(* Definition destroyed_by_store (chunk: memory_chunk) (addr: addressing): list mreg := nil. *)
+Definition destroyed_by_store (chunk: memory_chunk) (addr: addressing): list mreg := nil.
 
-(* Definition destroyed_by_cond (cond: condition): list mreg := nil. *)
+Definition destroyed_by_cond (cond: condition): list mreg := nil.
 
 Definition destroyed_by_jumptable: list mreg := R5 :: nil.
 

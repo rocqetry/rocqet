@@ -50,6 +50,9 @@
    lib/Bounds
    lib/Separation
    lib/Stacklayout
+   lib/Switch
+   lib/Op
+   lib/BoolEqual
   ))
 
 
