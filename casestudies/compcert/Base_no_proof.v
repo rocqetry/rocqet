@@ -22,6 +22,7 @@ Require Import Mergesort.
 Require Import Ordered.
 Require Import Coq.ZArith.ZArith.
 From NFPOP Require Import Prelude.
+From NFPOP Require Import Op.
 
 Local Open Scope string_scope.
 Local Open Scope list_scope.
@@ -54,6 +55,7 @@ FInductive instruction : Type :=
 | Pcfi_rel_offset : int -> instruction (**r .cfi_rel_offset debug directive *)
 | Pallocframe : Z -> ptrofs -> instruction (**r allocate new stack frame *)
 | Pfreeframe  : Z -> ptrofs -> instruction (**r deallocate stack frame and restore previous frame *)
+| Ploadsymbol : ireg -> ident -> ptrofs -> instruction (**r load the address of a symbol *)                                   
 | Pnop : instruction. (**r nop instruction *)
                        
 FDefinition code := list instruction.
@@ -133,13 +135,6 @@ FInductive instruction : Type :=
 (** 64-bit integer register-register instructions *)
 | Paddl  : ireg -> ireg0 -> ireg0 -> instruction (**r integer addition *)
 | Psubl  : ireg -> ireg0 -> ireg0 -> instruction (**r integer subtraction *)
-| Pmull  : ireg -> ireg0 -> ireg0 -> instruction (**r integer multiply low *)
-| Pmulhl : ireg -> ireg0 -> ireg0 -> instruction (**r integer multiply high signed *)
-| Pmulhul: ireg -> ireg0 -> ireg0 -> instruction (**r integer multiply high unsigned *)
-| Pdivl  : ireg -> ireg0 -> ireg0 -> instruction (**r integer division *)
-| Pdivul : ireg -> ireg0 -> ireg0 -> instruction (**r unsigned integer division *)
-| Preml  : ireg -> ireg0 -> ireg0 -> instruction (**r integer remainder *)
-| Premul : ireg -> ireg0 -> ireg0 -> instruction (**r unsigned integer remainder *)
 | Psltl  : ireg -> ireg0 -> ireg0 -> instruction (**r set-less-than *)
 | Psltul : ireg -> ireg0 -> ireg0 -> instruction (**r set-less-than unsigned *)
 | Pseql  : ireg -> ireg0 -> ireg0 -> instruction (**r [rd <- rs1 == rs2] (pseudo) *)
@@ -271,13 +266,6 @@ FEnd V.
 
 FEnd RV.
 
-Family Z extends RV.RV64I.
-
-FEnd Z.
-
-Check Z.Psw_a.
-
-
 Trait Base.
 
 
@@ -292,7 +280,9 @@ FInductive expr : Type :=
 | Esizeof : type -> type -> expr (* size of a type *)
 | Ealignof : type -> type -> expr (* natural alignment of a type *)        
 | Ecomma : expr -> expr -> type -> expr (* sequence expression r1, r2 *)                
-| Eparen : expr -> type -> type -> expr. 
+| Eparen : expr -> type -> type -> expr
+| Eunop  : Cop.unary_operation -> expr -> type -> expr
+| Ebinop : Cop.binary_operation -> expr -> expr -> type -> expr.
         
 FRecursion typeof about expr motive (fun (_ : expr) => type) by _rect.
 Case Eval v ty := ty.
@@ -305,6 +295,8 @@ Case Esizeof ty' ty := ty.
 Case Ealignof ty' ty := ty.          
 Case Ecomma r1 r2 ty := ty.
 Case Eparen e ty' ty := ty.
+Case Eunop op e ty := ty.
+Case Ebinop op e1 e2 ty := ty.
 FEnd typeof.
 
 FDefinition label := ident.     
@@ -355,7 +347,9 @@ FInductive expr : Type :=
 | Etempvar: ident -> type -> expr (* temporary variable *)          
 | Esizeof: type -> type -> expr (* size of a type *)
 | Ecast: expr -> type -> expr
-| Ealignof: type -> type -> expr. (* alignment of a type *)
+| Ealignof: type -> type -> expr (* alignment of a type *)
+| Eunop: Cop.unary_operation -> expr -> type -> expr (* unary operation *)
+| Ebinop: Cop.binary_operation -> expr -> expr -> type -> expr. (* binary operation *)
        
 FRecursion typeof about expr motive (fun (_ : expr) => type) by _rect. 
 Case Econst_int i ty := ty. 
@@ -366,6 +360,8 @@ Case Etempvar v ty := ty.
 Case Esizeof ty' ty := ty.
 Case Ealignof ty' ty := ty.
 Case Ecast e ty := ty.
+Case Eunop op e ty := ty.
+Case Ebinop op e0 e1 ty := ty.
 FEnd typeof.
        
 FDefinition label := ident.
@@ -474,6 +470,7 @@ Case Ecast b ty :=
 Case Etempvar id ty := None.
 Case Esizeof ty' ty := None.
 Case Ealignof ty' ty := None.
+Case _ := None.
 FEnd eval_simpl_expr.
 
 FDefinition makeif : T.expr -> T.stmt -> T.stmt -> T.stmt :=
@@ -581,6 +578,15 @@ Case Eseqand r1 r2 ty :=
 Case Esizeof ty' ty := (fun dst => ret (finish dst nil (T.Esizeof ty' ty))).
 Case Ealignof ty' ty := (fun dst => ret (finish dst nil (T.Ealignof ty' ty))).
 Case Eparen e tycast ty := (fun dst => error (msg "SimplExpr.transl_expr: paren")).
+Case Eunop op r1 ty :=
+  (fun dst =>
+    do (sl1, a1) <- transl_expr r1 self__SimplExpr.For_val;
+    ret (finish dst sl1 (T.Eunop op a1 ty))).
+Case Ebinop op r1 r2 ty :=
+  (fun dst =>
+     do (sl1, a1) <- transl_expr r1 self__SimplExpr.For_val;
+     do (sl2, a2) <- transl_expr r2 self__SimplExpr.For_val;
+     ret (finish dst (sl1 ++ sl2) (T.Ebinop op a1 a2 ty))).
 FEnd transl_expr.
 
 FDefinition transl_expression : S.expr -> mon (T.stmt * T.expr) := fun r =>
@@ -663,7 +669,7 @@ FEnd SimplExpr.
 Family Cfam.
 
 FInductive expr : Type :=
-| Evar : ident -> expr. (* reading a temporary variable *)            
+| Evar : ident -> expr. (* reading a temporary variable *)
 
 FDefinition label := ident.
 FInductive stmt : Type :=
@@ -698,12 +704,92 @@ FInductive constant : Type :=
 | Ofloatconst: float -> constant (* double-precision floating-point constant *)
 | Osingleconst: float32 -> constant (* single-precision floating-point constant *)
 | Olongconst: int64 -> constant.
+
+Inductive unary_operation : Type :=
+  | Ocast8unsigned: unary_operation(* 8-bit zero extension *)
+  | Ocast8signed: unary_operation(* 8-bit sign extension *)
+  | Ocast16unsigned: unary_operation(* 16-bit zero extension *)
+  | Ocast16signed: unary_operation(* 16-bit sign extension *)
+  | Onegint: unary_operation(* integer opposite *)
+  | Onotint: unary_operation(* bitwise complement *)
+  | Onegf: unary_operation(* float64 opposite *)
+  | Oabsf: unary_operation(* float64 absolute value *)
+  | Onegfs: unary_operation(* float32 opposite *)
+  | Oabsfs: unary_operation(* float32 absolute value *)
+  | Osingleoffloat: unary_operation(* float truncation to float32 *)
+  | Ofloatofsingle: unary_operation(* float extension to float64 *)
+  | Ointoffloat: unary_operation(* signed integer to float64 *)
+  | Ointuoffloat: unary_operation(* unsigned integer to float64 *)
+  | Ofloatofint: unary_operation(* float64 to signed integer *)
+  | Ofloatofintu: unary_operation(* float64 to unsigned integer *)
+  | Ointofsingle: unary_operation(* signed integer to float32 *)
+  | Ointuofsingle: unary_operation(* unsigned integer to float32 *)
+  | Osingleofint: unary_operation(* float32 to signed integer *)
+  | Osingleofintu: unary_operation(* float32 to unsigned integer *)
+  | Onegl: unary_operation(* long integer opposite *)
+  | Onotl: unary_operation(* long bitwise complement *)
+  | Ointoflong: unary_operation(* long to int *)
+  | Olongofint: unary_operation(* signed int to long *)
+  | Olongofintu: unary_operation(* unsigned int to long *)
+  | Olongoffloat: unary_operation(* float64 to signed long *)
+  | Olonguoffloat: unary_operation(* float64 to unsigned long *)
+  | Ofloatoflong: unary_operation(* signed long to float64 *)
+  | Ofloatoflongu: unary_operation(* unsigned long to float64 *)
+  | Olongofsingle: unary_operation(* float32 to signed long *)
+  | Olonguofsingle: unary_operation(* float32 to unsigned long *)
+  | Osingleoflong: unary_operation(* signed long to float32 *)
+  | Osingleoflongu: unary_operation. (* unsigned long to float32 *)
+
+Inductive binary_operation : Type :=
+  | Oadd: binary_operation(* integer addition *)
+  | Osub: binary_operation(* integer subtraction *)
+  | Omul: binary_operation(* integer multiplication *)
+  | Odiv: binary_operation(* integer signed division *)
+  | Odivu: binary_operation(* integer unsigned division *)
+  | Omod: binary_operation(* integer signed modulus *)
+  | Omodu: binary_operation(* integer unsigned modulus *)
+  | Oand: binary_operation(* integer bitwise ``and'' *)
+  | Oor: binary_operation(* integer bitwise ``or'' *)
+  | Oxor: binary_operation(* integer bitwise ``xor'' *)
+  | Oshl: binary_operation(* integer left shift *)
+  | Oshr: binary_operation(* integer right signed shift *)
+  | Oshru: binary_operation(* integer right unsigned shift *)
+  | Oaddf: binary_operation(* float64 addition *)
+  | Osubf: binary_operation(* float64 subtraction *)
+  | Omulf: binary_operation(* float64 multiplication *)
+  | Odivf: binary_operation(* float64 division *)
+  | Oaddfs: binary_operation(* float32 addition *)
+  | Osubfs: binary_operation(* float32 subtraction *)
+  | Omulfs: binary_operation(* float32 multiplication *)
+  | Odivfs: binary_operation(* float32 division *)
+  | Oaddl: binary_operation(* long addition *)
+  | Osubl: binary_operation(* long subtraction *)
+  | Omull: binary_operation(* long multiplication *)
+  | Odivl: binary_operation(* long signed division *)
+  | Odivlu: binary_operation(* long unsigned division *)
+  | Omodl: binary_operation(* long signed modulus *)
+  | Omodlu: binary_operation(* long unsigned modulus *)
+  | Oandl: binary_operation(* long bitwise ``and'' *)
+  | Oorl: binary_operation(* long bitwise ``or'' *)
+  | Oxorl: binary_operation(* long bitwise ``xor'' *)
+  | Oshll: binary_operation(* long left shift *)
+  | Oshrl: binary_operation(* long right signed shift *)
+  | Oshrlu: binary_operation(* long right unsigned shift *)
+  | Ocmp: comparison -> binary_operation(* integer signed comparison *)
+  | Ocmpu: comparison -> binary_operation(* integer unsigned comparison *)
+  | Ocmpf: comparison -> binary_operation(* float64 comparison *)
+  | Ocmpfs: comparison -> binary_operation(* float32 comparison *)
+  | Ocmpl: comparison -> binary_operation(* long signed comparison *)
+  | Ocmplu: comparison -> binary_operation. (* long unsigned comparison *)
 FEnd Constant.
 
 Family Csharpminor extends Cfam.
 
-FInductive expr : Type := Econst : Constant.constant -> expr. (* constants *)
-       
+FInductive expr : Type :=
+| Econst : Constant.constant -> expr (* constants *)
+| Eunop : unary_operation -> expr -> expr(* unary operation *)
+| Ebinop : binary_operation -> expr -> expr -> expr. (* binary operation *)                                    
+                                                                              
 FInductive stmt : Type := Sifthenelse: expr -> stmt -> stmt -> stmt.
        
 (* function *)
@@ -737,6 +823,63 @@ FDefinition make_singleconst := fun (f: float32) => T.Econst (Constant.Osingleco
 FDefinition make_ptrofsconst := fun (n: Z) =>
   if Archi.ptr64 then make_longconst (Int64.repr n) else make_intconst (Int.repr n).            
 
+FDefinition make_singleoffloat := fun (e: T.expr) => T.Eunop Osingleoffloat e.
+FDefinition make_floatofsingle := fun (e: T.expr) => T.Eunop Ofloatofsingle e.
+
+FDefinition make_floatofint := fun (e: T.expr) (sg: signedness) =>
+  match sg with
+  | Signed => T.Eunop Ofloatofint e
+  | Unsigned => T.Eunop Ofloatofintu e
+  end.
+
+FDefinition make_singleofint := fun (e: T.expr) (sg: signedness) =>
+  match sg with
+  | Signed => T.Eunop Osingleofint e
+  | Unsigned => T.Eunop Osingleofintu e
+  end.
+
+FDefinition make_intoffloat := fun (e: T.expr) (sg: signedness) =>
+  match sg with
+  | Signed => T.Eunop Ointoffloat e
+  | Unsigned => T.Eunop Ointuoffloat e
+  end.
+
+FDefinition make_intofsingle := fun (e: T.expr) (sg: signedness) =>
+  match sg with
+  | Signed => T.Eunop Ointofsingle e
+  | Unsigned => T.Eunop Ointuofsingle e
+  end.
+
+FDefinition make_longofint := fun (e: T.expr) (sg: signedness) =>
+  match sg with
+  | Signed => T.Eunop Olongofint e
+  | Unsigned => T.Eunop Olongofintu e
+  end.
+
+FDefinition make_floatoflong := fun (e: T.expr) (sg: signedness) =>
+  match sg with
+  | Signed => T.Eunop Ofloatoflong e
+  | Unsigned => T.Eunop Ofloatoflongu e
+  end.
+
+FDefinition make_singleoflong := fun (e: T.expr) (sg: signedness) =>
+  match sg with
+  | Signed => T.Eunop Osingleoflong e
+  | Unsigned => T.Eunop Osingleoflongu e
+  end.
+
+FDefinition make_longoffloat := fun (e: T.expr) (sg: signedness) =>
+  match sg with
+  | Signed => T.Eunop Olongoffloat e
+  | Unsigned => T.Eunop Olonguoffloat e
+  end.
+
+FDefinition make_longofsingle := fun (e: T.expr) (sg: signedness) =>
+  match sg with
+  | Signed => T.Eunop Olongofsingle e
+  | Unsigned => T.Eunop Olonguofsingle e
+  end.
+
 FDefinition sizeof : composite_env -> type -> res Z := fun ce t => 
   if complete_type ce t
   then OK (Ctypes.sizeof ce t)
@@ -747,12 +890,285 @@ FDefinition alignof : composite_env -> type -> res Z := fun ce t =>
   then OK (Ctypes.alignof ce t)
   else Error (msg "incomplete type").
 
-(* TODO: they rely on binary/unary ops *)
-(* To be overriden in a compiler that supports operations *)
-FOpaque Definition make_cast : type -> type -> T.expr -> res T.expr :=
-  fun _ _ e => OK e.
-FOpaque Definition make_boolean : T.expr -> type -> T.expr :=
-  fun e _ => e.
+FDefinition make_cmpu_ne_zero_helper := fun (op: binary_operation) (e: T.expr) =>
+  match op with                                           
+  | Ocmp c => e
+  | Ocmpu c => e
+  | Ocmpf c => e
+  | Ocmpfs c => e
+  | Ocmpl c => e
+  | Ocmplu c => e
+  | _ => T.Ebinop (Ocmpu Cne) e (make_intconst Int.zero)
+  end.                  
+
+FRecursion make_cmpu_ne_zero about T.expr motive (fun (_ : T.expr) => T.expr) by _rect.
+Case Ebinop op e1 e2 := (make_cmpu_ne_zero_helper op (T.Ebinop op e1 e2)).
+Case Evar v := (T.Ebinop (Ocmpu Cne) (T.Evar v) (make_intconst Int.zero)).
+Case Eunop op e := (T.Ebinop (Ocmpu Cne) (T.Eunop op e) (make_intconst Int.zero)).
+Case Econst c := (T.Ebinop (Ocmpu Cne) (T.Econst c) (make_intconst Int.zero)).
+FEnd make_cmpu_ne_zero.
+
+FDefinition make_cast_int := fun (e: T.expr) (sz: intsize) (si: signedness) =>
+  match sz, si with
+  | I8, Signed => T.Eunop Ocast8signed e
+  | I8, Unsigned => T.Eunop Ocast8unsigned e
+  | I16, Signed => T.Eunop Ocast16signed e
+  | I16, Unsigned => T.Eunop Ocast16unsigned e
+  | I32, _ => e
+  | IBool, _ => make_cmpu_ne_zero e
+  end.
+
+FDefinition make_cast := fun (from to: type) (e: T.expr) =>
+  match classify_cast from to with
+  | cast_case_pointer => OK e
+  | cast_case_i2i sz2 si2 => OK (make_cast_int e sz2 si2)
+  | cast_case_f2f => OK e
+  | cast_case_s2s => OK e
+  | cast_case_f2s => OK (make_singleoffloat e)
+  | cast_case_s2f => OK (make_floatofsingle e)
+  | cast_case_i2f si1 => OK (make_floatofint e si1)
+  | cast_case_i2s si1 => OK (make_singleofint e si1)
+  | cast_case_f2i sz2 si2 => OK (make_cast_int (make_intoffloat e si2) sz2 si2)
+  | cast_case_s2i sz2 si2 => OK (make_cast_int (make_intofsingle e si2) sz2 si2)
+  | cast_case_l2l => OK e
+  | cast_case_i2l si1 => OK (make_longofint e si1)
+  | cast_case_l2i sz2 si2 => OK (make_cast_int (T.Eunop Ointoflong e) sz2 si2)
+  | cast_case_l2f si1 => OK (make_floatoflong e si1)
+  | cast_case_l2s si1 => OK (make_singleoflong e si1)
+  | cast_case_f2l si2 => OK (make_longoffloat e si2)
+  | cast_case_s2l si2 => OK (make_longofsingle e si2)
+  | cast_case_i2bool => OK (make_cmpu_ne_zero e)
+  | cast_case_f2bool => OK (T.Ebinop (Ocmpf Cne) e (make_floatconst Float.zero))
+  | cast_case_s2bool => OK (T.Ebinop (Ocmpfs Cne) e (make_singleconst Float32.zero))
+  | cast_case_l2bool => OK (T.Ebinop (Ocmplu Cne) e (make_longconst Int64.zero))
+  | cast_case_struct id1 id2 => OK e
+  | cast_case_union id1 id2 => OK e
+  | cast_case_void => OK e
+  | cast_case_default => Error (msg "Cshmgen.make_cast")
+  end.
+
+FDefinition make_boolean := fun (e: T.expr) (ty: type) =>
+  match classify_bool ty with
+  | bool_case_i => make_cmpu_ne_zero e
+  | bool_case_f => T.Ebinop (Ocmpf Cne) e (make_floatconst Float.zero)
+  | bool_case_s => T.Ebinop (Ocmpfs Cne) e (make_singleconst Float32.zero)
+  | bool_case_l => T.Ebinop (Ocmplu Cne) e (make_longconst Int64.zero)
+  | bool_default => e (* should not happen *)
+  end.
+
+FDefinition make_notbool := fun (e: T.expr) (ty: type) =>
+  match classify_bool ty with
+  | bool_case_i => OK (T.Ebinop (Ocmpu Ceq) e (make_intconst Int.zero))
+  | bool_case_f => OK (T.Ebinop (Ocmpf Ceq) e (make_floatconst Float.zero))
+  | bool_case_s => OK (T.Ebinop (Ocmpfs Ceq) e (make_singleconst Float32.zero))
+  | bool_case_l => OK (T.Ebinop (Ocmplu Ceq) e (make_longconst Int64.zero))
+  | bool_default => Error (msg "Cshmgen.make_notbool")
+  end.
+
+FDefinition make_neg := fun (e: T.expr) (ty: type) =>
+  match classify_neg ty with
+  | neg_case_i _ => OK (T.Eunop Onegint e)
+  | neg_case_f => OK (T.Eunop Onegf e)
+  | neg_case_s => OK (T.Eunop Onegfs e)
+  | neg_case_l _ => OK (T.Eunop Onegl e)
+  | neg_default => Error (msg "Cshmgen.make_neg")
+  end.
+
+FDefinition make_absfloat := fun (e: T.expr) (ty: type) =>
+  match classify_neg ty with
+  | neg_case_i sg => OK (T.Eunop Oabsf (make_floatofint e sg))
+  | neg_case_f => OK (T.Eunop Oabsf e)
+  | neg_case_s => OK (T.Eunop Oabsf (make_floatofsingle e))
+  | neg_case_l sg => OK (T.Eunop Oabsf (make_floatoflong e sg))
+  | neg_default => Error (msg "Cshmgen.make_absfloat")
+  end.
+
+FDefinition make_notint := fun (e: T.expr) (ty: type) =>
+  match classify_notint ty with
+  | notint_case_i _ => OK (T.Eunop Onotint e)
+  | notint_case_l _ => OK (T.Eunop Onotl e)
+  | notint_default => Error (msg "Cshmgen.make_notint")
+  end.
+
+FDefinition transl_unop := fun (op: Cop.unary_operation) (a: T.expr) (ta: type) =>
+  match op with
+  | Cop.Onotbool => make_notbool a ta
+  | Cop.Onotint => make_notint a ta
+  | Cop.Oneg => make_neg a ta
+  | Cop.Oabsfloat => make_absfloat a ta
+  end.
+
+FDefinition make_binarith := fun (iop iopu fop sop lop lopu: binary_operation)
+                         (e1: T.expr) (ty1: type) (e2: T.expr) (ty2: type) =>
+  let c := classify_binarith ty1 ty2 in
+  let ty := binarith_type c in
+  do e1' <- make_cast ty1 ty e1;
+  do e2' <- make_cast ty2 ty e2;
+  match c with
+  | bin_case_i Signed => OK (T.Ebinop iop e1' e2')
+  | bin_case_i Unsigned => OK (T.Ebinop iopu e1' e2')
+  | bin_case_f => OK (T.Ebinop fop e1' e2')
+  | bin_case_s => OK (T.Ebinop sop e1' e2')
+  | bin_case_l Signed => OK (T.Ebinop lop e1' e2')
+  | bin_case_l Unsigned => OK (T.Ebinop lopu e1' e2')
+  | bin_default => Error (msg "Cshmgen.make_binarith")
+  end.
+
+FDefinition make_add_ptr_int := fun (ce: composite_env) (ty: type) (si: signedness) (e1 e2: T.expr) =>
+  do sz <- sizeof ce ty;
+  if Archi.ptr64 then
+    let n := make_longconst (Int64.repr sz) in
+    OK (T.Ebinop Oaddl e1 (T.Ebinop Omull n (make_longofint e2 si)))
+  else
+    let n := make_intconst (Int.repr sz) in
+    OK (T.Ebinop Oadd e1 (T.Ebinop Omul n e2)).
+
+FDefinition make_add_ptr_long := fun (ce: composite_env) (ty: type) (e1 e2: T.expr) =>
+  do sz <- sizeof ce ty;
+  if Archi.ptr64 then
+    let n := make_longconst (Int64.repr sz) in
+    OK (T.Ebinop Oaddl e1 (T.Ebinop Omull n e2))
+  else
+    let n := make_intconst (Int.repr sz) in
+    OK (T.Ebinop Oadd e1 (T.Ebinop Omul n (T.Eunop Ointoflong e2))).
+
+FDefinition make_add := fun (ce: composite_env) (e1: T.expr) (ty1: type) (e2: T.expr) (ty2: type) =>
+  match classify_add ty1 ty2 with
+  | add_case_pi ty si => make_add_ptr_int ce ty si e1 e2
+  | add_case_pl ty => make_add_ptr_long ce ty e1 e2
+  | add_case_ip si ty => make_add_ptr_int ce ty si e2 e1
+  | add_case_lp ty => make_add_ptr_long ce ty e2 e1
+  | add_default => make_binarith Oadd Oadd Oaddf Oaddfs Oaddl Oaddl e1 ty1 e2 ty2
+  end.
+
+FDefinition make_sub := fun (ce: composite_env) (e1: T.expr) (ty1: type) (e2: T.expr) (ty2: type) =>
+  match classify_sub ty1 ty2 with
+  | sub_case_pi ty si =>
+      do sz <- sizeof ce ty;
+      if Archi.ptr64 then
+        let n := make_longconst (Int64.repr sz) in
+        OK (T.Ebinop Osubl e1 (T.Ebinop Omull n (make_longofint e2 si)))
+      else
+        let n := make_intconst (Int.repr sz) in
+        OK (T.Ebinop Osub e1 (T.Ebinop Omul n e2))
+  | sub_case_pp ty =>
+      do sz <- sizeof ce ty;
+      if Archi.ptr64 then
+        let n := make_longconst (Int64.repr sz) in
+        OK (T.Ebinop Odivl (T.Ebinop Osubl e1 e2) n)
+      else
+        let n := make_intconst (Int.repr sz) in
+        OK (T.Ebinop Odiv (T.Ebinop Osub e1 e2) n)
+  | sub_case_pl ty =>
+      do sz <- sizeof ce ty;
+      if Archi.ptr64 then
+        let n := make_longconst (Int64.repr sz) in
+        OK (T.Ebinop Osubl e1 (T.Ebinop Omull n e2))
+      else
+        let n := make_intconst (Int.repr sz) in
+        OK (T.Ebinop Osub e1 (T.Ebinop Omul n (T.Eunop Ointoflong e2)))
+  | sub_default =>
+      make_binarith Osub Osub Osubf Osubfs Osubl Osubl e1 ty1 e2 ty2
+  end.
+
+FDefinition make_mul := fun (e1: T.expr) (ty1: type) (e2: T.expr) (ty2: type) =>
+  make_binarith Omul Omul Omulf Omulfs Omull Omull e1 ty1 e2 ty2.
+
+FDefinition make_div := fun (e1: T.expr) (ty1: type) (e2: T.expr) (ty2: type) =>
+  make_binarith Odiv Odivu Odivf Odivfs Odivl Odivlu e1 ty1 e2 ty2.
+
+FDefinition make_binarith_int :=
+  fun (iop iopu lop lopu: binary_operation)
+      (e1: T.expr) (ty1: type) (e2: T.expr) (ty2: type) =>
+  let c := classify_binarith ty1 ty2 in
+  let ty := binarith_type c in
+  do e1' <- make_cast ty1 ty e1;
+  do e2' <- make_cast ty2 ty e2;
+  match c with
+  | bin_case_i Signed => OK (T.Ebinop iop e1' e2')
+  | bin_case_i Unsigned => OK (T.Ebinop iopu e1' e2')
+  | bin_case_l Signed => OK (T.Ebinop lop e1' e2')
+  | bin_case_l Unsigned => OK (T.Ebinop lopu e1' e2')
+  | bin_case_f | bin_case_s | bin_default => Error (msg "Cshmgen.make_binarith_int")
+  end.
+
+FDefinition make_mod := fun (e1: T.expr) (ty1: type) (e2: T.expr) (ty2: type) =>
+  make_binarith_int Omod Omodu Omodl Omodlu e1 ty1 e2 ty2.
+
+FDefinition make_and := fun (e1: T.expr) (ty1: type) (e2: T.expr) (ty2: type) =>
+  make_binarith_int Oand Oand Oandl Oandl e1 ty1 e2 ty2.
+
+FDefinition make_or := fun (e1: T.expr) (ty1: type) (e2: T.expr) (ty2: type) =>
+  make_binarith_int Oor Oor Oorl Oorl e1 ty1 e2 ty2.
+
+FDefinition make_xor := fun (e1: T.expr) (ty1: type) (e2: T.expr) (ty2: type) =>
+  make_binarith_int Oxor Oxor Oxorl Oxorl e1 ty1 e2 ty2.
+
+FDefinition make_shl := fun (e1: T.expr) (ty1: type) (e2: T.expr) (ty2: type) =>
+  match classify_shift ty1 ty2 with
+  | shift_case_ii _ => OK (T.Ebinop Oshl e1 e2)
+  | shift_case_li _ => OK (T.Ebinop Oshll e1 e2)
+  | shift_case_il _ => OK (T.Ebinop Oshl e1 (T.Eunop Ointoflong e2))
+  | shift_case_ll _ => OK (T.Ebinop Oshll e1 (T.Eunop Ointoflong e2))
+  | shift_default => Error (msg "Cshmgen.make_shl")
+  end.
+
+FDefinition make_shr := fun (e1: T.expr) (ty1: type) (e2: T.expr) (ty2: type) =>
+  match classify_shift ty1 ty2 with
+  | shift_case_ii Signed => OK (T.Ebinop Oshr e1 e2)
+  | shift_case_ii Unsigned => OK (T.Ebinop Oshru e1 e2)
+  | shift_case_li Signed => OK (T.Ebinop Oshrl e1 e2)
+  | shift_case_li Unsigned => OK (T.Ebinop Oshrlu e1 e2)
+  | shift_case_il Signed => OK (T.Ebinop Oshr e1 (T.Eunop Ointoflong e2))
+  | shift_case_il Unsigned => OK (T.Ebinop Oshru e1 (T.Eunop Ointoflong e2))
+  | shift_case_ll Signed => OK (T.Ebinop Oshrl e1 (T.Eunop Ointoflong e2))
+  | shift_case_ll Unsigned => OK (T.Ebinop Oshrlu e1 (T.Eunop Ointoflong e2))
+  | shift_default => Error (msg "Cshmgen.make_shr")
+  end.
+
+FDefinition make_cmp_ptr := fun (c: comparison) (e1 e2: T.expr) =>
+  T.Ebinop (if Archi.ptr64 then Ocmplu c else Ocmpu c) e1 e2.
+
+FDefinition make_cmp := fun (c: comparison) (e1: T.expr) (ty1: type) (e2: T.expr) (ty2: type) =>
+  match classify_cmp ty1 ty2 with
+  | cmp_case_pp => OK (make_cmp_ptr c e1 e2)
+  | cmp_case_pi si =>
+      OK (make_cmp_ptr c e1 (if Archi.ptr64 then make_longofint e2 si else e2))
+  | cmp_case_ip si =>
+      OK (make_cmp_ptr c (if Archi.ptr64 then make_longofint e1 si else e1) e2)
+  | cmp_case_pl =>
+      OK (make_cmp_ptr c e1 (if Archi.ptr64 then e2 else T.Eunop Ointoflong e2))
+  | cmp_case_lp =>
+      OK (make_cmp_ptr c (if Archi.ptr64 then e1 else T.Eunop Ointoflong e1) e2)
+  | cmp_default =>
+      make_binarith
+        (Ocmp c) (Ocmpu c) (Ocmpf c) (Ocmpfs c) (Ocmpl c) (Ocmplu c)
+        e1 ty1 e2 ty2
+  end.
+
+FDefinition transl_binop
+  := fun (ce: composite_env)
+         (op: Cop.binary_operation)
+         (a: T.expr) (ta: type)
+         (b: T.expr) (tb: type) =>
+  match op with
+  | Cop.Oadd => make_add ce a ta b tb
+  | Cop.Osub => make_sub ce a ta b tb
+  | Cop.Omul => make_mul a ta b tb
+  | Cop.Odiv => make_div a ta b tb
+  | Cop.Omod => make_mod a ta b tb
+  | Cop.Oand => make_and a ta b tb
+  | Cop.Oor => make_or a ta b tb
+  | Cop.Oxor => make_xor a ta b tb
+  | Cop.Oshl => make_shl a ta b tb
+  | Cop.Oshr => make_shr a ta b tb
+  | Cop.Oeq => make_cmp Ceq a ta b tb
+  | Cop.One => make_cmp Cne a ta b tb
+  | Cop.Olt => make_cmp Clt a ta b tb
+  | Cop.Ogt => make_cmp Cgt a ta b tb
+  | Cop.Ole => make_cmp Cle a ta b tb
+  | Cop.Oge => make_cmp Cge a ta b tb
+  end.
 
 FRecursion transl_expr about S.expr motive (fun (_ : S.expr) => composite_env -> res T.expr) by _rect.
 Case Econst_int n ty := (fun ce => OK(make_intconst n)). 
@@ -763,6 +1179,15 @@ Case Etempvar id ty := (fun ce => OK(T.Evar id)).
 Case Esizeof ty' ty := (fun ce => do sz <- sizeof ce ty'; OK(make_ptrofsconst sz)).
 Case Ealignof ty' ty := (fun ce => do al <- alignof ce ty'; OK(make_ptrofsconst al)).
 Case Ecast b ty := (fun ce => do tb <- transl_expr b ce; make_cast (S.typeof b) ty tb).
+Case Eunop op b ty :=
+(fun ce =>
+   do tb <- transl_expr b ce;
+    transl_unop op tb (S.typeof b)).
+Case Ebinop op b c ty :=
+(fun ce =>
+   do tb <- transl_expr b ce;
+   do tc <- transl_expr c ce;
+   transl_binop ce op tb (S.typeof b) tc (S.typeof c)).
 FEnd transl_expr.
       
 FRecursion transl_stmt about S.stmt motive (fun (_ : S.stmt) => composite_env -> type -> nat -> nat -> res T.stmt) by _rect.
@@ -838,7 +1263,11 @@ FEnd Cshmgen.
 
 Family Cminor extends Cfam.
 
-FInductive expr : Type := Econst : Constant.constant -> expr.        
+FInductive expr : Type :=
+| Econst : Constant.constant -> expr
+| Eunop : unary_operation -> expr -> expr(* unary operation *)
+| Ebinop : binary_operation -> expr -> expr -> expr. (* binary operation *)
+
 FInductive stmt : Type := Sifthenelse: expr -> stmt -> stmt -> stmt.  
         
 MetaData fn.
@@ -859,7 +1288,7 @@ FOverride Definition function_sig := self__Cminor.fn_sig.
 
 FEnd Cminor.
 
-Family Op.
+(*Family Op.
 
 (* Operations *)
 FInductive condition : Type :=
@@ -955,23 +1384,23 @@ Case Omakelong :=
     | _ => None end).  
 FEnd eval_operation.
 
-FEnd Op.
+FEnd Op.*)
 
 (* RISC-V *)
-Family Asm extends RV.RV64I, RV.D.    
+Family Asm extends RV.RV64I, RV.M, RV.D.
 FEnd Asm.
 
 Family CminorSel extends Cfam.
 FInductive expr : Type :=
 | Econdition : condexpr -> expr -> expr -> expr
-| Eop : Op.operation -> exprlist -> expr
+| Eop : operation -> exprlist -> expr
 | Elet : expr -> expr -> expr
 | Eletvar : nat -> expr
 with exprlist : Type :=
 | Enil: exprlist
 | Econs: expr -> exprlist -> exprlist
 with condexpr : Type :=
-| CEcond : Op.condition -> exprlist -> condexpr
+| CEcond : condition -> exprlist -> condexpr
 | CEcondition : condexpr -> condexpr -> condexpr -> condexpr
 | CElet: expr -> condexpr -> condexpr.
        
@@ -1042,7 +1471,13 @@ Family T extends Cminor. FEnd T.
 FDefinition compilenv := PTree.t Z.
 
 FRecursion transl_expr.
-Case Econst c := cheat. (* (OK (T.Econst c)).*)
+Case Econst c := (OK (T.Econst c)).
+Case Eunop op e1 := 
+  (do te1 <- transl_expr e1; OK (T.Eunop op te1)).
+Case Ebinop op e1 e2 :=
+  (do te1 <- transl_expr e1;
+   do te2 <- transl_expr e2;
+   OK (T.Ebinop op te1 te2)).
 FEnd transl_expr.
     
 FRecursion transl_stmt. 
@@ -1100,7 +1535,7 @@ Family T extends CminorSel. FEnd T.
 Family SplitLong.
 
 FDefinition makelong : T.expr -> T.expr -> T.expr := fun h l => 
-  T.Eop Op.Omakelong (T.Econs h (T.Econs l T.Enil)).
+  T.Eop Op.Omakelong (T.Econs h  (T.Econs l T.Enil)). 
 
 FDefinition longconst : int64 -> T.expr := fun n =>
   makelong (T.Eop (Op.Ointconst (Int64.hiword n)) T.Enil)
@@ -1117,18 +1552,49 @@ Case Osingleconst f := (T.Eop (Op.Osingleconst f) T.Enil).
 Case Olongconst n := (longconst n).
 FEnd sel_constant.
 
+(*FRecursion addimm about T.expr motive (fun (_ : T.expr) => int -> T.expr) by _rect.
+Case Eop op args :=
+  (fun n =>
+     match op, args with
+     | Ointconst m, nil => T.Eop (Ointconst (Int.add n m)) nil
+     | Oaddrsymbol s m, nil   => T.Eop (Oaddrsymbol s (Ptrofs.add (Ptrofs.of_int n) m)) nil
+     | Oaddrstack m, nil      => T.Eop (Oaddrstack (Ptrofs.add (Ptrofs.of_int n) m)) nil
+     | Oaddimm m, t :: nil =>  T.Eop (Oaddimm(Int.add n m)) (t :: nil)                                 
+     | _, _ =>  T.Eop (Oaddimm n) ((T.Eop op args) :: nil)
+     end).
+Case Evar v := (fun n => T.Eop (Oaddimm n) (T.Evar v :: nil)).
+Case Econdition a b c := (fun n => T.Eop (Oaddimm n) (T.Econdition a b c :: nil)).
+Case Elet a b := (fun n => T.Eop (Oaddimm n) (T.Elet a b :: nil)).
+Case Eletvar v := (fun n => T.Eop (Oaddimm n) (T.Eletvar v :: nil)).
+FEnd addimm.*)
+
+(* selectop*)
+FDefinition sel_unop : unary_operation -> T.expr -> T.expr := fun op args => cheat.
+FDefinition sel_binop : binary_operation -> T.expr -> T.expr -> T.expr := fun arg1 arg2 => cheat.
+
 FRecursion transl_expr.
 Case Econst cst := (OK (sel_constant cst)).
+Case Eunop op arg :=
+  ( do targ <- transl_expr arg;
+    OK (sel_unop op targ)).
+Case Ebinop op arg1 arg2 :=
+  ( do targ1 <- transl_expr arg1;
+    do targ2 <- transl_expr arg2;
+    OK (sel_binop op targ1 targ2)).
 FEnd transl_expr.
-       
-FRecursion condexpr_of_expr_eop about
+
+(*FRecursion condexpr_of_expr_eop about
   Op.operation motive (fun (_ : Op.operation) => T.expr -> T.exprlist -> T.condexpr) by _rect.
 Case Ocmp c := (fun _ args => T.CEcond c args).
 Case _ := (fun e _ => T.CEcond (Op.Ccompuimm Cne Int.zero) (T.Econs e T.Enil)).
-FEnd condexpr_of_expr_eop.
+FEnd condexpr_of_expr_eop. *)
        
 FRecursion condexpr_of_expr about T.expr motive (fun (_ : T.expr) => T.condexpr) by _rect.
-Case Eop op args := (condexpr_of_expr_eop op (T.Eop op args) args).
+Case Eop op args :=
+  (match op with
+   | Op.Ocmp c =>  T.CEcond c args
+   | _ => T.CEcond (Op.Ccompuimm Cne Int.zero) (T.Econs (T.Eop op args) T.Enil)
+   end).
 Case Econdition a b c := (T.CEcondition a (condexpr_of_expr b) (condexpr_of_expr c)).
 Case Elet a b := (T.CElet a (condexpr_of_expr b)).
 Case Eletvar n := (T.CEcond (Op.Ccompuimm Cne Int.zero) (T.Econs (T.Eletvar n) T.Enil)).
@@ -1163,8 +1629,8 @@ From NFPOP Require Import Registers.
       
 FInductive instruction: Type :=
 | Inop: node -> instruction
-| Iop: Op.operation -> list reg -> reg -> node -> instruction          
-| Icond: Op.condition -> list reg -> node -> node -> instruction
+| Iop: operation -> list reg -> reg -> node -> instruction          
+| Icond: condition -> list reg -> node -> node -> instruction
 | Ireturn: option reg -> instruction.
 
 FDefinition code: Type := PTree.t instruction.
@@ -1504,7 +1970,16 @@ From NFPOP Require Import Machregs.
 From NFPOP Require Import Conventions1.
 From NFPOP Require Import Locations.
 (* Some Machreg functions will defined here *)
-Family M.
+(*Family M.
+
+FDefinition destroyed_by_op : Op.operation -> list mreg := fun op  =>
+  match op with
+  | Op.Ointoffloat | Ointuoffloat | Ointofsingle | Ointuofsingle
+  | Olongoffloat | Olonguoffloat | Olongofsingle | Olonguofsingle
+      => F6 :: nil
+  | _ => nil
+  end.
+
 FRecursion destroyed_by_op about Op.operation motive
   (fun (_ : Op.operation) => list mreg) by _rect.
 (*Case Omove := nil.
@@ -1518,7 +1993,7 @@ Case _ := nil.
 FEnd destroyed_by_op.
 
 FDefinition destroyed_by_cond : Op.condition -> list mreg := fun cond => nil. 
-FEnd M.
+FEnd M.*)
 
 
 Family LTL.
@@ -1861,7 +2336,7 @@ FDefinition offset_local := fun (fe: frame_env) (x: Z) => fe.(fe_ofs_local) + 4 
 FDefinition offset_arg := fun (x: Z) => fe_ofs_arg + 4 * x.
 
 FDefinition transl_op := fun (fe: frame_env) (op: Op.operation) =>
-    Op.shift_stack_operation op fe.(fe_stack_data).
+    Op.shift_stack_operation fe.(fe_stack_data) op.
 
 MetaData save_callee_save_rec.
 Fixpoint save_callee_save_rec (rl: list mreg) (ofs: Z) (k: self__Stacking.T.code) :=
@@ -1955,7 +2430,6 @@ FEnd Stacking.
 (* Mach -> Asm *)
 Family Asmgen.
 Family S extends Mach. FEnd S.
-Family T extends Asm. FEnd T.
 
 FDefinition ireg_of : mreg -> res ireg := fun r =>
   match preg_of r with IR mr => OK mr | _ => Error(msg "Asmgen.ireg_of") end.
@@ -1976,12 +2450,12 @@ FDefinition make_immed32 := fun (val: int) =>
   else self__Asmgen.Imm32_pair (Int.shru (Int.sub val lo) (Int.repr 12)) lo.
 
 FDefinition load_hilo32 := fun (r: ireg) (hi lo: int) k =>
-  if Int.eq lo Int.zero then T.Pluiw r hi :: k
-  else T.Pluiw r hi :: T.Paddiw r r lo :: k.
+  if Int.eq lo Int.zero then Asm.Pluiw r hi :: k
+  else Asm.Pluiw r hi :: Asm.Paddiw r r lo :: k.
 
-FDefinition loadimm32 := fun (r: ireg) (n: int) (k: T.code) =>
+FDefinition loadimm32 := fun (r: ireg) (n: int) (k: Asm.code) =>
   match make_immed32 n with
-  | self__Asmgen.Imm32_single imm => T.Paddiw r X0 imm :: k
+  | self__Asmgen.Imm32_single imm => Asm.Paddiw r X0 imm :: k
   | self__Asmgen.Imm32_pair hi lo => load_hilo32 r hi lo k
   end.
 
@@ -2001,71 +2475,71 @@ FDefinition make_immed64 := fun (val: int64) =>
   else self__Asmgen.Imm64_large val.
 
 FDefinition load_hilo64 := fun (r: ireg) (hi lo: int64) k =>
-  if Int64.eq lo Int64.zero then T.Pluil r hi :: k
-  else T.Pluil r hi :: T.Paddil r r lo :: k.
+  if Int64.eq lo Int64.zero then Asm.Pluil r hi :: k
+  else Asm.Pluil r hi :: Asm.Paddil r r lo :: k.
 
-
-FDefinition loadimm64 := fun (r: ireg) (n: int64) (k: T.code) =>
+FDefinition loadimm64 := fun (r: ireg) (n: int64) (k: Asm.code) =>
   match make_immed64 n with
-  | self__Asmgen.Imm64_single imm => T.Paddil r X0 imm :: k
+  | self__Asmgen.Imm64_single imm => Asm.Paddil r X0 imm :: k
   | self__Asmgen.Imm64_pair hi lo => load_hilo64 r hi lo k
-  | self__Asmgen.Imm64_large imm  => T.Ploadli r imm :: k
+  | self__Asmgen.Imm64_large imm  => Asm.Ploadli r imm :: k
   end.
 
 FDefinition opimm32 := 
-fun (op: ireg -> ireg0 -> ireg0 -> T.instruction)
-    (opimm: ireg -> ireg0 -> int -> T.instruction)
-    (rd rs: ireg) (n: int) (k: T.code) =>
+fun (op: ireg -> ireg0 -> ireg0 -> Asm.instruction)
+    (opimm: ireg -> ireg0 -> int -> Asm.instruction)
+    (rd rs: ireg) (n: int) (k: Asm.code) =>
   match make_immed32 n with
   | self__Asmgen.Imm32_single imm => opimm rd rs imm :: k
   | self__Asmgen.Imm32_pair hi lo => load_hilo32 X31 hi lo (op rd rs X31 :: k)
   end.
 
 FDefinition opimm64 := 
-  fun (op: ireg -> ireg0 -> ireg0 -> T.instruction)
-      (opimm: ireg -> ireg0 -> int64 -> T.instruction)
-      (rd rs: ireg) (n: int64) (k: T.code) =>
+  fun (op: ireg -> ireg0 -> ireg0 -> Asm.instruction)
+      (opimm: ireg -> ireg0 -> int64 -> Asm.instruction)
+      (rd rs: ireg) (n: int64) (k: Asm.code) =>
   match make_immed64 n with
   | self__Asmgen.Imm64_single imm => opimm rd rs imm :: k
   | self__Asmgen.Imm64_pair hi lo => load_hilo64 X31 hi lo (op rd rs X31 :: k)
-  | self__Asmgen.Imm64_large imm  => T.Ploadli X31 imm :: op rd rs X31 :: k
+  | self__Asmgen.Imm64_large imm  => Asm.Ploadli X31 imm :: op rd rs X31 :: k
   end.
 
-FDefinition addimm32 := opimm32 T.Paddw T.Paddiw.
-FDefinition xorimm32 := opimm32 T.Pxorw T.Pxoriw.
-FDefinition sltimm32 := opimm32 T.Psltw T.Psltiw.
-FDefinition addimm64 := opimm64 T.Paddl T.Paddil.
-FDefinition sltuimm32 := opimm32 T.Psltuw T.Psltiuw.
+FDefinition addimm32 := opimm32 Asm.Paddw Asm.Paddiw.
+FDefinition xorimm32 := opimm32 Asm.Pxorw Asm.Pxoriw.
+FDefinition sltimm32 := opimm32 Asm.Psltw Asm.Psltiw.
+FDefinition addimm64 := opimm64 Asm.Paddl Asm.Paddil.
+FDefinition sltuimm32 := opimm32 Asm.Psltuw Asm.Psltiuw.
+FDefinition xorimm64 := opimm64 Asm.Pxorl Asm.Pxoril.
 
-FDefinition addptrofs := fun (rd rs: ireg) (n: ptrofs) (k: T.code) =>
+FDefinition addptrofs := fun (rd rs: ireg) (n: ptrofs) (k: Asm.code) =>
   if Ptrofs.eq_dec n Ptrofs.zero then
-    T.Pmv rd rs :: k
+    Asm.Pmv rd rs :: k
   else
     if Archi.ptr64
     then addimm64 rd rs (Ptrofs.to_int64 n) k
     else addimm32 rd rs (Ptrofs.to_int n) k.
 
-FDefinition transl_cond_int32s := fun (cmp: comparison) (rd: ireg) (r1 r2: ireg0) (k: T.code) =>
+FDefinition transl_cond_int32s := fun (cmp: comparison) (rd: ireg) (r1 r2: ireg0) (k: Asm.code) =>
   match cmp with
-  | Ceq => T.Pseqw rd r1 r2 :: k
-  | Cne => T.Psnew rd r1 r2 :: k
-  | Clt => T.Psltw rd r1 r2 :: k
-  | Cle => T.Psltw rd r2 r1 :: T.Pxoriw rd rd Int.one :: k
-  | Cgt => T.Psltw rd r2 r1 :: k
-  | Cge => T.Psltw rd r1 r2 :: T.Pxoriw rd rd Int.one :: k
+  | Ceq => Asm.Pseqw rd r1 r2 :: k
+  | Cne => Asm.Psnew rd r1 r2 :: k
+  | Clt => Asm.Psltw rd r1 r2 :: k
+  | Cle => Asm.Psltw rd r2 r1 :: Asm.Pxoriw rd rd Int.one :: k
+  | Cgt => Asm.Psltw rd r2 r1 :: k
+  | Cge => Asm.Psltw rd r1 r2 :: Asm.Pxoriw rd rd Int.one :: k
   end.
 
-FDefinition transl_cond_int32u := fun (cmp: comparison) (rd: ireg) (r1 r2: ireg0) (k: T.code) =>
+FDefinition transl_cond_int32u := fun (cmp: comparison) (rd: ireg) (r1 r2: ireg0) (k: Asm.code) =>
   match cmp with
-  | Ceq => T.Pseqw rd r1 r2 :: k
-  | Cne => T.Psnew rd r1 r2 :: k
-  | Clt => T.Psltuw rd r1 r2 :: k
-  | Cle => T.Psltuw rd r2 r1 :: T.Pxoriw rd rd Int.one :: k
-  | Cgt => T.Psltuw rd r2 r1 :: k
-  | Cge => T.Psltuw rd r1 r2 :: T.Pxoriw rd rd Int.one :: k
+  | Ceq => Asm.Pseqw rd r1 r2 :: k
+  | Cne => Asm.Psnew rd r1 r2 :: k
+  | Clt => Asm.Psltuw rd r1 r2 :: k
+  | Cle => Asm.Psltuw rd r2 r1 :: Asm.Pxoriw rd rd Int.one :: k
+  | Cgt => Asm.Psltuw rd r2 r1 :: k
+  | Cge => Asm.Psltuw rd r1 r2 :: Asm.Pxoriw rd rd Int.one :: k
   end.
 
-FDefinition transl_condimm_int32s := fun (cmp: comparison) (rd: ireg) (r1: ireg) (n: int) (k: T.code) => 
+FDefinition transl_condimm_int32s := fun (cmp: comparison) (rd: ireg) (r1: ireg) (n: int) (k: Asm.code) => 
   if Int.eq n Int.zero then transl_cond_int32s cmp rd r1 X0 k else
   match cmp with
   | Ceq | Cne => xorimm32 rd r1 n (transl_cond_int32s cmp rd rd X0 k)
@@ -2076,14 +2550,121 @@ FDefinition transl_condimm_int32s := fun (cmp: comparison) (rd: ireg) (r1: ireg)
   | _   => loadimm32 X31 n (transl_cond_int32s cmp rd r1 X31 k)
   end.
 
-FDefinition transl_condimm_int32u := fun (cmp: comparison) (rd: ireg) (r1: ireg) (n: int) (k: T.code) =>
+FDefinition transl_condimm_int32u := fun (cmp: comparison) (rd: ireg) (r1: ireg) (n: int) (k: Asm.code) =>
   if Int.eq n Int.zero then transl_cond_int32u cmp rd r1 X0 k else
   match cmp with
   | Clt => sltuimm32 rd r1 n k
   | _   => loadimm32 X31 n (transl_cond_int32u cmp rd r1 X31 k)
   end.
 
-FRecursion transl_cond_op about Op.condition motive (fun (_ : Op.condition) => ireg -> list mreg -> T.code -> res T.code) by _rect.
+FDefinition transl_cond_int64s := fun (cmp: comparison) (rd: ireg) (r1 r2: ireg0) (k: Asm.code) =>
+  match cmp with
+  | Ceq => Asm.Pseql rd r1 r2 :: k
+  | Cne => Asm.Psnel rd r1 r2 :: k
+  | Clt => Asm.Psltl rd r1 r2 :: k
+  | Cle => Asm.Psltl rd r2 r1 :: Asm.Pxoriw rd rd Int.one :: k
+  | Cgt => Asm.Psltl rd r2 r1 :: k
+  | Cge => Asm.Psltl rd r1 r2 :: Asm.Pxoriw rd rd Int.one :: k
+  end.
+
+FDefinition transl_cond_int64u := fun (cmp: comparison) (rd: ireg) (r1 r2: ireg0) (k: Asm.code) =>
+  match cmp with
+  | Ceq => Asm.Pseql rd r1 r2 :: k
+  | Cne => Asm.Psnel rd r1 r2 :: k
+  | Clt => Asm.Psltul rd r1 r2 :: k
+  | Cle => Asm.Psltul rd r2 r1 :: Asm.Pxoriw rd rd Int.one :: k
+  | Cgt => Asm.Psltul rd r2 r1 :: k
+  | Cge => Asm.Psltul rd r1 r2 :: Asm.Pxoriw rd rd Int.one :: k
+  end.
+
+FDefinition transl_cond_float := fun (cmp: comparison) (rd: ireg) (fs1 fs2: freg) =>
+  match cmp with
+  | Ceq => (Asm.Pfeqd rd fs1 fs2, true)
+  | Cne => (Asm.Pfeqd rd fs1 fs2, false)
+  | Clt => (Asm.Pfltd rd fs1 fs2, true)
+  | Cle => (Asm.Pfled rd fs1 fs2, true)
+  | Cgt => (Asm.Pfltd rd fs2 fs1, true)
+  | Cge => (Asm.Pfled rd fs2 fs1, true)
+  end.
+  
+FDefinition transl_cond_single := fun (cmp: comparison) (rd: ireg) (fs1 fs2: freg) =>
+  match cmp with
+  | Ceq => (Asm.Pfeqs rd fs1 fs2, true)
+  | Cne => (Asm.Pfeqs rd fs1 fs2, false)
+  | Clt => (Asm.Pflts rd fs1 fs2, true)
+  | Cle => (Asm.Pfles rd fs1 fs2, true)
+  | Cgt => (Asm.Pflts rd fs2 fs1, true)
+  | Cge => (Asm.Pfles rd fs2 fs1, true)
+  end.
+
+FDefinition sltimm64 := opimm64 Asm.Psltl Asm.Psltil.
+FDefinition transl_condimm_int64s := fun (cmp: comparison) (rd: ireg) (r1: ireg) (n: int64) (k: Asm.code) =>
+  if Int64.eq n Int64.zero then transl_cond_int64s cmp rd r1 X0 k else
+  match cmp with
+  | Ceq | Cne => xorimm64 rd r1 n (transl_cond_int64s cmp rd rd X0 k)
+  | Clt => sltimm64 rd r1 n k
+  | Cle => if Int64.eq n (Int64.repr Int64.max_signed)
+           then loadimm32 rd Int.one k
+           else sltimm64 rd r1 (Int64.add n Int64.one) k
+  | _   => loadimm64 X31 n (transl_cond_int64s cmp rd r1 X31 k)
+  end.
+
+FDefinition sltuimm64 := opimm64 Asm.Psltul Asm.Psltiul.
+FDefinition transl_condimm_int64u := fun (cmp: comparison) (rd: ireg) (r1: ireg) (n: int64) (k: Asm.code) =>
+  if Int64.eq n Int64.zero then transl_cond_int64u cmp rd r1 X0 k else
+  match cmp with
+  | Clt => sltuimm64 rd r1 n k
+  | _   => loadimm64 X31 n (transl_cond_int64u cmp rd r1 X31 k)
+  end.
+
+FDefinition transl_cond_op
+           := fun (cond: condition) (rd: ireg) (args: list mreg) (k: Asm.code) =>
+  match cond, args with
+  | Ccomp c, a1 :: a2 :: nil =>
+      do r1 <- ireg_of a1; do r2 <- ireg_of a2;
+      OK (transl_cond_int32s c rd r1 r2 k)
+  | Ccompu c, a1 :: a2 :: nil =>
+      do r1 <- ireg_of a1; do r2 <- ireg_of a2;
+      OK (transl_cond_int32u c rd r1 r2 k)
+  | Ccompimm c n, a1 :: nil =>
+      do r1 <- ireg_of a1;
+      OK (transl_condimm_int32s c rd r1 n k)
+  | Ccompuimm c n, a1 :: nil =>
+      do r1 <- ireg_of a1;
+      OK (transl_condimm_int32u c rd r1 n k)
+  | Ccompl c, a1 :: a2 :: nil =>
+      do r1 <- ireg_of a1; do r2 <- ireg_of a2;
+      OK (transl_cond_int64s c rd r1 r2 k)
+  | Ccomplu c, a1 :: a2 :: nil =>
+      do r1 <- ireg_of a1; do r2 <- ireg_of a2;
+      OK (transl_cond_int64u c rd r1 r2 k)
+  | Ccomplimm c n, a1 :: nil =>
+      do r1 <- ireg_of a1;
+      OK (transl_condimm_int64s c rd r1 n k)
+  | Ccompluimm c n, a1 :: nil =>
+      do r1 <- ireg_of a1;
+      OK (transl_condimm_int64u c rd r1 n k)
+  | Ccompf c, f1 :: f2 :: nil =>
+      do r1 <- freg_of f1; do r2 <- freg_of f2;
+      let (insn, normal) := transl_cond_float c rd r1 r2 in
+      OK (insn :: if normal then k else Asm.Pxoriw rd rd Int.one :: k)
+  | Cnotcompf c, f1 :: f2 :: nil =>
+      do r1 <- freg_of f1; do r2 <- freg_of f2;
+      let (insn, normal) := transl_cond_float c rd r1 r2 in
+      OK (insn :: if normal then Asm.Pxoriw rd rd Int.one :: k else k)
+  | Ccompfs c, f1 :: f2 :: nil =>
+      do r1 <- freg_of f1; do r2 <- freg_of f2;
+      let (insn, normal) := transl_cond_single c rd r1 r2 in
+      OK (insn :: if normal then k else Asm.Pxoriw rd rd Int.one :: k)
+  | Cnotcompfs c, f1 :: f2 :: nil =>
+      do r1 <- freg_of f1; do r2 <- freg_of f2;
+      let (insn, normal) := transl_cond_single c rd r1 r2 in
+      OK (insn :: if normal then Asm.Pxoriw rd rd Int.one :: k else k)
+  | _, _ =>
+      Error(msg "Asmgen.transl_cond_op")
+  end.
+
+(*FRecursion transl_cond_op about Op.condition motive (fun (_ : Op.condition) => ireg -> list mreg -> Asm.code -> res Asm.code) by _rect.
 Case Ccomp c := 
 (fun rd args k => 
   match args with 
@@ -2108,18 +2689,334 @@ Case Ccompuimm c n :=
       OK (transl_condimm_int32u c rd r1 n k)
   | _ =>  Error(msg "Asmgen.transl_cond_op")
   end).
-FEnd transl_cond_op.
+FEnd transl_cond_op. *)
 
 From NFPOP Require Import Prelude.
 
-FRecursion transl_op about Op.operation motive (fun (_ : Op.operation) => list mreg -> mreg -> T.code -> res T.code) by _rect.
+(** Translation of the arithmetic operation [r <- op(args)].
+  The corresponding instructions are prepended to [k]. *)
+
+FDefinition andimm32 := opimm32 Asm.Pandw Asm.Pandiw.
+FDefinition orimm32  := opimm32 Asm.Porw Asm.Poriw.
+FDefinition andimm64 := opimm64 Asm.Pandl Asm.Pandil.
+FDefinition orimm64  := opimm64 Asm.Porl  Asm.Poril.
+FDefinition transl_op
+            := fun (op: operation) (args: list mreg) (res: mreg) (k: Asm.code) =>
+  match op, args with
+  | Op.Omove, a1 :: nil =>
+      match preg_of res, preg_of a1 with
+      | IR r, IR a => OK (Asm.Pmv r a :: k)
+      | FR r, FR a => OK (Asm.Pfmv r a :: k)
+      |  _  ,  _   => Error(msg "Asmgen.Omove")
+      end
+  | Op.Ointconst n, nil =>
+      do rd <- ireg_of res;
+      OK (loadimm32 rd n k)
+  | Op.Olongconst n, nil =>
+      do rd <- ireg_of res;
+      OK (loadimm64 rd n k)
+  | Op.Ofloatconst f, nil =>
+      do rd <- freg_of res;
+      OK (if Float.eq_dec f Float.zero
+          then Asm.Pfcvtdw rd X0 :: k
+          else Asm.Ploadfi rd f :: k)
+  | Op.Osingleconst f, nil =>
+      do rd <- freg_of res;
+      OK (if Float32.eq_dec f Float32.zero
+          then Asm.Pfcvtsw rd X0 :: k
+          else Asm.Ploadsi rd f :: k)
+  | Op.Oaddrsymbol s ofs, nil =>
+      do rd <- ireg_of res;
+      OK (if Archi.pic_code tt && negb (Ptrofs.eq ofs Ptrofs.zero)
+          then Asm.Ploadsymbol rd s Ptrofs.zero :: addptrofs rd rd ofs k
+          else Asm.Ploadsymbol rd s ofs :: k)
+  | Op.Oaddrstack n, nil =>
+      do rd <- ireg_of res;
+      OK (addptrofs rd SP n k)
+
+  | Op.Ocast8signed, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- ireg_of a1;
+      OK (Asm.Pslliw rd rs (Int.repr 24) :: Asm.Psraiw rd rd (Int.repr 24) :: k)
+  | Op.Ocast16signed, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- ireg_of a1;
+      OK (Asm.Pslliw rd rs (Int.repr 16) :: Asm.Psraiw rd rd (Int.repr 16) :: k)
+  | Op.Oadd, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Paddw rd rs1 rs2 :: k)
+  | Op.Oaddimm n, a1 :: nil =>
+      do rd  <- ireg_of res; do rs <- ireg_of a1;
+      OK (addimm32 rd rs n k)
+  | Op.Oneg, a1 :: nil =>
+      do rd  <- ireg_of res; do rs <- ireg_of a1;
+      OK (Asm.Psubw rd X0 rs :: k)
+  | Op.Osub, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Psubw rd rs1 rs2 :: k)
+  | Op.Omul, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Pmulw rd rs1 rs2 :: k)
+  | Op.Omulhs, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Pmulhw rd rs1 rs2 :: k)
+  | Op.Omulhu, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Pmulhuw rd rs1 rs2 :: k)
+  | Op.Odiv, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Pdivw rd rs1 rs2 :: k)
+  | Op.Odivu, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Pdivuw rd rs1 rs2 :: k)
+  | Op.Omod, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Premw rd rs1 rs2 :: k)
+  | Op.Omodu, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Premuw rd rs1 rs2 :: k)
+  | Op.Oand, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Pandw rd rs1 rs2 :: k)
+  | Op.Oandimm n, a1 :: nil =>
+      do rd  <- ireg_of res; do rs <- ireg_of a1;
+      OK (andimm32 rd rs n k)
+  | Op.Oor, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Porw rd rs1 rs2 :: k)
+  | Op.Oorimm n, a1 :: nil =>
+      do rd  <- ireg_of res; do rs <- ireg_of a1;
+      OK (orimm32 rd rs n k)
+  | Op.Oxor, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Pxorw rd rs1 rs2 :: k)
+  | Op.Oxorimm n, a1 :: nil =>
+      do rd  <- ireg_of res; do rs <- ireg_of a1;
+      OK (xorimm32 rd rs n k)
+  | Op.Oshl, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Psllw rd rs1 rs2 :: k)
+  | Op.Oshlimm n, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- ireg_of a1;
+      OK (Asm.Pslliw rd rs n :: k)
+  | Op.Oshr, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Psraw rd rs1 rs2 :: k)
+  | Op.Oshrimm n, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- ireg_of a1;
+      OK (Asm.Psraiw rd rs n :: k)
+  | Op.Oshru, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Psrlw rd rs1 rs2 :: k)
+  | Op.Oshruimm n, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- ireg_of a1;
+      OK (Asm.Psrliw rd rs n :: k)
+  | Op.Oshrximm n, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- ireg_of a1;
+      OK (if Int.eq n Int.zero then Asm.Pmv rd rs :: k else
+          Asm.Psraiw X31 rs (Int.repr 31) ::
+          Asm.Psrliw X31 X31 (Int.sub Int.iwordsize n) ::
+          Asm.Paddw X31 rs X31 ::
+          Asm.Psraiw rd X31 n :: k)  
+
+  (* [Omakelong], [Ohighlong]  should not occur *)
+  | Op.Olowlong, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- ireg_of a1;
+      OK (Asm.Pcvtl2w rd rs :: k)  
+  | Op.Ocast32signed, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- ireg_of a1;
+      assertion (ireg_eq rd rs);
+      OK (Asm.Pcvtw2l rd :: k)
+  | Op.Ocast32unsigned, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- ireg_of a1;
+      assertion (ireg_eq rd rs);
+      OK (Asm.Pcvtw2l rd :: Asm.Psllil rd rd (Int.repr 32) :: Asm.Psrlil rd rd (Int.repr 32) :: k)
+  | Op.Oaddl, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Paddl rd rs1 rs2 :: k)
+  | Op.Oaddlimm n, a1 :: nil =>
+      do rd  <- ireg_of res; do rs <- ireg_of a1;
+      OK (addimm64 rd rs n k)
+  | Op.Onegl, a1 :: nil =>
+      do rd  <- ireg_of res; do rs <- ireg_of a1;
+      OK (Asm.Psubl rd X0 rs :: k)
+  | Op.Osubl, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Psubl rd rs1 rs2 :: k)
+  | Op.Omull, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Pmull rd rs1 rs2 :: k)
+  | Op.Omullhs, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Pmulhl rd rs1 rs2 :: k)
+  | Op.Omullhu, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Pmulhul rd rs1 rs2 :: k)
+  | Op.Odivl, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Pdivl rd rs1 rs2 :: k)
+  | Op.Odivlu, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Pdivul rd rs1 rs2 :: k)
+  | Op.Omodl, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Preml rd rs1 rs2 :: k)
+  | Op.Omodlu, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Premul rd rs1 rs2 :: k)
+  | Op.Oandl, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Pandl rd rs1 rs2 :: k)
+  | Op.Oandlimm n, a1 :: nil =>
+      do rd  <- ireg_of res; do rs <- ireg_of a1;
+      OK (andimm64 rd rs n k)
+  | Op.Oorl, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Porl rd rs1 rs2 :: k)
+  | Op.Oorlimm n, a1 :: nil =>
+      do rd  <- ireg_of res; do rs <- ireg_of a1;
+      OK (orimm64 rd rs n k)
+  | Op.Oxorl, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Pxorl rd rs1 rs2 :: k)
+  | Op.Oxorlimm n, a1 :: nil =>
+      do rd  <- ireg_of res; do rs <- ireg_of a1;
+      OK (xorimm64 rd rs n k)
+  | Op.Oshll, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Pslll rd rs1 rs2 :: k)
+  | Op.Oshllimm n, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- ireg_of a1;
+      OK (Asm.Psllil rd rs n :: k)
+  | Op.Oshrl, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Psral rd rs1 rs2 :: k)
+  | Op.Oshrlimm n, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- ireg_of a1;
+      OK (Asm.Psrail rd rs n :: k)
+  | Op.Oshrlu, a1 :: a2 :: nil =>
+      do rd <- ireg_of res; do rs1 <- ireg_of a1; do rs2 <- ireg_of a2;
+      OK (Asm.Psrll rd rs1 rs2 :: k)
+  | Op.Oshrluimm n, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- ireg_of a1;
+      OK (Asm.Psrlil rd rs n :: k)
+  | Op.Oshrxlimm n, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- ireg_of a1;
+      OK (if Int.eq n Int.zero then Asm.Pmv rd rs :: k else
+          Asm.Psrail X31 rs (Int.repr 63) ::
+          Asm.Psrlil X31 X31 (Int.sub Int64.iwordsize' n) ::
+          Asm.Paddl X31 rs X31 ::
+          Asm.Psrail rd X31 n :: k)  
+
+  | Op.Onegf, a1 :: nil =>
+      do rd <- freg_of res; do rs <- freg_of a1;
+      OK (Asm.Pfnegd rd rs :: k)
+  | Op.Oabsf, a1 :: nil =>
+      do rd <- freg_of res; do rs <- freg_of a1;
+      OK (Asm.Pfabsd rd rs :: k)
+  | Op.Oaddf, a1 :: a2 :: nil =>
+      do rd <- freg_of res; do rs1 <- freg_of a1; do rs2 <- freg_of a2;
+      OK (Asm.Pfaddd rd rs1 rs2 :: k)
+  | Op.Osubf, a1 :: a2 :: nil =>
+      do rd <- freg_of res; do rs1 <- freg_of a1; do rs2 <- freg_of a2;
+      OK (Asm.Pfsubd rd rs1 rs2 :: k)
+  | Op.Omulf, a1 :: a2 :: nil =>
+      do rd <- freg_of res; do rs1 <- freg_of a1; do rs2 <- freg_of a2;
+      OK (Asm.Pfmuld rd rs1 rs2 :: k)
+  | Op.Odivf, a1 :: a2 :: nil =>
+      do rd <- freg_of res; do rs1 <- freg_of a1; do rs2 <- freg_of a2;
+      OK (Asm.Pfdivd rd rs1 rs2 :: k)
+
+  | Op.Onegfs, a1 :: nil =>
+      do rd <- freg_of res; do rs <- freg_of a1;
+      OK (Asm.Pfnegs rd rs :: k)
+  | Op.Oabsfs, a1 :: nil =>
+      do rd <- freg_of res; do rs <- freg_of a1;
+      OK (Asm.Pfabss rd rs :: k)
+  | Op.Oaddfs, a1 :: a2 :: nil =>
+      do rd <- freg_of res; do rs1 <- freg_of a1; do rs2 <- freg_of a2;
+      OK (Asm.Pfadds rd rs1 rs2 :: k)
+  | Op.Osubfs, a1 :: a2 :: nil =>
+      do rd <- freg_of res; do rs1 <- freg_of a1; do rs2 <- freg_of a2;
+      OK (Asm.Pfsubs rd rs1 rs2 :: k)
+  | Op.Omulfs, a1 :: a2 :: nil =>
+      do rd <- freg_of res; do rs1 <- freg_of a1; do rs2 <- freg_of a2;
+      OK (Asm.Pfmuls rd rs1 rs2 :: k)
+  | Op.Odivfs, a1 :: a2 :: nil =>
+      do rd <- freg_of res; do rs1 <- freg_of a1; do rs2 <- freg_of a2;
+      OK (Asm.Pfdivs rd rs1 rs2 :: k)
+
+  | Op.Osingleoffloat, a1 :: nil =>
+      do rd <- freg_of res; do rs <- freg_of a1;
+      OK (Asm.Pfcvtsd rd rs :: k)
+  | Op.Ofloatofsingle, a1 :: nil =>
+      do rd <- freg_of res; do rs <- freg_of a1;
+      OK (Asm.Pfcvtds rd rs :: k)
+
+  | Op.Ointoffloat, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- freg_of a1;
+      OK (Asm.Pfcvtwd rd rs :: k)
+  | Op.Ointuoffloat, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- freg_of a1;
+      OK (Asm.Pfcvtwud rd rs :: k)
+  | Op.Ofloatofint, a1 :: nil =>
+      do rd <- freg_of res; do rs <- ireg_of a1;
+      OK (Asm.Pfcvtdw rd rs :: k)
+  | Op.Ofloatofintu, a1 :: nil =>
+      do rd <- freg_of res; do rs <- ireg_of a1;
+      OK (Asm.Pfcvtdwu rd rs :: k)
+  | Op.Ointofsingle, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- freg_of a1;
+      OK (Asm.Pfcvtws rd rs :: k)
+  | Op.Ointuofsingle, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- freg_of a1;
+      OK (Asm.Pfcvtwus rd rs :: k)
+  | Op.Osingleofint, a1 :: nil =>
+      do rd <- freg_of res; do rs <- ireg_of a1;
+      OK (Asm.Pfcvtsw rd rs :: k)
+  | Op.Osingleofintu, a1 :: nil =>
+      do rd <- freg_of res; do rs <- ireg_of a1;
+      OK (Asm.Pfcvtswu rd rs :: k)
+
+  | Op.Olongoffloat, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- freg_of a1;
+      OK (Asm.Pfcvtld rd rs :: k)
+  | Op.Olonguoffloat, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- freg_of a1;
+      OK (Asm.Pfcvtlud rd rs :: k)
+  | Op.Ofloatoflong, a1 :: nil =>
+      do rd <- freg_of res; do rs <- ireg_of a1;
+      OK (Asm.Pfcvtdl rd rs :: k)
+  | Op.Ofloatoflongu, a1 :: nil =>
+      do rd <- freg_of res; do rs <- ireg_of a1;
+      OK (Asm.Pfcvtdlu rd rs :: k)
+  | Op.Olongofsingle, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- freg_of a1;
+      OK (Asm.Pfcvtls rd rs :: k)
+  | Op.Olonguofsingle, a1 :: nil =>
+      do rd <- ireg_of res; do rs <- freg_of a1;
+      OK (Asm.Pfcvtlus rd rs :: k)
+  | Op.Osingleoflong, a1 :: nil =>
+      do rd <- freg_of res; do rs <- ireg_of a1;
+      OK (Asm.Pfcvtsl rd rs :: k)
+  | Op.Osingleoflongu, a1 :: nil =>
+      do rd <- freg_of res; do rs <- ireg_of a1;
+      OK (Asm.Pfcvtslu rd rs :: k)
+
+  | Op.Ocmp cmp, _ =>
+      do rd <- ireg_of res;
+      transl_cond_op cmp rd args k
+
+  | _, _ =>
+      Error(msg "Asmgen.transl_op")
+  end.
+
+(*FRecursion transl_op about Op.operation motive (fun (_ : Op.operation) => list mreg -> mreg -> Asm.code -> res Asm.code) by _rect.
 Case Omove :=
 (fun args res k =>
   match args with 
   | a1 :: nil =>
       match preg_of res, preg_of a1 with
-      | IR r, IR a => OK (T.Pmv r a :: k)
-      | FR r, FR a => OK (T.Pfmv r a :: k)
+      | IR r, IR a => OK (Asm.Pmv r a :: k)
+      | FR r, FR a => OK (Asm.Pfmv r a :: k)
       |  _  ,  _   => Error(msg "Asmgen.Omove")
       end
   | _ =>  Error(msg "Asmgen.transl_op")
@@ -2142,8 +3039,8 @@ Case Ofloatconst f :=
   | nil => 
       do rd <- freg_of res;
       OK (if Float.eq_dec f Float.zero
-          then T.Pfcvtdw rd X0 :: k
-          else cheat T.Ploadfi rd f :: k)
+          then Asm.Pfcvtdw rd X0 :: k
+          else cheat Asm.Ploadfi rd f :: k)
   | _ => Error(msg "Asmgen.transl_op")
   end).
 Case Osingleconst f := 
@@ -2152,8 +3049,8 @@ Case Osingleconst f :=
   | nil => 
        do rd <- freg_of res;
       OK (if Float32.eq_dec f Float32.zero
-          then T.Pfcvtsw rd X0 :: k
-          else T.Ploadsi rd f :: k)
+          then Asm.Pfcvtsw rd X0 :: k
+          else Asm.Ploadsi rd f :: k)
   | _ => Error(msg "Asmgen.transl_op")
   end).
 Case Oaddrstack n := 
@@ -2165,29 +3062,108 @@ Case Oaddrstack n :=
 Case Ocmp cmp := (fun args res k => do rd <- ireg_of res; transl_cond_op cmp rd args k).
 (* [Omakelong], [Ohighlong]  should not occur *)
 Case Omakelong := (fun args res k =>  Error(msg "Asmgen.transl_op")).
-FEnd transl_op.
+FEnd transl_op.*)
 
-FDefinition transl_cbranch_int32s := fun (cmp: comparison) (r1 r2: ireg0) (lbl: T.label) =>
+FDefinition transl_cbranch_int32s := fun (cmp: comparison) (r1 r2: ireg0) (lbl: Asm.label) =>
   match cmp with
-  | Ceq => T.Pbeqw r1 r2 lbl
-  | Cne => T.Pbnew r1 r2 lbl
-  | Clt => T.Pbltw r1 r2 lbl
-  | Cle => T.Pbgew r2 r1 lbl
-  | Cgt => T.Pbltw r2 r1 lbl
-  | Cge => T.Pbgew r1 r2 lbl
+  | Ceq => Asm.Pbeqw r1 r2 lbl
+  | Cne => Asm.Pbnew r1 r2 lbl
+  | Clt => Asm.Pbltw r1 r2 lbl
+  | Cle => Asm.Pbgew r2 r1 lbl
+  | Cgt => Asm.Pbltw r2 r1 lbl
+  | Cge => Asm.Pbgew r1 r2 lbl
   end.
 
-FDefinition transl_cbranch_int32u := fun (cmp: comparison) (r1 r2: ireg0) (lbl: T.label) =>
+FDefinition transl_cbranch_int32u := fun (cmp: comparison) (r1 r2: ireg0) (lbl: Asm.label) =>
   match cmp with
-  | Ceq => T.Pbeqw  r1 r2 lbl
-  | Cne => T.Pbnew  r1 r2 lbl
-  | Clt => T.Pbltuw r1 r2 lbl
-  | Cle => T.Pbgeuw r2 r1 lbl
-  | Cgt => T.Pbltuw r2 r1 lbl
-  | Cge => T.Pbgeuw r1 r2 lbl
+  | Ceq => Asm.Pbeqw  r1 r2 lbl
+  | Cne => Asm.Pbnew  r1 r2 lbl
+  | Clt => Asm.Pbltuw r1 r2 lbl
+  | Cle => Asm.Pbgeuw r2 r1 lbl
+  | Cgt => Asm.Pbltuw r2 r1 lbl
+  | Cge => Asm.Pbgeuw r1 r2 lbl
   end.
 
-FRecursion transl_cbranch about Op.condition motive (fun (_ : Op.condition) => list mreg -> T.label -> T.code -> res T.code) by _rect.
+FDefinition transl_cbranch_int64s := fun (cmp: comparison) (r1 r2: ireg0) (lbl: Asm.label) =>
+  match cmp with
+  | Ceq => Asm.Pbeql r1 r2 lbl
+  | Cne => Asm.Pbnel r1 r2 lbl
+  | Clt => Asm.Pbltl r1 r2 lbl
+  | Cle => Asm.Pbgel r2 r1 lbl
+  | Cgt => Asm.Pbltl r2 r1 lbl
+  | Cge => Asm.Pbgel r1 r2 lbl
+  end.
+
+FDefinition transl_cbranch_int64u := fun (cmp: comparison) (r1 r2: ireg0) (lbl: Asm.label) =>
+  match cmp with
+  | Ceq => Asm.Pbeql  r1 r2 lbl
+  | Cne => Asm.Pbnel  r1 r2 lbl
+  | Clt => Asm.Pbltul r1 r2 lbl
+  | Cle => Asm.Pbgeul r2 r1 lbl
+  | Cgt => Asm.Pbltul r2 r1 lbl
+  | Cge => Asm.Pbgeul r1 r2 lbl
+  end.
+  
+FDefinition transl_cbranch
+           := fun (cond: condition) (args: list mreg) (lbl: Asm.label) (k: Asm.code) =>
+  match cond, args with
+  | Ccomp c, a1 :: a2 :: nil =>
+      do r1 <- ireg_of a1; do r2 <- ireg_of a2;
+      OK (transl_cbranch_int32s c r1 r2 lbl :: k)
+  | Ccompu c, a1 :: a2 :: nil =>
+      do r1 <- ireg_of a1; do r2 <- ireg_of a2;
+      OK (transl_cbranch_int32u c r1 r2 lbl :: k)
+  | Ccompimm c n, a1 :: nil =>
+      do r1 <- ireg_of a1;
+      OK (if Int.eq n Int.zero then
+            transl_cbranch_int32s c r1 X0 lbl :: k
+          else
+            loadimm32 X31 n (transl_cbranch_int32s c r1 X31 lbl :: k))
+  | Ccompuimm c n, a1 :: nil =>
+      do r1 <- ireg_of a1;
+      OK (if Int.eq n Int.zero then
+            transl_cbranch_int32u c r1 X0 lbl :: k
+          else
+            loadimm32 X31 n (transl_cbranch_int32u c r1 X31 lbl :: k))
+  | Ccompl c, a1 :: a2 :: nil =>
+      do r1 <- ireg_of a1; do r2 <- ireg_of a2;
+      OK (transl_cbranch_int64s c r1 r2 lbl :: k)
+  | Ccomplu c, a1 :: a2 :: nil =>
+      do r1 <- ireg_of a1; do r2 <- ireg_of a2;
+      OK (transl_cbranch_int64u c r1 r2 lbl :: k)
+  | Ccomplimm c n, a1 :: nil =>
+      do r1 <- ireg_of a1;
+      OK (if Int64.eq n Int64.zero then
+            transl_cbranch_int64s c r1 X0 lbl :: k
+          else
+            loadimm64 X31 n (transl_cbranch_int64s c r1 X31 lbl :: k))
+  | Ccompluimm c n, a1 :: nil =>
+      do r1 <- ireg_of a1;
+      OK (if Int64.eq n Int64.zero then
+            transl_cbranch_int64u c r1 X0 lbl :: k
+          else
+            loadimm64 X31 n (transl_cbranch_int64u c r1 X31 lbl :: k))
+  | Ccompf c, f1 :: f2 :: nil =>
+      do r1 <- freg_of f1; do r2 <- freg_of f2;
+      let (insn, normal) := transl_cond_float c X31 r1 r2 in
+      OK (insn :: (if normal then Asm.Pbnew X31 X0 lbl else Asm.Pbeqw X31 X0 lbl) :: k)
+  | Cnotcompf c, f1 :: f2 :: nil =>
+      do r1 <- freg_of f1; do r2 <- freg_of f2;
+      let (insn, normal) := transl_cond_float c X31 r1 r2 in
+      OK (insn :: (if normal then Asm.Pbeqw X31 X0 lbl else Asm.Pbnew X31 X0 lbl) :: k)
+  | Ccompfs c, f1 :: f2 :: nil =>
+      do r1 <- freg_of f1; do r2 <- freg_of f2;
+      let (insn, normal) := transl_cond_single c X31 r1 r2 in
+      OK (insn :: (if normal then Asm.Pbnew X31 X0 lbl else Asm.Pbeqw X31 X0 lbl) :: k)
+  | Cnotcompfs c, f1 :: f2 :: nil =>
+      do r1 <- freg_of f1; do r2 <- freg_of f2;
+      let (insn, normal) := transl_cond_single c X31 r1 r2 in
+      OK (insn :: (if normal then Asm.Pbeqw X31 X0 lbl else Asm.Pbnew X31 X0 lbl) :: k)
+  | _, _ =>
+      Error(msg "Asmgen.transl_cond_branch")
+  end.
+
+(*FRecursion transl_cbranch about Op.condition motive (fun (_ : Op.condition) => list mreg -> Asm.label -> Asm.code -> res Asm.code) by _rect.
 Case Ccomp c := 
 (fun args lbl k => 
   match args with
@@ -2218,64 +3194,64 @@ Case Ccompuimm c n :=
             loadimm32 X31 n (transl_cbranch_int32u c r1 X31 lbl :: k))
   | _ => Error(msg "Asmgen.transl_cond_branch")
   end).  
-FEnd transl_cbranch.
+FEnd transl_cbranch.*)
 
 FDefinition indexed_memory_access :=
-  fun (mk_instr: ireg -> T.offset -> T.instruction)
-      (base: ireg) (ofs: ptrofs) (k: T.code) =>
+  fun (mk_instr: ireg -> Asm.offset -> Asm.instruction)
+      (base: ireg) (ofs: ptrofs) (k: Asm.code) =>
   if Archi.ptr64 then
     match make_immed64 (Ptrofs.to_int64 ofs) with
     | self__Asmgen.Imm64_single imm =>
-        mk_instr base (T.Ofsimm (Ptrofs.of_int64 imm)) :: k
+        mk_instr base (Asm.Ofsimm (Ptrofs.of_int64 imm)) :: k
     | self__Asmgen.Imm64_pair hi lo =>
-        T.Pluil X31 hi :: T.Paddl X31 base X31 :: mk_instr X31 (T.Ofsimm (Ptrofs.of_int64 lo)) :: k
+        Asm.Pluil X31 hi :: Asm.Paddl X31 base X31 :: mk_instr X31 (Asm.Ofsimm (Ptrofs.of_int64 lo)) :: k
     | self__Asmgen.Imm64_large imm =>
-        T.Ploadli X31 imm :: T.Paddl X31 base X31 :: mk_instr X31 (T.Ofsimm Ptrofs.zero) :: k
+        Asm.Ploadli X31 imm :: Asm.Paddl X31 base X31 :: mk_instr X31 (Asm.Ofsimm Ptrofs.zero) :: k
     end
   else
     match make_immed32 (Ptrofs.to_int ofs) with
     | self__Asmgen.Imm32_single imm =>
-        mk_instr base (T.Ofsimm (Ptrofs.of_int imm)) :: k
+        mk_instr base (Asm.Ofsimm (Ptrofs.of_int imm)) :: k
     | self__Asmgen.Imm32_pair hi lo =>
-        T.Pluiw X31 hi :: T.Paddw X31 base X31 :: mk_instr X31 (T.Ofsimm (Ptrofs.of_int lo)) :: k
+        Asm.Pluiw X31 hi :: Asm.Paddw X31 base X31 :: mk_instr X31 (Asm.Ofsimm (Ptrofs.of_int lo)) :: k
     end.
 
 FDefinition loadind := 
-  fun (base: ireg) (ofs: ptrofs) (ty: typ) (dst: mreg) (k: T.code) =>
+  fun (base: ireg) (ofs: ptrofs) (ty: typ) (dst: mreg) (k: Asm.code) =>
   match ty, preg_of dst with
-  | AST.Tint,    IR rd => OK (indexed_memory_access (T.Plw rd) base ofs k)
-  | AST.Tlong,   IR rd => OK (indexed_memory_access (T.Pld rd) base ofs k)
-  | AST.Tsingle, FR rd => OK (indexed_memory_access (T.Pfls rd) base ofs k)
-  | AST.Tfloat,  FR rd => OK (indexed_memory_access (T.Pfld rd) base ofs k)
-  | AST.Tany32,  IR rd => OK (indexed_memory_access (T.Plw_a rd) base ofs k)
-  | AST.Tany64,  IR rd => OK (indexed_memory_access (T.Pld_a rd) base ofs k)
-  | AST.Tany64,  FR rd => OK (indexed_memory_access (T.Pfld_a rd) base ofs k)
+  | AST.Tint,    IR rd => OK (indexed_memory_access (Asm.Plw rd) base ofs k)
+  | AST.Tlong,   IR rd => OK (indexed_memory_access (Asm.Pld rd) base ofs k)
+  | AST.Tsingle, FR rd => OK (indexed_memory_access (Asm.Pfls rd) base ofs k)
+  | AST.Tfloat,  FR rd => OK (indexed_memory_access (Asm.Pfld rd) base ofs k)
+  | AST.Tany32,  IR rd => OK (indexed_memory_access (Asm.Plw_a rd) base ofs k)
+  | AST.Tany64,  IR rd => OK (indexed_memory_access (Asm.Pld_a rd) base ofs k)
+  | AST.Tany64,  FR rd => OK (indexed_memory_access (Asm.Pfld_a rd) base ofs k)
   | _, _           => Error (msg "Asmgen.loadind")
   end.
 
-FDefinition storeind := fun (src: mreg) (base: ireg) (ofs: ptrofs) (ty: typ) (k: T.code) => 
+FDefinition storeind := fun (src: mreg) (base: ireg) (ofs: ptrofs) (ty: typ) (k: Asm.code) => 
   match ty, preg_of src with
-  | AST.Tint,    IR rd => OK (indexed_memory_access (T.Psw rd) base ofs k)
-  | AST.Tlong,   IR rd => OK (indexed_memory_access (T.Psd rd) base ofs k)
-  | AST.Tsingle, FR rd => OK (indexed_memory_access (T.Pfss rd) base ofs k)
-  | AST.Tfloat,  FR rd => OK (indexed_memory_access (T.Pfsd rd) base ofs k)
-  | AST.Tany32,  IR rd => OK (indexed_memory_access (T.Psw_a rd) base ofs k)
-  | AST.Tany64,  IR rd => OK (indexed_memory_access (T.Psd_a rd) base ofs k)
-  | AST.Tany64,  FR rd => OK (indexed_memory_access (T.Pfsd_a rd) base ofs k)
+  | AST.Tint,    IR rd => OK (indexed_memory_access (Asm.Psw rd) base ofs k)
+  | AST.Tlong,   IR rd => OK (indexed_memory_access (Asm.Psd rd) base ofs k)
+  | AST.Tsingle, FR rd => OK (indexed_memory_access (Asm.Pfss rd) base ofs k)
+  | AST.Tfloat,  FR rd => OK (indexed_memory_access (Asm.Pfsd rd) base ofs k)
+  | AST.Tany32,  IR rd => OK (indexed_memory_access (Asm.Psw_a rd) base ofs k)
+  | AST.Tany64,  IR rd => OK (indexed_memory_access (Asm.Psd_a rd) base ofs k)
+  | AST.Tany64,  FR rd => OK (indexed_memory_access (Asm.Pfsd_a rd) base ofs k)
   | _, _           => Error (msg "Asmgen.storeind")
   end.
 
-FDefinition loadind_ptr := fun (base: ireg) (ofs: ptrofs) (dst: ireg) (k: T.code) => 
-  indexed_memory_access (if Archi.ptr64 then T.Pld dst else T.Plw dst) base ofs k.
+FDefinition loadind_ptr := fun (base: ireg) (ofs: ptrofs) (dst: ireg) (k: Asm.code) => 
+  indexed_memory_access (if Archi.ptr64 then Asm.Pld dst else Asm.Plw dst) base ofs k.
 
-FDefinition storeind_ptr := fun (src: ireg) (base: ireg) (ofs: ptrofs) (k: T.code) =>
-  indexed_memory_access (if Archi.ptr64 then T.Psd src else T.Psw src) base ofs k.
+FDefinition storeind_ptr := fun (src: ireg) (base: ireg) (ofs: ptrofs) (k: Asm.code) =>
+  indexed_memory_access (if Archi.ptr64 then Asm.Psd src else Asm.Psw src) base ofs k.
 
-FDefinition make_epilogue := fun (f: S.function) (k: T.code) =>
+FDefinition make_epilogue := fun (f: S.function) (k: Asm.code) =>
   loadind_ptr SP (S.fn_retaddr_ofs f) RA
-    (cheat T.Pfreeframe (S.fn_stacksize f) (S.fn_link_ofs f) :: k).
+    (cheat Asm.Pfreeframe (S.fn_stacksize f) (S.fn_link_ofs f) :: k).
 
-FRecursion transl_instr about S.instruction motive (fun (_ : S.instruction) => S.function -> bool -> T.code -> res T.code) by _rect.
+FRecursion transl_instr about S.instruction motive (fun (_ : S.instruction) => S.function -> bool -> Asm.code -> res Asm.code) by _rect.
 Case Lgetstack ofs ty dst := (fun f ep k => loadind SP ofs ty dst k).
 Case Lsetstack src ofs ty := (fun f ep k =>  storeind src SP ofs ty k).
 Case Lgetparam ofs ty dst := 
@@ -2284,10 +3260,10 @@ Case Lgetparam ofs ty dst :=
       OK (if ep then c
                 else loadind_ptr SP (S.fn_link_ofs f) X30 c)).
 Case Lop op args res := (fun f ep k =>  transl_op op args res k).
-Case Llabel lbl := (fun f ep k =>  OK (T.Plabel lbl :: k)).
-Case Lgoto lbl := (fun f ep k => OK (T.Pj_l lbl :: k)).
+Case Llabel lbl := (fun f ep k =>  OK (Asm.Plabel lbl :: k)).
+Case Lgoto lbl := (fun f ep k => OK (Asm.Pj_l lbl :: k)).
 Case Lcond cond args lbl := (fun f ep k => transl_cbranch cond args lbl k).
-Case Lreturn := (fun f ep k => OK (make_epilogue f (T.Pj_r RA (S.fn_sig f) :: k))).
+Case Lreturn := (fun f ep k => OK (make_epilogue f (Asm.Pj_r RA (S.fn_sig f) :: k))).
 FEnd transl_instr.
 
 FRecursion it1_is_parent about S.instruction motive (fun (_ : S.instruction) => bool -> bool) by _rect.
@@ -2317,7 +3293,7 @@ FEnd transl_code.*)
   that runs in constant stack space. *)      
 MetaData transl_code_rec.
 Fixpoint transl_code_rec (f: self__Asmgen.S.function) (il: list self__Asmgen.S.instruction)
-                         (it1p: bool) (k: self__Asmgen.T.code -> res self__Asmgen.T.code) :=
+                         (it1p: bool) (k: self__Base.Asm.code -> res self__Base.Asm.code) :=
   match il with
   | nil => k nil
   | i1 :: il' =>
@@ -2337,20 +3313,20 @@ FDefinition transl_code' :=
 
 FDefinition transl_function := fun (f: S.function) =>
   do c <- transl_code' f (S.fn_code f) true;
-  OK (T.mkfunction (S.fn_sig f)
-        (cheat T.Pallocframe (S.fn_stacksize f) (S.fn_link_ofs f) ::
-         storeind_ptr RA SP (S.fn_retaddr_ofs f) (cheat T.Pcfi_rel_offset (Ptrofs.to_int (S.fn_retaddr_ofs f)):: c))).
+  OK (Asm.mkfunction (S.fn_sig f)
+        (cheat Asm.Pallocframe (S.fn_stacksize f) (S.fn_link_ofs f) ::
+         storeind_ptr RA SP (S.fn_retaddr_ofs f) (cheat Asm.Pcfi_rel_offset (Ptrofs.to_int (S.fn_retaddr_ofs f)):: c))).
 
-FDefinition transf_function : S.function -> res T.function := fun f =>
+FDefinition transf_function : S.function -> res Asm.function := fun f =>
   do tf <- transl_function f;
-  if zlt Ptrofs.max_unsigned (list_length_z (T.fn_code tf))
+  if zlt Ptrofs.max_unsigned (list_length_z (Asm.fn_code tf))
   then Error (msg "code size exceeded")
   else OK tf.
 
-FDefinition transf_fundef : S.fundef -> res T.fundef := fun f =>
+FDefinition transf_fundef : S.fundef -> res Asm.fundef := fun f =>
   transf_partial_fundef transf_function f.
 
-FDefinition transf_program : S.program -> res T.program := fun p =>
+FDefinition transf_program : S.program -> res Asm.program := fun p =>
   transform_partial_program transf_fundef p.     
 
 FEnd Asmgen.
@@ -2586,7 +3562,7 @@ Local Open Scope error_monad_scope.
 Case Ljumptable arg tbl :=
 (fun f ep k =>
    do r <- ireg_of arg;
-   OK (T.Pbtbl r tbl :: k)).
+   OK (Asm.Pbtbl r tbl :: k)).
 FEnd transl_instr.
 
 FRecursion it1_is_parent.
@@ -2599,6 +3575,282 @@ Family Asmgen extends Asmgen_jumptable.
 FEnd Asmgen.
 
 FEnd Comp_Loops.
+
+Trait Comp_Builtin extends Base.
+
+Family C.
+FInductive expr : Type :=
+| Ebuiltin : external_function -> list type -> list expr -> type -> expr
+with exprlist : Type :=
+| Enil : exprlist
+| Econs : expr -> exprlist.                                                                         
+
+FRecursion typeof.
+Case Ebuiltin ef ts es ty := ty.
+FEnd typeof.
+FEnd C.
+
+Family Clight.
+FInductive stmt : Type :=
+| Sbuiltin: option ident -> external_function -> list type -> list expr -> stmt. (* builtin invocation *)
+FEnd Clight.
+
+From NFPOP Require Import Mon.
+Local Open Scope gensym_monad_scope.
+
+Family SimplExpr.
+
+FRecursion transl_expr.
+Case Ebuiltin ef tyargs rl ty :=
+  (fun dst =>
+     do (sl, al) <- cheat (*transl_exprlist rl*);
+      match dst with
+      | self__SimplExpr.For_val | self__SimplExpr.For_set _ =>
+          do t <- gensym ty;
+          ret (finish dst (sl ++ T.Sbuiltin (Some t) ef tyargs al :: nil)
+                          (T.Etempvar t ty))
+      | self__SimplExpr.For_effects =>
+          ret (sl ++ T.Sbuiltin None ef tyargs al :: nil, dummy_expr)
+      end).
+FEnd transl_expr.
+
+FEnd SimplExpr.
+
+Family Csharpminor.
+FInductive stmt : Type :=
+| Sbuiltin : option ident -> external_function -> list expr -> stmt.
+FEnd Csharpminor.
+
+From NFPOP Require Import Errors.
+Local Open Scope error_monad_scope.
+
+Family Cshmgen.
+
+Inherit transl_expr.
+
+MetaData transl_arglist.
+Fixpoint transl_arglist (ce: composite_env) (al: list self__Cshmgen.S.expr) (tyl: list type)
+                         {struct al}: res (list self__Cshmgen.T.expr) :=
+  match al, tyl with
+  | nil, nil => OK nil
+  | a1 :: a2, ty1 :: ty2 =>
+      do ta1 <- self__Cshmgen.transl_expr a1 ce;
+      do ta1' <- self__Cshmgen.make_cast (self__Cshmgen.S.typeof a1) ty1 ta1;
+      do ta2 <- transl_arglist ce a2 ty2;
+      OK (ta1' :: ta2)
+  | a1 :: a2, nil =>
+      do ta1 <- self__Cshmgen.transl_expr a1 ce;
+      do ta1' <- self__Cshmgen.make_cast (self__Cshmgen.S.typeof a1) (default_argument_conversion (self__Cshmgen.S.typeof a1)) ta1;
+      do ta2 <- transl_arglist ce a2 nil;
+      OK (ta1' :: ta2)
+  | _, _ =>
+      Error(msg "Cshmgen.transl_arglist: arity mismatch")
+  end.
+FEnd transl_arglist.
+
+FRecursion transl_stmt.
+Case Sbuiltin x ef tyargs bl :=
+(fun ce tyret nbrk ncnt =>
+  do tbl <- transl_arglist ce bl tyargs;
+  OK(T.Sbuiltin x ef tbl)).
+FEnd transl_stmt.
+FEnd Cshmgen.
+
+Family Cminor.
+FInductive stmt : Type :=
+| Sbuiltin : option ident -> external_function -> list expr -> stmt.
+FEnd Cminor.
+
+Family CminorSel.
+FInductive stmt : Type :=
+| Sbuiltin : builtin_res ident -> external_function -> list (builtin_arg expr) -> stmt.
+FEnd CminorSel.
+
+Family Selection.
+From NFPOP Require Import Builtins.
+
+Family S extends Cminor. FEnd S.
+Family T extends CminorSel. FEnd T.
+
+Inherit transl_expr.
+
+FDefinition sel_known_builtin : builtin_function -> T.exprlist -> option T.expr := fun bf args  => None.
+  (*match bf, args with  
+  | BI_platform b, _ =>
+      SelectOp.platform_builtin b args
+  | BI_standard (BI_select ty), a1 ::: a2 ::: a3 ::: Enil =>
+      Some (sel_select ty a1 a2 a3)
+  | BI_standard BI_fabs, a1 ::: Enil =>
+      Some (SelectOp.absf a1)
+  | BI_standard BI_fabsf, a1 ::: Enil =>
+      Some (SelectOp.absfs a1) 
+  | _, _ =>
+      None
+  end.*)
+
+MetaData sel_exprlist.
+Fixpoint sel_exprlist (al: list self__Selection.S.expr) : res self__Selection.T.exprlist :=
+  match al with
+  | nil => OK self__Selection.T.Enil
+  | a :: bl =>
+      do ta <- (self__Selection.transl_expr a);
+      do rest <- (sel_exprlist bl);
+      OK (self__Selection.T.Econs ta rest)
+  end.
+FEnd sel_exprlist.
+
+FDefinition sel_builtin_arg : S.expr -> builtin_arg_constraint -> res (AST.builtin_arg T.expr) := fun e c =>       
+  do e' <- transl_expr e;
+  let ba := cheat (* builtin_arg e'*) in (* selection! *)
+  if builtin_arg_ok ba c then OK ba else OK (BA e').
+
+MetaData sel_builtin_args.
+Fixpoint sel_builtin_args 
+       (el: list self__Selection.S.expr)
+       (cl: list builtin_arg_constraint): res (list (AST.builtin_arg self__Selection.T.expr)) :=
+  match el with
+  | nil => OK nil
+  | e :: el =>
+      do a <- self__Selection.sel_builtin_arg e (List.hd OK_default cl);
+      do rest <- sel_builtin_args el (List.tl cl);
+      OK (a :: rest)
+  end.
+FEnd sel_builtin_args.
+
+FDefinition sel_builtin_res : option ident -> builtin_res ident := fun optid =>
+  match optid with
+  | None => BR_none
+  | Some id => BR id
+  end.
+
+FDefinition sel_builtin_default
+  := fun (optid: option ident) (ef: external_function)
+         (args: list S.expr) =>
+  do args <- (sel_builtin_args args (Machregs.builtin_constraints ef));
+  OK (T.Sbuiltin (sel_builtin_res optid) ef args).
+
+FDefinition Sno_op := T.Sseq T.Sskip T.Sskip.
+
+FDefinition sel_builtin :=
+  fun (optid: option ident) (ef: external_function)
+      (args: list S.expr) =>
+  match ef with
+  | EF_builtin name sg =>
+      match lookup_builtin_function name sg with
+      | Some bf =>
+          match optid with
+          | Some id =>
+              do targs <- (sel_exprlist args);
+              match sel_known_builtin bf targs with
+              | Some a => OK (T.Sassign id a)
+              | None =>(sel_builtin_default optid ef args)
+              end
+          | None =>
+              OK Sno_op(* builtins with semantics are pure *)
+          end
+      | None => (sel_builtin_default optid ef args)
+      end
+  | _ =>
+      sel_builtin_default optid ef args
+  end.
+
+FRecursion transl_stmt.
+Case Sbuiltin optid ef args :=
+      (sel_builtin optid ef args).
+FEnd transl_stmt.
+FEnd Selection.
+
+Family RTL.
+FInductive instruction: Type :=
+| Ibuiltin: external_function -> list (builtin_arg reg) -> builtin_res reg -> node -> instruction.
+FEnd RTL.
+
+Family RTLgen.
+Family S extends CminorSel. FEnd S.
+Family T extends RTL. FEnd T.
+
+FDefinition exprlist_of_expr_list : list S.expr -> S.exprlist := fun l =>
+  List.fold_right S.Econs S.Enil l.
+
+MetaData params_of_builtin_arg.
+Fixpoint params_of_builtin_arg (A: Type) (a: builtin_arg A) : list A :=
+  match a with
+  | BA x => x :: nil
+  | BA_splitlong hi lo => params_of_builtin_arg A hi ++ params_of_builtin_arg A lo
+  | BA_addptr a1 a2 => params_of_builtin_arg A a1 ++ params_of_builtin_arg A a2
+  | _ => nil
+  end.
+FEnd params_of_builtin_arg.
+
+FDefinition params_of_builtin_args := fun (A: Type) (al: list (builtin_arg A)) =>
+  List.fold_right (fun a l => params_of_builtin_arg A a ++ l) nil al.
+
+MetaData convert_builtin_arg.
+Fixpoint convert_builtin_arg {A: Type} (a: builtin_arg self__RTLgen.S.expr) (rl: list A) : builtin_arg A * list A :=
+  match a with
+  | BA a =>
+      match rl with
+      | r :: rs => (BA r, rs)
+      | nil => (BA_int Int.zero, nil)(* never happens *)
+      end
+  | BA_int n => (BA_int n, rl)
+  | BA_long n => (BA_long n, rl)
+  | BA_float n => (BA_float n, rl)
+  | BA_single n => (BA_single n, rl)
+  | BA_loadstack chunk ofs => (BA_loadstack chunk ofs, rl)
+  | BA_addrstack ofs => (BA_addrstack ofs, rl)
+  | BA_loadglobal chunk id ofs => (BA_loadglobal chunk id ofs, rl)
+  | BA_addrglobal id ofs => (BA_addrglobal id ofs, rl)
+  | BA_splitlong hi lo =>
+      let (hi', rl1) := convert_builtin_arg hi rl in
+      let (lo', rl2) := convert_builtin_arg lo rl1 in
+      (BA_splitlong hi' lo', rl2)
+  | BA_addptr a1 a2 =>
+      let (a1', rl1) := convert_builtin_arg a1 rl in
+      let (a2', rl2) := convert_builtin_arg a2 rl1 in
+      (BA_addptr a1' a2', rl2)
+  end.
+FEnd convert_builtin_arg.
+
+MetaData convert_builtin_args.
+Fixpoint convert_builtin_args {A: Type} (al: list (builtin_arg self__RTLgen.S.expr)) (rl: list A) : list (builtin_arg A) :=
+  match al with
+  | nil => nil
+  | a1 :: al =>
+      let (a1', rl1) := self__RTLgen.convert_builtin_arg a1 rl in
+      a1' :: convert_builtin_args al rl1
+  end.
+FEnd convert_builtin_args.
+
+From NFPOP Require Import RTLmonad.
+Inherit labelmap.
+
+FDefinition convert_builtin_res : mapping -> rettype -> builtin_res ident -> self__RTLgen.mon (builtin_res reg)
+ := fun map ty r =>                                                                                            
+  match r with
+  | BR id => do r <- find_var map id; ret (BR r)
+  | BR_none => if rettype_eq ty AST.Tvoid then ret BR_none else (do r <- new_reg; ret (BR r))
+  | _ => error (Errors.msg "RTLgen: bad builtin_res")
+  end.
+
+FRecursion transl_stmt.
+Case Sbuiltin r ef args :=
+(fun map nd nexits ngoto nret rret =>  
+   let al := exprlist_of_expr_list (params_of_builtin_args S.expr args) in
+   do rargs <- alloc_regs al map;
+   let args' := convert_builtin_args args rargs in
+   do res' <- convert_builtin_res map (sig_res (ef_sig ef)) r;
+   do n1 <- add_instr (T.Ibuiltin ef args' res' nd);
+   transl_exprlist al map rargs n1).
+FEnd transl_stmt.
+
+FRecursion reserve_labels.
+Case _ := (fun lm => ret lm).
+FEnd reserve_labels.
+
+FEnd RTLgen.
+
+FEnd Comp_Builtin.
 
 (* small extension *)
 Trait Comp_Switch extends Comp_Loops.
@@ -3308,7 +4560,7 @@ FInductive expr : Type :=
 FEnd CminorSel.
 
 Family Cminorgen.
-
+(* extended with addrstack/oaddrsymbol *)
 Definition var_addr (cenv: compilenv) (id: ident): expr :=
   match PTree.get id cenv with
   | Some ofs => Econst (Oaddrstack (Ptrofs.repr ofs))
@@ -3380,10 +4632,6 @@ FEnd Comp_op.
 (* small *)
 Trait Comp_External extends Comp_Base.
 FEnd Comp_External.
-
-(* small *)
-Trait Comp_Builtin extends Comp_Base.
-FEnd Comp_Builtin.
 
 (* ?? *)
 Trait Comp_Vector extends Comp_Base.
