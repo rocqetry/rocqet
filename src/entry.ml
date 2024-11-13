@@ -133,6 +133,17 @@ let open_trait_with_base ~name ~base =
         close = Trait.close_trait;
       }
 
+let open_trait_with_base_list ~name ~bases =
+  let names = [name] in 
+  Trait.open_with_base_list ~name ~bases; 
+  PluginScopes.push
+    PluginCmdScope.
+      {
+        names;
+        command = PluginCmd.Trait;
+        close = Trait.close_trait;
+      }
+
 let final_family = Family.define_final_family
 
 let add_wildcard_handler = Recursion.add_wildcard_handler
