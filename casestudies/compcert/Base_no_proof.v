@@ -56,6 +56,7 @@ FInductive instruction : Type :=
 | Pallocframe : Z -> ptrofs -> instruction (**r allocate new stack frame *)
 | Pfreeframe  : Z -> ptrofs -> instruction (**r deallocate stack frame and restore previous frame *)
 | Ploadsymbol : ireg -> ident -> ptrofs -> instruction (**r load the address of a symbol *)                                   
+| Ploadsymbol_high : ireg -> ident -> ptrofs  -> instruction
 | Pnop : instruction. (**r nop instruction *)
                        
 FDefinition code := list instruction.
@@ -484,10 +485,10 @@ FDefinition makeif : T.expr -> T.stmt -> T.stmt -> T.stmt :=
     | None => T.Sifthenelse a s1 s2
     end.
       
-FRecursion transl_expr about S.expr motive (fun (_ : S.expr) => destination -> mon (list T.stmt * T.expr)) by _rect.
-Case Evar id ty := (fun dst => ret (finish dst nil (T.Etempvar id ty))).
+FRecursion transl_expr about S.expr motive (fun (_ : S.expr) => composite_env -> destination -> mon (list T.stmt * T.expr)) by _rect.
+Case Evar id ty := (fun ce dst => ret (finish dst nil (T.Etempvar id ty))).
 Case Eval v ty := 
-  (fun dst => 
+  (fun ce dst => 
     match v with 
     | Vint n => ret (finish dst nil (T.Econst_int n ty)) 
     | Vlong n =>  ret (finish dst nil (T.Econst_long n ty))
@@ -495,143 +496,147 @@ Case Eval v ty :=
     | Vsingle n => ret (finish dst nil (T.Econst_single n ty))
     | _ => error (msg "SimplExpr.transl_expr: Eval") end).
 Case Ecast r1 ty :=
-  (fun dst => 
+  (fun ce dst => 
       match dst with
       | self__SimplExpr.For_val | self__SimplExpr.For_set _ =>
-          do (sl1, a1) <- transl_expr r1 self__SimplExpr.For_val;
+          do (sl1, a1) <- transl_expr r1 ce self__SimplExpr.For_val;
           ret (finish dst sl1 (T.Ecast a1 ty))
       | self__SimplExpr.For_effects =>
-          transl_expr r1 self__SimplExpr.For_effects end).
+          transl_expr r1 ce self__SimplExpr.For_effects end).
 Case Ecomma r1 r2 ty := 
-   (fun dst => 
-      do (sl1, a1) <- transl_expr r1 self__SimplExpr.For_effects;
-      do (sl2, a2) <- transl_expr r2 dst;
+   (fun ce dst => 
+      do (sl1, a1) <- transl_expr r1 ce self__SimplExpr.For_effects;
+      do (sl2, a2) <- transl_expr r2 ce dst;
       ret (sl1 ++ sl2, a2)).
 Case Econdition r1 r2 r3 ty :=
-  (fun dst => 
-      do (sl1, a1) <- transl_expr r1 self__SimplExpr.For_val;
+  (fun ce dst => 
+      do (sl1, a1) <- transl_expr r1 ce self__SimplExpr.For_val;
       match dst with
       | self__SimplExpr.For_val =>
           do t <- gensym ty;
           let sd := self__SimplExpr.SDbase ty ty t in
-          do (sl2, a2) <- transl_expr r2 (self__SimplExpr.For_set sd);
-          do (sl3, a3) <- transl_expr r3 (self__SimplExpr.For_set sd);
+          do (sl2, a2) <- transl_expr r2 ce (self__SimplExpr.For_set sd);
+          do (sl3, a3) <- transl_expr r3 ce (self__SimplExpr.For_set sd);
           ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
                T.Etempvar t ty)
       | self__SimplExpr.For_effects =>
-          do (sl2, a2) <- transl_expr r2 self__SimplExpr.For_effects;
-          do (sl3, a3) <- transl_expr r3 self__SimplExpr.For_effects;
+          do (sl2, a2) <- transl_expr r2 ce self__SimplExpr.For_effects;
+          do (sl3, a3) <- transl_expr r3 ce self__SimplExpr.For_effects;
           ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
                dummy_expr)
       | self__SimplExpr.For_set sd =>
           do t <- temp_for_sd ty sd;
           let sd' := self__SimplExpr.SDcons ty ty t sd in
-          do (sl2, a2) <- transl_expr r2 (self__SimplExpr.For_set sd');
-          do (sl3, a3) <- transl_expr r3 (self__SimplExpr.For_set sd');
+          do (sl2, a2) <- transl_expr r2 ce (self__SimplExpr.For_set sd');
+          do (sl3, a3) <- transl_expr r3 ce (self__SimplExpr.For_set sd');
           ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
                dummy_expr)
       end).
 Case Eseqor r1 r2 ty := 
-  (fun dst => 
-    do (sl1, a1) <- transl_expr r1 self__SimplExpr.For_val;
+  (fun ce dst => 
+    do (sl1, a1) <- transl_expr r1 ce self__SimplExpr.For_val;
       match dst with
       | self__SimplExpr.For_val =>
           do t <- gensym ty;
           let sd := self__SimplExpr.SDbase type_bool ty t in
-          do (sl2, a2) <- transl_expr r2 (self__SimplExpr.For_set sd);
+          do (sl2, a2) <- transl_expr r2 ce (self__SimplExpr.For_set sd);
           ret (sl1 ++
                makeif a1 (T.Sset t (T.Econst_int Int.one ty)) (makeseq sl2) :: nil,
                T.Etempvar t ty)
       | self__SimplExpr.For_effects =>
-          do (sl2, a2) <- transl_expr r2 self__SimplExpr.For_effects;
+          do (sl2, a2) <- transl_expr r2 ce self__SimplExpr.For_effects;
           ret (sl1 ++ makeif a1 T.Sskip (makeseq sl2) :: nil, dummy_expr)
       | self__SimplExpr.For_set sd =>
           do t <- temp_for_sd ty sd;
           let sd' := self__SimplExpr.SDcons type_bool ty t sd in
-          do (sl2, a2) <- transl_expr r2 (self__SimplExpr.For_set sd');
+          do (sl2, a2) <- transl_expr r2 ce (self__SimplExpr.For_set sd');
           ret (sl1 ++
                makeif a1 (makeseq (do_set sd (T.Econst_int Int.one ty))) (makeseq sl2) :: nil,
                dummy_expr)
       end).
 Case Eseqand r1 r2 ty := 
-  (fun dst => 
-    do (sl1, a1) <- transl_expr r1 self__SimplExpr.For_val;
+  (fun ce dst => 
+    do (sl1, a1) <- transl_expr r1 ce self__SimplExpr.For_val;
       match dst with
       | self__SimplExpr.For_val =>
           do t <- gensym ty;
           let sd := self__SimplExpr.SDbase type_bool ty t in
-          do (sl2, a2) <- transl_expr r2 (self__SimplExpr.For_set sd);
+          do (sl2, a2) <- transl_expr r2 ce (self__SimplExpr.For_set sd);
           ret (sl1 ++
                makeif a1 (makeseq sl2) (T.Sset t (T.Econst_int Int.zero ty)) :: nil,
                T.Etempvar t ty)
       | self__SimplExpr.For_effects =>
-          do (sl2, a2) <- transl_expr r2 self__SimplExpr.For_effects;
+          do (sl2, a2) <- transl_expr r2 ce self__SimplExpr.For_effects;
           ret (sl1 ++ makeif a1 (makeseq sl2) T.Sskip :: nil, dummy_expr)
       | self__SimplExpr.For_set sd =>
           do t <- temp_for_sd ty sd;
           let sd' := self__SimplExpr.SDcons type_bool ty t sd in
-          do (sl2, a2) <- transl_expr r2 (self__SimplExpr.For_set sd');
+          do (sl2, a2) <- transl_expr r2 ce (self__SimplExpr.For_set sd');
           ret (sl1 ++
                makeif a1 (makeseq sl2) (makeseq (do_set sd (T.Econst_int Int.zero ty))) :: nil,
                dummy_expr)
       end).                          
-Case Esizeof ty' ty := (fun dst => ret (finish dst nil (T.Esizeof ty' ty))).
-Case Ealignof ty' ty := (fun dst => ret (finish dst nil (T.Ealignof ty' ty))).
-Case Eparen e tycast ty := (fun dst => error (msg "SimplExpr.transl_expr: paren")).
+Case Esizeof ty' ty := (fun ce dst => ret (finish dst nil (T.Esizeof ty' ty))).
+Case Ealignof ty' ty := (fun ce dst => ret (finish dst nil (T.Ealignof ty' ty))).
+Case Eparen e tycast ty := (fun ce dst => error (msg "SimplExpr.transl_expr: paren")).
 Case Eunop op r1 ty :=
-  (fun dst =>
-    do (sl1, a1) <- transl_expr r1 self__SimplExpr.For_val;
+  (fun ce dst =>
+    do (sl1, a1) <- transl_expr r1 ce self__SimplExpr.For_val;
     ret (finish dst sl1 (T.Eunop op a1 ty))).
 Case Ebinop op r1 r2 ty :=
-  (fun dst =>
-     do (sl1, a1) <- transl_expr r1 self__SimplExpr.For_val;
-     do (sl2, a2) <- transl_expr r2 self__SimplExpr.For_val;
+  (fun ce dst =>
+     do (sl1, a1) <- transl_expr r1 ce self__SimplExpr.For_val;
+     do (sl2, a2) <- transl_expr r2 ce self__SimplExpr.For_val;
      ret (finish dst (sl1 ++ sl2) (T.Ebinop op a1 a2 ty))).
 FEnd transl_expr.
 
-FDefinition transl_expression : S.expr -> mon (T.stmt * T.expr) := fun r =>
-  do (sl, a) <- transl_expr r self__SimplExpr.For_val; ret (makeseq sl, a).
+FDefinition transl_expression : S.expr -> composite_env -> mon (T.stmt * T.expr) := fun r ce =>
+  do (sl, a) <- transl_expr r ce self__SimplExpr.For_val; ret (makeseq sl, a).
 
-FDefinition transl_expr_stmt : S.expr -> mon T.stmt := fun r =>
-  do (sl, a) <- transl_expr r self__SimplExpr.For_effects; ret (makeseq sl).
+FDefinition transl_expr_stmt : S.expr -> composite_env -> mon T.stmt := fun r ce =>
+  do (sl, a) <- transl_expr r ce self__SimplExpr.For_effects; ret (makeseq sl).
 
-FDefinition transl_if : S.expr -> T.stmt -> T.stmt -> mon T.stmt  := fun r s1 s2 => 
-  do (sl, a) <- transl_expr r self__SimplExpr.For_val;
+FDefinition transl_if : S.expr -> T.stmt -> T.stmt -> composite_env -> mon T.stmt  := fun r s1 s2 ce => 
+  do (sl, a) <- transl_expr r ce self__SimplExpr.For_val;
   ret (makeseq (sl ++ makeif a s1 s2 :: nil)).
 
 Closing Fact is_Sskip:
   forall s, {s = S.Sskip} + {s <> S.Sskip} by {  destruct s; ((left; reflexivity) || (right; congruence)) }.
 
-FRecursion transl_stmt about S.stmt motive (fun (_ : S.stmt) => mon T.stmt) by _rect.
-Case Sskip := (ret T.Sskip).
-Case Sdo e := (transl_expr_stmt e).
+FRecursion transl_stmt about S.stmt motive (fun (_ : S.stmt) => composite_env -> mon T.stmt) by _rect.
+Case Sskip := (fun ce => ret T.Sskip).
+Case Sdo e := (fun ce => transl_expr_stmt e ce).
 Case Sseq s1 s2 := 
-  (do ts1 <- transl_stmt s1;
-   do ts2 <- transl_stmt s2;
-   ret (T.Sseq ts1 ts2)). 
+  (fun ce => 
+     do ts1 <- transl_stmt s1 ce;
+     do ts2 <- transl_stmt s2 ce;
+     ret (T.Sseq ts1 ts2)). 
 Case Sifthenelse e s1 s2 := 
-  (do ts1 <- transl_stmt s1;
-   do ts2 <- transl_stmt s2;
-   do (s', a) <- transl_expression e;
-    if is_Sskip s1 && is_Sskip s2 then
-      ret (T.Sseq s' T.Sskip)
-    else
-      ret (T.Sseq s' (T.Sifthenelse a ts1 ts2))).
+  (fun ce => 
+     do ts1 <- transl_stmt s1 ce;
+     do ts2 <- transl_stmt s2 ce;
+     do (s', a) <- transl_expression e ce;
+     if is_Sskip s1 && is_Sskip s2 then
+       ret (T.Sseq s' T.Sskip)
+     else
+       ret (T.Sseq s' (T.Sifthenelse a ts1 ts2))).
 Case Sreturn e := 
-  (match e with
+  (fun ce => 
+    match e with
     | None => ret (T.Sreturn None)
     | Some e =>
-        do (s', a) <- transl_expression e;
+        do (s', a) <- transl_expression e ce;
         ret (T.Sseq s' (T.Sreturn (Some a)))
     end).
 Case Slabel lbl s1 := 
-  (do ts1 <- transl_stmt s1;
-    ret (T.Slabel lbl ts1)).
-Case Sgoto lbl := (ret (T.Sgoto lbl)).
+  (fun ce => 
+     do ts1 <- transl_stmt s1 ce;
+     ret (T.Slabel lbl ts1)).
+Case Sgoto lbl := (fun ce => ret (T.Sgoto lbl)).
 FEnd transl_stmt.
 
-FDefinition transl_function : S.function -> res T.function := fun f => 
-  match transl_stmt (S.fn_body f) (initial_generator tt) with
+FDefinition transl_function : S.function -> composite_env -> res T.function := fun f ce => 
+  match transl_stmt (S.fn_body f) ce (initial_generator tt) with
   | Err msg =>
       Error msg
   | Res tbody g i =>
@@ -646,10 +651,10 @@ FDefinition transl_function : S.function -> res T.function := fun f =>
 
 Local Open Scope error_monad_scope.
 
-FDefinition transl_fundef : composite_env -> S.fundef -> res T.fundef := fun _ fd =>
+FDefinition transl_fundef : composite_env -> S.fundef -> res T.fundef := fun ce fd =>
     match fd with
     | Internal f =>
-        do tf <- transl_function f; OK (Internal tf)
+        do tf <- transl_function f ce; OK (Internal tf)
     | External ef targs tres cc =>
       OK (External ef targs tres cc)           
     end.
@@ -698,13 +703,6 @@ FDefinition funsig := fun (fd: fundef) =>
 FEnd Cfam.
 
 (* constants *)
-Family Constant.
-FInductive constant : Type :=
-| Ointconst: int -> constant (* integer constant *)
-| Ofloatconst: float -> constant (* double-precision floating-point constant *)
-| Osingleconst: float32 -> constant (* single-precision floating-point constant *)
-| Olongconst: int64 -> constant.
-
 Inductive unary_operation : Type :=
   | Ocast8unsigned: unary_operation(* 8-bit zero extension *)
   | Ocast8signed: unary_operation(* 8-bit sign extension *)
@@ -781,12 +779,16 @@ Inductive binary_operation : Type :=
   | Ocmpfs: comparison -> binary_operation(* float32 comparison *)
   | Ocmpl: comparison -> binary_operation(* long signed comparison *)
   | Ocmplu: comparison -> binary_operation. (* long unsigned comparison *)
-FEnd Constant.
 
 Family Csharpminor extends Cfam.
+FInductive constant : Type :=
+| Ointconst: int -> constant (* integer constant *)
+| Ofloatconst: float -> constant (* double-precision floating-point constant *)
+| Osingleconst: float32 -> constant (* single-precision floating-point constant *)
+| Olongconst: int64 -> constant.
 
 FInductive expr : Type :=
-| Econst : Constant.constant -> expr (* constants *)
+| Econst : constant -> expr (* constants *)
 | Eunop : unary_operation -> expr -> expr(* unary operation *)
 | Ebinop : binary_operation -> expr -> expr -> expr. (* binary operation *)                                    
                                                                               
@@ -816,10 +818,10 @@ Family Cshmgen.
 Family S extends Clight. FEnd S.
 Family T extends Csharpminor. FEnd T.
 
-FDefinition make_intconst := fun (n: int) => T.Econst (Constant.Ointconst n).
-FDefinition make_longconst := fun (f: int64) => T.Econst (Constant.Olongconst f).
-FDefinition make_floatconst := fun (f: float) => T.Econst (Constant.Ofloatconst f).
-FDefinition make_singleconst := fun (f: float32) => T.Econst (Constant.Osingleconst f).
+FDefinition make_intconst := fun (n: int) => T.Econst (T.Ointconst n).
+FDefinition make_longconst := fun (f: int64) => T.Econst (T.Olongconst f).
+FDefinition make_floatconst := fun (f: float) => T.Econst (T.Ofloatconst f).
+FDefinition make_singleconst := fun (f: float32) => T.Econst (T.Osingleconst f).
 FDefinition make_ptrofsconst := fun (n: Z) =>
   if Archi.ptr64 then make_longconst (Int64.repr n) else make_intconst (Int.repr n).            
 
@@ -1262,9 +1264,16 @@ FDefinition transl_program : S.program -> res T.program := fun p =>
 FEnd Cshmgen.
 
 Family Cminor extends Cfam.
+FInductive constant : Type :=
+| Ointconst: int -> constant(* integer constant *)
+| Ofloatconst: float -> constant(* double-precision floating-point constant *)
+| Osingleconst: float32 -> constant(* single-precision floating-point constant *)
+| Olongconst: int64 -> constant(* long integer constant *)
+| Oaddrsymbol: ident -> ptrofs -> constant(* address of the symbol plus the offset *)
+| Oaddrstack: ptrofs -> constant. (* stack pointer plus the given offset *)
 
 FInductive expr : Type :=
-| Econst : Constant.constant -> expr
+| Econst : constant -> expr
 | Eunop : unary_operation -> expr -> expr(* unary operation *)
 | Ebinop : binary_operation -> expr -> expr -> expr. (* binary operation *)
 
@@ -1429,27 +1438,29 @@ FEnd CminorSel.
 Family Cfamtransl.
 Family S extends Cfam. FEnd S.
 Family T extends Cfam. FEnd T.
+
+FOpaque Definition transl_arg : Type := cheat.
    
-FRecursion transl_expr about S.expr motive (fun (_ : S.expr) => res T.expr) by _rect.
-Case Evar id := (OK (T.Evar id)).
+FRecursion transl_expr about S.expr motive (fun (_ : S.expr) => transl_arg -> res T.expr) by _rect.
+Case Evar id := (fun _ => OK (T.Evar id)).
 FEnd transl_expr.
 
-FRecursion transl_stmt about S.stmt motive (fun (_ : S.stmt) => res T.stmt) by _rect.
-Case Sskip := (OK (T.Sskip)).
-Case Sassign id e := ( do te <- transl_expr e; OK (T.Sassign id te)).
+FRecursion transl_stmt about S.stmt motive (fun (_ : S.stmt) => transl_arg -> res T.stmt) by _rect.
+Case Sskip := (fun _ => OK (T.Sskip)).
+Case Sassign id e := (fun arg => do te <- transl_expr e arg; OK (T.Sassign id te)).
 Case Sseq s1 s2 :=
-(do ts1 <- transl_stmt_s1; 
-do ts2 <- transl_stmt_s2; 
-OK (T.Sseq ts1 ts2)).
+(fun arg => do ts1 <- transl_stmt s1 arg; 
+            do ts2 <- transl_stmt s2 arg; 
+            OK (T.Sseq ts1 ts2)).
 Case Sreturn e := 
-(match e with
- | None => OK (T.Sreturn None)
- | Some e =>
-      do te <- transl_expr e;
-      OK (T.Sreturn (Some te))
- end).
-Case Slabel lbl s := (do ts <- transl_stmt s; OK (T.Slabel lbl ts)).
-Case Sgoto lbl := (OK (T.Sgoto lbl)).
+(fun arg => match e with
+            | None => OK (T.Sreturn None)
+            | Some e =>
+                do te <- transl_expr e arg;
+                OK (T.Sreturn (Some te))
+            end).
+Case Slabel lbl s := (fun arg => do ts <- transl_stmt s arg; OK (T.Slabel lbl ts)).
+Case Sgoto lbl := (fun arg => OK (T.Sgoto lbl)).
 FEnd transl_stmt.
       
 FOpaque Definition transl_function : S.function -> res T.function :=
@@ -1468,24 +1479,35 @@ Family Cminorgen extends Cfamtransl.
 Family S extends Csharpminor. FEnd S.
 Family T extends Cminor. FEnd T. 
 
-FDefinition compilenv := PTree.t Z.
+FDefinition compilenv : Type := PTree.t Z.
+FDefinition exit_env : Type := list bool.
+FOverride Definition transl_arg := (compilenv * exit_env)%type.
+
+FRecursion transl_constant about S.constant motive (fun (_ : S.constant) => T.constant) by _rect.
+Case Ointconst n := (T.Ointconst n).
+Case Ofloatconst n := (T.Ofloatconst n).
+Case Osingleconst n := (T.Osingleconst n).
+Case Olongconst n := (T.Olongconst n).
+FEnd transl_constant.
 
 FRecursion transl_expr.
-Case Econst c := (OK (T.Econst c)).
+Case Econst c := (fun _ => OK (T.Econst (transl_constant c))).
 Case Eunop op e1 := 
-  (do te1 <- transl_expr e1; OK (T.Eunop op te1)).
+  (fun arg => do te1 <- transl_expr e1 arg; OK (T.Eunop op te1)).
 Case Ebinop op e1 e2 :=
-  (do te1 <- transl_expr e1;
-   do te2 <- transl_expr e2;
-   OK (T.Ebinop op te1 te2)).
+  (fun arg => 
+     do te1 <- transl_expr e1 arg;
+     do te2 <- transl_expr e2 arg;
+     OK (T.Ebinop op te1 te2)).
 FEnd transl_expr.
     
 FRecursion transl_stmt. 
 Case Sifthenelse e s1 s2 :=
- (do te <- transl_expr e;
-  do ts1 <- transl_stmt s1;
-  do ts2 <- transl_stmt s2;
-  OK (T.Sifthenelse te ts1 ts2)).
+ (fun arg => 
+    do te <- transl_expr e arg;
+    do ts1 <- transl_stmt s1 arg;
+    do ts2 <- transl_stmt s2 arg;
+    OK (T.Sifthenelse te ts1 ts2)).
 FEnd transl_stmt.
 
 (* Stack layout *)
@@ -1504,13 +1526,13 @@ FDefinition assign_variable : compilenv * Z -> ident * Z -> compilenv * Z :=
 FDefinition assign_variables : compilenv * Z -> list (ident * Z) -> compilenv * Z :=
     fun cenv_stacksize vars => List.fold_left assign_variable vars cenv_stacksize.
 
-FDefinition build_compilenv : Csharpminor.function -> compilenv * Z :=
-    fun f => assign_variables (PTree.empty Z, 0) (VarSort.sort (Csharpminor.fn_vars f)).
+FDefinition build_compilenv : S.function -> compilenv * Z :=
+    fun f => assign_variables (PTree.empty Z, 0) (VarSort.sort (S.fn_vars f)).
 
 (* Translate Function, Fundef, Program *)
 FDefinition transl_funbody := 
 fun (cenv: compilenv) (stacksize: Z) (f: S.function) =>
-  do tbody <- transl_stmt (S.fn_body f) (* cenv*) (* nil*) ;
+  do tbody <- transl_stmt (S.fn_body f) (cenv, nil) ;
   OK (T.mkfunction
         (S.fn_sig f)
         (S.fn_params f)
@@ -1518,12 +1540,11 @@ fun (cenv: compilenv) (stacksize: Z) (f: S.function) =>
         stacksize
         tbody).
 
-(*equality thingy *)
-FOverride Definition transl_function := fun (f: S.function) => cheat.
-  (*let (cenv, stacksize) := build_compilenv f in
+FOverride Definition transl_function := fun (f: S.function) =>
+  let (cenv, stacksize) := build_compilenv f in
   if zle stacksize Ptrofs.max_unsigned
   then transl_funbody cenv stacksize f
-  else Error(msg "Cminorgen: too many local variables, stack size exceeded"). *)
+  else Error(msg "Cminorgen: too many local variables, stack size exceeded"). 
 
 FEnd Cminorgen.
 
@@ -1531,6 +1552,9 @@ FEnd Cminorgen.
 Family Selection extends Cfamtransl.
 Family S extends Cminor. FEnd S.
 Family T extends CminorSel. FEnd T.
+
+(*FDefinition known_idents := PTree.t unit.*)
+FOverride Definition transl_arg := unit.
 
 Family SplitLong.
 
@@ -1545,42 +1569,34 @@ FEnd SplitLong.
 FDefinition longconst : int64 -> T.expr := fun n =>
   if Archi.splitlong then SplitLong.longconst n else T.Eop (Op.Olongconst n) T.Enil.
 
-FRecursion sel_constant about Constant.constant motive (fun (_ : Constant.constant) => T.expr) by _rect.
+FDefinition addrsymbol := fun (id: ident) (ofs: ptrofs) =>
+  T.Eop (Op.Oaddrsymbol id ofs) T.Enil.
+
+FDefinition addrstack := fun (ofs: ptrofs) =>
+  T.Eop (Op.Oaddrstack ofs) T.Enil.
+
+FRecursion sel_constant about S.constant motive (fun (_ : S.constant) => T.expr) by _rect.
 Case Ointconst n := (T.Eop (Op.Ointconst n) T.Enil).
 Case Ofloatconst f := (T.Eop (Op.Ofloatconst f) T.Enil).
 Case Osingleconst f := (T.Eop (Op.Osingleconst f) T.Enil).
 Case Olongconst n := (longconst n).
+Case Oaddrsymbol id ofs := (addrsymbol id ofs).
+Case Oaddrstack ofs := (addrstack ofs).
 FEnd sel_constant.
 
-(*FRecursion addimm about T.expr motive (fun (_ : T.expr) => int -> T.expr) by _rect.
-Case Eop op args :=
-  (fun n =>
-     match op, args with
-     | Ointconst m, nil => T.Eop (Ointconst (Int.add n m)) nil
-     | Oaddrsymbol s m, nil   => T.Eop (Oaddrsymbol s (Ptrofs.add (Ptrofs.of_int n) m)) nil
-     | Oaddrstack m, nil      => T.Eop (Oaddrstack (Ptrofs.add (Ptrofs.of_int n) m)) nil
-     | Oaddimm m, t :: nil =>  T.Eop (Oaddimm(Int.add n m)) (t :: nil)                                 
-     | _, _ =>  T.Eop (Oaddimm n) ((T.Eop op args) :: nil)
-     end).
-Case Evar v := (fun n => T.Eop (Oaddimm n) (T.Evar v :: nil)).
-Case Econdition a b c := (fun n => T.Eop (Oaddimm n) (T.Econdition a b c :: nil)).
-Case Elet a b := (fun n => T.Eop (Oaddimm n) (T.Elet a b :: nil)).
-Case Eletvar v := (fun n => T.Eop (Oaddimm n) (T.Eletvar v :: nil)).
-FEnd addimm.*)
-
-(* selectop*)
-FDefinition sel_unop : unary_operation -> T.expr -> T.expr := fun op args => cheat.
-FDefinition sel_binop : binary_operation -> T.expr -> T.expr -> T.expr := fun arg1 arg2 => cheat.
+FOpaque Definition sel_unop : unary_operation -> T.expr -> T.expr := fun op args => cheat.
+FOpaque Definition sel_binop : binary_operation -> T.expr -> T.expr -> T.expr := fun arg1 arg2 => cheat.
 
 FRecursion transl_expr.
-Case Econst cst := (OK (sel_constant cst)).
+Case Econst cst := (fun _ => OK (sel_constant cst)).
 Case Eunop op arg :=
-  ( do targ <- transl_expr arg;
+  (fun argu => do targ <- transl_expr arg argu;
     OK (sel_unop op targ)).
 Case Ebinop op arg1 arg2 :=
-  ( do targ1 <- transl_expr arg1;
-    do targ2 <- transl_expr arg2;
-    OK (sel_binop op targ1 targ2)).
+  (fun argu =>
+       do targ1 <- transl_expr arg1 argu;
+       do targ2 <- transl_expr arg2 argu;
+       OK (sel_binop op targ1 targ2)).
 FEnd transl_expr.
 
 (*FRecursion condexpr_of_expr_eop about
@@ -1602,17 +1618,17 @@ Case Evar i := (T.CEcond (Op.Ccompuimm Cne Int.zero) (T.Econs (T.Evar i) T.Enil)
 FEnd condexpr_of_expr.
        
 FRecursion transl_stmt.                            
-Case Sifthenelse e ifso ifnot := (
+Case Sifthenelse e ifso ifnot := (fun argu =>
    (* For simplicity, don't use the
       "if conversion heuristics" present in CompCert *)                      
-     do ifso' <- transl_stmt ifso ;
-     do ifnot' <- transl_stmt ifnot ;
-     do te <- transl_expr e; 
+     do ifso' <- transl_stmt ifso argu;
+     do ifnot' <- transl_stmt ifnot argu;
+     do te <- transl_expr e argu; 
      OK (T.Sifthenelse (condexpr_of_expr te) ifso' ifnot')).
 FEnd transl_stmt.
 
 FOverride Definition transl_function := fun f =>             
-   do body' <- transl_stmt (S.fn_body f);
+   do body' <- transl_stmt (S.fn_body f) tt;
    OK (T.mkfunction
          (S.fn_sig f)
          (S.fn_params f)
@@ -2261,18 +2277,18 @@ From NFPOP Require Import Bounds.
 (* Fields in bounds that depend on late bound names *)
 
 FRecursion record_regs_of_instr about S.instruction motive
-  (fun (_ : S.instruction) => RegSet.t -> Regset.t) by _rect.
-Case Lreturn := cheat. (* (fun u => u).*)
-Case Lgetstack sl ofs ty r := cheat. (* (fun u => record_reg u r).*)
-Case Lsetstack r sl ofs ty := cheat. (* (fun u => record_reg u r).*)
-Case Lop op args res := cheat. (* (fun u => record_reg u res). *)
-Case Llabel lbl := cheat. (* (fun u => u). *)
-Case Lgoto lbl := cheat. (* (fun u => u). *)
-Case Lcond cond args lbl := cheat. (* (fun u => u). *)
+  (fun (_ : S.instruction) => Bounds.RegSet.t -> Bounds.RegSet.t) by _rect.
+Case Lreturn := (fun u => u).
+Case Lgetstack sl ofs ty r := (fun u => record_reg u r).
+Case Lsetstack r sl ofs ty := (fun u => record_reg u r).
+Case Lop op args res := (fun u => record_reg u res).
+Case Llabel lbl := (fun u => u). 
+Case Lgoto lbl := (fun u => u).
+Case Lcond cond args lbl := (fun u => u). 
 FEnd record_regs_of_instr.
 
-FDefinition record_regs_of_function : S.function -> RegSet.t := fun f =>
-  fold_left (fun u i => cheat (* record_regs_of_instr i u*)) (S.fn_code f) RegSet.empty.
+FDefinition record_regs_of_function : S.function -> Bounds.RegSet.t := fun f =>
+  fold_left (fun u i => record_regs_of_instr i u) (S.fn_code f) Bounds.RegSet.empty.
 
 FRecursion slots_of_instr about S.instruction motive
   (fun (_ : S.instruction) => list (slot * Z * typ)) by _rect.
@@ -3249,7 +3265,7 @@ FDefinition storeind_ptr := fun (src: ireg) (base: ireg) (ofs: ptrofs) (k: Asm.c
 
 FDefinition make_epilogue := fun (f: S.function) (k: Asm.code) =>
   loadind_ptr SP (S.fn_retaddr_ofs f) RA
-    (cheat Asm.Pfreeframe (S.fn_stacksize f) (S.fn_link_ofs f) :: k).
+    (Asm.Pfreeframe (S.fn_stacksize f) (S.fn_link_ofs f) :: k).
 
 FRecursion transl_instr about S.instruction motive (fun (_ : S.instruction) => S.function -> bool -> Asm.code -> res Asm.code) by _rect.
 Case Lgetstack ofs ty dst := (fun f ep k => loadind SP ofs ty dst k).
@@ -3314,7 +3330,7 @@ FDefinition transl_code' :=
 FDefinition transl_function := fun (f: S.function) =>
   do c <- transl_code' f (S.fn_code f) true;
   OK (Asm.mkfunction (S.fn_sig f)
-        (cheat Asm.Pallocframe (S.fn_stacksize f) (S.fn_link_ofs f) ::
+        (Asm.Pallocframe (S.fn_stacksize f) (S.fn_link_ofs f) ::
          storeind_ptr RA SP (S.fn_retaddr_ofs f) (cheat Asm.Pcfi_rel_offset (Ptrofs.to_int (S.fn_retaddr_ofs f)):: c))).
 
 FDefinition transf_function : S.function -> res Asm.function := fun f =>
@@ -3373,11 +3389,12 @@ Family S extends C_Swhile. FEnd S.
 
 FRecursion transl_stmt.
 Case Swhile e s1 :=
-(do s' <- transl_if e T.Sskip T.Sbreak;
- do ts1 <- transl_stmt s1;
+(fun ce => 
+ do s' <- transl_if e T.Sskip T.Sbreak ce;
+ do ts1 <- transl_stmt s1 ce;
  ret (T.Sloop (T.Sseq s' ts1) T.Sskip)).
-Case Sbreak := (ret T.Sbreak).                     
-Case Scontinue := (ret T.Scontinue).
+Case Sbreak := (fun ce => ret T.Sbreak).
+Case Scontinue := (fun ce => ret T.Scontinue).
 FEnd transl_stmt.
 
 FEnd SimplExpr_Swhile.
@@ -3387,9 +3404,10 @@ Family S extends C_Sdowhile. FEnd S.
 
 FRecursion transl_stmt.
 Case Sdowhile e s1 :=
-(do s' <- transl_if e T.Sskip T.Sbreak;
- do ts1 <- transl_stmt s1;
- ret (T.Sloop ts1 s')).  
+(fun ce => 
+   do s' <- transl_if e T.Sskip T.Sbreak ce;
+   do ts1 <- transl_stmt s1 ce;
+   ret (T.Sloop ts1 s')).
 FEnd transl_stmt.
 
 FEnd SimplExpr_Sdowhile.
@@ -3399,10 +3417,11 @@ Family S extends C_Sfor. FEnd S.
 
 FRecursion transl_stmt.
 Case Sfor s1 e2 s3 s4 :=
-(do ts1 <- transl_stmt s1;
- do s' <- transl_if e2 T.Sskip T.Sbreak;
- do ts3 <- transl_stmt s3;
- do ts4 <- transl_stmt s4;
+(fun ce => 
+ do ts1 <- transl_stmt s1 ce;
+ do s' <- transl_if e2 T.Sskip T.Sbreak ce;
+ do ts3 <- transl_stmt s3 ce;
+ do ts4 <- transl_stmt s4 ce;
  if is_Sskip s1 then
    ret (T.Sloop (T.Sseq s' ts4) ts3)
  else
@@ -3412,19 +3431,38 @@ FEnd transl_stmt.
 FEnd SimplExpr_Sfor.
 
 Family SimplExpr extends
-  SimplExpr_Sfor,
+  SimplExpr_Swhile,
   SimplExpr_Sdowhile,
-  SimplExpr_Swhile.
+  SimplExpr_Sfor.
 FEnd SimplExpr.
 
-Family Cfam.
+(*Family Cfam.
 
 FInductive stmt : Type :=
-| Sloop: stmt -> stmt
-| Sblock: stmt -> stmt
-| Sexit: nat -> stmt.
+| Sloop: stmt -> stmt.
 
-FEnd Cfam.
+FEnd Cfam.*)
+
+Trait Csharpminor_Sblock extends Csharpminor.
+FInductive stmt : Type :=
+| Sblock: stmt -> stmt. 
+FEnd Csharpminor_Sblock.
+
+Trait Csharpminor_Sexit extends Csharpminor.
+FInductive stmt : Type :=
+| Sexit: nat -> stmt.
+FEnd Csharpminor_Sexit.
+
+Trait Csharpminor_Sloop extends Csharpminor.
+FInductive stmt : Type :=
+| Sloop: stmt -> stmt.
+FEnd Csharpminor_Sloop.
+
+Family Csharpminor extends   
+  Csharpminor_Sexit, 
+  Csharpminor_Sloop,
+  Csharpminor_Sblock.
+FEnd Csharpminor.
 
 From NFPOP Require Import Errors.
 Local Open Scope error_monad_scope.
@@ -3448,15 +3486,76 @@ FEnd Cshmgen_Sloop.
 Family Cshmgen extends Cshmgen_Sloop.
 FEnd Cshmgen.
 
-Family Cfamtransl.
+Family Cminor.
+FInductive stmt : Type :=
+| Sblock: stmt -> stmt
+| Sexit: nat -> stmt
+| Sloop: stmt -> stmt.
+FEnd Cminor.
+
+Family CminorSel.
+FInductive stmt : Type :=
+| Sblock: stmt -> stmt
+| Sexit: nat -> stmt
+| Sloop: stmt -> stmt.
+FEnd CminorSel.
+
+Trait Cminorgen_Sblock extends Cminorgen.
+Family S extends Csharpminor_Sblock. FEnd S.
+Family T extends Cminor. FEnd T.
 
 FRecursion transl_stmt.
-Case Sloop body := (do ts <- transl_stmt body; OK (T.Sloop ts)).
-Case Sblock body := (do ts <- transl_stmt body; OK (T.Sblock ts)).
-Case Sexit n := (OK (T.Sexit n)).
+Case Sblock body := (fun args => do ts <- transl_stmt body (fst args, true :: snd args); OK (T.Sblock ts)).
+FEnd transl_stmt.
+FEnd Cminorgen_Sblock.
+
+Trait Cminorgen_Sexit extends Cminorgen.
+Family S extends Csharpminor_Sexit. FEnd S.
+Family T extends Cminor. FEnd T.
+
+Inherit exit_env.
+
+MetaData shift_exit.
+Fixpoint shift_exit (e: self__Cminorgen_Sexit.exit_env) (n: nat) {struct e} : nat :=
+  match e, n with
+  | nil, _ => n
+  | false :: e', _ => 1 + (shift_exit e' n)
+  | true :: e', O => O
+  | true :: e', m => 1 + (shift_exit e' (m - 1))
+  end.
+FEnd shift_exit.
+
+FRecursion transl_stmt.
+Case Sexit n := (fun arg => OK (T.Sexit (shift_exit (snd arg) n))).
+FEnd transl_stmt.
+FEnd Cminorgen_Sexit.
+
+Trait Cminorgen_Sloop extends Cminorgen.
+Family S extends Csharpminor_Sloop. FEnd S.
+Family T extends Cminor. FEnd T.
+
+FRecursion transl_stmt.
+Case Sloop body := (fun arg => do ts <- transl_stmt body arg; OK (T.Sloop ts)).
+FEnd transl_stmt.
+FEnd Cminorgen_Sloop.
+
+Family Cminorgen extends 
+    Cminorgen_Sexit,
+    Cminorgen_Sloop,
+    Cminorgen_Sblock.
+FEnd Cminorgen.
+
+Family Selection. 
+Family S extends Cminor. FEnd S.
+Family T extends CminorSel. FEnd T.
+
+FRecursion transl_stmt.
+Case Sloop body := (fun arg => do ts <- transl_stmt body arg; OK (T.Sloop ts)).
+Case Sblock body := (fun arg => do ts <- transl_stmt body arg; OK (T.Sblock ts)).
+Case Sexit n := (fun arg => OK (T.Sexit n)).
 FEnd transl_stmt.
 
-FEnd Cfamtransl.
+FEnd Selection.
 
 Trait RTL_jumptable extends RTL.
 FInductive instruction: Type :=
@@ -3511,6 +3610,9 @@ Case Ljumptable a tbl := (fun rest => tbl).
 FEnd successors_instr.
 FEnd LTL_jumptable.
 
+Family LTL extends LTL_jumptable.
+FEnd LTL.
+
 Family Lfam.
 FInductive instruction: Type :=
 | Ljumptable : mreg -> list label -> instruction.
@@ -3536,7 +3638,7 @@ FEnd Linearize.
 Trait Stacking_jumptable extends Stacking.
 
 FRecursion record_regs_of_instr.
-Case Ljumptable arg tbl := cheat.
+Case Ljumptable arg tbl := (fun u => u).
 FEnd record_regs_of_instr.
 
 FRecursion slots_of_instr.
@@ -3576,6 +3678,54 @@ FEnd Asmgen.
 
 FEnd Comp_Loops.
 
+Family CompX extends Comp_Loops.
+
+Family SimplExpr.
+Final Family S := C.
+Final Family T := Clight.
+FEnd SimplExpr. 
+
+Family Cshmgen.
+Final Family S := Clight.
+Final Family T := Csharpminor.
+FEnd Cshmgen.
+
+Family Cminorgen.
+Final Family S := Csharpminor.
+Final Family T := Cminor.
+FEnd Cminorgen.
+
+Family Selection. 
+Final Family S := Cminor.
+Final Family T := CminorSel.
+FEnd Selection.
+
+Family RTLgen.
+Final Family S := CminorSel.
+Final Family T := RTL.
+FEnd RTLgen.
+
+Inherit Lfam.
+Family Linear extends Lfam. FEnd Linear.
+Family Mach extends Lfam. FEnd Mach.
+
+Family Linearize.
+Final Family S := LTL.
+Final Family T := Linear.
+
+FEnd Linearize.
+
+Family Stacking.
+Final Family S := Linear.
+Final Family T := Mach.
+FEnd Stacking.
+
+Family Asmgen.
+Final Family S := Mach.
+FEnd Asmgen.
+
+FEnd CompX.
+
 Trait Comp_Builtin extends Base.
 
 Family C.
@@ -3602,7 +3752,7 @@ Family SimplExpr.
 
 FRecursion transl_expr.
 Case Ebuiltin ef tyargs rl ty :=
-  (fun dst =>
+  (fun ce dst =>
      do (sl, al) <- cheat (*transl_exprlist rl*);
       match dst with
       | self__SimplExpr.For_val | self__SimplExpr.For_set _ =>
@@ -3666,6 +3816,35 @@ FInductive stmt : Type :=
 | Sbuiltin : builtin_res ident -> external_function -> list (builtin_arg expr) -> stmt.
 FEnd CminorSel.
 
+Family Cminorgen.
+Family S extends Csharpminor. FEnd S.
+Family T extends Cminor. FEnd T.
+
+Inherit transl_expr.
+
+MetaData transl_exprlist.
+Fixpoint transl_exprlist 
+  (cenv: self__Cminorgen.transl_arg) (el: list self__Cminorgen.S.expr)
+                     {struct el}: res (list self__Cminorgen.T.expr) :=
+  match el with
+  | nil =>
+      OK nil
+  | e1 :: e2 =>
+      do te1 <- self__Cminorgen.transl_expr e1 cenv;
+      do te2 <- transl_exprlist cenv e2;
+      OK (te1 :: te2)
+  end.
+FEnd transl_exprlist.
+
+FRecursion transl_stmt.
+Case Sbuiltin optid ef el :=
+   (fun cenv => 
+      do tel <- transl_exprlist cenv el;
+      OK (T.Sbuiltin optid ef tel)).
+FEnd transl_stmt.
+
+FEnd Cminorgen.
+
 Family Selection.
 From NFPOP Require Import Builtins.
 
@@ -3693,14 +3872,14 @@ Fixpoint sel_exprlist (al: list self__Selection.S.expr) : res self__Selection.T.
   match al with
   | nil => OK self__Selection.T.Enil
   | a :: bl =>
-      do ta <- (self__Selection.transl_expr a);
+      do ta <- (self__Selection.transl_expr a tt);
       do rest <- (sel_exprlist bl);
       OK (self__Selection.T.Econs ta rest)
   end.
 FEnd sel_exprlist.
 
 FDefinition sel_builtin_arg : S.expr -> builtin_arg_constraint -> res (AST.builtin_arg T.expr) := fun e c =>       
-  do e' <- transl_expr e;
+  do e' <- transl_expr e tt;
   let ba := cheat (* builtin_arg e'*) in (* selection! *)
   if builtin_arg_ok ba c then OK ba else OK (BA e').
 
@@ -3756,7 +3935,7 @@ FDefinition sel_builtin :=
 
 FRecursion transl_stmt.
 Case Sbuiltin optid ef args :=
-      (sel_builtin optid ef args).
+    (fun _ => sel_builtin optid ef args).
 FEnd transl_stmt.
 FEnd Selection.
 
@@ -3852,7 +4031,7 @@ FEnd RTLgen.
 
 FEnd Comp_Builtin.
 
-Trait Comp_Heap extends Base. (* , Comp_builtin.*)
+Trait Comp_Heap extends Base, Comp_Builtin.
 
 Trait C_Eaddrof extends C.
 FInductive expr : Type :=
@@ -3946,8 +4125,8 @@ FEnd eval_simpl_expr.
 From NFPOP Require Import Mon.
 Local Open Scope gensym_monad_scope.
 
-FRecursion is_bitfield_access about T.expr motive (fun (_ : T.expr) => mon bitfield) by _rect.
-Case _ := (ret Full).
+FRecursion is_bitfield_access about T.expr motive (fun (_ : T.expr) => composite_env -> mon bitfield) by _rect.
+Case _ := (fun ce => ret Full).
 FEnd is_bitfield_access.
 
 FDefinition chunk_for_volatile_type : type -> bitfield -> option memory_chunk := fun ty bf =>
@@ -3968,12 +4147,10 @@ FDefinition make_assign : bitfield -> T.expr -> T.expr -> T.stmt := fun bf l r =
       T.Sassign l r
   | Some chunk =>
       let ty := T.typeof l in
-      let typtr := Tpointer ty noattr in
-      cheat
-      (*cheat (*Sbuiltin*) None (EF_vstore chunk) (typtr :: (ty :: nil))
-                    (T.Eaddrof l typtr :: r :: nil) *)
+      let typtr := Tpointer ty noattr in      
+      T.Sbuiltin None (EF_vstore chunk) (typtr :: (ty :: nil))
+                    (T.Eaddrof l typtr :: r :: nil)
   end.
-
 
 FDefinition make_normalize := fun (sz: intsize) (sg: signedness) (width: Z) (r: T.expr) =>
   let intconst (n: Z) := T.Econst_int (Int.repr n) type_int32s in
@@ -3995,10 +4172,10 @@ FDefinition make_assign_value := fun (bf: bitfield) (r: T.expr) =>
 
 FRecursion transl_expr.
 Case Eassign l1 r2 ty := 
-(fun dst => 
- do (sl1, a1) <- transl_expr l1 self__SimplExpr_Eassign.For_val;
- do (sl2, a2) <- transl_expr r2 self__SimplExpr_Eassign.For_val;
- do bf <- is_bitfield_access a1;
+(fun ce dst => 
+ do (sl1, a1) <- transl_expr l1 ce self__SimplExpr_Eassign.For_val;
+ do (sl2, a2) <- transl_expr r2 ce self__SimplExpr_Eassign.For_val;
+ do bf <- is_bitfield_access a1 ce;
  let ty1 := S.typeof l1 in
  let ty2 := S.typeof r2 in
  match dst with
@@ -4014,37 +4191,39 @@ Case Eassign l1 r2 ty :=
 FEnd transl_expr.
 FEnd SimplExpr_Eassign.
 
-Trait SimplExpr_Evalof extends SimplExpr.
+Trait SimplExpr_Evalof extends SimplExpr, SimplExpr_Eassign.
 Family S extends C_Evalof. FEnd S.
 
 FRecursion eval_simpl_expr.
 Case _ := None.
 FEnd eval_simpl_expr.
 
-FDefinition make_set := fun (bf: bitfield) (id: ident) (l: T.expr) => T.Sskip. (* dummy *)
-(* match chunk_for_volatile_type (typeof l) bf with
-  | None => Sset id l
+Inherit chunk_for_volatile_type.
+
+FDefinition make_set := fun (bf: bitfield) (id: ident) (l: T.expr) => 
+ match chunk_for_volatile_type (T.typeof l) bf with
+  | None => T.Sset id l
   | Some chunk =>
-      let typtr := Tpointer (typeof l) noattr in
-      Sbuiltin (Some id) (EF_vload chunk) (Tcons typtr Tnil) ((Eaddrof l typtr):: nil)
-  end. *)
+      let typtr := Tpointer (T.typeof l) noattr in
+      T.Sbuiltin (Some id) (EF_vload chunk) (typtr :: nil) ((T.Eaddrof l typtr):: nil)
+  end.
 
-FRecursion is_bitfield_access about T.expr motive (fun (_ : T.expr) => mon bitfield) by _rect.
+(*FRecursion is_bitfield_access about T.expr motive (fun (_ : T.expr) => mon bitfield) by _rect.
 Case _ := (ret Full).
-FEnd is_bitfield_access.
+FEnd is_bitfield_access.*)
 
-FDefinition transl_valof : type -> T.expr -> mon (list T.stmt * T.expr) := fun ty l =>
+FDefinition transl_valof : composite_env -> type -> T.expr -> mon (list T.stmt * T.expr) := fun ce ty l =>
   if type_is_volatile ty
   then do t <- gensym ty;
-       do bf <- is_bitfield_access l;
+       do bf <- is_bitfield_access l ce;
        ret (make_set bf t l :: nil, T.Etempvar t ty)
   else ret (nil, l).
 
 FRecursion transl_expr.
 Case Evalof l ty := 
-(fun dst => 
-   do (sl1, a1) <- transl_expr l self__SimplExpr_Evalof.For_val;
-   do (sl2, a2) <- transl_valof (S.typeof l) a1;
+(fun ce dst => 
+   do (sl1, a1) <- transl_expr l ce self__SimplExpr_Evalof.For_val;
+   do (sl2, a2) <- transl_valof ce (S.typeof l) a1;
    ret (finish dst (sl1 ++ sl2) a2)).
 FEnd transl_expr.
 
@@ -4059,7 +4238,7 @@ FEnd eval_simpl_expr.
 
 FRecursion transl_expr. 
 Case Ederef r ty :=
-  (fun dst => do (sl, a) <- transl_expr r self__SimplExpr_Ederef.For_val;
+  (fun ce dst => do (sl, a) <- transl_expr r ce self__SimplExpr_Ederef.For_val;
   ret (finish dst sl (T.Ederef a ty))).
 FEnd transl_expr.
 
@@ -4074,7 +4253,7 @@ FEnd eval_simpl_expr.
 
 FRecursion transl_expr. 
 Case Eaddrof l ty :=
-   (fun dst => do (sl, a) <- transl_expr l self__SimplExpr_Eaddrof.For_val;
+   (fun ce dst => do (sl, a) <- transl_expr l ce self__SimplExpr_Eaddrof.For_val;
       ret (finish dst sl (T.Eaddrof a ty))).
 FEnd transl_expr.
 
@@ -4132,9 +4311,8 @@ fun sz signedness pos width addr val =>
 FDefinition make_memcpy : composite_env -> T.expr -> T.expr -> type -> res T.stmt := 
   fun ce dst src ty => 
   do sz <- sizeof ce ty;
-  cheat.
-  (*OK (Sbuiltin None (EF_memcpy sz (Ctypes.alignof_blockcopy ce ty))
-                    (dst :: src :: nil)). *)
+  OK (T.Sbuiltin None (EF_memcpy sz (Ctypes.alignof_blockcopy ce ty))
+                    (dst :: src :: nil)).
 
 FDefinition make_store := fun (ce: composite_env) (addr: T.expr) (ty: type) (bf: bitfield) (rhs: T.expr) =>
   match bf with
@@ -4269,25 +4447,26 @@ Family T extends Cminor. FEnd T.
 
 Inherit compilenv.
 
-(* TODO: extended with addrstack/oaddrsymbol *)
 FDefinition var_addr : compilenv -> ident -> T.expr := fun cenv id =>
   match PTree.get id cenv with
-  | Some ofs => T.Econst (cheat (*Oaddrstack*) (Ptrofs.repr ofs))
-  | None => T.Econst (cheat (*Oaddrsymbol*) id Ptrofs.zero)
-  end. 
+  | Some ofs => T.Econst (T.Oaddrstack (Ptrofs.repr ofs))
+  | None => T.Econst (T.Oaddrsymbol id Ptrofs.zero)
+  end.
 
 FRecursion transl_expr.
-Case Eaddrof id := (OK (var_addr cheat (*cenv*) id)).
+Case Eaddrof id := (fun arg => OK (var_addr (fst arg) id)).
 Case Eload chunk e :=
-  (do te <- transl_expr e;
-   OK (T.Eload chunk te)).
+  (fun arg => 
+     do te <- transl_expr e arg;
+     OK (T.Eload chunk te)).
 FEnd transl_expr.
 
 FRecursion transl_stmt.
 Case Sstore chunk e1 e2 :=
-( do te1 <- transl_expr e1;
-  do te2 <- transl_expr e2;
-  OK (T.Sstore chunk te1 te2)).
+(fun arg => 
+   do te1 <- transl_expr e1 arg;
+   do te2 <- transl_expr e2 arg;
+   OK (T.Sstore chunk te1 te2)).
 FEnd transl_stmt.
 
 FEnd Cminorgen.
@@ -4311,7 +4490,7 @@ FDefinition store := fun (chunk: memory_chunk) (e1 e2: T.expr) =>
 
 FRecursion transl_expr.
 Case Eload chunk addr :=
-  (do taddr <- transl_expr addr;
+  (fun arg => do taddr <- transl_expr addr arg;
    OK (load chunk taddr)).
 FEnd transl_expr.
 
@@ -4321,9 +4500,10 @@ FEnd condexpr_of_expr.
   
 FRecursion transl_stmt.
 Case Sstore chunk addr rhs :=
-  ( do taddr <- transl_expr addr;
-    do trhs <- transl_expr rhs;
-    OK (store chunk taddr trhs)).
+  (fun arg => 
+     do taddr <- transl_expr addr arg;
+     do trhs <- transl_expr rhs arg;
+     OK (store chunk taddr trhs)).
 FEnd transl_stmt.
 FEnd Selection.
 
@@ -4408,8 +4588,8 @@ Family S extends Linear. FEnd S.
 Family T extends Mach. FEnd T.
 
 FRecursion record_regs_of_instr.
-Case Lload chunk addr args dst := cheat. (* (fun u => record_reg u dst).*)
-Case Lstore chunk addr args src := cheat. (*(fun u => u)*)
+Case Lload chunk addr args dst := (fun u => record_reg u dst).
+Case Lstore chunk addr args src := (fun u => u).
 FEnd record_regs_of_instr.
 
 FRecursion slots_of_instr.
@@ -4446,10 +4626,8 @@ FDefinition transl_memory_access
   | Aindexed ofs, a1 :: nil =>
       do rs <- ireg_of a1;
       OK (indexed_memory_access mk_instr rs ofs k)
-  | Aglobal id ofs, nil =>
-   (* Add this instruction *)
-  (*OK (Ploadsymbol_high X31 id ofs :: mk_instr X31 (Ofslow id ofs) :: k) *)
-      cheat
+  | Aglobal id ofs, nil =>   
+    OK (Asm.Ploadsymbol_high X31 id ofs :: mk_instr X31 (Asm.Ofslow id ofs) :: k)      
   | Ainstack ofs, nil =>
       OK (indexed_memory_access mk_instr SP ofs k)
   | _, _ =>
@@ -4528,7 +4706,7 @@ FEnd Asmgen.
 
 FEnd Comp_Heap.
 
-Trait Comp_Field extends Base.
+Trait Comp_Field extends Base, Comp_Heap.
 Family C.
 FInductive expr : Type :=
 | Efield : expr -> ident -> type -> expr. 
@@ -4558,10 +4736,33 @@ FEnd eval_simpl_expr.
 
 From NFPOP Require Import Mon.
 Local Open Scope gensym_monad_scope.
+
+FDefinition is_bitfield_access_aux := fun 
+              (ce : composite_env) (fn: composite_env -> ident -> members -> res (Z * bitfield))
+              (id: ident) (fld: ident) => (* : mon bitfield :=*)
+  match ce!id with
+  | None => error (MSG "unknown composite " :: CTX id :: nil)
+  | Some co =>
+      match fn ce fld (co_members co) with
+      | OK (_, bf) => ret bf
+      | Error _ => error (MSG "unknown field " :: CTX fld :: nil)
+      end
+  end.
+
+FRecursion is_bitfield_access.
+Case Efield r f x := 
+ (fun cenv => 
+  match T.typeof r with
+  | Tstruct id _ => is_bitfield_access_aux cenv field_offset id f
+  | Tunion id _ => is_bitfield_access_aux cenv union_field_offset id f
+  | _ => error (msg "is_bitfield_access")
+  end).
+FEnd is_bitfield_access.
+
 FRecursion transl_expr.
 Case Efield r f ty :=
-  (fun dst =>
-    do (sl, a) <- transl_expr r self__SimplExpr.For_val;
+  (fun ce dst =>
+    do (sl, a) <- transl_expr r ce self__SimplExpr.For_val;
     ret (finish dst sl (T.Efield a f ty))).
 FEnd transl_expr.
 FEnd SimplExpr.
@@ -4569,13 +4770,12 @@ FEnd SimplExpr.
 Family Cshmgen.
 Family S extends Clight. FEnd S.
 Family T extends Csharpminor. FEnd T.
-(* This family (Comp_Efield) should extend the heap extension *)
 From NFPOP Require Import Errors.
 Local Open Scope error_monad_scope.
 
+(*Inherit alignof.
 
-Inherit alignof.
-
+Inherit make_extract_bitfield.
 FDefinition make_extract_bitfield 
  : intsize -> signedness -> Z -> Z -> T.expr -> res T.expr := 
 fun sz sg pos width addr => cheat. (*we need the Eload expr *)
@@ -4586,7 +4786,9 @@ FDefinition make_load := fun (addr: T.expr) (ty_res: type) (bf: bitfield) =>
       cheat
   | Bits sz sg pos width =>
       make_extract_bitfield sz sg pos width addr
-  end.
+  end.*)
+
+Inherit make_load.
 
 FDefinition make_field_access
   := fun (ce: composite_env) (ty: type) (f: ident) (a: T.expr) =>
@@ -4623,14 +4825,11 @@ FEnd Cshmgen.
 
 FEnd Comp_Field.
 
-Trait Comp_Call extends Base.
+Trait Comp_Call extends Base, Comp_Builtin.
 
 Family C.
 FInductive expr : Type :=
-| Ecall : expr -> exprlist -> type -> expr
-with exprlist : Type :=
-| Enil : exprlist
-| Econs : expr -> exprlist -> exprlist.
+| Ecall : expr -> exprlist -> type -> expr.
 
 FRecursion typeof.
 Case Ecall e args t := t.
@@ -4653,8 +4852,8 @@ Family T extends Clight. FEnd T.
 
 FRecursion transl_expr.
 Case Ecall r1 rl2 ty :=
-  (fun dst =>
-   do (sl1, a1) <- transl_expr r1 self__SimplExpr.For_val;
+  (fun ce dst =>
+   do (sl1, a1) <- transl_expr r1 ce self__SimplExpr.For_val;
    do (sl2, al2) <- cheat (*transl_exprlist rl2*);
    match dst with
    | self__SimplExpr.For_val | self__SimplExpr.For_set _ =>
@@ -4721,7 +4920,7 @@ Case Scall x b cl :=
      match classify_fun (S.typeof b) with
       | fun_case_f args res cconv =>
           do tb <- transl_expr b ce;
-          do tcl <- cheat (*transl_arglist ce cl args*); (*from builtin*)
+          do tcl <- transl_arglist ce cl args; 
           let sg := {| sig_args := typlist_of_arglist cl args;
                        sig_res  := rettype_of_type res;
                        sig_cc   := cconv |} in
@@ -4748,9 +4947,9 @@ Family Cminorgen.
 Family S extends Csharpminor. FEnd S.
 Family T extends Cminor. FEnd T.
 
-Inherit transl_expr.
+(*Inherit transl_expr.*)
 
-MetaData transl_exprlist.
+(*MetaData transl_exprlist.
 Fixpoint transl_exprlist (cenv: self__Cminorgen.compilenv) (el: list self__Cminorgen.S.expr)
                      {struct el}: res (list self__Cminorgen.T.expr) :=
   match el with
@@ -4761,12 +4960,13 @@ Fixpoint transl_exprlist (cenv: self__Cminorgen.compilenv) (el: list self__Cmino
       do te2 <- transl_exprlist cenv e2;
       OK (te1 :: te2)
   end.
-FEnd transl_exprlist.
+FEnd transl_exprlist.*)
 
 FRecursion transl_stmt.
 Case Scall optid sig e el :=
-  (do te <- transl_expr e;
-   do tel <- transl_exprlist cheat (*cenv*) el;
+  (fun arg => 
+     do te <- transl_expr e arg;
+     do tel <- transl_exprlist arg el;
    OK (T.Scall optid sig te tel)).
 FEnd transl_stmt.
 FEnd Cminorgen.
@@ -4782,16 +4982,16 @@ Fixpoint sel_exprlist (al: list self__Selection.S.expr) : res self__Selection.T.
   match al with
   | nil => OK self__Selection.T.Enil
   | a :: bl =>
-      do ta <- (self__Selection.transl_expr a);
+      do ta <- (self__Selection.transl_expr a tt);
       do tbl <- (sel_exprlist bl);
       OK (self__Selection.T.Econs ta tbl)
   end.
 FEnd sel_exprlist.
 
-FDefinition expr_is_addrof_ident : T.expr -> option ident := fun e => cheat.
-  (* extend Cminor ops with Oaddrsymbol *)
+FDefinition expr_is_addrof_ident : S.expr -> option ident := fun e =>
+  None. (* simplify things *)
   (*match e with
-  | Cminor.Econst (Cminor.Oaddrsymbol id ofs) =>
+  | T.Econst (T.Oaddrsymbol id ofs)=>
       if Ptrofs.eq ofs Ptrofs.zero then Some id else None
   | _ => None
   end.*)
@@ -4803,7 +5003,7 @@ Inductive call_kind : Type :=
   | Call_builtin (ef: external_function).
 FEnd call_kind.
 
-FDefinition classify_call : T.expr -> call_kind := fun e =>
+FDefinition classify_call : S.expr -> call_kind := fun e =>
   match expr_is_addrof_ident e with
   | None => self__Selection.Call_default
   | Some id => self__Selection.Call_imm id
@@ -4816,17 +5016,19 @@ FDefinition classify_call : T.expr -> call_kind := fun e =>
 
 FRecursion transl_stmt.
 Case Scall optid sg fn args :=
-  (do tfn <- transl_expr fn;
-  do targs <- sel_exprlist args;
-  OK (match classify_call tfn with
-  | self__Selection.Call_default => T.Scall optid sg (inl _ tfn) targs
-  | self__Selection.Call_imm id => T.Scall optid sg (inr _ id) targs
-  | self__Selection.Call_builtin ef => (* sel_builtin optid ef args*) cheat (* needs builtin *)
+  (fun arg => 
+     do tfn <- transl_expr fn arg;
+     do targs <- sel_exprlist args;
+     OK (match classify_call fn with
+         | self__Selection.Call_default => T.Scall optid sg (inl _ tfn) targs
+         | self__Selection.Call_imm id => T.Scall optid sg (inr _ id) targs
+         | self__Selection.Call_builtin ef => (* sel_builtin optid ef args*) cheat (* needs builtin *)
       end)).
 Case Stailcall sg fn args := 
-  ( do targs <- (sel_exprlist args);
-    do tfn <- (transl_expr fn);
-    OK (match classify_call tfn with
+  (fun argu => 
+     do targs <- (sel_exprlist args);
+    do tfn <- (transl_expr fn argu);
+    OK (match classify_call fn with
    | self__Selection.Call_imm id => T.Stailcall sg (inr _ id) targs
    | _ => T.Stailcall sg (inl _ tfn) targs
    end)).
@@ -4935,7 +5137,7 @@ Family S extends Linear. FEnd S.
 Family T extends Mach. FEnd T.
 
 FRecursion record_regs_of_instr.
-Case _ := cheat. (*todo!*)
+Case _ := (fun u => u).
 FEnd record_regs_of_instr.
 
 FRecursion slots_of_instr.
@@ -5022,7 +5224,8 @@ Family S extends C_Switch. FEnd S.
 
 FRecursion transl_stmt.
 Case Sswitch e ls := 
-(do (s', a) <- transl_expression e;
+(fun ce => 
+   do (s', a) <- transl_expression e ce;
   (* do tls <- transl_lblstmt ls;*)
  ret (T.Sseq s' (T.Sswitch a cheat))).
 FEnd transl_stmt.
@@ -5098,8 +5301,6 @@ Family Cminorgen.
 Family S extends Csharpminor. FEnd S.
 Family T extends Cminor. FEnd T.
 
-FDefinition exit_env := list bool.
-
 FRecursion switch_table about S.lbl_stmts motive (fun (_ : S.lbl_stmts) => nat -> list (Z * nat) * nat) by _rect.
 Case LSnil := (fun k => (nil, k)).
 Case LScons lbl stmt rem :=
@@ -5110,6 +5311,8 @@ Case LScons lbl stmt rem :=
    end).
 FEnd switch_table.
 
+Inherit exit_env.
+
 FRecursion switch_env about S.lbl_stmts motive (fun (_ : S.lbl_stmts) => exit_env -> exit_env) by _rect.
 Case LSnil := (fun e => e).
 Case LScons a b ls' := (fun e => false :: switch_env ls' e).
@@ -5118,9 +5321,10 @@ FEnd switch_env.
 
 FRecursion transl_stmt.
 Case Sswitch long e ls :=
-  (let (tbl, dfl) := switch_table ls O in
-  do te <- transl_expr (*cenv*) e;
-  cheat (*transl_lblstmt cenv*) (switch_env ls cheat (*xenv*)) ls (T.Sswitch long te tbl dfl)).
+  (fun args => 
+     let (tbl, dfl) := switch_table ls O in
+     do te <- transl_expr e args;
+     cheat (*transl_lblstmt cenv*) (switch_env ls (snd args)) ls (T.Sswitch long te tbl dfl)).
 FEnd transl_stmt.
 
 FEnd Cminorgen.
@@ -5172,84 +5376,24 @@ Fixpoint sel_switch
 End SEL_SWITCH.
 FEnd sel_switch.
 
-(*Nondetfunction compimm (default: comparison -> int -> condition)
-                       (sem: comparison -> int -> int -> bool)
-                       (c: comparison) (e1: expr) (n2: int) :=
-  match c, e1 with
-  | c, Eop (Ointconst n1) Enil =>
-      Eop (Ointconst (if sem c n1 n2 then Int.one else Int.zero)) Enil
-  | Ceq, Eop (Ocmp c) el =>
-      if Int.eq_dec n2 Int.zero then
-        Eop (Ocmp (negate_condition c)) el
-      else if Int.eq_dec n2 Int.one then
-        Eop (Ocmp c) el
-      else
-        Eop (Ointconst Int.zero) Enil
-  | Cne, Eop (Ocmp c) el =>
-      if Int.eq_dec n2 Int.zero then
-        Eop (Ocmp c) el
-      else if Int.eq_dec n2 Int.one then
-        Eop (Ocmp (negate_condition c)) el
-      else
-        Eop (Ointconst Int.one) Enil
-  | _, _ =>
-       Eop (Ocmp (default c n2)) (e1 ::: Enil)
-  end.
-
-Nondetfunction comp (c: comparison) (e1: expr) (e2: expr) :=
-  match e1, e2 with
-  | Eop (Ointconst n1) Enil, t2 =>
-      compimm Ccompimm Int.cmp (swap_comparison c) t2 n1
-  | t1, Eop (Ointconst n2) Enil =>
-      compimm Ccompimm Int.cmp c t1 n2
-  | _, _ =>
-      Eop (Ocmp (Ccomp c)) (e1 ::: e2 ::: Enil)
-  end.
-
-Nondetfunction compu (c: comparison) (e1: expr) (e2: expr) :=
-  match e1, e2 with
-  | Eop (Ointconst n1) Enil, t2 =>
-      compimm Ccompuimm Int.cmpu (swap_comparison c) t2 n1
-  | t1, Eop (Ointconst n2) Enil =>
-      compimm Ccompuimm Int.cmpu c t1 n2
-  | _, _ =>
-      Eop (Ocmp (Ccompu c)) (e1 ::: e2 ::: Enil)
-  end.
-
-Nondetfunction sub (e1: expr) (e2: expr) :=
-  match e1, e2 with
-  | t1, Eop (Ointconst n2) Enil =>
-      addimm (Int.neg n2) t1
-  | Eop (Oaddimm n1) (t1:::Enil), Eop (Oaddimm n2) (t2:::Enil) =>
-      addimm (Int.sub n1 n2) (Eop Osub (t1:::t2:::Enil))
-  | Eop (Oaddimm n1) (t1:::Enil), t2 =>
-      addimm n1 (Eop Osub (t1:::t2:::Enil))
-  | t1, Eop (Oaddimm n2) (t2:::Enil) =>
-      addimm (Int.neg n2) (Eop Osub (t1:::t2:::Enil))
-  | _, _ => Eop Osub (e1:::e2:::Enil)
-  end.
-
-FDefinition sel_switch_int :=
-  sel_switch
-    (fun arg n => comp Ceq arg (Eop (Ointconst (Int.repr n)) Enil))
-    (fun arg n => compu Clt arg (Eop (Ointconst (Int.repr n)) Enil))
-    (fun arg ofs => sub arg (Eop (Ointconst (Int.repr ofs)) Enil))
-    (fun arg => arg).
-
-FDefinition sel_switch_long :=
-  sel_switch
-    (fun arg n => cmpl Ceq arg (longconst (Int64.repr n)))
-    (fun arg n => cmplu Clt arg (longconst (Int64.repr n)))
-    (fun arg ofs => subl arg (longconst (Int64.repr ofs)))
-    lowlong.*)
+FOpaque Definition sel_switch_int : nat -> comptree -> T.exitexpr := cheat.
+FOpaque Definition sel_switch_long : nat -> comptree -> T.exitexpr := cheat.
 
 FRecursion transl_stmt.
-Case Sswitch t e cases dfl := cheat.
-  (*(do te <- transl_expr e;
-   let t := compile_switch Int64.modulus dfl cases in
-   if validate_switch Int64.modulus dfl cases t
-   then OK (T.Sswitch (T.XElet te (sel_switch_long O t)))
-   else Error (msg "Selection: bad switch (long)")) *)
+Case Sswitch t e cases dfl :=
+ (fun _ => 
+    if t then 
+      do te <- transl_expr e tt;
+         let t := compile_switch Int64.modulus dfl cases in
+         if validate_switch Int64.modulus dfl cases t
+         then OK (T.Sswitch (T.XElet te (sel_switch_long O t)))
+         else Error (msg "Selection: bad switch (long)")
+    else 
+      do te <- (transl_expr e) tt;
+      let t := compile_switch Int.modulus dfl cases in
+      if validate_switch Int.modulus dfl cases t
+      then OK (T.Sswitch (T.XElet te (sel_switch_int O t)))
+      else Error (msg "Selection: bad switch (int)")).
 FEnd transl_stmt.
 FEnd Selection_Switch.
 
@@ -5311,20 +5455,18 @@ FEnd RTLgen.
 
 FEnd Comp_Switch.
 
-(* small extension *)
-(* small extension: Only C, Clight *)
-(* Struct/Union *)
-
-(* small extension *)
-
 Family Comp extends 
-  Comp_Switch,  
-  Comp_Loop,  
+  Base,
+  Comp_Switch,
+  Comp_Loops,
   Comp_Heap, 
   Comp_Field, 
   Comp_Call,
-  Comp_Float,
+  (* Comp_Float,*)
   Comp_Builtin. 
+
+
+
 FEnd Comp.
 
 Require Extraction.
