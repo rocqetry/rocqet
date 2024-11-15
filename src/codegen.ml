@@ -366,9 +366,9 @@ let compile_partial_recursor_implementation ~name ~type_name =
              ~name ~proof:prove_prec_tactic 
              ~ty ~opaque:Vernacexpr.Transparent)
 
-let compile_closing_fact_implementation ~name ~type_name ~(script: Ltac_plugin.Tacexpr.raw_tactic_expr) =   
+let compile_closing_fact_implementation ~name ~type_name ~(script: Ltac_plugin.Tacexpr.raw_tactic_expr) ~plain =   
   let ty = Constrexpr_ops.mkIdentC type_name in  
-  B.thunk (B.construct_term_using_proof ~is_starting_plain:false ~name ~proof:script ~ty ~opaque:Vernacexpr.Opaque)
+  B.thunk (B.construct_term_using_proof ~is_starting_plain:plain ~name ~proof:script ~ty ~opaque:Vernacexpr.Opaque)
 
 (* The name of the equation to generate axioms for *)
 let compile_computational_axiom_signature
@@ -746,10 +746,10 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         let* _ = compile_fields fields ctx in
         compile_computational_axiom_implementation ~axiom_name:name
           ~axiom_expr:axiom
-    | Snoc (fields, (name, ClosingFact { type_name; script; _ })) ->
+    | Snoc (fields, (name, ClosingFact { type_name; script; plain; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in        
-        compile_closing_fact_implementation ~name ~type_name ~script
+        compile_closing_fact_implementation ~name ~type_name ~script ~plain
     | Snoc
         (fields, (_, PartialRecursor { name; type_name; _ })) -> 
         let open B in
