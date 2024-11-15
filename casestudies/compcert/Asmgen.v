@@ -1449,7 +1449,8 @@ FEnd Comp.
 
 Require Extraction.
 Cd "extraction".
-Separate Extraction X.C.
+Separate Extraction Comp.Asmgen.
+
 Extraction Library X.
 
 Require Extraction.

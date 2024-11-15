@@ -30,7 +30,6 @@ Open Scope asm.
 
 Trait Base.
 
-
 Family C.
 FInductive expr : Type :=
 | Eval : val -> type -> expr (* constant *)
@@ -590,6 +589,38 @@ FEnd Comp_Builtin.
 
 Trait Comp_Heap extends Base, Comp_Builtin.
 
+(*| Eassignop (op: binary_operation) (l: expr) (r: expr) (tyres ty: type)
+| Epostincr (id: incr_or_decr) (l: expr) (ty: type)  
+| Eloc (b: block) (ofs: ptrofs) (bf: bitfield) (ty: type) *)
+
+Trait C_Eassignop extends C.
+FInductive expr : Type :=
+| Eassignop : Cop.binary_operation -> expr -> expr -> type -> type -> expr.
+
+FRecursion typeof.
+Case Eassignop op e0 e1 ty' ty := ty.
+FEnd typeof.
+FEnd C_Eassignop.
+
+Trait C_Epostincr extends C.
+FInductive expr : Type :=
+  | Epostincr : incr_or_decr -> expr -> type -> expr.
+
+FRecursion typeof.
+Case Epostincr a b ty := ty.
+FEnd typeof.
+FEnd C_Epostincr.
+
+(* This is used internally by the semantics of memory *)
+Trait C_Eloc extends C.
+FInductive expr : Type :=
+  | Eloc : block -> ptrofs -> bitfield -> type -> expr.
+
+FRecursion typeof.
+Case Eloc a b c ty := ty.
+FEnd typeof.
+FEnd C_Eloc.
+
 Trait C_Eaddrof extends C.
 FInductive expr : Type :=
 | Eaddrof : expr -> type -> expr. 
@@ -630,7 +661,10 @@ Family C extends
   C_Eassign,
   C_Evalof,
   C_Ederef,
-  C_Eaddrof.
+  C_Eaddrof,
+  C_Eassignop,
+  C_Epostincr,
+  C_Eloc.
 FEnd C.
 
 Trait Clight_Evar extends Clight.
@@ -814,14 +848,99 @@ Case Eaddrof l ty :=
       ret (finish dst sl (T.Eaddrof a ty))).
 FEnd transl_expr with transl_exprlist.
 
-FEnd SimplExpr_Eaddrof. 
+FEnd SimplExpr_Eaddrof.
+
+Trait SimplExpr_Eassignop extends SimplExpr_Evalof, SimplExpr_Eassign, SimplExpr.
+Family S extends C_Eassignop. FEnd S.
+
+FRecursion eval_simpl_expr.
+Case _ := None.
+FEnd eval_simpl_expr.
+
+FRecursion transl_expr with transl_exprlist.
+Case Eassignop op l1 r2 tyres ty := 
+  (fun ce dst =>
+     let ty1 := S.typeof l1 in
+      do (sl1, a1) <- transl_expr l1 ce self__SimplExpr_Eassignop.For_val;
+      do (sl2, a2) <- transl_expr r2 ce self__SimplExpr_Eassignop.For_val;
+      do (sl3, a3) <- transl_valof ce ty1 a1;
+      do bf <- is_bitfield_access a1 ce;
+      match dst with
+      | self__SimplExpr_Eassignop.For_val | self__SimplExpr_Eassignop.For_set _ =>
+          do t <- gensym ty1;
+          ret (finish dst
+                 (sl1 ++ sl2 ++ sl3 ++
+                  T.Sset t (T.Ecast (T.Ebinop op a3 a2 tyres) ty1) ::
+                  make_assign bf a1 (T.Etempvar t ty1) :: nil)
+                 (make_assign_value bf (T.Etempvar t ty1)))
+      | self__SimplExpr_Eassignop.For_effects =>
+          ret (sl1 ++ sl2 ++ sl3 ++ make_assign bf a1 (T.Ebinop op a3 a2 tyres) :: nil,
+              dummy_expr)
+     end).
+FEnd transl_expr with transl_exprlist.
+
+FEnd SimplExpr_Eassignop.
+
+Trait SimplExpr_Epostincr extends SimplExpr_Evalof, SimplExpr_Eassign, SimplExpr.
+Family S extends C_Epostincr. FEnd S.
+
+FRecursion eval_simpl_expr.
+Case _ := None.
+FEnd eval_simpl_expr.
+
+
+FDefinition transl_incrdecr := fun (id: incr_or_decr) (a: T.expr) (ty: type) =>
+  match id with
+  | Incr => T.Ebinop Cop.Oadd a (T.Econst_int Int.one Ctypes.type_int32s) (Cop.incrdecr_type ty)
+  | Decr => T.Ebinop Cop.Osub a (T.Econst_int Int.one Ctypes.type_int32s) (Cop.incrdecr_type ty)
+  end.
+
+FRecursion transl_expr with transl_exprlist.
+Case Epostincr id l1 ty :=
+  (fun ce dst =>
+     let ty1 := S.typeof l1 in
+      do (sl1, a1) <- transl_expr l1 ce self__SimplExpr_Epostincr.For_val;
+      do bf <- is_bitfield_access a1 ce;
+      match dst with
+      | self__SimplExpr_Epostincr.For_val | self__SimplExpr_Epostincr.For_set _ =>
+          do t <- gensym ty1;
+          ret (finish dst
+                 (sl1 ++ make_set bf t a1 ::
+                  make_assign bf a1 (transl_incrdecr id (T.Etempvar t ty1) ty1) :: nil)
+                 (T.Etempvar t ty1))
+      | self__SimplExpr_Epostincr.For_effects =>
+          do (sl2, a2) <- transl_valof ce ty1 a1;
+          ret (sl1 ++ sl2 ++ make_assign bf a1 (transl_incrdecr id a2 ty1) :: nil,
+               dummy_expr)
+      end).
+FEnd transl_expr with transl_exprlist.
+
+FEnd SimplExpr_Epostincr.
+
+Trait SimplExpr_Eloc extends SimplExpr.
+Family S extends C_Eloc. FEnd S.
+
+FRecursion eval_simpl_expr.
+Case _ := None.
+FEnd eval_simpl_expr.
+
+
+FRecursion transl_expr with transl_exprlist.
+Case Eloc b ofs bf ty := 
+   (fun ce dst => error (msg "SimplExpr.transl_expr: Eloc")).
+FEnd transl_expr with transl_exprlist.
+
+FEnd SimplExpr_Eloc.
 
 Family SimplExpr 
   extends 
   SimplExpr_Eassign, 
   SimplExpr_Evalof,
   SimplExpr_Ederef,
-  SimplExpr_Eaddrof.  
+  SimplExpr_Eaddrof,
+  SimplExpr_Eassignop,
+  SimplExpr_Epostincr,
+  SimplExpr_Eloc.
 FEnd SimplExpr.
 
 FEnd Comp_Heap.
@@ -992,7 +1111,6 @@ FEnd SimplExpr.
 FEnd Comp.
 
 Require Extraction.
-
 Cd "extraction".
 
 Separate Extraction Comp.SimplExpr.

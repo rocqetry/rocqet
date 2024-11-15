@@ -327,6 +327,63 @@ FEnd Comp_Loops.
 
 Trait Comp_Builtin extends Base.
 
+Family Linear.
+FInductive instruction : Type :=
+| Lbuiltin: external_function -> list (builtin_arg loc) -> builtin_res mreg -> instruction.
+FEnd Linear.
+
+Family Mach.
+FInductive instruction : Type :=
+| Lbuiltin: external_function -> list (builtin_arg mreg) -> builtin_res mreg -> instruction.
+FEnd Mach.
+
+Family Stacking.
+
+FRecursion record_regs_of_instr.
+Case _ := (fun u => u).
+FEnd record_regs_of_instr.
+
+FRecursion slots_of_instr.
+Case _ := nil.
+FEnd slots_of_instr.
+
+FRecursion outgoing_space.
+Case _ := 0.
+FEnd outgoing_space.
+
+FDefinition offset_local := fun (fe: frame_env) (x: Z) => fe.(fe_ofs_local) + 4 * x.
+
+MetaData transl_builtin_arg.
+Fixpoint transl_builtin_arg (fe: frame_env) (a: builtin_arg loc) : builtin_arg mreg :=
+  match a with
+  | BA (R r) => BA r
+  | BA (S Local ofs ty) =>
+      BA_loadstack (chunk_of_type ty) (Ptrofs.repr (self__Stacking.offset_local fe ofs))
+  | BA (S _ _ _) => BA_int Int.zero(* never happens *)
+  | BA_int n => BA_int n
+  | BA_long n => BA_long n
+  | BA_float n => BA_float n
+  | BA_single n => BA_single n
+  | BA_loadstack chunk ofs =>
+      BA_loadstack chunk (Ptrofs.add ofs (Ptrofs.repr fe.(fe_stack_data)))
+  | BA_addrstack ofs =>
+      BA_addrstack (Ptrofs.add ofs (Ptrofs.repr fe.(fe_stack_data)))
+  | BA_loadglobal chunk id ofs => BA_loadglobal chunk id ofs
+  | BA_addrglobal id ofs => BA_addrglobal id ofs
+  | BA_splitlong hi lo =>
+      BA_splitlong (transl_builtin_arg fe hi) (transl_builtin_arg fe lo)
+  | BA_addptr a1 a2 =>
+      BA_addptr (transl_builtin_arg fe a1) (transl_builtin_arg fe a2)
+  end.
+FEnd transl_builtin_arg.
+
+FRecursion transl_instr.
+Case Lbuiltin ef args dst := (fun fe k => T.Lbuiltin ef (map (transl_builtin_arg fe) args) dst :: k).
+FEnd transl_instr.
+
+FEnd Stacking.
+
+
 FEnd Comp_Builtin.
 
 Trait Comp_Heap extends Base, Comp_Builtin.
@@ -437,7 +494,7 @@ FEnd Comp.
 
 Require Extraction.
 Cd "extraction".
-Separate Extraction X.C.
+Separate Extraction Comp.Stacking.
 Extraction Library X.
 
 Require Extraction.

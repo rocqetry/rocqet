@@ -500,6 +500,10 @@ FEnd Comp_Loops.
 Trait Comp_Builtin extends Base.
 
 Family CminorSel.
+FInductive expr : Type :=
+| Ebuiltin : external_function -> exprlist -> expr
+| Eexternal : ident -> signature -> exprlist -> expr.
+
 FInductive stmt : Type :=
 | Sbuiltin : builtin_res ident -> external_function -> list (builtin_arg expr) -> stmt.
 FEnd CminorSel.
@@ -567,6 +571,24 @@ Fixpoint convert_builtin_args {A: Type} (al: list (builtin_arg self__RTLgen.S.ex
 FEnd convert_builtin_args.
 
 From NFPOP Require Import RTLmonad.
+
+FRecursion alloc_reg.
+Case _ := (fun map => new_reg).
+FEnd alloc_reg.
+
+FRecursion transl_expr with transl_exprlist with transl_condexpr.
+Case Ebuiltin ef al :=
+  (fun map rd nd =>
+     do rl <- alloc_regs al map;
+     do no <- add_instr (T.Ibuiltin ef (List.map (@BA reg) rl) (BR rd) nd);
+     transl_exprlist al map rl no).
+Case Eexternal id sg al :=
+  (fun map rd nd =>
+    do rl <- alloc_regs al map;
+    do no <- add_instr cheat (* (T.Icall sg (inr id) rl rd nd)*);
+    transl_exprlist al map rl no).
+FEnd transl_expr with transl_exprlist with transl_condexpr.
+
 Inherit labelmap.
 
 FDefinition convert_builtin_res : mapping -> rettype -> builtin_res ident -> self__RTLgen.mon (builtin_res reg)
@@ -820,7 +842,8 @@ FEnd Comp.
 
 Require Extraction.
 Cd "extraction".
-Separate Extraction X.C.
+Separate Extraction Comp.RTLgen.
+           
 Extraction Library X.
 
 Require Extraction.

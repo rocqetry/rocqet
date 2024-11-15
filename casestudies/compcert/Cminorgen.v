@@ -615,7 +615,9 @@ FEnd Comp.
 
 Require Extraction.
 Cd "extraction".
-Separate Extraction X.C.
+
+Separate Extraction Comp.Cminorgen.
+
 Extraction Library X.
 
 Require Extraction.
