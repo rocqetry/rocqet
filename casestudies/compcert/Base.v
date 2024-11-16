@@ -1314,57 +1314,77 @@ Inductive bitfield : Type :=
           
        FDefinition eval_operation := fun op => Asm.eval_operation op fundef unit.
        
-       FInductive eval_expr: val -> env -> mem -> letenv -> expr -> val -> Prop :=
+       FInductive eval_expr: fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
              | eval_Eop: forall sp e m le op al vl v ge,        
                eval_exprlist sp e m le al vl ->
-               eval_operation op ge sp vl m = Some v ->
+               eval_operation op ge (Vptr sp Ptrofs.zero) vl m = Some v ->
                  eval_expr sp e m le (Eop op al) v
-           (* | eval_Econdition: forall sp e m le a b c va v, *)
-           (*     eval_condexpr sp e m le a va -> *)
-           (*     eval_expr sp e m le (if va then b else c) v -> *)
-           (*     eval_expr sp e m le (Econdition a b c) v *)
-           (* | eval_Elet: forall sp e m le a b v1 v2, *)
-           (*     eval_expr sp e m le a v1 -> *)
-           (*     eval_expr sp e m (v1 :: le) b v2 -> *)
-           (*     eval_expr sp e m le (Elet a b) v2 *)
-           (* | eval_Eletvar: forall sp e m le n v, *)
-           (*     nth_error le n = Some v -> *)
-           (*     eval_expr sp e m le (Eletvar n) v *)
-       with eval_exprlist: val -> env -> mem -> letenv -> self__CminorSel.exprlist -> list val -> Prop := cheat.
+           | eval_Econdition: forall sp e m le a b c va v,
+               eval_condexpr sp e m le a va ->
+               eval_expr sp e m le (if va then b else c) v ->
+               eval_expr sp e m le (Econdition a b c) v
+           | eval_Elet: forall sp e m le a b v1 v2,
+               eval_expr sp e m le a v1 ->
+               eval_expr sp e m (v1 :: le) b v2 ->
+               eval_expr sp e m le (Elet a b) v2
+           | eval_Eletvar: forall sp e m le n v,
+               nth_error le n = Some v ->
+               eval_expr sp e m le (Eletvar n) v
+       with eval_exprlist: fenv -> env -> mem -> letenv -> self__CminorSel.exprlist -> list val -> Prop := 
           | eval_Enil: forall sp e m le,
               eval_exprlist sp e m le Enil nil
           | eval_Econs: forall sp e m le a1 al v1 vl,
               eval_expr sp e m le a1 v1 -> eval_exprlist sp e m le al vl ->
               eval_exprlist sp e m le (Econs a1 al) (v1 :: vl)
-       (* with eval_condexpr: val -> env -> mem -> letenv -> self__CminorSel.condexpr -> bool -> Prop := cheat.  *)
-          (* | eval_CEcond: forall sp e m le cond al vl vb, *)
-          (*     eval_exprlist sp e m le al vl -> *)
-          (*     Asm.eval_condition cond vl m = Some vb -> *)
-          (*     eval_condexpr sp e m le (CEcond cond al) vb *)
-          (* | eval_CEcondition: forall sp e m le a b c va v, *)
-          (*     eval_condexpr sp e m le a va -> *)
-          (*     eval_condexpr sp e m le (if va then b else c) v -> *)
-          (*     eval_condexpr sp e m le (CEcondition a b c) v *)
-          (* | eval_CElet: forall sp e m le a b v1 v2, *)
-          (*     eval_expr sp e m le a v1 -> *)
-          (*     eval_condexpr sp e m (v1 :: le) b v2 -> *)
-          (*     eval_condexpr sp e m le (CElet a b) v2.        *)
+       with eval_condexpr: fenv -> env -> mem -> letenv -> self__CminorSel.condexpr -> bool -> Prop := 
+          | eval_CEcond: forall sp e m le cond al vl vb,
+              eval_exprlist sp e m le al vl ->
+              Asm.eval_condition cond vl m = Some vb ->
+              eval_condexpr sp e m le (CEcond cond al) vb
+          | eval_CEcondition: forall sp e m le a b c va v,
+              eval_condexpr sp e m le a va ->
+              eval_condexpr sp e m le (if va then b else c) v ->
+              eval_condexpr sp e m le (CEcondition a b c) v
+          | eval_CElet: forall sp e m le a b v1 v2,
+              eval_expr sp e m le a v1 ->
+              eval_condexpr sp e m (v1 :: le) b v2 ->
+              eval_condexpr sp e m le (CElet a b) v2.
   FEnd CminorSel.
 
   Family Selection extends Cfamtransl.
       Family Source extends Cminor.
       FEnd Source.
 
-      Family Target extends Cminor.
+      Family Target extends CminorSel.
       FEnd Target.
-      
-             FDefinition longconst : int64 -> expr := fun n =>
-          if Archi.splitlong then SplitLong.longconst n else CminorSel.Eop (Asm.Olongconst n) CminorSel.Enil.
 
-       FRecurcion sel_constant about Cminor.constant motive (fun (_ : Cminor.constant) => CminorSel.expr).
+      (* MetaData splitlong_cases. *)
+(*       Inductive splitlong_cases: forall (e: self__Selection.Target.expr) , Type := *)
+(*   | splitlong_case1: forall h l, splitlong_cases (self__Selection.Target.Eop Op.makelong (h ::: l ::: Enil)) *)
+(*   | splitlong_default: forall (e: expr) , splitlong_cases e. *)
+(*       FEnd splitlong_cases. *)
+      
+(* Definition splitlong_match (e: expr) := *)
+(*   match e as zz1 return splitlong_cases zz1 with *)
+(*   | Eop Omakelong (h ::: l ::: Enil) => splitlong_case1 h l *)
+(*   | e => splitlong_default e *)
+(*   end. *)
+
+(* Definition splitlong (e: expr) (f: expr -> expr -> expr) := *)
+(*   match splitlong_match e with *)
+(*   | splitlong_case1 h l => *)
+(*       f h l *)
+(*   | splitlong_default e => *)
+(*       Elet e (f (Eop Ohighlong (Eletvar O ::: Enil)) (Eop Olowlong (Eletvar O ::: Enil))) *)
+(*   end. *)
+      
+(*        FDefinition longconst : int64 -> self__Selection.Target.expr := fun n => *)
+(*           if Archi.splitlong then SplitLong.longconst n else CminorSel.Eop (Asm.Olongconst n) CminorSel.Enil. *)
+
+       FRecursion sel_constant about Cminor.constant motive (fun (_ : Cminor.constant) => CminorSel.expr) by _rect.
            Case Ointconst := (fun n => CminorSel.Eop (Asm.Ointconst n) CminorSel.Enil).
-           Case Ofloatconst := (fun n => CminorSel.Eop (Asm.Ofloatconst f) CminorSel.Enil).
-           Case Osingleconst := (fun n =>  CminorSel.Eop (Asm.Osingleconst f) CminorSel.Enil).
+           Case Ofloatconst := (fun f => CminorSel.Eop (Asm.Ofloatconst f) CminorSel.Enil).
+           Case Osingleconst := (fun f =>  CminorSel.Eop (Asm.Osingleconst f) CminorSel.Enil).
            Case Olongconst := (fun n => longconst n).
        FEnd sel_constant.
 
