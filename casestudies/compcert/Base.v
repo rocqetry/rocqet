@@ -1468,98 +1468,174 @@ Inductive bitfield : Type :=
          i64_sar: ident;(* shift right signed *)
          i64_umulh: ident;(* unsigned multiply high *)
          i64_smulh: ident;(* signed multiply high *)
-       }.
+        }.
+
+        Definition sig_l_l := mksignature (Tlong :: nil) Tlong cc_default.
+        Definition sig_l_f := mksignature (Tlong :: nil) Tfloat cc_default.
+        Definition sig_l_s := mksignature (Tlong :: nil) Tsingle cc_default.
+        Definition sig_f_l := mksignature (Tfloat :: nil) Tlong cc_default.
+        Definition sig_ll_l := mksignature (Tlong :: Tlong :: nil) Tlong cc_default.
+        Definition sig_li_l := mksignature (Tlong :: Tint :: nil) Tlong cc_default.
+        Definition sig_ii_l := mksignature (Tint :: Tint :: nil) Tlong cc_default.
+
+       
+        Definition helper_declared {F V: Type} (p: AST.program (AST.fundef F) V) (id: ident) (name: string) (sg: signature) : Prop :=
+          (prog_defmap p)!id = Some (Gfun (External (EF_runtime name sg))).
+
+        Definition helper_functions_declared {F V: Type} (p: AST.program (AST.fundef F) V) (hf: helper_functions) : Prop :=
+             helper_declared p i64_dtos "__compcert_i64_dtos" sig_f_l
+          /\ helper_declared p i64_dtou "__compcert_i64_dtou" sig_f_l
+          /\ helper_declared p i64_stod "__compcert_i64_stod" sig_l_f
+          /\ helper_declared p i64_utod "__compcert_i64_utod" sig_l_f
+          /\ helper_declared p i64_stof "__compcert_i64_stof" sig_l_s
+          /\ helper_declared p i64_utof "__compcert_i64_utof" sig_l_s
+          /\ helper_declared p i64_sdiv "__compcert_i64_sdiv" sig_ll_l
+          /\ helper_declared p i64_udiv "__compcert_i64_udiv" sig_ll_l
+          /\ helper_declared p i64_smod "__compcert_i64_smod" sig_ll_l
+          /\ helper_declared p i64_umod "__compcert_i64_umod" sig_ll_l
+          /\ helper_declared p i64_shl "__compcert_i64_shl" sig_li_l
+          /\ helper_declared p i64_shr "__compcert_i64_shr" sig_li_l
+          /\ helper_declared p i64_sar "__compcert_i64_sar" sig_li_l
+          /\ helper_declared p i64_umulh "__compcert_i64_umulh" sig_ll_l
+          /\ helper_declared p i64_smulh "__compcert_i64_smulh" sig_ll_l.
+
+       
         FDefinition known_idents : Type := PTree.t unit.
 
         FDefinition typenv : Type := ident -> typ.
 
-        MetaData match_cont.
-        Inductive match_cont: self__Selection.Source.program -> helper_functions -> self__Selection.known_idents -> self__Selection.typenv -> self__Selection.Source.cont -> self__Selection.Target.cont -> Prop :=
-            | match_cont_seq: forall cunit hf ki env s s' k k',
-                sel_stmt (prog_defmap cunit) ki env s = OK s' ->
-                match_cont cunit hf ki env k k' ->
-                match_cont cunit hf ki env (self__Selection.Source.Kseq s k) (Kseq s' k')
-            | match_cont_block: forall cunit hf ki env k k',
-                match_cont cunit hf ki env k k' ->
-                match_cont cunit hf ki env (self__Selection.Source.Kblock k) (Kblock k')
-            | match_cont_other: forall cunit hf ki env k k',
-                match_call_cont k k' ->
-                match_cont cunit hf ki env k k'
-        with match_call_cont: self__Selection.Source.cont -> self__Selection.Target.cont -> Prop :=
-            | match_cont_stop:
-                match_call_cont self__Selection.Source.Kstop self__Selection.Target.Kstop
-            | match_cont_call: forall cunit hf env id f sp e k f' e' k',
-                linkorder cunit prog ->
-                helper_functions_declared cunit hf ->
-                sel_function (prog_defmap cunit) hf f = OK f' ->
-                type_function f = OK env ->
-                match_cont cunit hf (known_id f) env k k' ->
-                env_lessdef e e' ->
-                match_call_cont (self__Selection.Source.Kcall id f sp e k) (Kcall id f' sp e' k').
 
-       Inductive match_states: Cminor.state -> CminorSel.state -> Prop :=
-        | match_state: forall cunit hf f f' s k s' k' sp e m e' m' env
-            (LINK: linkorder cunit prog)
-            (HF: helper_functions_declared cunit hf)
-            (TF: sel_function (prog_defmap cunit) hf f = OK f')
-            (TYF: type_function f = OK env)
-            (TS: sel_stmt (prog_defmap cunit) (known_id f) env s = OK s')
-            (MC: match_cont cunit hf (known_id f) env k k')
-            (LD: env_lessdef e e')
-            (ME: Mem.extends m m'),
-            match_states
-            (Cminor.State f s k sp e m)
-            (State f' s' k' sp e' m')
-        | match_callstate: forall cunit f f' args args' k k' m m'
-            (LINK: linkorder cunit prog)
-            (TF: match_fundef cunit f f')
-            (MC: match_call_cont k k')
-            (LD: Val.lessdef_list args args')
-            (ME: Mem.extends m m'),
-            match_states
-            (Cminor.Callstate f args k m)
-            (Callstate f' args' k' m')
-        | match_returnstate: forall v v' k k' m m'
-            (MC: match_call_cont k k')
-            (LD: Val.lessdef v v')
-            (ME: Mem.extends m m'),
-            match_states
-            (Cminor.Returnstate v k m)
-            (Returnstate v' k' m')
-        | match_builtin_1: forall cunit hf ef args optid f sp e k m al f' e' k' m' env
-            (LINK: linkorder cunit prog)
-            (HF: helper_functions_declared cunit hf)
-            (TF: sel_function (prog_defmap cunit) hf f = OK f')
-            (TYF: type_function f = OK env)
-            (MC: match_cont cunit hf (known_id f) env k k')
-            (EA: Cminor.eval_exprlist ge sp e m al args)
-            (LDE: env_lessdef e e')
-            (ME: Mem.extends m m'),
-            match_states
-            (Cminor.Callstate (External ef) args (Cminor.Kcall optid f sp e k) m)
-            (State f' (sel_builtin optid ef al) k' sp e' m')
-        | match_builtin_2: forall cunit hf v v' optid f sp e k m f' e' m' k' env
-            (LINK: linkorder cunit prog)
-            (HF: helper_functions_declared cunit hf)
-            (TF: sel_function (prog_defmap cunit) hf f = OK f')
-            (TYF: type_function f = OK env)
-            (MC: match_cont cunit hf (known_id f) env k k')
-            (LDV: Val.lessdef v v')
-            (LDE: env_lessdef (set_optvar optid v e) e')
-            (ME: Mem.extends m m'),
-            match_states
-            (Cminor.Returnstate v (Cminor.Kcall optid f sp e k) m)
-            (State f' Sskip k' sp e' m').
+        Module Type TYPE_ALGEBRA.
 
-        Definition measure (s: Cminor.state) : nat :=
-            match s with
-            | Cminor.Callstate _ _ _ _ => 0%nat
-            | Cminor.State _ _ _ _ _ _ => 1%nat
-            | Cminor.Returnstate _ _ _ => 2%nat
+Parameter t: Type.
+Parameter eq: forall (x y: t), {x=y} + {x<>y}.
+Parameter default: t.
+
+End TYPE_ALGEBRA.
+        Module UniSolver (T: TYPE_ALGEBRA).
+
+          Module S := UniSolver(RTLtypes).
+
+        FDefinition type_function := fun (f: self__Selection.Source.function) =>
+          do e1 <- S.set_list S.initial f.(fn_params) f.(fn_sig).(sig_args);
+          do e2 <- type_stmt f.(fn_sig).(sig_res) e1 f.(fn_body);
+          S.solve e2.
+        
+
+        (* MetaData match_cont. *)
+        (* Inductive match_cont: self__Selection.Source.cont -> self__Selection.Target.cont -> Prop := *)
+        (*     | match_cont_other: forall k k', *)
+        (*         match_call_cont k k' -> *)
+        (*         match_cont k k' *)
+        (* with match_call_cont: self__Selection.Source.cont -> self__Selection.Target.cont -> Prop := *)
+        (*     | match_cont_stop: *)
+        (*         match_call_cont self__Selection.Source.Kstop self__Selection.Target.Kstop. *)
+        (* FEnd match_cont. *)
+        (* Without parameters helper_functions, known_idents, typeenv, match_cont is identical to the one in CfamTransl *)
+        Inherit match_cont.
+        
+            (* | match_cont_call: forall prog cunit hf env id f sp e k f' e' k', *)
+            (*     linkorder cunit prog -> *)
+            (*     helper_functions_declared cunit hf -> *)
+            (*     (* sel_function (prog_defmap cunit) hf f = OK f' -> *) *)
+            (*     type_function f = OK env -> *)
+            (*     match_cont cunit k k' -> *)
+            (*     env_lessdef e e' -> *)
+            (*     match_call_cont (self__Selection.Source.Kcall id f sp e k) (Kcall id f' sp e' k'). *)
+       (* MetaData match_states. *)
+       (* Inductive match_states: self__Selection.Source.state -> self__Selection.Target.state -> Prop := *)
+       (*  | match_state: forall cunit hf f f' s k s' k' sp e m e' m' env *)
+       (*      (LINK: linkorder cunit prog) *)
+       (*      (HF: helper_functions_declared cunit hf) *)
+       (*      (TF: sel_function (prog_defmap cunit) hf f = OK f') *)
+       (*      (TYF: type_function f = OK env) *)
+       (*      (TS: sel_stmt (prog_defmap cunit) (known_id f) env s = OK s') *)
+       (*      (MC: match_cont cunit hf (known_id f) env k k') *)
+       (*      (LD: env_lessdef e e') *)
+       (*      (ME: Mem.extends m m'), *)
+       (*      match_states *)
+       (*      (self__Selection.Source.State f s k sp e m) *)
+       (*      (self__Selection.Target.State f' s' k' sp e' m') *)
+       (*  | match_callstate: forall cunit f f' args args' k k' m m' *)
+       (*      (LINK: linkorder cunit prog) *)
+       (*      (TF: match_fundef cunit f f') *)
+       (*      (MC: match_call_cont k k') *)
+       (*      (LD: Val.lessdef_list args args') *)
+       (*      (ME: Mem.extends m m'), *)
+       (*      match_states *)
+       (*      (Cminor.Callstate f args k m) *)
+       (*      (Callstate f' args' k' m') *)
+       (*  | match_returnstate: forall v v' k k' m m' *)
+       (*      (MC: match_call_cont k k') *)
+       (*      (LD: Val.lessdef v v') *)
+       (*      (ME: Mem.extends m m'), *)
+       (*      match_states *)
+       (*      (Cminor.Returnstate v k m) *)
+       (*      (Returnstate v' k' m') *)
+       (*  | match_builtin_1: forall cunit hf ef args optid f sp e k m al f' e' k' m' env *)
+       (*      (LINK: linkorder cunit prog) *)
+       (*      (HF: helper_functions_declared cunit hf) *)
+       (*      (TF: sel_function (prog_defmap cunit) hf f = OK f') *)
+       (*      (TYF: type_function f = OK env) *)
+       (*      (MC: match_cont cunit hf (known_id f) env k k') *)
+       (*      (EA: Cminor.eval_exprlist ge sp e m al args) *)
+       (*      (LDE: env_lessdef e e') *)
+       (*      (ME: Mem.extends m m'), *)
+       (*      match_states *)
+       (*      (Cminor.Callstate (External ef) args (Cminor.Kcall optid f sp e k) m) *)
+       (*      (State f' (sel_builtin optid ef al) k' sp e' m') *)
+       (*  | match_builtin_2: forall cunit hf v v' optid f sp e k m f' e' m' k' env *)
+       (*      (LINK: linkorder cunit prog) *)
+       (*      (HF: helper_functions_declared cunit hf) *)
+       (*      (TF: sel_function (prog_defmap cunit) hf f = OK f') *)
+       (*      (TYF: type_function f = OK env) *)
+       (*      (MC: match_cont cunit hf (known_id f) env k k') *)
+       (*      (LDV: Val.lessdef v v') *)
+       (*      (LDE: env_lessdef (set_optvar optid v e) e') *)
+       (*      (ME: Mem.extends m m'), *)
+       (*      match_states *)
+       (*      (Cminor.Returnstate v (Cminor.Kcall optid f sp e k) m) *)
+       (*      (State f' Sskip k' sp e' m'). *)
+        
+        FOverride Definition measure := fun st =>
+            match st with
+            | self__Selection.Source.Callstate _ _ _ _ => 0%nat
+            | self__Selection.Source.State _ _ _ _ _ _ => 1%nat
+            | self__Selection.Source.Returnstate _ _ _ => 2%nat
             end.
 
-        Lemma sel_step_correct:
-            forall S1 t S2, Cminor.step ge S1 t S2 ->
+        MetaData wt_function.
+        Inductive wt_function (env: self__Selection.typenv) (f: self__Selection.Source.function) : Prop :=
+  wt_function_intro:
+    type_function f = OK env ->(* to ensure uniqueness of env *)
+    List.map env f.(fn_params) = f.(fn_sig).(sig_args) ->
+    wt_stmt env f.(fn_sig).(sig_res) f.(fn_body) ->
+    wt_function env f.
+        FEnd wt_function.
+        
+        MetaData wt_state.
+   Inductive wt_state: self__Selection.Source.state -> Prop :=
+  | wt_normal_state: forall f s k sp e m env
+        (WT_FN: wt_function env f)
+        (WT_STMT: wt_stmt env f.(fn_sig).(sig_res) s)
+        (WT_CONT: wt_cont env f.(fn_sig).(sig_res) k)
+        (WT_ENV: wt_env env e)
+        (DEF_ENV: def_env f e),
+      wt_state (State f s k sp e m)
+  | wt_call_state: forall f args k m
+        (WT_FD: wt_fundef f)
+        (WT_ARGS: Val.has_type_list args (funsig f).(sig_args))
+        (WT_CONT: wt_cont_call k (funsig f).(sig_res)),
+      wt_state (Callstate f args k m)
+  | wt_return_state: forall v k m tret
+        (WT_RES: Val.has_type v (proj_rettype tret))
+        (WT_CONT: wt_cont_call k tret),
+      wt_state (Returnstate v k m).
+        FEnd wt_state.
+
+   
+        FLemma sel_step_correct:
+            forall S1 t S2, self__Selection.Source.step ge S1 t S2 ->
             forall T1, match_states S1 T1 -> wt_state S1 ->
             (exists T2, plus step tge T1 t T2 /\ match_states S2 T2)
             \/ (measure S2 < measure S1 /\ t = E0 /\ match_states S2 T1)%nat
