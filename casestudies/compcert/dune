@@ -1,9 +1,9 @@
 (include_subdirs qualified)
 
 (coq.theory
- (name NFPOP.CompCert)
+ (name Rocqet.CompCert)
  ;; 
- (theories Flocq NFPOP)
+ (theories Flocq Rocqet)
  (modules   
    ;Imp
 
