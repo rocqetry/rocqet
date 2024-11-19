@@ -1,4 +1,4 @@
-DECLARE PLUGIN "nfpop.plugin"
+DECLARE PLUGIN "rocqet.plugin"
 (* https://github.com/coq/coq/blob/master/dev/doc/parsing.md *)
 
 {

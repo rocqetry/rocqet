@@ -2,12 +2,12 @@
 
 (using coq 0.8)
 
-(name nfpop)
+(name rocqet)
 
 (generate_opam_files true)
 
 (package
- (name nfpop)
+ (name rocqet)
  (depends
   (ocaml
    (>= 4.14.2))

@@ -63,4 +63,4 @@ Ltac prove_comp_axiom := eauto.
 Ltac prove_prec :=
   intros x; induction x; eauto; eauto using None.
 
-Declare ML Module "nfpop:nfpop.plugin".
+Declare ML Module "rocqet:rocqet.plugin".

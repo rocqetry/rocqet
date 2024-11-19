@@ -4,8 +4,8 @@
   (alias_rec all)))
 
 (coq.theory
- (name NFPOP.Tests)
- (theories NFPOP)
+ (name Rocqet.Tests)
+ (theories Rocqet)
  (modules
   ;Handler_types
   ;Closing_facts_test
