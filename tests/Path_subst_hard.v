@@ -1,4 +1,4 @@
-From NFPOP Require Import Loader.
+Require Import Rocqet.Loader.
 
 Trait Comp_Base.
 FDefinition ident := nat.

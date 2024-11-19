@@ -1,4 +1,4 @@
-From NFPOP Require Import Loader.
+Require Import Rocqet.Loader.
 
 Axiom cheat : forall {X}, X.
 Notation signature := nat.

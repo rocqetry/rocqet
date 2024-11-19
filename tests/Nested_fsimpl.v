@@ -1,4 +1,4 @@
-From NFPOP Require Import Loader.
+Require Import Rocqet.Loader.
 
 Notation ident := nat.
 
