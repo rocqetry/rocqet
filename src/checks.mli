@@ -5,6 +5,6 @@ val check_exhaustive :
   inductive:VernacInductive.t ->
   inductive_paths:Libnames.qualid list ->
   handlers:Names.Id.t list ->
-  unit
+  (Names.Id.t * Names.Id.t list) list
 
 val check_further_binding_structure : LinkageCtx.t -> unit
