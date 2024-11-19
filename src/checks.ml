@@ -7,13 +7,21 @@ let check_exhaustive ~names ~inductive ~inductive_paths ~handlers =
     inductive_paths
     |> List.map Naming.extract_path_base
   in
+  (* constructors, in order  *)
+  let inductive_constructors =
+    inductive
+    |> List.map fst
+    |> List.filter_map (fun e ->
+       let (i, _), cs = VernacInductive.extract_type_and_cstrs e  in
+       if List.mem i inductive_names then Some (i, (List.map fst cs)) else None)    
+  in              
   let constructors =
     inductive_names
     |> List.concat_map (fun inductive_name ->
        inductive
        |> VernacInductive.create_inductive_constructor_map
        |> Names.Id.Map.find inductive_name)
-  in  
+  in
   let names_pretty =
     names
     |> List.map Names.Id.to_string
@@ -31,7 +39,8 @@ let check_exhaustive ~names ~inductive ~inductive_paths ~handlers =
                  names_pretty
                  (Names.Id.to_string constructor)
              in
-             Errors.fail ~info)
+             Errors.fail ~info);
+  inductive_constructors
 
 (* "Typechecking" for families
 
