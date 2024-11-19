@@ -3,8 +3,8 @@
 Field
 self__STLC
 FScheme*)
-Require Import NFPOP.Loader.
-Require Import NFPOP.LibTactics.
+Require Import Rocqet.Loader.
+Require Import Rocqet.LibTactics.
 From Coq Require Import Nat.
 Require Import PeanoNat.
 Require Import Coq.Logic.FunctionalExtensionality.

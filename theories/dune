@@ -1,11 +1,11 @@
 (coq.theory
- (name NFPOP) ; This will determine the top-level Coq
+ (name Rocqet) ; This will determine the top-level Coq
               ; module of your theory, modules will
               ; be MyPlugin.A, etc., when seen from the
               ; outside.
- (package nfpop) ; Adding this line will make your
+ (package rocqet) ; Adding this line will make your
                  ; library installable in the opam package
- (plugins nfpop.plugin))
+ (plugins rocqet.plugin))
 
 ; Here you should declare all
 ; OCaml plugin dependencies
