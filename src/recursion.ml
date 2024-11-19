@@ -50,7 +50,7 @@ let close_recursion () =
     Ctx.get ()
   in
   (* let inductive_name = inductive_path |> Naming.extract_path_base in*)
-  Checks.check_exhaustive ~names ~inductive ~inductive_paths ~handlers:defined_handlers;
+  let _ = Checks.check_exhaustive ~names ~inductive ~inductive_paths ~handlers:defined_handlers in
   (* We use this becuase the handlers have to be in the right order *)
   let inductive_names =
     inductive_paths

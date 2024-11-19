@@ -520,28 +520,33 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
            in
            let handlers =
              recursive.handlers |> List.concat_map snd 
-           in 
-            Checks.check_exhaustive
-              ~names:recursive.names
-              ~inductive
-              ~inductive_paths:recursive.inductive_paths
-              ~handlers;
-            RecursorDefinition { recursive with compiled_context }, []
+           in
+           (* handlers in the *correct* order *)
+           let handlers = 
+              Checks.check_exhaustive
+                 ~names:recursive.names
+                 ~inductive
+                 ~inductive_paths:recursive.inductive_paths
+                 ~handlers
+           in
+           RecursorDefinition { recursive with handlers; compiled_context }, []
         | TheoremDefinition theorem ->
            let inductive, _, _ =
               let name = List.hd theorem.inductive_paths in
               Context.lookup_inductive_for_recursion
                 ~name context
-            in            
-            let handlers =
+           in            
+           let handlers =
              theorem.handlers |> List.concat_map snd 
-           in 
-            Checks.check_exhaustive
-              ~names:theorem.names
-              ~inductive
-              ~inductive_paths:theorem.inductive_paths
-              ~handlers;
-            TheoremDefinition { theorem with compiled_context }, []
+           in
+           let handlers = 
+              Checks.check_exhaustive
+                ~names:theorem.names
+                ~inductive
+                ~inductive_paths:theorem.inductive_paths
+                ~handlers;
+           in
+           TheoremDefinition { theorem with handlers; compiled_context }, []
       in      
       let open Bwd.Infix in
       let fields = Snoc (linkage.fields, (name, element)) <@ fresh_elements in
