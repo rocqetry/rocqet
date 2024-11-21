@@ -2,10 +2,10 @@
 
 ## Overview
 
-Rocqet equips the [Rocq Prover](https://coq.inria.fr/) with *nested family polymorphism* to 
+Rocqet equips the [Rocq](https://coq.inria.fr/) with *nested family polymorphism* to 
 enable scalable, extensible mechanized proofs.
 
-## Getting Started
+## Building
 We currently build with Rocq version 8.19.0 using OCaml 5.1.0.
 
 Currently, we only support installation from source. 
@@ -30,6 +30,11 @@ The CompCert case study has a dependency
 on [Flocq](https://flocq.gitlabpages.inria.fr/). 
 You need to install it before trying out that case study.
 
+Finally, we can build by runinng the command: 
+```sh
+$ dune b
+```
+
 ### Nix/NixOS
 We provide a `flake.nix` with all the dependencies (including Emacs, Proof General, Flocq, etc)
 
@@ -38,14 +43,25 @@ We recommend [Proof General](https://proofgeneral.github.io/)
 in [Emacs](https://www.gnu.org/software/emacs/) for all platforms.
 If you prefer [VSCode](https://code.visualstudio.com/), 
 we recommend [VSCoq](https://github.com/coq/vscoq), 
-but it only properly for Linux systems with our plugin.
+but it only works properly for Linux systems with our plugin.
 
 Other [user interfaces](https://coq.inria.fr/user-interfaces.html) exist, 
 but we haven't tested them with our plugin. Feel free to try it out.
 
-## Case Studies
-1. CompCert
-2. STLC
+## Try It Out
+After building and installing a proof interface, you can now step 
+through proofs. We provide lots of example 
+programs [here](https://github.com/ebresafegaga/rocqet/tree/main/tests).
+You can step through the programs interactively to get a familiar with the 
+plugin.
+
+For more interesting programs, we have (a) a framework for extensible certified 
+C compilers [here](https://github.com/ebresafegaga/rocqet/tree/main/casestudies/compcert), and 
+(b) modular mechanized simply-typed lambda calculi 
+[here](https://github.com/ebresafegaga/rocqet/tree/main/bench).
+
+## Hacking
+See [here](https://github.com/ebresafegaga/rocqet/blob/main/HACKING.md).
 
 ## Bugs and Knwon Issues
 Generally, issues/bugs with our plugin can be found [here](https://github.com/ebresafegaga/rocqet/issues).
