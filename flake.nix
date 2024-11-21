@@ -1,5 +1,5 @@
 {
-  description = "Nested family polymorphism in a proof language";
+  description = "Rocqet: nested family polymorphism for the Rocq prover";
 
   inputs = {
     nixpkgs.url = "nixpkgs/nixpkgs-unstable";
