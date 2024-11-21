@@ -1360,17 +1360,16 @@ Inductive bitfield : Type :=
       FEnd Target.
 
       Family Cminortyping.
-          Definition type_constant (c: constant) : typ :=
-            match c with
-            | Ointconst _ => Tint
-            | Ofloatconst _ => Tfloat
-            | Osingleconst _ => Tsingle
-            | Olongconst _ => Tlong
-            | Oaddrsymbol _ _ => Tptr
-            | Oaddrstack _ => Tptr
-            end.
+          FRecursion type_constant about Source.constant motive (fun (_: Source.constant) => typ ) by _rect.
+            Case Ointconst := (fun _ => Tint).
+            Case Ofloatconst := (fun _ => Tfloat).
+            Case Osingleconst := (fun _ => Tsingle).
+            Case Olongconst := (fun _ => Tlong).
+            (* Case Oaddrsymbol := (fun _ => Tptr). *)
+            (* Case Oaddrstack := (fun _ => Tptr). *)
+          FEnd type_constant.
 
-          Definition type_unop (op: unary_operation) : typ * typ :=
+          FRecursion type_unop about unary_operation motive (fun (_: Source.unary_operation) => typ * typ) by _rect.
             match op with
             | Ocast8unsigned | Ocast8signed | Ocast16unsigned | Ocast16signed
             | Onegint | Onotint => (Tint, Tint)
