@@ -31,7 +31,8 @@
    lib/Builtins
    lib/Errors
    lib/Integers
-   lib/Memtype   
+   lib/Memtype
+   lib/Unityping
   ))
 
 

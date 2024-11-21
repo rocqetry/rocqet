@@ -1,17 +1,18 @@
-From NFPOP Require Import Loader.
+From Rocqet Require Import Loader.
 
-From NFPOP Require Import Coqlib.
-From NFPOP Require Import Errors.
-From NFPOP Require Import Values.
-From NFPOP Require Import AST.
-From NFPOP Require Import Integers. 
-From NFPOP Require Import Floats.
-From NFPOP Require Import Memory.
-From NFPOP Require Import Globalenvs.
-From NFPOP Require Import Smallstep.
-From NFPOP Require Import Events.
-From NFPOP Require Import Maps.
-From NFPOP Require Import Linking.
+From Rocqet Require Import Coqlib.
+From Rocqet Require Import Errors.
+From Rocqet Require Import Values.
+From Rocqet Require Import AST.
+From Rocqet Require Import Integers. 
+From Rocqet Require Import Floats.
+From Rocqet Require Import Memory.
+From Rocqet Require Import Globalenvs.
+From Rocqet Require Import Smallstep.
+From Rocqet Require Import Events.
+From Rocqet Require Import Maps.
+From Rocqet Require Import Linking.
+From Rocqet Require Import Unityping.
 Require Import FSets.
 Require Import FSetAVL.
 Require Import Orders.
@@ -1504,18 +1505,8 @@ Inductive bitfield : Type :=
 
         FDefinition typenv : Type := ident -> typ.
 
-
-        Module Type TYPE_ALGEBRA.
-
-Parameter t: Type.
-Parameter eq: forall (x y: t), {x=y} + {x<>y}.
-Parameter default: t.
-
-End TYPE_ALGEBRA.
-        Module UniSolver (T: TYPE_ALGEBRA).
-
-          Module S := UniSolver(RTLtypes).
-
+        Module S := Unityping.Unisolver(RTLtypes).
+        
         FDefinition type_function := fun (f: self__Selection.Source.function) =>
           do e1 <- S.set_list S.initial f.(fn_params) f.(fn_sig).(sig_args);
           do e2 <- type_stmt f.(fn_sig).(sig_res) e1 f.(fn_body);
