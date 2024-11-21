@@ -10,18 +10,24 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; overlays = [ ]; };
-        ocamlDeps = with pkgs.ocaml-ng.ocamlPackages_5_1; [
-          ocaml          
-          findlib
-          dune_3
-          ocamlformat_0_26_1
-          pkgs.coq
-          pkgs.coqPackages.flocq
+        coq = pkgs.coq.override { coq-version = "8.19.0"; customOCamlPackages = pkgs.ocaml-ng.ocamlPackages_5_1; };        
+        ocamlPkgs = coq.ocamlPackages;
+        coqPkgs = pkgs.coqPackages_8_19;
+
+        shellDeps = [
+          ocamlPkgs.ocaml          
+          ocamlPkgs.findlib
+          pkgs.dune_3
+          coq
+          coqPkgs.flocq
+          pkgs.emacs
+          pkgs.emacsPackages.exec-path-from-shell
+          pkgs.emacsPackages.proof-general
         ];
       in
         {
           devShell = pkgs.mkShell {
-            buildInputs = ocamlDeps;
+            buildInputs = shellDeps;
           };
         }
     );
