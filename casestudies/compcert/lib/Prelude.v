@@ -1,11 +1,11 @@
 Require Import Orders.
 Require Import Mergesort.
 Require Import Ordered.
-From NFPOP Require Import Coqlib.
-From NFPOP Require Import AST.
-From NFPOP Require Import Maps.
-From NFPOP Require Import Values.
-From NFPOP Require Import Integers. 
+From Rocqet Require Import Coqlib.
+From Rocqet Require Import AST.
+From Rocqet Require Import Maps.
+From Rocqet Require Import Values.
+From Rocqet Require Import Integers. 
 Require Import Coq.ZArith.ZArith.
 
 Axiom cheat : forall {X}, X.

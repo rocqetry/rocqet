@@ -1,27 +1,27 @@
-From NFPOP Require Import Loader.
+From Rocqet Require Import Loader.
 
-From NFPOP Require Import Coqlib.
-From NFPOP Require Import Errors.
-From NFPOP Require Import Values.
-From NFPOP Require Import AST.
-From NFPOP Require Import Integers. 
-From NFPOP Require Import Floats.
-From NFPOP Require Import Memory.
-From NFPOP Require Import Globalenvs.
-From NFPOP Require Import Smallstep.
-From NFPOP Require Import Events.
-From NFPOP Require Import Maps.
-From NFPOP Require Import Linking.
-Require Import NFPOP.CompCert.lib.Ctypes.
-From NFPOP Require Import Cop.
-From NFPOP Require Import Mon.
+From Rocqet Require Import Coqlib.
+From Rocqet Require Import Errors.
+From Rocqet Require Import Values.
+From Rocqet Require Import AST.
+From Rocqet Require Import Integers. 
+From Rocqet Require Import Floats.
+From Rocqet Require Import Memory.
+From Rocqet Require Import Globalenvs.
+From Rocqet Require Import Smallstep.
+From Rocqet Require Import Events.
+From Rocqet Require Import Maps.
+From Rocqet Require Import Linking.
+Require Import Rocqet.CompCert.lib.Ctypes.
+From Rocqet Require Import Cop.
+From Rocqet Require Import Mon.
 Require Import FSets.
 Require Import FSetAVL.
 Require Import Orders.
 Require Import Mergesort.
 Require Import Ordered.
 Require Import Coq.ZArith.ZArith.
-From NFPOP Require Import Prelude.
+From Rocqet Require Import Prelude.
 
 Local Open Scope string_scope.
 Local Open Scope list_scope.
@@ -2708,7 +2708,7 @@ FEnd CminorSel.
 Family RTL.
 FDefinition node := positive.
 
-From NFPOP Require Import Registers.
+From Rocqet Require Import Registers.
       
 FInductive instruction: Type :=
 | Inop: node -> instruction
@@ -2836,7 +2836,7 @@ FEnd final_state.      *)
 
 FEnd RTL.
 
-From NFPOP Require Import RTLmonad.
+From Rocqet Require Import RTLmonad.
 
 (* CminorSel -> RTL *)
 Family RTLgen.
@@ -3400,10 +3400,10 @@ Proof.
 *)                 
 FEnd RTLgen.  
 
-From NFPOP Require Import Machregs.
+From Rocqet Require Import Machregs.
 
-From NFPOP Require Import Conventions1.
-From NFPOP Require Import Locations.
+From Rocqet Require Import Conventions1.
+From Rocqet Require Import Locations.
 (* Some Machreg functions will defined here *)
 Family M.
 FRecursion destroyed_by_op about Asm.operation motive
@@ -3868,9 +3868,9 @@ FOverride Definition function_sig := self__Mach.fn_sig.
 FOverride Definition function_stacksize := self__Mach.fn_stacksize.
 FOverride Definition function_code := self__Mach.fn_code.
 
-From NFPOP Require Import Mregisters.        
+From Rocqet Require Import Mregisters.        
 (*
-From NFPOP Require Import Mregisters.        
+From Rocqet Require Import Mregisters.        
 FOverride Definition storeset := Regmap.t val.
 FOverride Definition func_ptr := block.
 FOverride Definition call_func_ptr := block.
@@ -3974,8 +3974,8 @@ FEnd Mach.
 (* LTL -> Linear *)
 Family Linearize.
 
-From NFPOP Require Import Lattice.
-From NFPOP Require Import Kildall.
+From Rocqet Require Import Lattice.
+From Rocqet Require Import Kildall.
 
 (* Determination of the order of basic blocks *)
 
@@ -4000,7 +4000,7 @@ FEnd enumerate_aux.
 
 Module Nodeset := FSetAVL.Make(OrderedPositive).
 
-From NFPOP Require Import Errors.
+From Rocqet Require Import Errors.
 Open Scope error_monad_scope.
 
 MetaData nodeset_of_list.
@@ -4179,7 +4179,7 @@ FEnd Linearize.
 (* Linear -> Mach *)
 Family Stacking.
 
-From NFPOP Require Import Bounds.
+From Rocqet Require Import Bounds.
 (* Fields in bounds that depend on late bound names *)
 
 FRecursion record_regs_of_instr about Linear.instruction motive
@@ -4251,7 +4251,7 @@ Next Obligation.
 Qed.
 FEnd function_bounds.
 
-From NFPOP Require Import Stacklayout.
+From Rocqet Require Import Stacklayout.
 
 FDefinition offset_local := fun (fe: frame_env) (x: Z) => fe.(fe_ofs_local) + 4 * x.
 
@@ -4535,7 +4535,7 @@ Case Ccompimm c n :=
   end).
 FEnd transl_cond_op.
 
-From NFPOP Require Import Prelude.
+From Rocqet Require Import Prelude.
 
 FRecursion transl_op about Asm.operation motive (fun (_ : Asm.operation) => list mreg -> mreg -> Asm.code -> res Asm.code) by _rect.
 Case Omove :=
