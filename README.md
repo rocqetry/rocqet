@@ -2,7 +2,7 @@
 
 ## Overview
 
-Rocqet equips the [Rocq](https://coq.inria.fr/) with *nested family polymorphism* to 
+Rocqet equips [Rocq](https://coq.inria.fr/) with *nested family polymorphism* to 
 enable scalable, extensible mechanized proofs.
 
 ## Building
