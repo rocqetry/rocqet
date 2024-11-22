@@ -44,7 +44,7 @@ we recommend [VSCoq](https://github.com/coq/vscoq),
 but it only works properly for Linux systems with our plugin.
 
 Other [user interfaces](https://coq.inria.fr/user-interfaces.html) exist, 
-but we haven't tested them with our plugin. Feel free to try it out.
+but we haven't tested them with our plugin. Feel free to try any of them out.
 
 ## Try It Out
 After building and installing a proof interface, you can now step 
