@@ -1,7 +1,7 @@
 open Types
 open Env
 
-let add ~name ~ty ~(script: Ltac_plugin.Tacexpr.raw_tactic_expr) = 
+let add ~name ~ty ~(script: Ltac_plugin.Tacexpr.raw_tactic_expr) ~plain = 
   Inheritance.inherit_dependencies ~prefix:name;  
   let type_name = Naming.fresh_name ~prefix:"ClosingFactTy" in
   let _ = Definition.add_definition ~name:type_name ty in 
@@ -28,6 +28,7 @@ let add ~name ~ty ~(script: Ltac_plugin.Tacexpr.raw_tactic_expr) =
         compiled_signature;
         default_ctx_params;
         script;
+        plain;
       }
   in
   Context.add_field ~name ~elem
