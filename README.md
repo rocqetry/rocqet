@@ -9,7 +9,7 @@ enable scalable, extensible mechanized proofs.
 We currently build with Rocq version `8.19.0` using OCaml `5.1.0`.
 
 Currently, we only support installation from source. 
-In the future, you can expect to install it like so: 
+In the future, you can expect to install `Rocqet` like so: 
 ```sh
 $ opam install rocqet
 ```
