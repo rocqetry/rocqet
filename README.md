@@ -14,7 +14,7 @@ In the future, you can expect to install `Rocqet` like so:
 $ opam install rocqet
 ```
 
-Right now, you can follow these steps to get build:
+Right now, you can follow these steps:
 1. Install [opam](https://opam.ocaml.org/doc/Install.html)
 
 2. Create a new opam switch with OCaml `5.1.0`:
