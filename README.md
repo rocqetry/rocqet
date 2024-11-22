@@ -61,7 +61,7 @@ modular mechanized simply-typed lambda calculi
 ## Hacking
 See [here](https://github.com/ebresafegaga/rocqet/blob/main/HACKING.md).
 
-## Bugs and Knwon Issues
+## Bugs and Known Issues
 Generally, issues/bugs with our plugin can be found [here](https://github.com/ebresafegaga/rocqet/issues).
 
 Others:
