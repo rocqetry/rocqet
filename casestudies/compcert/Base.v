@@ -553,36 +553,38 @@ Inductive bitfield : Type :=
           apply H0 in EQ1;eauto.
           destruct (self__Cfamtransl.Source.find_label __i0 lbl k) as [[s' k'] | ]eqn:?.
           ** destruct EQ1 as [ts' [tk' [hyp1 [hyp2 hyp3]]]].
-             exists ts',tk'. repeat (try (split;eauto)).
-          apply H0;eauto. fsimpl in *. H1. monadInv H1.
-          rewrite EQ1.  constructor.
-        destruct (self__Cfamtransl.Target.find_label x lbl (self__Cfamtransl.Target.Kseq x0 tk)) as [[s c]|]eqn:?.
-        *
-          ** exists s,c. split;eauto. split.
-             *** 
-        * eexists. eexists. split.
-          ** destruct (self__Cfamtransl.Target.find_label x lbl (self__Cfamtransl.Target.Kseq x0 tk)) as [[]|]eqn:?. reflexivity.
-              *** rewrite <- Heqo0. apply cheat.
-              *** apply cheat.
-           ** apply cheat.
-        * destruct (self__Cfamtransl.Source.find_label __i0 lbl k) as [[s' k']|].
-          ** exists ts,tk. apply cheat.
-          ** apply cheat.
+             eexists. eexists. repeat (try (split;eauto)).
+             apply cheat.
+          ** fsimpl. apply cheat.
       (* Sifthenelse *)
       + intros. fsimpl. fsimpl in *.
         apply cheat.
       (* Sloop *)
-      + apply cheat.
+      + intros. fsimpl. fsimpl in *.
+        monadInv H0.
+        destruct (self__Cfamtransl.Source.find_label __i lbl
+                    (self__Cfamtransl.Source.Kseq (self__Cfamtransl.Source.Sloop __i) k))
+          as [[s' k']|].
+        * apply cheat.
+        * apply cheat.
       (* Sblock *)
-      + apply cheat.
+      + intros. fsimpl. fsimpl in *. monadInv H0.
+        apply H.
+        * apply cheat.
+        * apply cheat.
       (* Sexit *)
-      + apply cheat.
+      + intros. fsimpl. fsimpl in *. monadInv H.
+        fsimpl. reflexivity.
        (* Sreturn *)
-      + apply cheat.
+      + intros. fsimpl. destruct o;
+          fsimpl in *; monadInv H; fsimpl;
+          reflexivity.
        (* Slabel *)
-      + apply cheat.
+      + intros. fsimpl. fsimpl in *. destruct (ident_eq lbl l).
+        * monadInv H0. apply cheat.
+        * apply H;eauto. monadInv H0. apply cheat. 
        (* Sgoto *)
-      + apply cheat.
+      + intros. fsimpl. fsimpl in *. monadInv H. fsimpl. reflexivity.
       Qed. FEnd transl_find_label.
        
       FLemma transl_find_label_body:
