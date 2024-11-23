@@ -54,7 +54,8 @@ You can step through the examples interactively, to get familiar with the
 proof language.
 
 For more interesting programs, we have a framework for extensible certified 
-C compilers [here](https://github.com/ebresafegaga/rocqet/tree/main/casestudies/compcert) and 
+C compilers, which is based on [CompCert](https://github.com/AbsInt/CompCert), 
+[here](https://github.com/ebresafegaga/rocqet/tree/main/casestudies/compcert) and 
 modular mechanized simply-typed lambda calculi 
 [here](https://github.com/ebresafegaga/rocqet/tree/main/bench).
 
