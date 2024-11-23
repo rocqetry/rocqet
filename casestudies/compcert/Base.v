@@ -1083,12 +1083,19 @@ Inductive bitfield : Type :=
            Qed.
        CloseFLemma.
 
+       FInduction kstop_helper about Target.cont motive
+          (fun tk => match_cont Source.Kstop tk -> tk = Target.Kstop).
+       FProof.
+         intros.
+         
+       Qed.
+       FEnd kstop_helper.
+       
        FLemma transl_final_states:
          forall S R r,
          match_states S R -> Source.final_state S r -> Target.final_state R r.
            FProofLemma.
            intros. inv H0. inv H.
-           FInduction TK.
            (*inv MK. inv RESINJ.*) constructor. Qed.            
       CloseFLemma.
   FEnd Cminorgen.     
