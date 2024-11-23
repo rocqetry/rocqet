@@ -1087,19 +1087,19 @@ Inductive bitfield : Type :=
         forall tk, match_cont Source.Kstop tk -> tk = Target.Kstop
         by plain { intros until tk; intros H; inv H; eauto }.
     
-       FInduction kstop_helper about Target.cont motive
+       (*FInduction kstop_helper about Target.cont motive
           (fun tk => match_cont Source.Kstop tk -> tk = Target.Kstop).
        FProof.
          intros.
          
        Qed.
-       FEnd kstop_helper.
+       FEnd kstop_helper.*)
        
        FLemma transl_final_states:
          forall S R r,
          match_states S R -> Source.final_state S r -> Target.final_state R r.
            FProofLemma.
-           intros. inv H0. inv H.
+           intros. inv H0. inv H. apply self__Cminorgen.match_cont_Kstop_inv in MK.
            (*inv MK. inv RESINJ.*) constructor. Qed.            
       CloseFLemma.
   FEnd Cminorgen.     
