@@ -704,30 +704,18 @@ FEnd makeseq_rec.
 FDefinition makeseq : list self__SimplExpr.T.stmt -> self__SimplExpr.T.stmt := fun l =>
   makeseq_rec self__SimplExpr.T.Sskip l.
 
-MetaData set_destination.
+MetaData set_destination binds SDbase, SDcons.
 Inductive set_destination : Type :=
 | SDbase (tycast ty: type) (tmp: ident)
 | SDcons (tycast ty: type) (tmp: ident) (sd: set_destination).
 FEnd set_destination.
 
-MetaData destination.
+MetaData destination binds For_val, For_effects, For_set.
 Inductive destination : Type :=
 | For_val
 | For_effects
 | For_set (sd: self__SimplExpr.set_destination).
 FEnd destination.
-
-(* #91 *)
-MetaData SDbase.
-FEnd SDbase.
-MetaData SDcons.
-FEnd SDcons.
-MetaData For_val.
-FEnd For_val.
-MetaData For_effects.
-FEnd For_effects.
-MetaData For_set.
-FEnd For_set.
 
 MetaData do_set.
 Fixpoint do_set (sd: self__SimplExpr.set_destination) (a: self__SimplExpr.T.expr) : list self__SimplExpr.T.stmt :=
@@ -1979,10 +1967,14 @@ Qed. FEnd match_cont_is_call_cont.
 FInduction match_cont_call_cont
   about match_cont
   motive (fun ce k tk (_ : match_cont ce k tk) =>
-    match_cont ce k tk -> forall ce', match_cont ce' (S.call_cont k) (T.call_cont tk)).
+    forall ce', match_cont ce' (S.call_cont k) (T.call_cont tk)).
 FProof.
 all: intros; do 2 fsimpl; auto; fconstructor.
 Qed. FEnd match_cont_call_cont.
+
+Closing Fact is_call_cont_preserved :
+  forall ce k tk, match_cont ce k tk -> S.is_call_cont k -> T.is_call_cont tk
+  by plain {intros until tk; intros MK; inv MK; auto}.
 
 Closing Fact match_cont_seq_inv :
   forall ce s k tk,
@@ -2074,21 +2066,21 @@ FEnd match_states.
 
 FRecursion esize about S.expr motive (fun (_ : S.expr) => nat)
   with esizelist about S.exprlist motive (fun (_ : S.exprlist) => nat) by _rect.
-Case Eval v ty := 1%nat.
-Case Evar x ty := 0%nat.
-Case Eunop op r ty := (1 + esize r)%nat.
-Case Ebinop op r1 r2 ty := (1 + esize r1 + esize r2)%nat.
-Case Ecast r1 ty := (1 + esize r1)%nat.
-Case Eseqand r1 r2 ty := (1 + esize r1)%nat.
-Case Eseqor r1 r2 ty := (1 + esize r1)%nat.
-Case Econdition r1 r2 r3 ty := (1 + esize r1)%nat.
+Case Evar x ty := 1%nat.
+Case Eval v ty := 0%nat.
+Case Eunop op r ty := (Datatypes.S(esize r)).
+Case Ebinop op r1 r2 ty := (Datatypes.S(esize r1 + esize r2)%nat).
+Case Ecast r1 ty := (Datatypes.S(esize r1)).
+Case Eseqand r1 r2 ty := (Datatypes.S(esize r1)).
+Case Eseqor r1 r2 ty := (Datatypes.S(esize r1)).
+Case Econdition r1 r2 r3 ty := (Datatypes.S(esize r1)).
 Case Esizeof ty' ty := 1%nat.
 Case Ealignof ty' ty:= 1%nat.
-Case Ecomma r1 r2 ty := (esize r1 + esize r2)%nat.
-Case Eparen r1 tycast ty := (1 + esize r1)%nat.
+Case Ecomma r1 r2 ty := (Datatypes.S(esize r1 + esize r2)%nat).
+Case Eparen r1 tycast ty := (Datatypes.S(esize r1)).
 
 Case Enil := 0%nat.
-Case Econs r1 rl2 := (1 + esize r1 + esizelist rl2)%nat.
+Case Econs r1 rl2 := (Datatypes.S(esize r1 + esizelist rl2)%nat).
 FEnd esize with esizelist.
 
 Closing Fact esize_zero_val :
@@ -2113,20 +2105,599 @@ FDefinition measure : S.state -> nat := fun st =>
   end.
 
 FInduction leftcontext_size
-  about C.leftcontext
-  motive (fun from to c (_ : C.leftcontext from to c) =>
+  about S.leftcontext
+  motive (fun from to c (_ : S.leftcontext from to c) =>
     forall e1 e2,
     (esize e1 < esize e2)%nat ->
     (esize (c e1) < esize (c e2))%nat)
 with leftcontextlist_size
-  about C.leftcontextlist
-  motive (fun from c (_ : C.leftcontextlist from c) =>
+  about S.leftcontextlist
+  motive (fun from c (_ : S.leftcontextlist from c) =>
     forall e1 e2,
     (esize e1 < esize e2)%nat ->
     (esizelist (c e1) < esizelist (c e2))%nat).
 FProof.
 all: intros; do 2 fsimpl; auto with arith.
-Qed. FEnd leftcontext_size.
+Qed. FEnd leftcontext_size with leftcontextlist_size.
+
+FInduction estep_simulation about S.estep 
+  motive (fun ge S1 t S2 (_ : S.estep ge S1 t S2) => 
+    forall prog tprog tge, match_prog prog tprog -> 
+    S.globalenv prog = ge -> T.globalenv tprog = tge ->
+    forall T1 (MS : match_states tge S1 T1),
+    exists T2,
+    (plus T.step tge T1 t T2 \/ (star T.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
+    /\ match_states tge S2 T2).
+FProof.
+all: intros; inv MS.
+(* expr *)
+- assert (self__SimplExpr.tr_expr (prog_comp_env cu) le dest r sl a tmps).
+    { inv TR. exfalso; unfold self__SimplExpr.S.is_val in n; eauto. auto. }
+  exploit self__SimplExpr.tr_simple_rvalue; eauto. destruct dest.
+  (* for value *)
+  + intros [SL1 [TY1 EV1]]. subst sl.
+    econstructor. split.
+    * right; split. apply star_refl. unfold self__SimplExpr.measure. fsimpl.
+      destruct (self__SimplExpr.esize r) eqn:Hs.
+      -- apply self__SimplExpr.esize_zero_val in Hs. contradiction.
+      -- lia. 
+    * eapply self__SimplExpr.match_exprstates with (tmps := tmps); eauto.
+      apply self__SimplExpr.tr_top_val_val; auto using EV1.
+  (* for effects *)
+  + intros SL1. subst sl.
+    econstructor. split.
+    * right; split. apply star_refl. unfold self__SimplExpr.measure. fsimpl.
+      destruct (self__SimplExpr.esize r) eqn:Hs.
+      -- apply self__SimplExpr.esize_zero_val in Hs. contradiction.
+      -- lia.
+    * eapply self__SimplExpr.match_exprstates with (tmps := tmps); eauto.
+      apply self__SimplExpr.tr_top_base. fconstructor.
+  (* for set *)
+  + apply self__SimplExpr.match_cont_exp_no_set in MK as [].
+(* seqand true *)
+- exploit self__SimplExpr.tr_top_leftcontext; eauto. clear TR.
+  intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
+  inv P.
+  + (* fdiscriminate. *) apply cheat.
+  + apply self__SimplExpr.tr_seqand_inv in H0. destruct dst'; unpack H0.
+    (* for value *)
+    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1 a'. simpl self__SimplExpr.Kseqlist.
+      eexists. { split.
+      - left. eapply plus_left.
+        + fconstructor.
+        + eapply star_trans.
+          * apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
+          * apply self__SimplExpr.push_seq.
+          * reflexivity.
+        + reflexivity.
+      - rewrite <- self__SimplExpr.Kseqlist_app.
+        eapply self__SimplExpr.match_exprstates; eauto.
+        apply S.
+        + apply self__SimplExpr.tr_paren_val with (a1 := a2); auto.
+          apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+        + auto.
+        + do 2 fsimpl. auto. }
+    (* for effects *)
+    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl self__SimplExpr.Kseqlist.
+      eexists. { split.
+      - left. eapply plus_left.
+        + fconstructor.
+        + eapply star_trans.
+          * apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
+          * apply self__SimplExpr.push_seq.
+          * reflexivity.
+        + reflexivity.
+      - rewrite <- self__SimplExpr.Kseqlist_app.
+        eapply self__SimplExpr.match_exprstates; eauto.
+        apply S.
+        + apply self__SimplExpr.tr_paren_effects with (a1 := a2); auto.
+          apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+        + auto.
+        + do 2 fsimpl. auto. }
+    (* for set *)
+    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl self__SimplExpr.Kseqlist.
+      eexists. { split.
+      - left. eapply plus_left.
+        + fconstructor.
+        + eapply star_trans.
+          * apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
+          * apply self__SimplExpr.push_seq.
+          * reflexivity.
+        + reflexivity.
+      - rewrite <- self__SimplExpr.Kseqlist_app.
+        eapply self__SimplExpr.match_exprstates; eauto.
+        apply S.
+        + apply self__SimplExpr.tr_paren_set with (a1 := a2) (t := t); auto.
+          apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+        + auto.
+        + do 2 fsimpl. auto. }
+(* seqand false *)       
+- exploit self__SimplExpr.tr_top_leftcontext; eauto. clear TR.
+  intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
+  inv P.
+  + (* fdiscriminate. *) apply cheat.
+  + apply self__SimplExpr.tr_seqand_inv in H0. destruct dst'; unpack H0.
+    (* for value *)
+    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1 a'. simpl self__SimplExpr.Kseqlist.
+      eexists. { split.
+      - left. eapply plus_left.
+        + fconstructor.
+        + eapply star_trans.
+          * apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
+          * apply star_one. fconstructor. fconstructor.
+          * reflexivity.
+        + reflexivity.
+      - eapply self__SimplExpr.match_exprstates; eauto.
+        change sl2 with (nil ++ sl2). apply S.
+        + fconstructor.
+          * fsimpl. auto.
+          * intros. fconstructor. rewrite H0; auto using PTree.gss.
+        + intros. apply PTree.gso. congruence.
+        + do 2 fsimpl. auto. }
+    (* for effects *)
+    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl self__SimplExpr.Kseqlist.
+      eexists. { split.
+      - left. eapply plus_left.
+        + fconstructor.
+        + apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
+        + reflexivity.
+      - eapply self__SimplExpr.match_exprstates; eauto.
+        change sl2 with (nil ++ sl2). apply S.
+        + fconstructor.
+        + auto.
+        + do 2 fsimpl. auto. }
+    (* for set *)
+    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl self__SimplExpr.Kseqlist.
+      eexists. { split.
+      - left. eapply plus_left.
+        + fconstructor.
+        + eapply star_trans.
+          * apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
+          * apply self__SimplExpr.push_seq.
+          * reflexivity.
+        + reflexivity.
+      - rewrite <- self__SimplExpr.Kseqlist_app.
+        eapply self__SimplExpr.match_exprstates; eauto.
+        apply S.
+        + fconstructor.
+          * fsimpl. auto.
+          * intros. fconstructor.
+        + auto.
+        + do 2 fsimpl. auto. }
+(* seqor true *)
+- exploit self__SimplExpr.tr_top_leftcontext; eauto. clear TR.
+  intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
+  inv P.
+  + (* fdiscriminate. *) apply cheat.
+  + apply self__SimplExpr.tr_seqor_inv in H0. destruct dst'; unpack H0.
+    (* for value *)
+    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1 a'. simpl self__SimplExpr.Kseqlist.
+      eexists. { split.
+      - left. eapply plus_left.
+        + fconstructor.
+        + eapply star_trans.
+          * apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
+          * apply star_one. fconstructor. fconstructor.
+          * reflexivity.
+        + reflexivity.
+      - eapply self__SimplExpr.match_exprstates; eauto.
+        change sl2 with (nil ++ sl2). apply S.
+        + fconstructor.
+          * fsimpl. auto.
+          * intros. fconstructor. rewrite H0; auto using PTree.gss.
+        + intros. apply PTree.gso. congruence.
+        + do 2 fsimpl. auto. }
+    (* for effects *)
+    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl self__SimplExpr.Kseqlist.
+      eexists. { split.
+      - left. eapply plus_left.
+        + fconstructor.
+        + apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
+        + reflexivity.
+      - eapply self__SimplExpr.match_exprstates; eauto.
+        change sl2 with (nil ++ sl2). apply S.
+        + fconstructor.
+        + auto.
+        + do 2 fsimpl. auto. }
+    (* for set *)
+    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl self__SimplExpr.Kseqlist.
+      eexists. { split.
+      - left. eapply plus_left.
+        + fconstructor.
+        + eapply star_trans.
+          * apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
+          * apply self__SimplExpr.push_seq.
+          * reflexivity.
+        + reflexivity.
+      - rewrite <- self__SimplExpr.Kseqlist_app.
+        eapply self__SimplExpr.match_exprstates; eauto.
+        apply S.
+        + fconstructor.
+          * fsimpl. auto.
+          * intros. fconstructor.
+        + auto.
+        + do 2 fsimpl. auto. }
+(* seqor false *)
+- exploit self__SimplExpr.tr_top_leftcontext; eauto. clear TR.
+  intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
+  inv P.
+  + (* fdiscriminate. *) apply cheat.
+  + apply self__SimplExpr.tr_seqor_inv in H0. destruct dst'; unpack H0.
+    (* for value *)
+    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1 a'. simpl self__SimplExpr.Kseqlist.
+      eexists. { split.
+      - left. eapply plus_left.
+        + fconstructor.
+        + eapply star_trans.
+          * apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
+          * apply self__SimplExpr.push_seq.
+          * reflexivity.
+        + reflexivity.
+      - rewrite <- self__SimplExpr.Kseqlist_app.
+        eapply self__SimplExpr.match_exprstates; eauto.
+        apply S.
+        + apply self__SimplExpr.tr_paren_val with (a1 := a2); auto.
+          apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+        + auto.
+        + do 2 fsimpl. auto. }
+    (* for effects *)
+    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl self__SimplExpr.Kseqlist.
+      eexists. { split.
+      - left. eapply plus_left.
+        + fconstructor.
+        + eapply star_trans.
+          * apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
+          * apply self__SimplExpr.push_seq.
+          * reflexivity.
+        + reflexivity.
+      - rewrite <- self__SimplExpr.Kseqlist_app.
+        eapply self__SimplExpr.match_exprstates; eauto.
+        apply S.
+        + apply self__SimplExpr.tr_paren_effects with (a1 := a2); auto.
+          apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+        + auto.
+        + do 2 fsimpl. auto. }
+    (* for set *)
+    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl self__SimplExpr.Kseqlist.
+      eexists. { split.
+      - left. eapply plus_left.
+        + fconstructor.
+        + eapply star_trans.
+          * apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
+          * apply self__SimplExpr.push_seq.
+          * reflexivity.
+        + reflexivity.
+      - rewrite <- self__SimplExpr.Kseqlist_app.
+        eapply self__SimplExpr.match_exprstates; eauto.
+        apply S.
+        + apply self__SimplExpr.tr_paren_set with (a1 := a2) (t := t); auto.
+          apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+        + auto.
+        + do 2 fsimpl. auto. }
+(* condition *)
+- exploit self__SimplExpr.tr_top_leftcontext; eauto. clear TR.
+  intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
+  inv P.
+  + (* fdiscriminate. *) apply cheat.
+  + apply self__SimplExpr.tr_condition_inv in H0. destruct dst'; unpack H0.
+    (* for value *)
+    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1 a'. simpl self__SimplExpr.Kseqlist. destruct b.
+      -- eexists. { split.
+        - left. eapply plus_left.
+          + fconstructor.
+          + eapply star_trans.
+            * apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
+            * apply self__SimplExpr.push_seq.
+            * reflexivity.
+          + reflexivity.
+        - rewrite <- self__SimplExpr.Kseqlist_app.
+          eapply self__SimplExpr.match_exprstates; eauto.
+          apply S.
+          + apply self__SimplExpr.tr_paren_val with (a1 := a2); auto.
+            apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+          + auto.
+          + do 2 fsimpl. auto. }
+      -- eexists. { split.
+        - left. eapply plus_left.
+          + fconstructor.
+          + eapply star_trans.
+            * apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
+            * apply self__SimplExpr.push_seq.
+            * reflexivity.
+          + reflexivity.
+        - rewrite <- self__SimplExpr.Kseqlist_app.
+          eapply self__SimplExpr.match_exprstates; eauto.
+          apply S.
+          + apply self__SimplExpr.tr_paren_val with (a1 := a3); auto.
+            apply self__SimplExpr.tr_expr_monotone with tmp3; eauto.
+          + auto.
+          + do 2 fsimpl. auto. }
+    (* for effects *)
+    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl self__SimplExpr.Kseqlist. destruct b.
+      -- eexists. { split.
+        - left. eapply plus_left.
+          + fconstructor.
+          + eapply star_trans.
+            * apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
+            * apply self__SimplExpr.push_seq.
+            * reflexivity.
+          + reflexivity.
+        - rewrite <- self__SimplExpr.Kseqlist_app.
+          eapply self__SimplExpr.match_exprstates; eauto.
+          apply S.
+          + apply self__SimplExpr.tr_paren_effects with (a1 := a2); auto.
+            apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+          + auto.
+          + do 2 fsimpl. auto. }
+      -- eexists. { split.
+        - left. eapply plus_left.
+          + fconstructor.
+          + eapply star_trans.
+            * apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
+            * apply self__SimplExpr.push_seq.
+            * reflexivity.
+          + reflexivity.
+        - rewrite <- self__SimplExpr.Kseqlist_app.
+          eapply self__SimplExpr.match_exprstates; eauto.
+          apply S.
+          + apply self__SimplExpr.tr_paren_effects with (a1 := a3); auto.
+            apply self__SimplExpr.tr_expr_monotone with tmp3; eauto.
+          + auto.
+          + do 2 fsimpl. auto. }
+    (* for set *)
+    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl self__SimplExpr.Kseqlist. destruct b.
+      -- eexists. { split.
+        - left. eapply plus_left.
+          + fconstructor.
+          + eapply star_trans.
+            * apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
+            * apply self__SimplExpr.push_seq.
+            * reflexivity.
+          + reflexivity.
+        - rewrite <- self__SimplExpr.Kseqlist_app.
+          eapply self__SimplExpr.match_exprstates; eauto.
+          apply S.
+          + apply self__SimplExpr.tr_paren_set with (a1 := a2) (t := t); auto.
+            apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+          + auto.
+          + do 2 fsimpl. auto. }
+      -- eexists. { split.
+        - left. eapply plus_left.
+          + fconstructor.
+          + eapply star_trans.
+            * apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
+            * apply self__SimplExpr.push_seq.
+            * reflexivity.
+          + reflexivity.
+        - rewrite <- self__SimplExpr.Kseqlist_app.
+          eapply self__SimplExpr.match_exprstates; eauto.
+          apply S.
+          + apply self__SimplExpr.tr_paren_set with (a1 := a3) (t := t); auto.
+            apply self__SimplExpr.tr_expr_monotone with tmp3; eauto.
+          + auto.
+          + do 2 fsimpl. auto. }
+(* comma *)
+- exploit self__SimplExpr.tr_top_leftcontext; eauto. clear TR.
+  intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
+  inv P.
+  + (* fdiscriminate. *) apply cheat.
+  + apply self__SimplExpr.tr_comma_inv in H0. unpack H0.
+    exploit self__SimplExpr.tr_simple_rvalue; eauto. simpl; intro SL1.
+    subst sl0 sl1; simpl self__SimplExpr.Kseqlist.
+    eexists. { split.
+    - right. split.
+      + apply star_refl.
+      + rewrite <- Nat.succ_lt_mono.
+        apply (self__SimplExpr.leftcontext_size _ _ _ l). fsimpl. lia.
+    - eapply self__SimplExpr.match_exprstates; eauto.
+      apply S.
+      + eapply self__SimplExpr.tr_expr_monotone; eauto.
+      + auto.
+      + fsimpl. auto. }
+(* paren *)
+- exploit self__SimplExpr.tr_top_leftcontext; eauto. clear TR.
+  intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
+  inv P.
+  + (* fdiscriminate. *) apply cheat.
+  + apply self__SimplExpr.tr_paren_inv in H0. destruct dst'; unpack H0.
+    (* for value *)
+    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [b [SL1 [TY1 EV1]]].
+      subst sl1 a'; simpl self__SimplExpr.Kseqlist.
+      eexists. { split.
+        - left. eapply plus_left.
+          + fconstructor.
+          + apply star_one. fconstructor. fconstructor.
+            rewrite <- TY1; eauto.
+          + reflexivity.
+        - eapply self__SimplExpr.match_exprstates; eauto.
+          change sl2 with (self__SimplExpr.final self__SimplExpr.For_val (self__SimplExpr.T.Etempvar t (self__SimplExpr.S.typeof r)) ++ sl2).
+          apply S.
+          + fconstructor.
+            * fsimpl. auto.
+            * intros. fconstructor. rewrite H0; auto using PTree.gss.
+          + intros. apply PTree.gso. congruence.
+          + do 2 fsimpl. auto. }
+    (* for effects *)
+    * eexists. { split.
+      - right. split.
+        + apply star_refl.
+        + simpl. rewrite <- Nat.succ_lt_mono.
+          apply (self__SimplExpr.leftcontext_size _ _ _ l). do 2 fsimpl. lia.
+      - eapply self__SimplExpr.match_exprstates; eauto.
+        exploit self__SimplExpr.tr_simple_rvalue; eauto.
+        simpl. intros A. subst sl1.
+        apply S.
+        + fconstructor.
+        + auto.
+        + do 2 fsimpl. auto. }
+    (* for set *)
+    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [b [SL1 [TY1 EV1]]].
+      subst sl1; simpl self__SimplExpr.Kseqlist.
+      eexists. { split.
+        - left. eapply plus_left.
+          + fconstructor.
+          + apply star_one. fconstructor. fconstructor.
+            rewrite <- TY1; eauto.
+          + reflexivity.
+        - eapply self__SimplExpr.match_exprstates; eauto.
+          apply S.
+          + fconstructor.
+            * fsimpl. auto.
+            * intros. fconstructor. rewrite H0; auto using PTree.gss.
+          + intros. apply PTree.gso. congruence.
+          + do 2 fsimpl. auto. }
+Qed. FEnd estep_simulation.
+
+FLemma tr_top_val_for_val_inv:
+  forall tge ce e le m v ty sl a tmps,
+  tr_top ce tge e le m self__SimplExpr.For_val (S.Eval v ty) sl a tmps ->
+  sl = nil /\ T.typeof a = ty /\ T.eval_expr tge e le m a v.
+FProofLemma.
+  intros. inv H.
+  - (* finjection H0. *) apply cheat.
+  - apply self__SimplExpr.tr_val_inv in H0. intuition.
+Qed. CloseFLemma.
+
+FLemma blocks_of_env_preserved:
+  forall prog tprog ge tge, match_prog prog tprog -> S.globalenv prog = ge -> T.globalenv tprog = tge ->
+  forall e, T.blocks_of_env tge e = S.blocks_of_env ge e.
+FProofLemma.
+  intros; unfold self__SimplExpr.T.blocks_of_env, self__SimplExpr.S.blocks_of_env.
+  unfold self__SimplExpr.T.block_of_binding, self__SimplExpr.S.block_of_binding.
+  rewrite (self__SimplExpr.comp_env_preserved prog tprog ge tge); auto.
+Qed. CloseFLemma.
+
+FInduction sstep_simulation about S.sstep 
+   motive (fun ge S1 t S2 (_ : S.sstep ge S1 t S2) => 
+           forall prog tprog tge, match_prog prog tprog -> S.globalenv prog = ge -> T.globalenv tprog = tge ->
+           forall T1 (MS : match_states tge S1 T1),
+           exists T2,
+           (plus T.step tge T1 t T2 \/
+              (star T.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
+                    /\ match_states tge S2 T2).
+FProof.
+all: intros; inv MS.
+(* do 1 *)
+- apply self__SimplExpr.tr_do_inv in TR. inv TR.
+  eexists. split.
+  + right. split. apply self__SimplExpr.push_seq. simpl. fsimpl. lia.
+  + econstructor; eauto. fconstructor.
+(* do 2 *)
+- apply self__SimplExpr.match_cont_exp_do_inv in MK as []; subst. inv TR.
+  apply self__SimplExpr.tr_val_inv in H0; subst.
+  eexists. split.
+  + right. split. apply star_refl. simpl. fsimpl. lia.
+  + econstructor; eauto. fconstructor.
+(* seq *)
+- apply self__SimplExpr.tr_seq_inv in TR; unpack TR; subst.
+  eexists. split.
+  + left. apply plus_one. fconstructor.
+  + econstructor; eauto. fconstructor.
+(* skip seq *)
+- apply self__SimplExpr.tr_skip_inv in TR; subst.
+  apply self__SimplExpr.match_cont_seq_inv in MK; unpack MK; subst.
+  eexists. split.
+  + left. apply plus_one. fconstructor.
+  + econstructor; eauto.
+(* ifthenelse *)
+- apply self__SimplExpr.tr_ifthenelse_inv in TR as [He|Hn].
+  (* ifthenelse empty *)
+  + unpack He. inv TEMP3. eexists. split.
+    * left. eapply plus_left. fconstructor. apply self__SimplExpr.push_seq. auto.
+    * econstructor; eauto. fconstructor.
+  (* ifthenelse non empty *)
+  + unpack Hn. inv TEMP0. eexists. split.
+    * left. eapply plus_left. fconstructor. apply self__SimplExpr.push_seq. auto.
+    * econstructor; eauto. fconstructor. 
+(* ifthenelse *)
+- apply self__SimplExpr.match_cont_exp_ifthenelse_inv in MK as [He|Hn].
+  (* ifthenelse empty *)
+  + unpack He; subst.
+    exploit self__SimplExpr.tr_top_val_for_val_inv; eauto. intros [A [B C]]. subst.
+    eexists. split.
+    * right. destruct b; split; do 2 (simpl; fsimpl); auto.
+      -- eapply star_left. fconstructor. constructor. auto.
+      -- eapply star_left. fconstructor. constructor. auto.
+    * destruct b; econstructor; eauto; fconstructor.
+  (* ifthenelse non empty *)
+  + unpack Hn; subst.
+    exploit self__SimplExpr.tr_top_val_for_val_inv; eauto. intros [A [B C]]. subst.
+    eexists. split.
+    * left. eapply plus_two. fconstructor. fconstructor. auto.
+    * destruct b; econstructor; eauto.
+(* return none *)
+- apply self__SimplExpr.tr_return_inv in TR; subst.
+  eexists. split.
+  + left. apply plus_one. fconstructor. erewrite self__SimplExpr.blocks_of_env_preserved; eauto.
+  + econstructor. intros. eapply self__SimplExpr.match_cont_call_cont; eauto.
+(* return some 1 *)
+- apply self__SimplExpr.tr_return_inv in TR; unpack TR; subst. inv TEMP1.
+  eexists. split.
+  + left. eapply plus_left. fconstructor. apply self__SimplExpr.push_seq. auto.
+  + econstructor; eauto. fconstructor.
+(* return some 2 *)
+- apply self__SimplExpr.match_cont_exp_return_inv in MK; unpack MK; subst.
+  exploit self__SimplExpr.tr_top_val_for_val_inv; eauto. intros [A [B C]]. subst.
+  eexists. split.
+  + left. eapply plus_two.
+    -- fconstructor.
+    -- fconstructor. erewrite self__SimplExpr.function_return_preserved; eauto.
+      erewrite self__SimplExpr.blocks_of_env_preserved; eauto.
+    -- auto.
+  + econstructor. intros. eapply self__SimplExpr.match_cont_call_cont; eauto.
+(* skip return *)
+- apply self__SimplExpr.tr_skip_inv in TR; subst.
+  assert (self__SimplExpr.T.is_call_cont tk). { eapply self__SimplExpr.is_call_cont_preserved; eauto. }
+  eexists. split.
+  + left. apply plus_one. fconstructor.
+    erewrite self__SimplExpr.blocks_of_env_preserved; eauto.
+  + econstructor. intros. eapply self__SimplExpr.match_cont_is_call_cont; eauto.
+(* label *)
+- apply self__SimplExpr.tr_label_inv in TR; unpack TR; subst.
+  eexists. split.
+  + left. apply plus_one. fconstructor.
+  + econstructor; eauto.
+(* goto *)
+- apply self__SimplExpr.tr_goto_inv in TR; unpack TR; subst.
+  inversion TRF; subst. apply cheat.
+  (* eexists. split.
+  + left. apply plus_one. fconstructor.
+  + econstructor; eauto. *)
+(* internal function *)
+- inv TR. inversion H1; subst.
+  eexists. split.
+  + left. apply plus_one. fconstructor. admit.
+  + econstructor; eauto.
+Qed. FEnd sstep_simulation.
+
+FLemma simulation :
+     (forall ge S1 t S2 (_ : C.step ge S1 t S2),
+     forall prog tprog tge, match_prog prog tprog -> S.globalenv prog = ge -> T.globalenv tprog = tge ->
+     forall T1 (MS : match_states tge S1 T1),
+        exists T2,
+         (plus Clight.step tge T1 t T2 \/
+           (star Clight.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
+     /\ match_states tge S2 T2).
+FProofLemma.
+intros ge S1 t S2 STEP. destruct STEP.
+- apply self__SimplExpr.estep_simulation; auto.
+- apply self__SimplExpr.sstep_simulation; auto.
+Qed. CloseFLemma.
 
 FEnd SimplExpr.
 
