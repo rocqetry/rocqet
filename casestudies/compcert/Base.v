@@ -1083,6 +1083,10 @@ Inductive bitfield : Type :=
            Qed.
        CloseFLemma.
 
+      Closing Fact match_cont_Kstop_inv : 
+        forall tk, match_cont Source.Kstop tk -> tk = Target.Kstop
+        by plain { intros until tk; intros H; inv H; eauto }.
+    
        FInduction kstop_helper about Target.cont motive
           (fun tk => match_cont Source.Kstop tk -> tk = Target.Kstop).
        FProof.
