@@ -48,6 +48,14 @@ let metadata name =
     PluginCmdScope.
       { names; command = PluginCmd.MetaData; close = Metadata.close_metadata }
 
+let metadata_bound_names name bound_names = 
+  let names = [name] in
+  Metadata.open_metadata_with_bound_names name bound_names;
+  PluginScopes.push
+    PluginCmdScope.
+      { names; command = PluginCmd.MetaData; close = Metadata.close_metadata }
+  
+
 let definition ~name ?body_type body_expr =
   Definition.add_definition ~name ?body_type body_expr
 

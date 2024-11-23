@@ -154,6 +154,9 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "MetaData" ident(i) ] -> { Entry.metadata i }
 
+| [ "MetaData" ident(name) "binds" ne_ident_list_sep(bound_names, ",") ] -> 
+   { Entry.metadata_bound_names name bound_names }
+
 | [ "FDisplay" "PluginScope" ] -> { Entry.display_plugin_scope () }
 
 | [ "Closing" "Fact" ident(name) ":" llconstr_ip(ty) "by" "{" tactic(script) "}" ] -> 

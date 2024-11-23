@@ -15,6 +15,8 @@ val family_extends_list :
 (* Handle a `Metadata ...` section *)
 val metadata : Names.Id.t -> unit
 
+val metadata_bound_names : Names.Id.t -> Names.Id.t list -> unit
+
 (* Handle a `FInductive ... := ...` command *)
 val finductive : VernacInductive.t -> unit
 

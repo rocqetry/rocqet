@@ -8,6 +8,7 @@ module DB = Backend.Declare
 module Ctx = struct
   type t = {
     name : Names.Id.t;
+    bound_names: Names.Id.t list;
     compiled_impl : CompiledModule.t;
     compiled_context : CompiledModuleType.t;
   }
@@ -23,6 +24,17 @@ module Ctx = struct
   let update data = store := Some data
 end
 
+let open_metadata_with_bound_names name bound_names =
+  Inheritance.inherit_dependencies ~prefix:name;
+  let context = Context.get () in
+  let compiled_context, parameters =
+    Codegen.compile_linkage_context ~field_name:name context
+  in
+  let module_name = Naming.fresh_name ~prefix:"MetaData" in
+  let compiled_impl = DB.start_module module_name parameters in  
+  let ctx = Ctx.{ name; bound_names; compiled_impl; compiled_context } in
+  Ctx.update ctx
+
 let open_metadata name =
   Inheritance.inherit_dependencies ~prefix:name;
   let context = Context.get () in
@@ -31,20 +43,23 @@ let open_metadata name =
   in
   let module_name = Naming.fresh_name ~prefix:"MetaData" in
   let compiled_impl = DB.start_module module_name parameters in
-  let ctx = Ctx.{ name; compiled_impl; compiled_context } in
+  let bound_names = [] in
+  let ctx = Ctx.{ name; bound_names; compiled_impl; compiled_context } in
   Ctx.update ctx
 
 let close_metadata () =
-  let Ctx.{ name; compiled_impl; compiled_context } = Ctx.get () in
+  let Ctx.{ name; bound_names; compiled_impl; compiled_context } = Ctx.get () in
   let default_ctx_params =
     let context = Context.get () in
     context |> Context.family_linkage |> function
     | { default_ctx_params; _ } -> default_ctx_params
   in
-  let _ = DB.end_module () in
+  let _ = DB.end_module () in  
   let elem =
     LinkageElem.MetaDataSection
-      { name; compiled_impl; compiled_context; default_ctx_params }
+      { name; bound_names; compiled_impl; compiled_context; default_ctx_params }
   in
+  let s = bound_names |> List.map Names.Id.to_string |> String.concat ", " in
+  Feedback.msg_info Pp.(str "Binding: " ++ str s);
   Context.add_field ~name ~elem;
   Ctx.clear ()

@@ -33,6 +33,9 @@ let rec linear_ctx_mapping context =
                         (name, Naming.self_version linkage.name)))
         in
         (name, Naming.self_version linkage.name) :: names
+    | LinkageElem.MetaDataSection { bound_names; _ } -> 
+       let names = name :: bound_names in 
+       names |> List.map (fun name -> (name, Naming.self_version linkage.name))
     | _ -> [ (name, Naming.self_version linkage.name) ]
   in
   match context with

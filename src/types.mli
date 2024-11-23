@@ -148,6 +148,7 @@ module rec LinkageElem : sig
       }
     | MetaDataSection of {
         name : Names.Id.t;
+        bound_names: Names.Id.t list;
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
