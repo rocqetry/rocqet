@@ -104,6 +104,12 @@ FDefinition type_of_fundef : fundef -> type := fun f =>
 
 FDefinition program := Ctypes.program function.
 
+FRecursion seq_of_labeled_statement about lbl_stmts
+  motive (fun (_ : lbl_stmts) => stmt) by _rect.
+Case LSnil := Sskip.
+Case LScons i s sl' := (Sseq s (seq_of_labeled_statement sl')).
+FEnd seq_of_labeled_statement.
+
 (* Semantics *)
 MetaData genv.
 Record genv := { genv_genv :> Genv.t self__C.fundef type; genv_cenv :> composite_env }.
@@ -216,7 +222,8 @@ Inductive state: Type :=
 | Stuckstate. (* undefined behavior occurred *)
 FEnd state.
 
-FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect.
+FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont))
+  with find_label_ls about lbl_stmts motive (fun (_ : lbl_stmts) => label -> cont -> option (stmt * cont)) by _rect.
 Case Sskip := (fun lbl k => None).
 Case Sseq s1 s2 :=
   (fun lbl k =>
@@ -234,7 +241,15 @@ Case Sifthenelse a s1 s2 :=
 Case Sreturn a := (fun lbl k => None).
 Case Slabel lbl' s' := (fun lbl k => if ident_eq lbl lbl' then Some(s', k) else find_label s' lbl k).
 Case Sgoto lbl' := (fun lbl k => None).
-FEnd find_label.
+
+Case LSnil := (fun lbl k => None).
+Case LScons i s sl' :=
+  (fun lbl k =>
+    match find_label s lbl (Kseq (seq_of_labeled_statement sl') k) with
+    | Some sk => Some sk
+    | None => find_label_ls sl' lbl k
+    end).
+FEnd find_label with find_label_ls.
 
 (* deterministic evaluation strategy *)
 
@@ -517,6 +532,12 @@ FDefinition type_of_fundef : fundef -> type := fun f =>
 
 FDefinition program := Ctypes.program function.
 
+FRecursion seq_of_labeled_statement about lbl_stmts
+  motive (fun (_ : lbl_stmts) => stmt) by _rect.
+Case LSnil := Sskip.
+Case LScons i s sl' := (Sseq s (seq_of_labeled_statement sl')).
+FEnd seq_of_labeled_statement.
+
 (* Semantics *)
 
 MetaData genv.
@@ -574,7 +595,8 @@ Case Kstop := True.
 Case Kseq s k := False.
 FEnd is_call_cont.
 
-FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect.
+FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont))
+  with find_label_ls about lbl_stmts motive (fun (_ : lbl_stmts) => label -> cont -> option (stmt * cont)) by _rect.
 Case Sskip := (fun lbl k => None).
 Case Sset id e := (fun lbl k => None).
 Case Sseq s1 s2 :=
@@ -593,7 +615,15 @@ Case Sreturn a := (fun lbl k => None).
 Case Slabel lbl' s' :=
   (fun lbl k =>  if ident_eq lbl lbl' then Some(s', k) else find_label s' lbl k).
 Case Sgoto lbl' :=  (fun lbl k => None).
-FEnd find_label.
+
+Case LSnil := (fun lbl k => None).
+Case LScons i s sl' :=
+  (fun lbl k =>
+    match find_label s lbl (Kseq (seq_of_labeled_statement sl') k) with
+    | Some sk => Some sk
+    | None => find_label_ls sl' lbl k
+    end).
+FEnd find_label with find_label_ls.
 
 MetaData state.
 Inductive state: Type :=
@@ -1429,7 +1459,14 @@ FInductive tr_stmt: composite_env -> S.stmt -> T.stmt -> Prop :=
     tr_stmt ce s ts ->
     tr_stmt ce (S.Slabel lbl s) (T.Slabel lbl ts)
 | tr_goto: forall ce lbl,
-    tr_stmt ce (S.Sgoto lbl) (T.Sgoto lbl).
+    tr_stmt ce (S.Sgoto lbl) (T.Sgoto lbl)
+with tr_lblstmts: composite_env -> S.lbl_stmts -> T.lbl_stmts -> Prop :=
+| tr_ls_nil: forall ce,
+    tr_lblstmts ce S.LSnil T.LSnil
+| tr_ls_cons: forall ce c s ls ts tls,
+    tr_stmt ce s ts ->
+    tr_lblstmts ce ls tls ->
+    tr_lblstmts ce (S.LScons c s ls) (T.LScons c ts tls).
 
 Closing Fact tr_skip_inv :
   forall ce ts,
@@ -1476,6 +1513,18 @@ Closing Fact tr_goto_inv :
   forall ce lbl ts,
   tr_stmt ce (S.Sgoto lbl) ts ->
   ts = T.Sgoto lbl
+  by plain {intros until ts; intros H; inv H; eauto}.
+
+Closing Fact tr_ls_nil_inv :
+  forall ce ts,
+  tr_lblstmts ce S.LSnil ts ->
+  ts = T.LSnil
+  by plain {intros until ts; intros H; inv H; eauto}.
+
+Closing Fact tr_ls_cons_inv :
+  forall ce c s ls ts,
+  tr_lblstmts ce (S.LScons c s ls) ts ->
+  exists ts' tls, ts = T.LScons c ts' tls /\ tr_stmt ce s ts' /\ tr_lblstmts ce ls tls
   by plain {intros until ts; intros H; inv H; eauto}.
 
 MetaData tr_function.
@@ -2064,6 +2113,217 @@ Inductive match_states (tge : self__SimplExpr.T.genv) : self__SimplExpr.S.state 
         match_states tge self__SimplExpr.S.Stuckstate S.
 FEnd match_states.
 
+FInduction tr_seq_of_labeled_statement
+  about tr_lblstmts
+  motive (fun ce ls tls (_ : tr_lblstmts ce ls tls) =>
+    tr_stmt ce (S.seq_of_labeled_statement ls) (T.seq_of_labeled_statement tls)).
+FProof.
+all: intros; do 2 fsimpl; fconstructor.
+Qed. FEnd tr_seq_of_labeled_statement.
+
+FDefinition nolabel := fun (lbl: T.label) (s: T.stmt) =>
+  forall k, T.find_label s lbl k = None.
+
+FDefinition nolabel_list := fix rec (lbl: T.label) (sl: list T.stmt) :=
+  match sl with
+  | nil => True
+  | s1 :: sl' => nolabel lbl s1 /\ rec lbl sl'
+  end.
+
+FLemma nolabel_list_app:
+  forall lbl sl2 sl1, nolabel_list lbl sl1 -> nolabel_list lbl sl2 -> nolabel_list lbl (sl1 ++ sl2).
+FProofLemma.
+  intros lbl. induction sl1; simpl; intros. auto. tauto.
+Qed. CloseFLemma.
+
+FLemma makeseq_nolabel:
+  forall lbl sl, nolabel_list lbl sl -> nolabel lbl (makeseq sl).
+FProofLemma.
+  intros lbl.
+  assert (forall sl s, self__SimplExpr.nolabel lbl s -> self__SimplExpr.nolabel_list lbl sl -> self__SimplExpr.nolabel lbl (self__SimplExpr.makeseq_rec s sl)).
+  { induction sl; intros. auto. destruct H0. apply IHsl; fsimpl; auto.
+    red. intros; fsimpl. rewrite H. apply H0. }
+  intros. unfold self__SimplExpr.makeseq. apply H; auto. red. fsimpl. auto.
+Qed. CloseFLemma.
+
+FLemma makeif_nolabel:
+  forall lbl a s1 s2, nolabel lbl s1 -> nolabel lbl s2 -> nolabel lbl (makeif a s1 s2).
+FProofLemma.
+  intros. functional induction (self__SimplExpr.makeif a s1 s2); auto.
+  - red; fsimpl; intros. rewrite H; auto.
+  - red; fsimpl; intros. rewrite H; auto.
+Qed. CloseFLemma.
+
+FLemma nolabel_do_set:
+  forall lbl sd a, nolabel_list lbl (do_set sd a).
+FProofLemma.
+  intros lbl. induction sd; intros; split; auto; red; fsimpl; auto.
+Qed. CloseFLemma.
+
+FLemma nolabel_final:
+  forall lbl dst a, nolabel_list lbl (final dst a).
+FProofLemma.
+  destruct dst; simpl; intros. auto. auto. apply self__SimplExpr.nolabel_do_set.
+Qed. CloseFLemma.
+
+FInduction tr_find_label_expr
+  about tr_expr
+  motive (fun ce le dst r sl a tmps (_ : tr_expr ce le dst r sl a tmps) =>
+    forall lbl, nolabel_list lbl sl)
+with tr_find_label_exprlist
+  about tr_exprlist
+  motive (fun ce le rl sl al tmps (_ : tr_exprlist ce le rl sl al tmps) =>
+    forall lbl, nolabel_list lbl sl).
+FProof.
+Ltac NoLabelTac :=
+  match goal with
+  | [ |- self__SimplExpr.nolabel_list ?lbl nil ] => exact I
+  | [ |- self__SimplExpr.nolabel_list ?lbl (self__SimplExpr.do_set _ _) ] => apply (self__SimplExpr.nolabel_do_set lbl) (*; NoLabelTac*)
+  | [ |- self__SimplExpr.nolabel_list ?lbl (self__SimplExpr.final _ _) ] => apply (self__SimplExpr.nolabel_final lbl) (*; NoLabelTac*)
+  | [ |- self__SimplExpr.nolabel_list ?lbl (_ :: _) ] => simpl; split; NoLabelTac
+  | [ |- self__SimplExpr.nolabel_list ?lbl (_ ++ _) ] => apply (self__SimplExpr.nolabel_list_app lbl); NoLabelTac
+  | [ H: _ -> self__SimplExpr.nolabel_list ?lbl ?x |- self__SimplExpr.nolabel_list ?lbl ?x ] => apply H; NoLabelTac
+  | [ |- self__SimplExpr.nolabel ?lbl (self__SimplExpr.makeseq _) ] => apply (self__SimplExpr.makeseq_nolabel lbl); NoLabelTac
+  | [ |- self__SimplExpr.nolabel ?lbl (self__SimplExpr.makeif _ _ _) ] => apply (self__SimplExpr.makeif_nolabel lbl); NoLabelTac
+  | [ |- self__SimplExpr.nolabel _ _ ] => red; intros; fsimpl; auto
+  | [ |- _ /\ _ ] => split; NoLabelTac
+  | _ => auto
+  end.
+all: intros; simpl; NoLabelTac.
+Qed. FEnd tr_find_label_expr with tr_find_label_exprlist.
+
+FLemma tr_find_label_top:
+  forall ce tge lbl e le m dst r sl a tmps,
+  tr_top ce tge e le m dst r sl a tmps -> nolabel_list lbl sl.
+FProofLemma.
+  induction 1.
+  - exact I.
+  - eapply self__SimplExpr.tr_find_label_expr. eassumption.
+Qed. CloseFLemma.
+
+FLemma tr_find_label_expression:
+  forall ce (tge: self__SimplExpr.T.genv) lbl r s a,
+  tr_expression ce r s a -> forall k, T.find_label s lbl k = None.
+FProofLemma.
+  intros. inv H.
+  assert (self__SimplExpr.nolabel lbl (self__SimplExpr.makeseq sl)). apply self__SimplExpr.makeseq_nolabel.
+  eapply self__SimplExpr.tr_find_label_top with
+    (e := self__SimplExpr.T.empty_env) (le := PTree.empty val) (m := Mem.empty) (tge := tge).
+  eauto. apply H.
+Qed. CloseFLemma.
+
+FLemma tr_find_label_expr_stmt:
+  forall ce (tge: self__SimplExpr.T.genv) lbl r s,
+  tr_expr_stmt ce r s -> forall k, T.find_label s lbl k = None.
+FProofLemma.
+  intros. inv H.
+  assert (self__SimplExpr.nolabel lbl (self__SimplExpr.makeseq sl)). apply self__SimplExpr.makeseq_nolabel.
+  eapply self__SimplExpr.tr_find_label_top with
+    (e := self__SimplExpr.T.empty_env) (le := PTree.empty val) (m := Mem.empty) (tge := tge).
+  eauto. apply H.
+Qed. CloseFLemma.
+
+(* FLemma tr_find_label_if:
+  forall ce (tge: self__SimplExpr.T.genv) lbl r s,
+  tr_if ce r S.Sskip S.Sbreak s ->
+  forall k, T.find_label s lbl k = None.
+FProofLemma.
+  intros. inv H.
+  assert (self__SimplExpr.nolabel lbl (self__SimplExpr.makeseq (sl ++ self__SimplExpr.makeif a Sskip Sbreak :: nil))).
+  apply self__SimplExpr.makeseq_nolabel.
+  apply self__SimplExpr.nolabel_list_app.
+  eapply self__SimplExpr.tr_find_label_top with
+    (e := self__SimplExpr.T.empty_env) (le := PTree.empty val) (m := Mem.empty) (tge := tge).
+  eauto.
+  simpl; split; auto. apply self__SimplExpr.makeif_nolabel. red; simpl; auto. red; simpl; auto.
+  apply H.
+Qed. CloseFLemma. *)
+
+FInduction tr_find_label
+  about S.stmt
+  motive (fun (s : S.stmt) =>
+    forall ce (tge: self__SimplExpr.T.genv) lbl k ts tk
+      (TR : tr_stmt ce s ts)
+      (MC : match_cont ce k tk),
+    match S.find_label s lbl k with
+    | None =>
+        T.find_label ts lbl tk = None
+    | Some (s', k') =>
+        exists ts' tk', 
+          T.find_label ts lbl tk = Some (ts', tk')
+        /\ tr_stmt ce s' ts'
+        /\ match_cont ce k' tk'
+    end)
+with tr_find_label_ls
+  about S.lbl_stmts
+  motive (fun (s : S.lbl_stmts) =>
+    forall ce (tge: self__SimplExpr.T.genv) lbl k ts tk
+      (TR : tr_lblstmts ce s ts)
+      (MC : match_cont ce k tk),
+    match S.find_label_ls s lbl k with
+    | None =>
+        T.find_label_ls ts lbl tk = None
+    | Some (s', k') =>
+        exists ts' tk', 
+          T.find_label_ls ts lbl tk = Some (ts', tk')
+        /\ tr_stmt ce s' ts'
+        /\ match_cont ce k' tk'
+    end).
+FProof.
+(* seq *)
+- intros. apply self__SimplExpr.tr_seq_inv in TR; unpack TR; subst. fsimpl.
+  exploit (H ce tge lbl (self__SimplExpr.S.Kseq __i0 k)); eauto. fconstructor.
+  destruct (self__SimplExpr.S.find_label __i lbl (self__SimplExpr.S.Kseq __i0 k)) as [[s' k'] | ].
+  + intros [ts1' [tk' [A [B C]]]]. fsimpl. rewrite A. eauto.
+  + intro EQ. fsimpl. rewrite EQ. eapply H0; eauto.
+(* skip *)
+- intros. apply self__SimplExpr.tr_skip_inv in TR; subst. fsimpl. fsimpl. auto.
+(* do *)
+- intros. apply self__SimplExpr.tr_do_inv in TR. fsimpl.
+  eapply self__SimplExpr.tr_find_label_expr_stmt; eauto.
+(* ifthenelse *)
+- intros. apply self__SimplExpr.tr_ifthenelse_inv in TR as [He|Hn].
+  (* ifthenelse empty *)
+  + unpack He; subst.
+    assert (Hf: self__SimplExpr.S.find_label (self__SimplExpr.S.Sifthenelse e self__SimplExpr.S.Sskip self__SimplExpr.S.Sskip) lbl k = None)
+      by (do 3 fsimpl; auto); rewrite Hf; clear Hf.
+    fsimpl. rewrite (self__SimplExpr.tr_find_label_expression ce tge lbl _ _ _ TEMP3).
+    fsimpl. auto.
+  (* ifthenelse non empty *)
+  + unpack Hn; subst. rename s' into sr.
+    fsimpl. fsimpl. rewrite (self__SimplExpr.tr_find_label_expression ce tge lbl _ _ _ TEMP0).
+    exploit (H ce tge lbl k); eauto.
+    destruct (self__SimplExpr.S.find_label __i lbl k) as [[s' k'] | ].
+    * intros [ts' [tk' [A [B C]]]]. fsimpl. rewrite A. eauto.
+    * intro EQ. fsimpl. rewrite EQ. eapply H0; eauto.
+(* return *)
+- intros. apply self__SimplExpr.tr_return_inv in TR. destruct o; unpack TR; subst.
+  (* return some *)
+  + fsimpl. fsimpl. rewrite (self__SimplExpr.tr_find_label_expression ce tge lbl _ _ _ TEMP1).
+    fsimpl. auto.
+  (* return none *)
+  + fsimpl. fsimpl. auto.
+(* label *)
+- intros. apply self__SimplExpr.tr_label_inv in TR; unpack TR; subst.
+  fsimpl. fsimpl. destruct (ident_eq lbl l).
+  + eauto.
+  + apply H; eauto.
+(* goto *)
+- intros. apply self__SimplExpr.tr_goto_inv in TR; subst.
+  fsimpl. fsimpl. auto.
+
+(* nil *)
+- intros. apply self__SimplExpr.tr_ls_nil_inv in TR; subst.
+  fsimpl. fsimpl. auto.
+(* cons *)
+- intros. apply self__SimplExpr.tr_ls_cons_inv in TR; unpack TR; subst. rename ts' into tsr.
+  fsimpl. fsimpl. exploit (H ce tge lbl (self__SimplExpr.S.Kseq (self__SimplExpr.S.seq_of_labeled_statement __i0) k)); eauto.
+  + fconstructor. apply self__SimplExpr.tr_seq_of_labeled_statement; eauto.
+  + destruct (self__SimplExpr.S.find_label __i lbl (self__SimplExpr.S.Kseq (self__SimplExpr.S.seq_of_labeled_statement __i0) k)) as [[s' k'] | ].
+    * intros [ts' [tk' [A [B C]]]]. fsimpl. rewrite A. eauto.
+    * intro EQ. fsimpl. rewrite EQ. eapply H0; eauto.
+Qed. FEnd tr_find_label with tr_find_label_ls.
+
 FRecursion esize about S.expr motive (fun (_ : S.expr) => nat)
   with esizelist about S.exprlist motive (fun (_ : S.exprlist) => nat) by _rect.
 Case Evar x ty := 1%nat.
@@ -2573,6 +2833,24 @@ FProofLemma.
   - apply self__SimplExpr.tr_val_inv in H0. intuition.
 Qed. CloseFLemma.
 
+(* FLemma alloc_variables_preserved:
+  forall prog tprog ge tge, match_prog prog tprog -> S.globalenv prog = ge -> T.globalenv tprog = tge ->
+  forall e m params e' m',
+  S.alloc_variables ge e m params e' m' ->
+  T.alloc_variables tge e m params e' m'.
+FProofLemma.
+  
+Qed. CloseFLemma.
+
+FLemma bind_parameters_preserved:
+  forall prog tprog ge tge, match_prog prog tprog -> S.globalenv prog = ge -> T.globalenv tprog = tge ->
+  forall e m params args m',
+  S.bind_parameters ge e m params args m' ->
+  T.bind_parameters tge e m params args m'.
+FProofLemma.
+  
+Qed. CloseFLemma. *)
+
 FLemma blocks_of_env_preserved:
   forall prog tprog ge tge, match_prog prog tprog -> S.globalenv prog = ge -> T.globalenv tprog = tge ->
   forall e, T.blocks_of_env tge e = S.blocks_of_env ge e.
@@ -2674,14 +2952,20 @@ all: intros; inv MS.
   + econstructor; eauto.
 (* goto *)
 - apply self__SimplExpr.tr_goto_inv in TR; unpack TR; subst.
-  inversion TRF; subst. apply cheat.
-  (* eexists. split.
-  + left. apply plus_one. fconstructor.
-  + econstructor; eauto. *)
+  inversion TRF; subst.
+  exploit self__SimplExpr.tr_find_label.
+  + refine (self__SimplExpr.T.globalenv tprog).
+  + eauto.
+  + eapply self__SimplExpr.match_cont_call_cont; eauto.
+  + rewrite e0. intros [ts' [tk' [A [B C]]]]. eexists. split.
+    * left. apply plus_one. fconstructor.
+    * econstructor; eauto.
 (* internal function *)
 - inv TR. inversion H1; subst.
   eexists. split.
-  + left. apply plus_one. fconstructor. admit.
+  + left. apply plus_one. fconstructor.
+    (* TODO: function_entry *)
+    Unshelve. all: eauto; apply cheat.
   + econstructor; eauto.
 Qed. FEnd sstep_simulation.
 
