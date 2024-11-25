@@ -774,13 +774,16 @@ FEnd Clight.
 Family SimplExpr.
 Family S extends C. FEnd S.
 Family T extends Clight.
-  FInductive eval_expr: genv -> env -> temp_env -> mem -> expr -> val -> Prop :=.
+  Inherit temp_env.
 
   FDefinition create_undef_temps := fix rec (temps: list (ident * type)): temp_env :=
     match temps with
     | nil => PTree.empty val
     | (id, t) :: temps' => PTree.set id Vundef (rec temps')
     end.
+
+  Inherit alloc_variables.
+  Inherit bind_parameters.
 
   MetaData function_entry1.
   Inductive function_entry1 (ge: self__T.genv) (f: self__T.function) (vargs: list val) (m: mem) (e: self__T.env) (le: self__T.temp_env) (m': mem) : Prop :=
