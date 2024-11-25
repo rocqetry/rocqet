@@ -519,6 +519,9 @@ Record function : Type := mkfunction {
 }.
 FEnd function.
 
+FDefinition var_names := fun (vars: list(ident * type)) =>
+  List.map (@fst ident type) vars.
+
 FDefinition fundef := Ctypes.fundef function.
 
 FDefinition type_of_function : function -> type := fun f =>
@@ -550,6 +553,57 @@ FDefinition globalenv : program -> genv := fun p =>
 FDefinition env := PTree.t (block * type).
 FDefinition empty_env: env := (PTree.empty (block * type)).
 FDefinition temp_env := PTree.t val.
+
+MetaData assign_loc.
+Inductive assign_loc (ce: composite_env) (ty: type) (m: mem) (b: block) (ofs: ptrofs):
+                                            bitfield -> val -> mem -> Prop :=
+  | assign_loc_value: forall v chunk m',
+      access_mode ty = By_value chunk ->
+      Mem.storev chunk m (Vptr b ofs) v = Some m' ->
+      assign_loc ce ty m b ofs Full v m'
+  | assign_loc_copy: forall b' ofs' bytes m',
+      access_mode ty = By_copy ->
+      (sizeof ce ty > 0 -> (alignof_blockcopy ce ty | Ptrofs.unsigned ofs')) ->
+      (sizeof ce ty > 0 -> (alignof_blockcopy ce ty | Ptrofs.unsigned ofs)) ->
+      b' <> b \/ Ptrofs.unsigned ofs' = Ptrofs.unsigned ofs
+              \/ Ptrofs.unsigned ofs' + sizeof ce ty <= Ptrofs.unsigned ofs
+              \/ Ptrofs.unsigned ofs + sizeof ce ty <= Ptrofs.unsigned ofs' ->
+      Mem.loadbytes m b' (Ptrofs.unsigned ofs') (sizeof ce ty) = Some bytes ->
+      Mem.storebytes m b (Ptrofs.unsigned ofs) bytes = Some m' ->
+      assign_loc ce ty m b ofs Full (Vptr b' ofs') m'
+  | assign_loc_bitfield: forall sz sg pos width v m' v',
+      store_bitfield ty sz sg pos width m (Vptr b ofs) v m' v' ->
+      assign_loc ce ty m b ofs (Bits sz sg pos width) v m'.
+FEnd assign_loc.
+
+MetaData alloc_variables.
+Inductive alloc_variables (ge : self__Clight.genv) : self__Clight.env -> mem ->
+                           list (ident * type) ->
+                           self__Clight.env -> mem -> Prop :=
+  | alloc_variables_nil:
+      forall e m,
+      alloc_variables ge e m nil e m
+  | alloc_variables_cons:
+      forall e m id ty vars m1 b1 m2 e2,
+      Mem.alloc m 0 (sizeof (self__Clight.genv_cenv ge) ty) = (m1, b1) ->
+      alloc_variables ge (PTree.set id (b1, ty) e) m1 vars e2 m2 ->
+      alloc_variables ge e m ((id, ty) :: vars) e2 m2.
+FEnd alloc_variables.
+
+MetaData bind_parameters.
+Inductive bind_parameters (ge : self__Clight.genv) (e: self__Clight.env):
+                           mem -> list (ident * type) -> list val ->
+                           mem -> Prop :=
+  | bind_parameters_nil:
+      forall m,
+      bind_parameters ge e m nil nil m
+  | bind_parameters_cons:
+      forall m id ty params v1 vl b m1 m2,
+      PTree.get id e = Some(b, ty) ->
+      self__Clight.assign_loc (self__Clight.genv_cenv ge) ty m b Ptrofs.zero Full v1 m1 ->
+      bind_parameters ge e m1 params vl m2 ->
+      bind_parameters ge e m ((id, ty) :: params) (v1 :: vl) m2.
+FEnd bind_parameters.
 
 FInductive eval_expr : genv -> env -> temp_env -> mem -> expr -> val -> Prop :=
 | eval_Econst_int: forall ge e le m i ty,
@@ -652,7 +706,7 @@ FDefinition blocks_of_env : genv -> env -> list (block * Z * Z)  := fun ge e =>
   List.map (block_of_binding ge) (PTree.elements e).
 
 (* To be overriden in SimplExpr & Cshmgen *)
-FOpaque Definition function_entry : function -> list val -> mem -> env -> temp_env -> mem -> Prop := cheat.
+FOpaque Definition function_entry : genv -> function -> list val -> mem -> env -> temp_env -> mem -> Prop := cheat.
 
 FInductive step : genv -> state -> trace -> state -> Prop :=
 | step_skip_seq: forall ge f s k e le m,
@@ -693,7 +747,7 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
   step ge (self__Clight.State f (Sgoto lbl) k e le m)
     E0 (self__Clight.State f s' k' e le m)
 | step_internal_function: forall ge f vargs k m e le m1,
-      function_entry f vargs m e le m1 ->
+      function_entry ge f vargs m e le m1 ->
       step ge (self__Clight.Callstate (Internal f) vargs k m)
         E0 (self__Clight.State f (self__Clight.fn_body f) k e le m1).
 
@@ -719,7 +773,26 @@ FEnd Clight.
 (* C -> Clight *)
 Family SimplExpr.
 Family S extends C. FEnd S.
-Family T extends Clight. FEnd T.
+Family T extends Clight.
+  FInductive eval_expr: genv -> env -> temp_env -> mem -> expr -> val -> Prop :=.
+
+  FDefinition create_undef_temps := fix rec (temps: list (ident * type)): temp_env :=
+    match temps with
+    | nil => PTree.empty val
+    | (id, t) :: temps' => PTree.set id Vundef (rec temps')
+    end.
+
+  MetaData function_entry1.
+  Inductive function_entry1 (ge: self__T.genv) (f: self__T.function) (vargs: list val) (m: mem) (e: self__T.env) (le: self__T.temp_env) (m': mem) : Prop :=
+  | function_entry1_intro: forall m1,
+      list_norepet (self__T.var_names (self__T.fn_params f) ++ self__T.var_names (self__T.fn_vars f)) ->
+      self__T.alloc_variables ge self__T.empty_env m ((self__T.fn_params f) ++ (self__T.fn_vars f)) e m1 ->
+      self__T.bind_parameters ge e m1 (self__T.fn_params f) vargs m' ->
+      le = self__T.create_undef_temps (self__T.fn_temps f) ->
+      function_entry1 ge f vargs m e le m'.
+  FEnd function_entry1.
+  FOverride Definition function_entry := function_entry1.
+FEnd T.
 
 Local Open Scope gensym_monad_scope.
 
@@ -2833,13 +2906,14 @@ FProofLemma.
   - apply self__SimplExpr.tr_val_inv in H0. intuition.
 Qed. CloseFLemma.
 
-(* FLemma alloc_variables_preserved:
+FLemma alloc_variables_preserved:
   forall prog tprog ge tge, match_prog prog tprog -> S.globalenv prog = ge -> T.globalenv tprog = tge ->
   forall e m params e' m',
   S.alloc_variables ge e m params e' m' ->
   T.alloc_variables tge e m params e' m'.
 FProofLemma.
-  
+  intros. induction H2; econstructor; eauto.
+  rewrite (self__SimplExpr.comp_env_preserved prog tprog ge tge); auto.
 Qed. CloseFLemma.
 
 FLemma bind_parameters_preserved:
@@ -2848,8 +2922,12 @@ FLemma bind_parameters_preserved:
   S.bind_parameters ge e m params args m' ->
   T.bind_parameters tge e m params args m'.
 FProofLemma.
-  
-Qed. CloseFLemma. *)
+intros. induction H2; econstructor; eauto. inversion H3. subst v m' v1. clear H3.
+- eapply self__SimplExpr.T.assign_loc_value; eauto.
+- inv H7. eapply self__SimplExpr.T.assign_loc_value; eauto.
+- rewrite <- (self__SimplExpr.comp_env_preserved prog tprog ge tge) in *; try assumption.
+  eapply self__SimplExpr.T.assign_loc_copy; eauto.
+Qed. CloseFLemma.
 
 FLemma blocks_of_env_preserved:
   forall prog tprog ge tge, match_prog prog tprog -> S.globalenv prog = ge -> T.globalenv tprog = tge ->
@@ -2964,18 +3042,21 @@ all: intros; inv MS.
 - inv TR. inversion H1; subst.
   eexists. split.
   + left. apply plus_one. fconstructor.
-    (* TODO: function_entry *)
-    Unshelve. all: eauto; apply cheat.
+    red. econstructor.
+    * rewrite H4, H5. auto.
+    * rewrite H4, H5. eapply self__SimplExpr.alloc_variables_preserved; eauto.
+    * rewrite H4. eapply self__SimplExpr.bind_parameters_preserved; eauto.
+    * eauto.
   + econstructor; eauto.
 Qed. FEnd sstep_simulation.
 
 FLemma simulation :
-     (forall ge S1 t S2 (_ : C.step ge S1 t S2),
+     (forall ge S1 t S2 (_ : S.step ge S1 t S2),
      forall prog tprog tge, match_prog prog tprog -> S.globalenv prog = ge -> T.globalenv tprog = tge ->
      forall T1 (MS : match_states tge S1 T1),
         exists T2,
-         (plus Clight.step tge T1 t T2 \/
-           (star Clight.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
+         (plus T.step tge T1 t T2 \/
+           (star T.step tge T1 t T2 /\ measure S2 < measure S1)%nat)
      /\ match_states tge S2 T2).
 FProofLemma.
 intros ge S1 t S2 STEP. destruct STEP.
