@@ -3,6 +3,10 @@ open Types
 (* TODO: We should not expose this here *)
 module B = Backend.Vernac
 
+val compile_empty_signature :
+  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
+  CompiledModuleType.t
+
 (* Compiling inductive definitions *)
 val compile_inductive_signature :
   ind_def:VernacInductive.t ->

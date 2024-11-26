@@ -1,18 +1,18 @@
 (* The plugin *)
-From NFPOP Require Import Loader.
+From Rocqet Require Import Loader.
 
 (* CompCert libs *)
-From NFPOP Require Import Coqlib.
-From NFPOP Require Import Errors.
-From NFPOP Require Import Memory.
-From NFPOP Require Import Smallstep.
-From NFPOP Require Import Maps.
-From NFPOP Require Import AST.
-From NFPOP Require Import Globalenvs.
-From NFPOP Require Import Events.
-From NFPOP Require Import Memory.
-From NFPOP Require Import Integers.
-From NFPOP Require Import Values.
+From Rocqet Require Import Coqlib.
+From Rocqet Require Import Errors.
+From Rocqet Require Import Memory.
+From Rocqet Require Import Smallstep.
+From Rocqet Require Import Maps.
+From Rocqet Require Import AST.
+From Rocqet Require Import Globalenvs.
+From Rocqet Require Import Events.
+From Rocqet Require Import Memory.
+From Rocqet Require Import Integers.
+From Rocqet Require Import Values.
 Local Open Scope error_monad_scope.
 
 Axiom cheat : forall {X}, X.

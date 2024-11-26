@@ -13,10 +13,10 @@ let extract_handlers_names names =
            |> Env.Context.lookup_linkage_elem context 
            |> Option.map fst
            |> Option.map (function 
-              | LinkageElem.RecursorDefinition { names; handlers; _} -> 
+              | LinkageElem.RecursorDefinition { names; handlers; handlers_table; behaviour_table; _} -> 
                  let prefix = Naming.extract_prefix name in
                  let handlers = handlers |> List.concat_map snd in 
-                 Some (prefix, names, handlers)
+                 Some (prefix, names, handlers, handlers_table, behaviour_table)
               | _ -> None)                      
            |> Option.flatten
         else None)  
@@ -24,14 +24,10 @@ let extract_handlers_names names =
 let handlers_to_computational_axiom handlers = 
   let context = Env.Context.get () in
   handlers       
-  |> List.concat_map (fun (prefix, recursor_names, handlers) ->        
+  |> List.concat_map (fun (prefix, _recursor_names, handlers, _, table) ->        
        handlers 
-       |> List.map (fun constructor_name -> 
-              let name = 
-                 Naming.computational_axiom_name 
-                   ~recursor_names 
-                   ~constructor_name
-              in 
+       |> List.map (fun constructor_name ->              
+              let name = List.assoc constructor_name table in
               let qualid = Naming.qualid_point prefix name in
               Resolver.resolve_qualid 
                 ~context 
@@ -40,12 +36,12 @@ let handlers_to_computational_axiom handlers =
 let handlers_to_case_definitions handlers = 
   let context = Env.Context.get () in
   handlers
-  |> List.concat_map (fun (prefix, recursors, handlers) ->        
+  |> List.concat_map (fun (prefix, _recursors, handlers, table, _) ->        
        handlers 
-       |> List.map (fun case -> 
-              let name = Naming.handler_name ~recursors ~case in              
-              let qualid = Naming.qualid_point prefix name in
-              Resolver.resolve_qualid ~context ~qualid))
+       |> List.map (fun case ->              
+           let name = List.assoc case table in
+           let qualid = Naming.qualid_point prefix name in
+           Resolver.resolve_qualid ~context ~qualid))
 
 let idtac =
   let open Ltac_plugin in

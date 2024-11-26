@@ -339,6 +339,11 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         arguments : Names.Id.t list;
         prefix : Libnames.qualid;
+        (* handler name -> defined name in family *)
+        handlers_table : (Names.Id.t * Names.Id.t) list;
+        (* computational behaviour *)
+        (* handler name -> defined CB in the family *)
+        behaviour_table : (Names.Id.t * Names.Id.t) list;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | TheoremDefinition of {
@@ -348,8 +353,16 @@ module rec LinkageElem : sig
         handlers : (Names.Id.t * Names.Id.t list) list;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
+        (* handler name -> defined name in family *)
+        handlers_table : (Names.Id.t * Names.Id.t) list;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
-      }
+    }    
+    (* Axiom about FInduction or FRecursion *)
+    | RecursiveAxiom of { 
+      compiled_context : CompiledModuleType.t;
+      compiled_signature : CompiledModuleType.t;
+      default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+    }
     | ComputationalAxiom of {
         name : Names.Id.t;
         axiom : Constrexpr.constr_expr;
@@ -456,7 +469,10 @@ end = struct
        PartialRecursor { prec with default_ctx_params }
     | InductiveAxiom axiom -> 
        let default_ctx_params = path_subst_ctx axiom.default_ctx_params in
-       InductiveAxiom { axiom with default_ctx_params } 
+       InductiveAxiom { axiom with default_ctx_params }
+    | RecursiveAxiom axiom -> 
+       let default_ctx_params = path_subst_ctx axiom.default_ctx_params in
+       RecursiveAxiom { axiom with default_ctx_params } 
     | OpaqueFieldDefinition definition ->
         let default_ctx_params = path_subst_ctx definition.default_ctx_params in
         OpaqueFieldDefinition { definition with default_ctx_params; }

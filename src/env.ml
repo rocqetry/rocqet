@@ -312,22 +312,26 @@ module Context = struct
   let base_linkage context =
     match context with
     | LinkageCtx.Toplevel linkage | LinkageCtx.Nested (_, linkage) ->
-        linkage.base
+       linkage.base  
 
   let base_linkage_elem context ~field =
+    let found ~bound_names = bound_names |> List.exists (Names.Id.equal field) in 
     let lookup (linkage : Linkage.t) =
       linkage.fields
-      |> Bwd.find_opt (fun (name, _) -> Names.Id.equal name field)
-      |> Option.map (fun (_, elem) -> (linkage, elem))
+      |> Bwd.find_map (fun (found_name, elem) ->             
+             let bound_names = linkage_elem_names (found_name, elem) in
+             if found ~bound_names then Some (linkage, elem) else None)      
     in
     context |> base_linkage |> Option.map lookup |> Option.flatten
 
   let further_bound_linkage_elem context ~field :
-      ((Names.Id.t * Names.Id.t) * Linkage.t * LinkageElem.t) list =
+        ((Names.Id.t * Names.Id.t) * Linkage.t * LinkageElem.t) list =
+    let found ~bound_names = bound_names |> List.exists (Names.Id.equal field) in 
     let lookup (inh, (linkage : Linkage.t)) =
       linkage.fields
-      |> Bwd.find_opt (fun (name, _) -> Names.Id.equal name field)
-      |> Option.map (fun (_, elem) -> (inh, linkage, elem))
+      |> Bwd.find_map (fun (found_name, elem) ->
+             let bound_names = linkage_elem_names (found_name, elem) in
+             if found ~bound_names then Some (inh, linkage, elem) else None)      
     in
     context |> further_bound_linkage |> List.filter_map lookup
 end

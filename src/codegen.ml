@@ -3,6 +3,16 @@ open Bwd
 open Bwd.Infix
 module B = Backend.Vernac
 
+let compile_empty_signature 
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) :
+    CompiledModuleType.t =
+  let module_name =    
+    Naming.fresh_name ~prefix:"Empty"
+  in
+  B.(
+    run
+    @@ define_moduletype ~module_name ~parameters:ctx ~body:(fun _ -> return ()))
+
 let compile_inductive_signature ~(ind_def : VernacInductive.t)
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
     CompiledModuleType.t =
@@ -292,7 +302,10 @@ let compile_recursive_definition_signature ~(names : Names.Id.t list)
 (* Return the compiled module and the generated computational behaviour *)
 let compile_recursive_definition_implementation
     ~(recursor_names: Names.Id.t list)
-    ~handlers ~(inductive_paths : Libnames.qualid list) ~suffix : unit B.t =
+    ~handlers
+    ~(inductive_paths : Libnames.qualid list)
+    ~suffix
+    ~handlers_table : unit B.t =
   let prefix =
     let inductive_path = List.hd inductive_paths in
     match inductive_path |> Naming.path_to_list |> List.rev with
@@ -309,11 +322,17 @@ let compile_recursive_definition_implementation
            |> Constrexpr_ops.mkRefC)
     in
     let handlers =
-      (* What if the handler names are not in the right order? *)      
+      (* We expect that "inherit element" in inheritance.ml put the
+         handlers in the right order.
+         Thus, if there is ever a compilation failure about type errors
+         due to handler order,
+         inheritance.ml is not doing its job properly. *)
       handlers
-      |> List.map (fun handler -> Naming.handler_name ~recursors:recursor_names ~case:handler)
-      |> List.map Libnames.qualid_of_ident
-      |> List.map Constrexpr_ops.mkRefC
+      |> List.map (fun handler ->
+         handlers_table
+         |> List.assoc handler
+         |> Libnames.qualid_of_ident
+         |> Constrexpr_ops.mkRefC)      
     in    
     let open B in
     let inductives = inductive_paths |> List.map Naming.extract_path_base in
@@ -520,6 +539,11 @@ let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
   | Bwd.Snoc
       ( _,
         ( _,
+          RecursiveAxiom
+            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
+  | Bwd.Snoc
+      ( _,
+        ( _,
           TheoremDefinition
             { default_ctx_params; compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
@@ -655,6 +679,7 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
     | Snoc (fields, (_, InductiveAxiom _)) -> compile_fields fields
+    | Snoc (fields, (_, RecursiveAxiom _)) -> compile_fields fields
     | Snoc (fields, (_, InductiveDefinition { inductive; _ })) ->
         let open B in
         let* _ = compile_fields fields in
@@ -724,23 +749,23 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         ( fields,
           ( _,
             LinkageElem.RecursorDefinition
-              { inductive_paths; handlers; names; suffix; _ } ) ) ->
+              { inductive_paths; handlers; names; suffix; handlers_table; _ } ) ) ->
         let open B in
         let* _ = compile_fields fields ctx in
         let handlers = handlers |> List.concat_map snd in
         compile_recursive_definition_implementation          
           ~recursor_names:names
-          ~handlers ~inductive_paths ~suffix
+          ~handlers ~inductive_paths ~suffix ~handlers_table
     | Snoc
         ( fields,
-          (_, TheoremDefinition { inductive_paths; handlers; names; suffix; _ })
+          (_, TheoremDefinition { inductive_paths; handlers; names; suffix; handlers_table; _ })
         ) ->
         let open B in
         let* _ = compile_fields fields ctx in
         let handlers = handlers |> List.concat_map snd in
         compile_recursive_definition_implementation
           ~recursor_names:names ~inductive_paths
-          ~suffix ~handlers
+          ~suffix ~handlers ~handlers_table
     | Snoc (fields, (_, ComputationalAxiom { name; axiom; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in
@@ -777,6 +802,8 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
     
     (* An implementation will be provided by the inductive *)
     | Snoc (fields, (_, InductiveAxiom _)) -> compile_fields fields ctx
+    (* Implementation provided by RecursiveDefinition *)
+    | Snoc (fields, (_, RecursiveAxiom _)) -> compile_fields fields ctx
     | Snoc
         (fields, (_, MetaDataSection { default_ctx_params; compiled_impl; _ }))
     | Snoc
@@ -910,6 +937,12 @@ let compile_linkage_signature linkage =
         ( _,
           ( _,
             InductiveAxiom
+              { default_ctx_params; compiled_context; compiled_signature; _ } )
+        )
+    | Snoc
+        ( _,
+          ( _,
+            RecursiveAxiom
               { default_ctx_params; compiled_context; compiled_signature; _ } )
         )
     | Snoc

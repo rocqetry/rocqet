@@ -16,6 +16,10 @@ module Ctx = struct
     arguments : Names.Id.t list;
     inductive_paths : Libnames.qualid list;
     rec_principle_prefix : Libnames.qualid;
+    (* mappings from constructor names to various compiled artifacts *)
+    inherited_handlers_table : (Names.Id.t * Names.Id.t) list;
+    inherited_behaviour_table: (Names.Id.t * Names.Id.t) list;
+    inherited_names : Names.Id.t list;
   }
 
   let store = Summary.ref ~name:"RecursionCtx" (None : t option)
@@ -34,6 +38,30 @@ module Ctx = struct
     update ctx
 end
 
+let add_recursive_axiom ~names = 
+  names |> List.iter (fun name -> Inheritance.inherit_dependencies ~prefix:name);
+  let context = Context.get () in
+  let family_name = Naming.concat_names names in  
+  let default_ctx_params =
+    context |> Context.family_linkage |> function
+    | { default_ctx_params; _ } -> default_ctx_params
+  in
+  names
+  |> List.iter (fun name ->
+     let axiom_name = Naming.recursive_axiom_name name in
+     let context = Context.get () in    
+     let compiled_context, parameters =
+       Codegen.compile_linkage_context ~field_name:family_name context
+     in      
+     let compiled_signature =
+       Codegen.compile_recursive_definition_signature
+         ~names:[name] ~ctx:parameters ~family_name
+     in
+     let elem =
+       LinkageElem.RecursiveAxiom { compiled_context; compiled_signature; default_ctx_params; }
+     in
+     Context.add_field ~name:axiom_name ~elem)
+
 let close_recursion () =
   let Ctx.
         {
@@ -45,11 +73,13 @@ let close_recursion () =
           inductive_paths;
           rec_principle_prefix;
           implementing_handlers;
+          inherited_handlers_table;
+          inherited_behaviour_table;
+          inherited_names;
           _;
         } =
     Ctx.get ()
-  in
-  (* let inductive_name = inductive_path |> Naming.extract_path_base in*)
+  in  
   let _ = Checks.check_exhaustive ~names ~inductive ~inductive_paths ~handlers:defined_handlers in
   (* We use this becuase the handlers have to be in the right order *)
   let inductive_names =
@@ -79,11 +109,25 @@ let close_recursion () =
   in
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:module_name context
-  in
+  in  
   let compiled_signature =
-    Codegen.compile_recursive_definition_signature ~names
-      ~ctx:parameters ~family_name:(Naming.concat_names names)
+    Codegen.compile_empty_signature ~ctx:parameters    
+  in  
+  let handlers_table =
+    implementing_handlers    
+    |> List.map (fun handler -> (handler, Naming.handler_name ~recursors:names ~case:handler))
   in
+  let handlers_table = inherited_handlers_table @ handlers_table in
+  let behaviour_table =    
+    implementing_handlers
+    |> List.map (fun handler ->
+       (handler,
+         Naming.computational_axiom_name
+          ~recursor_names:names
+          ~constructor_name:handler))
+  in
+  let behaviour_table  = inherited_behaviour_table @ behaviour_table in
+  (* Add elem before axiom *)
   let elem =
     LinkageElem.RecursorDefinition
       {
@@ -95,10 +139,21 @@ let close_recursion () =
         suffix;
         arguments;
         prefix = rec_principle_prefix;
+        handlers_table;
+        behaviour_table;
         default_ctx_params;
       }
-  in  
-  Context.add_field ~name:(List.hd names) ~elem;    
+  in
+  Context.add_field ~name:(List.hd names) ~elem;
+
+  (* Add non-inherited names axioms *)
+  let defined_names = names |> List.filter (fun n -> not (List.mem n inherited_names)) in
+  if not (List.is_empty defined_names) then add_recursive_axiom ~names:defined_names ;
+
+  (* Inherit axioms *)
+  inherited_names
+  |> List.iter (fun n -> Inheritance.inherit_name ~name:(Naming.recursive_axiom_name n));  
+  
   let recursor_names =
     List.combine inductive_names names
     |> Names.Id.Map.of_list
@@ -138,11 +193,9 @@ let close_recursion () =
   (* Force the inheritance of computational axioms *)
   let _ =    
     inherited_handlers
-    |> List.iter (fun constructor_name ->
-           let name =
-             Naming.computational_axiom_name ~constructor_name ~recursor_names:names
-           in
-           Inheritance.inherit_name ~name)
+    |> List.iter (fun constructor_name ->           
+      let name = List.assoc constructor_name inherited_behaviour_table in
+      Inheritance.inherit_name ~name)
   in
 
   Ctx.clear ()
@@ -174,11 +227,22 @@ let open_recursion
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let recursor = RecursorStore.find suffix recursors in
-  (* Make the motive a field in the family:  *)
-  let motive_names = names |> List.map (fun name -> Naming.motive_of name) in  
+  (* Make the motive a field in the family:  *)  
+  (* pick one name *)
+  let inherited_elem = Inheritance.lookup_field_in_base ~field:(List.hd names) ~context in 
+  let inherited_names, inherited_handlers,
+      inherited_handlers_table, inherited_behaviour_table =
+    match inherited_elem with
+    | Some (RecursorDefinition { names; handlers; handlers_table; behaviour_table; _ }) ->
+       names, handlers, handlers_table, behaviour_table
+    | _ -> [], [], [], []
+  in  
   let () =
-    List.iter2 (fun motive_name motive_expr -> Definition.add_definition ~name:motive_name motive_expr)
-      motive_names motive_exprs 
+    List.iter2 (fun name motive_expr ->
+        if not (List.mem name inherited_names) then 
+           let motive_name = Naming.motive_of name in
+           Definition.add_definition ~name:motive_name motive_expr)
+      names motive_exprs 
   in
   let context = Context.get () in
   let handler_types =
@@ -187,12 +251,18 @@ let open_recursion
   let rec_principle_prefix =
     Codegen.calculate_rec_principle_prefix ~inductive_path ~context
   in
-  let implementing_handlers = List.map fst handler_types in
+  let inherited_handlers = inherited_handlers |> List.concat_map snd in
+  let implementing_handlers =
+    let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
+    handler_types
+    |> List.filter_map (fun (x, _) ->
+           if not (inside x inherited_handlers) then Some x else None)
+  in  
   
   let recursion_ctx =
     Ctx.
       {
-        defined_handlers = [];
+        defined_handlers = inherited_handlers;
         implementing_handlers;
         suffix;
         inductive_paths;
@@ -201,6 +271,9 @@ let open_recursion
         inductive;
         arguments;
         rec_principle_prefix;
+        inherited_handlers_table;
+        inherited_behaviour_table;
+        inherited_names;
       }
   in
   Ctx.update recursion_ctx
@@ -212,13 +285,14 @@ let open_recursion_extension ~names =
     let name = List.hd names in
     Inheritance.lookup_field_in_base ~field:name ~context
   in
-  let inductive_paths, inherited_handlers, suffix, arguments =
+  let inductive_paths, inherited_handlers, suffix, arguments,
+      inherited_handlers_table, inherited_behaviour_table =
     match elem with
     | None -> Errors.fail ~info:"There is no such FRecursion in a base family"
     | Some
-        (RecursorDefinition { inductive_paths; suffix; handlers; arguments; _ })
+        (RecursorDefinition { inductive_paths; suffix; handlers; arguments; handlers_table; behaviour_table;  _ })
       ->
-        (inductive_paths, handlers, suffix, arguments)
+        (inductive_paths, handlers, suffix, arguments, handlers_table, behaviour_table)
     | _ -> Errors.fail ~info:"Expected to inherit an FRecrusion"
   in
   let inductive, recursors, _provenance =
@@ -252,6 +326,9 @@ let open_recursion_extension ~names =
         inductive_paths;
         arguments;
         rec_principle_prefix;
+        inherited_handlers_table;
+        inherited_behaviour_table;
+        inherited_names = names;
       }
   in
   Ctx.update recursion_ctx

@@ -44,4 +44,5 @@
   ;Path_subst_hard
   ;Inherit_mutual 
   ;MetaData_bound_names
+  ;Extend_with_mutual
   ))

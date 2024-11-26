@@ -128,6 +128,8 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         arguments : Names.Id.t list;
         prefix : Libnames.qualid;
+        handlers_table : (Names.Id.t * Names.Id.t) list;        
+        behaviour_table : (Names.Id.t * Names.Id.t) list;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | TheoremDefinition of {
@@ -137,8 +139,14 @@ module rec LinkageElem : sig
         handlers : (Names.Id.t * Names.Id.t list) list;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
+        handlers_table : (Names.Id.t * Names.Id.t) list;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
+    | RecursiveAxiom of { 
+      compiled_context : CompiledModuleType.t;
+      compiled_signature : CompiledModuleType.t;
+      default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+    }
     | ComputationalAxiom of {
         name : Names.Id.t;
         axiom : Constrexpr.constr_expr;

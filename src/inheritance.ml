@@ -76,6 +76,30 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t) ~(base : LinkageEl
     in
     aux [] lst
   in
+  (* for comparison without locations *)
+  let remove_duplicates_qualid (lst: Libnames.qualid list) =
+    let rec aux seen = function
+      | [] -> []
+      | (hd: Libnames.qualid) :: tl ->
+          if List.mem hd.v seen then aux seen tl else hd :: aux (hd.v :: seen) tl
+    in
+    aux [] lst
+  in
+  let combine_mapping (m0: (Names.Id.t * Names.Id.t list) list) m1 =
+    let lhs = 
+      m0
+      |> List.map (fun (s, t) -> 
+             let point = match List.assoc_opt s m1 with None -> [] | Some p -> p in
+             s, remove_duplicates (t @ point))
+    in 
+    let rhs = 
+      m1 |> List.filter_map (fun (s, t) -> 
+              match List.assoc_opt s m0 with 
+              | None -> Some (s, t)
+              | Some _ -> None)
+    in 
+    lhs @ rhs 
+  in
   (* TODO: Since we will never compile a field twice, 
      we can actualy check for equality of compiled functor 
      for cases where we don't overriding or not? *)
@@ -89,6 +113,7 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t) ~(base : LinkageEl
       in
       InductiveDefinition { derived with inductive }
   | InductiveAxiom derived, InductiveAxiom _ -> InductiveAxiom derived
+  | RecursiveAxiom derived, RecursiveAxiom _ -> RecursiveAxiom derived
   | FamilyDefinition derived, FamilyDefinition base ->
       let linkage =
         linkage_concatenate ~derived:derived.linkage ~base:base.linkage
@@ -100,24 +125,26 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t) ~(base : LinkageEl
   
   (* Overriding *)
   | FieldDefinition derived, OpaqueFieldDefinition _ -> FieldDefinition derived
-  | OpaqueFieldDefinition _, FieldDefinition base -> FieldDefinition base
+  | OpaqueFieldDefinition _, FieldDefinition base -> FieldDefinition base  
+
+  | RecursorDefinition derived, RecursorDefinition base ->      
+      let inductive_paths = remove_duplicates_qualid (base.inductive_paths @ derived.inductive_paths) in
+      let handlers_table = remove_duplicates (base.handlers_table @ derived.handlers_table) in
+      let behaviour_table = remove_duplicates (base.behaviour_table @ derived.behaviour_table) in
+      let names = remove_duplicates (base.names @ derived.names) in      
+      let handlers  = combine_mapping base.handlers derived.handlers in
+      let _ = 
+        handlers |> List.concat_map snd 
+        |> List.iter (fun n -> Printf.printf "Handler: %s\n" (Names.Id.to_string n))
+      in      
+      RecursorDefinition { derived with names; inductive_paths; handlers; handlers_table; behaviour_table }
+  | TheoremDefinition derived, TheoremDefinition base ->      
+      let names = remove_duplicates (base.names @ derived.names) in      
+      let handlers_table = remove_duplicates (base.handlers_table @ derived.handlers_table) in
+      let handlers  = combine_mapping base.handlers derived.handlers in
+      let inductive_paths = remove_duplicates_qualid (base.inductive_paths @ derived.inductive_paths) in
+      TheoremDefinition { derived with names; inductive_paths; handlers; handlers_table }
   
-  | RecursorDefinition derived, RecursorDefinition base ->
-      let combine_mapping m0 m1 =
-        m0
-        |> List.map (fun (s, t) -> s, remove_duplicates (t @ List.assoc s m1))
-      in  
-      let names = remove_duplicates (base.names @ derived.names) in      
-      let handlers  = combine_mapping base.handlers derived.handlers in
-      RecursorDefinition { derived with names; handlers }
-  | TheoremDefinition derived, TheoremDefinition base ->
-      let combine_mapping m0 m1 =
-        m0
-        |> List.map (fun (s, t) -> s, remove_duplicates (t @ List.assoc s m1))
-      in  
-      let names = remove_duplicates (base.names @ derived.names) in      
-      let handlers  = combine_mapping base.handlers derived.handlers in
-      TheoremDefinition { derived with names; handlers }
   | MetaDataSection derived, MetaDataSection _ -> MetaDataSection derived
   | ClosingFact fact, ClosingFact _ -> ClosingFact fact
   | PartialRecursor derived, PartialRecursor _ -> PartialRecursor derived
@@ -125,7 +152,7 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t) ~(base : LinkageEl
      let linkage =
        linkage_concatenate ~derived:derived.linkage ~base:base.linkage
      in
-     TraitDefinition { derived with linkage }     
+     TraitDefinition { derived with linkage }
   | _, _ ->
       let info = 
         Printf.sprintf 
@@ -503,7 +530,9 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
         | ComputationalAxiom comp ->
             ComputationalAxiom { comp with compiled_context }, []
         | InductiveAxiom axiom ->
-            InductiveAxiom { axiom with compiled_context }, []
+           InductiveAxiom { axiom with compiled_context }, []
+        | RecursiveAxiom axiom ->
+            RecursiveAxiom { axiom with compiled_context }, []
         | FieldDefinition field ->
             FieldDefinition { field with compiled_context }, []
         | MetaDataSection metadata ->
@@ -614,8 +643,7 @@ let inherit_name ~(name : Names.Id.t) =
        in
        let names = (name, element) :: names in
        List.fold_left 
-       (fun linkage (name, element) -> 
-         print_endline @@ Names.Id.to_string @@ name;
+       (fun linkage (name, element) ->          
          inherit_one ~name ~element ~linkage ~context)
        linkage 
        names      

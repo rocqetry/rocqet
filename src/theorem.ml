@@ -20,6 +20,8 @@ module Ctx = struct
     inductive_paths : Libnames.qualid list;
     suffix : RecKind.t;
     inductive : VernacInductive.t;
+    inherited_handlers_table : (Names.Id.t * Names.Id.t) list;
+    inherited_names : Names.Id.t list;
   }
 
   let store = Summary.ref ~name:"TheoremCtx" (None : t option)
@@ -118,7 +120,8 @@ let open_theorem ~(args : Frec_arg.t list) =
     args
     |> List.map (fun Frec_arg.{ name; inductive; motive } -> name, inductive, motive)
     |> split3
-  in 
+  in
+  names |> List.iter (fun name -> Inheritance.inherit_dependencies ~prefix:name);
   
   let context = Context.get () in
   let motives =
@@ -131,24 +134,26 @@ let open_theorem ~(args : Frec_arg.t list) =
   in
   let suffix = RecKind.IndComplete in
   let recursor = RecursorStore.find suffix recursors in
-  let motive_names = names |> List.map (fun name -> Naming.motive_of name) in
+  let inherited_elem = Inheritance.lookup_field_in_base ~field:(List.hd names) ~context in 
+  let inherited_names, inherited_handlers,
+      inherited_handlers_table =
+    match inherited_elem with
+    | Some (TheoremDefinition { names; handlers; handlers_table; _ }) ->
+       names, handlers, handlers_table
+    | _ -> [], [], []
+  in  
   let () =
-    List.iter2 (fun motive_name motive -> Definition.add_definition ~name:motive_name motive)
-      motive_names
+    List.iter2 (fun name motive ->
+        if not (List.mem name inherited_names) then
+          let motive_name = Naming.motive_of name in
+          Definition.add_definition ~name:motive_name motive)
+      names
       motives
   in
   let context = Context.get () in
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:(Naming.concat_names names) context
   in
-  let handler_types =
-    Termutils.handler_type_for_recursion ~names ~inductive_paths ~recursor
-  in
-  (*let inductive_name = inductive_path |> Naming.extract_path_base in
-  let handler_names =
-    recursor.handlers
-    |> Names.Id.Map.find inductive_name |> List.map fst
-  in*)
   let handler_names =
     inductive_paths
     |> List.map Naming.extract_path_base
@@ -157,10 +162,21 @@ let open_theorem ~(args : Frec_arg.t list) =
        |> VernacInductive.create_inductive_constructor_map
        |> Names.Id.Map.find inductive_name)
   in 
-  let implementing_handler_names = handler_names in
+  (*let implementing_handler_names = handler_names in*)
+  let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
+  let inherited_handlers = inherited_handlers |> List.concat_map snd in
+  let implementing_handler_names =
+    handler_names |> List.filter (fun x -> not (inside x inherited_handlers))
+  in  
+  let handler_types =
+    Termutils.handler_type_for_recursion ~names ~inductive_paths ~recursor
+    |> List.filter_map (fun (name, handler_type) ->
+           if inside name implementing_handler_names then Some handler_type
+           else None)
+  in
   let goal =
     Termutils.calculate_inductive_proof_goal
-      ~handler_types:(List.map snd handler_types)
+      ~handler_types
       ~suffix
   in
   let rec_principle_prefix =
@@ -168,8 +184,7 @@ let open_theorem ~(args : Frec_arg.t list) =
     Codegen.calculate_rec_principle_prefix ~inductive_path ~context
   in
   let goal_name = Naming.fresh_name ~prefix:"Goal" in
-  let module_name = goal_name in
-  let inherited_handlers = [] in
+  let module_name = goal_name in  
   let ctx =
     Ctx.
       {
@@ -185,6 +200,8 @@ let open_theorem ~(args : Frec_arg.t list) =
         parameters;
         suffix;
         inductive;
+        inherited_handlers_table;
+        inherited_names;
       }
   in
   Ctx.update ctx;
@@ -197,13 +214,13 @@ let open_theorem_extension ~(names : Names.Id.t list) =
     Codegen.compile_linkage_context ~field_name:(Naming.concat_names names) context
   in
   let elem = Inheritance.lookup_field_in_base ~field:(List.hd names) ~context in
-  let inductive_paths, inherited_handlers, suffix =
+  let inductive_paths, inherited_handlers, suffix, inherited_handlers_table =
     match elem with
     | None -> Errors.fail ~info:"There is no such FInduction in a base family"
     | Some
-        (LinkageElem.TheoremDefinition { inductive_paths; handlers; suffix; _ })
+        (LinkageElem.TheoremDefinition { inductive_paths; handlers; suffix; handlers_table; _ })
       ->
-        (inductive_paths, handlers, suffix)
+        (inductive_paths, handlers, suffix, handlers_table)
     | _ -> Errors.fail ~info:"Expected to inherit an FInduction"
   in
   let inductive, recursors, _ =
@@ -252,10 +269,36 @@ let open_theorem_extension ~(names : Names.Id.t list) =
         parameters;
         suffix;
         inductive;
+        inherited_handlers_table;
+        inherited_names = names;
       }
   in
   Ctx.update ctx;
   prepare_proving ()
+
+let add_recursive_axiom ~names = 
+  names |> List.iter (fun name -> Inheritance.inherit_dependencies ~prefix:name);
+  let context = Context.get () in
+  let family_name = Naming.concat_names names in  
+  let default_ctx_params =
+    context |> Context.family_linkage |> function
+    | { default_ctx_params; _ } -> default_ctx_params
+  in
+  names
+  |> List.iter (fun name ->
+     let axiom_name = Naming.recursive_axiom_name name in
+     let context = Context.get () in    
+     let compiled_context, parameters =
+       Codegen.compile_linkage_context ~field_name:family_name context
+     in      
+     let compiled_signature =
+       Codegen.compile_recursive_definition_signature
+         ~names:[name] ~ctx:parameters ~family_name
+     in
+     let elem =
+       LinkageElem.RecursiveAxiom { compiled_context; compiled_signature; default_ctx_params; }
+     in
+     Context.add_field ~name:axiom_name ~elem)
 
 let close_theorem () =
   let Ctx.
@@ -269,6 +312,8 @@ let close_theorem () =
           suffix;
           rec_principle_prefix;
           inductive_paths;
+          inherited_handlers_table;
+          inherited_names;
           _;
         } =
     Ctx.get ()
@@ -291,17 +336,9 @@ let close_theorem () =
   let implemented_handlers =
     Termutils.extract_handlers_from_inductive_proof implementing_handler_names
       (mkIdentC goal_name) suffix
-  in
-  (* let all_handlers = inherited_handlers @ List.map fst implemented_handlers in*)
+  in  
   let inductive_names = inductive_paths |> List.map Naming.extract_path_base in
-  (* We want the names to be in the right order *)
-  (*let handlers =     
-    inductive_names
-    |> List.concat_map (fun inductive_name ->
-       inductive
-       |> VernacInductive.create_inductive_constructor_map
-       |> Names.Id.Map.find inductive_name)
-  in*)
+  (* We want the names to be in the right order *)  
   let handlers =     
     inductive_names
     |> List.map (fun inductive_name ->
@@ -324,14 +361,18 @@ let close_theorem () =
            in
            Definition.add_definition ~name handler)
   in
-  let context = Context.get () in
-  let family_name = Context.family_name context in
+  let handlers_table =
+    implementing_handler_names
+    |> List.map (fun handler ->
+           (handler, Naming.handler_name ~recursors:names ~case:handler))
+  in
+  let handlers_table = inherited_handlers_table @ handlers_table in
+  let context = Context.get () in  
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:(Naming.concat_names names) context
   in
   let compiled_signature =
-    Codegen.compile_theorem_definition_signature ~names ~ctx:parameters
-      ~family_name
+    Codegen.compile_empty_signature ~ctx:parameters
   in
   let elem =
     LinkageElem.TheoremDefinition
@@ -342,9 +383,19 @@ let close_theorem () =
         handlers;
         inductive_paths;
         suffix;
+        handlers_table;
         default_ctx_params;
       }
   in
   let name = List.hd names in
   Context.add_field ~name ~elem;
+
+  (* Add non-inherited names axioms *)  
+  let defined_names = names |> List.filter (fun n -> not (List.mem n inherited_names)) in
+  if not (List.is_empty defined_names) then add_recursive_axiom ~names:defined_names ;
+
+  (* Inherit axioms *)
+  inherited_names
+  |> List.iter (fun n -> Inheritance.inherit_name ~name:(Naming.recursive_axiom_name n));
+  
   Ctx.clear ()
