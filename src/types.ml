@@ -147,11 +147,12 @@ module VernacInductive = struct
     ind_type_name.v
 
   let concatenate ~(base : t) ~(derived : t) : t =
-    let remove_duplicates lst =
+    let remove_duplicates proj lst =
       let rec aux seen = function
         | [] -> []
         | hd :: tl ->
-            if List.mem hd seen then aux seen tl else hd :: aux (hd :: seen) tl
+            let h = proj hd in
+            if List.mem h seen then aux seen tl else hd :: aux (h :: seen) tl
       in
       aux [] lst
     in
@@ -165,7 +166,7 @@ module VernacInductive = struct
         | ( Vernacexpr.Constructors base_constr,
             Vernacexpr.Constructors derived_constr ) ->
             Vernacexpr.Constructors
-              (remove_duplicates (base_constr @ derived_constr))
+              (remove_duplicates (fun (_, (n, _)) -> n) (base_constr @ derived_constr))
         | _, _ -> Errors.fail ~info:"Record types are not yet supported"
       in
       let child_ind = (a, b, c, childcstrs) in
