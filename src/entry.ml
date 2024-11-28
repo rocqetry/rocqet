@@ -7,54 +7,49 @@ let finductive inductive_definitions =
   (* PluginScopes.ensure_in_scope ~scope:PluginCmd.Family;*)
   Inductive.add_inductive_definition inductive_definitions
 
-let fend_with (scope_names: Names.Id.t list) = 
+let fend_with (scope_names : Names.Id.t list) =
   match PluginScopes.pop scope_names with
   | None -> Errors.fail ~info:"There is no open scope"
   | Some scope ->
       let PluginCmdScope.{ close; _ } = scope in
       close ()
 
-let fend scope_name = fend_with [scope_name]  
+let fend scope_name = fend_with [ scope_name ]
 
 let family name =
-  let names = [name] in
+  let names = [ name ] in
   Family.open_family name;
   PluginScopes.push
     PluginCmdScope.
       { names; command = PluginCmd.Family; close = Family.close_family }
 
 let family_extends ~derived ~base =
-  let names = [derived] in
+  let names = [ derived ] in
   Family.open_family_with_base ~base ~name:derived;
   PluginScopes.push
     PluginCmdScope.
-      {
-        names;
-        command = PluginCmd.Family;
-        close = Family.close_family;
-      }
+      { names; command = PluginCmd.Family; close = Family.close_family }
 
-let family_extends_list ~derived ~bases =  
-  let names = [derived] in
+let family_extends_list ~derived ~bases =
+  let names = [ derived ] in
   Family.open_family_with_base_list ~name:derived ~bases;
   PluginScopes.push
     PluginCmdScope.
       { names; command = PluginCmd.Family; close = Family.close_family }
 
 let metadata name =
-  let names = [name] in
+  let names = [ name ] in
   Metadata.open_metadata name;
   PluginScopes.push
     PluginCmdScope.
       { names; command = PluginCmd.MetaData; close = Metadata.close_metadata }
 
-let metadata_bound_names name bound_names = 
-  let names = [name] in
+let metadata_bound_names name bound_names =
+  let names = [ name ] in
   Metadata.open_metadata_with_bound_names name bound_names;
   PluginScopes.push
     PluginCmdScope.
       { names; command = PluginCmd.MetaData; close = Metadata.close_metadata }
-  
 
 let definition ~name ?body_type body_expr =
   Definition.add_definition ~name ?body_type body_expr
@@ -62,42 +57,51 @@ let definition ~name ?body_type body_expr =
 let opaque_definition ~name ~body_type ~body_expr =
   Definition.add_opaque_definition ~name ~body_type ~body_expr
 
-let foverride = Definition.override 
+let foverride = Definition.override
 
-let frecursion 
-     (args : Frec_arg.t list)
-     (suffix : RecKind.t) =
+let frecursion (args : Frec_arg.t list) (suffix : RecKind.t) =
   (* TODO: Check that all the inductives come from the same inductive group  *)
-  let names = args |> List.map (fun Frec_arg.{ name; _ } -> name) in 
-  Recursion.open_recursion ~args ~suffix
-    ~arguments:[];
+  let names = args |> List.map (fun Frec_arg.{ name; _ } -> name) in
+  Recursion.open_recursion ~args ~suffix ~arguments:[];
   PluginScopes.push
     PluginCmdScope.
-      { names; command = PluginCmd.Recursion; close = Recursion.close_recursion }
+      {
+        names;
+        command = PluginCmd.Recursion;
+        close = Recursion.close_recursion;
+      }
 
-let frecursion_extension ~(names : Names.Id.t list) =  
+let frecursion_extension ~(names : Names.Id.t list) =
   Recursion.open_recursion_extension ~names;
   PluginScopes.push
     PluginCmdScope.
-      { names; command = PluginCmd.Recursion; close = Recursion.close_recursion }
+      {
+        names;
+        command = PluginCmd.Recursion;
+        close = Recursion.close_recursion;
+      }
 
 let frecursion_handler = Recursion.add_handler
 
 let frecursion_elegant name args =
-  let names = [name] in
+  let names = [ name ] in
   Recursion.elegant name args;
   PluginScopes.push
     PluginCmdScope.
-      { names; command = PluginCmd.Recursion; close = Recursion.close_recursion }
+      {
+        names;
+        command = PluginCmd.Recursion;
+        close = Recursion.close_recursion;
+      }
 
-let finduction (args : Frec_arg.t list) =      
-  let names = args |> List.map (fun Frec_arg.{ name; _ } -> name) in 
+let finduction (args : Frec_arg.t list) =
+  let names = args |> List.map (fun Frec_arg.{ name; _ } -> name) in
   Theorem.open_theorem ~args;
   PluginScopes.push
     PluginCmdScope.
       { names; command = PluginCmd.Induction; close = Theorem.close_theorem }
 
-let finduction_extension ~(names : Names.Id.t list) =  
+let finduction_extension ~(names : Names.Id.t list) =
   Theorem.open_theorem_extension ~names;
   PluginScopes.push
     PluginCmdScope.
@@ -107,51 +111,36 @@ let finduction_extension ~(names : Names.Id.t list) =
 let fproof () = Theorem.start_proving ()
 let fproof_lemma = Lemma.prepare_proving
 let flemma name t = Lemma.open_flemma name t
+
 (* PluginScopes.push
    PluginCmdScope.
      { name; command = PluginCmd.Lemma; close = Lemma.close_flemma }*)
 let foverride_lemma = Lemma.override
-
 let close_flemma = Lemma.close_flemma
 let display_plugin_scope = PluginScopes.display
-
 let closing_fact = Closing_fact.add
-
 let inherit_name = Inheritance.inherit_name
 
-let open_trait ~name = 
-  let names = [name] in 
+let open_trait ~name =
+  let names = [ name ] in
   Trait.open_trait ~name;
   PluginScopes.push
     PluginCmdScope.
-      {
-        names;
-        command = PluginCmd.Trait;
-        close = Trait.close_trait;
-      }
-  
-let open_trait_with_base ~name ~base = 
-  let names = [name] in 
-  Trait.open_with_base ~name ~base; 
+      { names; command = PluginCmd.Trait; close = Trait.close_trait }
+
+let open_trait_with_base ~name ~base =
+  let names = [ name ] in
+  Trait.open_with_base ~name ~base;
   PluginScopes.push
     PluginCmdScope.
-      {
-        names;
-        command = PluginCmd.Trait;
-        close = Trait.close_trait;
-      }
+      { names; command = PluginCmd.Trait; close = Trait.close_trait }
 
 let open_trait_with_base_list ~name ~bases =
-  let names = [name] in 
-  Trait.open_with_base_list ~name ~bases; 
+  let names = [ name ] in
+  Trait.open_with_base_list ~name ~bases;
   PluginScopes.push
     PluginCmdScope.
-      {
-        names;
-        command = PluginCmd.Trait;
-        close = Trait.close_trait;
-      }
+      { names; command = PluginCmd.Trait; close = Trait.close_trait }
 
 let final_family = Family.define_final_family
-
 let add_wildcard_handler = Recursion.add_wildcard_handler

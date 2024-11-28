@@ -16,10 +16,8 @@ module Vernac : sig
   val define_inductive_scheme :
     (Names.Id.t * Names.Id.t * Sorts.family) list -> unit t
 
-  val define_mutual_inductive_scheme : 
-   inductives:Names.Id.t list -> 
-   suffix:RecKind.t -> 
-   unit t
+  val define_mutual_inductive_scheme :
+    inductives:Names.Id.t list -> suffix:RecKind.t -> unit t
 
   val define_term :
     ?ty:Constrexpr.constr_expr ->
@@ -39,10 +37,9 @@ module Vernac : sig
     parameters:(Names.Id.t * Constrexpr.module_ast) list ->
     body:(CompiledModule.t list -> unit t) ->
     CompiledModule.t t
-  
-  val define_module_inline : 
-    name:Names.Id.t ->
-    value:Constrexpr.module_ast -> unit t
+
+  val define_module_inline :
+    name:Names.Id.t -> value:Constrexpr.module_ast -> unit t
 
   val declare_module : module_name:Names.Id.t -> Constrexpr.module_ast -> unit t
 
@@ -58,7 +55,7 @@ module Vernac : sig
 
   val construct_term_using_proof :
     name:Names.Id.t ->
-    is_starting_plain: bool ->
+    is_starting_plain:bool ->
     proof:Ltac_plugin.Tacexpr.raw_tactic_expr ->
     ty:Constrexpr.constr_expr ->
     opaque:Vernacexpr.opacity_flag ->

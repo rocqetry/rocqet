@@ -2,17 +2,13 @@ val motive_of : Names.Id.t -> Names.Id.t
 val internal_name : Names.Id.t -> Names.Id.t
 val recursor_type : inductive:Names.Id.t -> string -> Names.Id.t
 val handler_type : Names.Id.t -> suffix:string -> Names.Id.t
-
 val inductive_axiom_name : Names.Id.t -> Names.Id.t
 val recursive_axiom_name : Names.Id.t -> Names.Id.t
 
 val recursion_handler_type :
   function_name:Names.Id.t -> case_name:Names.Id.t -> Names.Id.t
 
-val principle_name :
-  inductives:Names.Id.t list ->
-  kind:string ->
-  Names.Id.t
+val principle_name : inductives:Names.Id.t list -> kind:string -> Names.Id.t
 
 val mutual_principle_name :
   inductive:Names.Id.t ->
@@ -21,19 +17,13 @@ val mutual_principle_name :
   Names.Id.t
 
 val computational_axiom_name :
-  recursor_names:Names.Id.t list ->
-  constructor_name:Names.Id.t ->
-  Names.Id.t
+  recursor_names:Names.Id.t list -> constructor_name:Names.Id.t -> Names.Id.t
 
-val partial_recursor_name : 
-  inductive_name:Names.Id.t -> 
-  prec_suffix:Names.Id.t -> 
-  Names.Id.t
+val partial_recursor_name :
+  inductive_name:Names.Id.t -> prec_suffix:Names.Id.t -> Names.Id.t
 
-val prec_computational_axiom_name: 
-  constructor_name:Names.Id.t -> 
-  prec_suffix:Names.Id.t -> 
-  Names.Id.t
+val prec_computational_axiom_name :
+  constructor_name:Names.Id.t -> prec_suffix:Names.Id.t -> Names.Id.t
 
 val point_qualid : Names.Id.t -> Libnames.qualid -> Libnames.qualid
 val qualid_point : Libnames.qualid option -> Names.Id.t -> Libnames.qualid
@@ -88,11 +78,7 @@ val inv_name_map_with :
   (Names.Id.t -> Names.Id.t) -> Names.Id.t list -> Names.Id.t Names.Id.Map.t
 
 val concat_names : Names.Id.t list -> Names.Id.t
-
 val is_self_name : Names.Id.t -> bool
-
 val is_self_qualid : Libnames.qualid -> bool
-
 val remove_self_qualid : Libnames.qualid -> Libnames.qualid
-
 val extract_prefix : Libnames.qualid -> Libnames.qualid option

@@ -1,11 +1,11 @@
 (library
  (name rocqet) ; This is the name you will use in
-              ; Coq's `Declare ML Module`, and
-              ; the name of the main OCaml
-              ; module of your plugin.
+               ; Coq's `Declare ML Module`, and
+               ; the name of the main OCaml
+               ; module of your plugin.
  (public_name rocqet.plugin) ; This makes the plugin
-                            ; installable; recommended, must
-                            ; match opam package name.
+                             ; installable; recommended, must
+                             ; match opam package name.
  (synopsis "Nested family polymorphism in a proof language") ; Synopsis, used in META generation.
  (flags :standard -rectypes) ; Coq requires the `-rectypes`
                              ; flag; CoqPP generated code

@@ -4,8 +4,7 @@ open Types
 module B = Backend.Vernac
 
 val compile_empty_signature :
-  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-  CompiledModuleType.t
+  ctx:(Names.Id.t * Constrexpr.module_ast) list -> CompiledModuleType.t
 
 (* Compiling inductive definitions *)
 val compile_inductive_signature :
@@ -24,9 +23,9 @@ val compile_inductive_implementation :
   ind_def:VernacInductive.t ->
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
   family_name:Names.Id.t ->
-  CompiledModule.t *
-  ((Names.Id.t * Constrexpr.constr_expr) list) RecursorStore.t *
-   Constrexpr.constr_expr RecursorStore.t
+  CompiledModule.t
+  * (Names.Id.t * Constrexpr.constr_expr) list RecursorStore.t
+  * Constrexpr.constr_expr RecursorStore.t
 
 (* Compiling recursive definitions *)
 
@@ -38,22 +37,22 @@ val compile_theorem_definition_signature :
 
 val compile_computational_axiom_signature :
   ctx:(Names.Id.t * Constrexpr.module_ast) list ->
-  constructor_name:Names.Id.t ->  
+  constructor_name:Names.Id.t ->
   inductive:VernacInductive.t ->
   inductive_paths:Libnames.qualid list ->
-  recursor_names: Names.Id.t Names.Id.Map.t ->
+  recursor_names:Names.Id.t Names.Id.Map.t ->
   prefix:Libnames.qualid option ->
   Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t
 
 val compile_prec_computational_axiom_signature :
-    ctx : (Names.Id.t * Constrexpr.module_ast) list ->
-    constructor_name : Names.Id.t ->
-    constructor_path : Libnames.qualid ->
-    handlers: Names.Id.t list ->    
-    inductive : VernacInductive.t ->
-    prec_suffix: Names.Id.t ->                
-    recursor_path : Libnames.qualid  ->    
-    Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t 
+  ctx:(Names.Id.t * Constrexpr.module_ast) list ->
+  constructor_name:Names.Id.t ->
+  constructor_path:Libnames.qualid ->
+  handlers:Names.Id.t list ->
+  inductive:VernacInductive.t ->
+  prec_suffix:Names.Id.t ->
+  recursor_path:Libnames.qualid ->
+  Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t
 
 val compile_recursive_definition_signature :
   names:Names.Id.t list ->
@@ -72,18 +71,18 @@ val compile_linkage_context :
 
 (* Compiling Linkages *)
 val compile_linkage : Linkage.t -> CompiledModule.t
-(* include signature, helper signature *)
-val compile_linkage_signature : Linkage.t -> CompiledModuleType.t * CompiledModuleType.t
 
-val compile_final_linkage_signature : 
-  linkage:Linkage.t -> 
-  base:Libnames.qualid -> 
-  CompiledModuleType.t
+(* include signature, helper signature *)
+val compile_linkage_signature :
+  Linkage.t -> CompiledModuleType.t * CompiledModuleType.t
+
+val compile_final_linkage_signature :
+  linkage:Linkage.t -> base:Libnames.qualid -> CompiledModuleType.t
 
 val compile_same_linkage_signature :
-  linkage:Linkage.t -> 
-  signature:CompiledModuleType.t -> 
-  default_ctx_params:(Names.Id.t * CompiledModule.t) list -> 
+  linkage:Linkage.t ->
+  signature:CompiledModuleType.t ->
+  default_ctx_params:(Names.Id.t * CompiledModule.t) list ->
   CompiledModuleType.t
 
 (* Compiling a field definition *)
@@ -102,5 +101,5 @@ val compile_lemma_signature :
   CompiledModuleType.t
 
 val compile_default_params :
-  context:(Names.Id.t * Constrexpr.module_ast) list -> 
+  context:(Names.Id.t * Constrexpr.module_ast) list ->
   (Names.Id.t * CompiledModule.t) list

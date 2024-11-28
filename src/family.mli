@@ -5,8 +5,4 @@ val open_family_with_base_list :
   name:Names.Id.t -> bases:Libnames.qualid list -> unit
 
 val close_family : unit -> unit
-
-val define_final_family : 
-  name:Names.Id.t -> 
-  value : Libnames.qualid -> 
-  unit
+val define_final_family : name:Names.Id.t -> value:Libnames.qualid -> unit

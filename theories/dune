@@ -1,10 +1,10 @@
 (coq.theory
  (name Rocqet) ; This will determine the top-level Coq
-              ; module of your theory, modules will
-              ; be MyPlugin.A, etc., when seen from the
-              ; outside.
+               ; module of your theory, modules will
+               ; be MyPlugin.A, etc., when seen from the
+               ; outside.
  (package rocqet) ; Adding this line will make your
-                 ; library installable in the opam package
+                  ; library installable in the opam package
  (plugins rocqet.plugin))
 
 ; Here you should declare all

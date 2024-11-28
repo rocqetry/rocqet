@@ -3,12 +3,9 @@ open Bwd
 open Bwd.Infix
 module B = Backend.Vernac
 
-let compile_empty_signature 
-    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) :
+let compile_empty_signature ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) :
     CompiledModuleType.t =
-  let module_name =    
-    Naming.fresh_name ~prefix:"Empty"
-  in
+  let module_name = Naming.fresh_name ~prefix:"Empty" in
   B.(
     run
     @@ define_moduletype ~module_name ~parameters:ctx ~body:(fun _ -> return ()))
@@ -31,12 +28,10 @@ let compile_inductive_axiom ~(name : Names.Id.t) ~(ty : Constrexpr.constr_expr)
   @@ B.define_moduletype ~module_name ~parameters:ctx ~body:(fun _ ->
          B.postulate_axiom ~name ~ty)
 
-let compile_inductive_implementation
-    ~(ind_def : VernacInductive.t)
-    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
-    ~family_name :
+let compile_inductive_implementation ~(ind_def : VernacInductive.t)
+    ~(ctx : (Names.Id.t * Constrexpr.module_ast) list) ~family_name :
     CompiledModule.t
-    * ((Names.Id.t * Constrexpr.constr_expr) list) RecursorStore.t
+    * (Names.Id.t * Constrexpr.constr_expr) list RecursorStore.t
     * Constrexpr.constr_expr RecursorStore.t =
   (* Generate a definition mapping of the inductive type and
      return the new inductive definition and the export of the correct names *)
@@ -69,15 +64,15 @@ let compile_inductive_implementation
     possible_suffixes
     |> List.iter (fun suffix ->
            (* This is only a potential recursor name, since _rec and _rect may not exist.
-              For instance, if the type is Prop, _rec and _rect are impossible to derive. *)           
+              For instance, if the type is Prop, _rec and _rect are impossible to derive. *)
            let potential_recursor =
              Nameops.add_suffix internal_name (RecKind.to_string suffix)
-           in           
+           in
            if Constrintern.is_global potential_recursor then
              let recursor_name =
                potential_recursor |> Constrexpr_ops.mkIdentC
              in
-             let _ =               
+             let _ =
                B.run
                @@ B.define_term
                     ~name:
@@ -89,36 +84,41 @@ let compile_inductive_implementation
                |> Termutils.reflect_checked_term
                |> Constrexpr_ops.replace_vars_constr_expr
                     remove_internal_prefix_map
-             in             
+             in
              let updater principle_store =
                match principle_store with
-               | None -> Some [(ind_name, recursor_type)]
-               | Some principle_store -> Some ((ind_name, recursor_type) :: principle_store)
-             in 
-             defined_recursors := RecursorStore.update suffix updater !defined_recursors);
+               | None -> Some [ (ind_name, recursor_type) ]
+               | Some principle_store ->
+                   Some ((ind_name, recursor_type) :: principle_store)
+             in
+             defined_recursors :=
+               RecursorStore.update suffix updater !defined_recursors);
     B.return ()
   in
   (* Filter principles not defined on this inductive *)
   let filter_mutual_principle suffixes =
     suffixes
-    |> List.filter_map (fun suffix -> RecursorStore.find_opt suffix !defined_recursors |> Option.map (Fun.const suffix))
-  in 
-  let collect_mutual_recursor () : unit B.t =    
-    possible_mutual_suffixes
-    |> filter_mutual_principle
+    |> List.filter_map (fun suffix ->
+           RecursorStore.find_opt suffix !defined_recursors
+           |> Option.map (Fun.const suffix))
+  in
+  let collect_mutual_recursor () : unit B.t =
+    possible_mutual_suffixes |> filter_mutual_principle
     |> List.iter (fun suffix ->
-       let principle =
-         Naming.principle_name ~inductives:type_names ~kind:(RecKind.to_string suffix)                  
-       in       
-         let recursor_type =
-           principle |> Constrexpr_ops.mkIdentC |> Termutils.checked_type_of
-           |> Termutils.reflect_checked_term
-           |> Constrexpr_ops.replace_vars_constr_expr
-                remove_internal_prefix_map
-         in
-         defined_mutual_recursor := RecursorStore.add suffix recursor_type !defined_mutual_recursor);
+           let principle =
+             Naming.principle_name ~inductives:type_names
+               ~kind:(RecKind.to_string suffix)
+           in
+           let recursor_type =
+             principle |> Constrexpr_ops.mkIdentC |> Termutils.checked_type_of
+             |> Termutils.reflect_checked_term
+             |> Constrexpr_ops.replace_vars_constr_expr
+                  remove_internal_prefix_map
+           in
+           defined_mutual_recursor :=
+             RecursorStore.add suffix recursor_type !defined_mutual_recursor);
     B.return ()
-  in 
+  in
   let compiled_impl =
     B.(
       run
@@ -140,8 +140,8 @@ let compile_inductive_implementation
                      ])
                  type_names
              in
-             let* () = flatmap all_ind_comp_schemes in             
-             
+             let* () = flatmap all_ind_comp_schemes in
+
              (* Now, we read from the environment all defined recursors and get their types. *)
              let collect_thunks =
                type_names
@@ -150,21 +150,21 @@ let compile_inductive_implementation
              in
              let* () = flatmap collect_thunks in
 
-             (* Mutual Inductive *)             
-             let define_mutual_inductive = fun () -> 
-               match type_names with 
-               | [] | [_] -> return ()
-               | inductives ->                   
-                  possible_mutual_suffixes
-                  |> filter_mutual_principle
-                  |> List.map (fun suffix -> define_mutual_inductive_scheme ~inductives ~suffix)
-                  |> flatmap
+             (* Mutual Inductive *)
+             let define_mutual_inductive () =
+               match type_names with
+               | [] | [ _ ] -> return ()
+               | inductives ->
+                   possible_mutual_suffixes |> filter_mutual_principle
+                   |> List.map (fun suffix ->
+                          define_mutual_inductive_scheme ~inductives ~suffix)
+                   |> flatmap
              in
 
              (* We thunk becuase we want to be aware of the defined principles *)
-             let* () = thunk define_mutual_inductive in 
+             let* () = thunk define_mutual_inductive in
              let* () = thunk collect_mutual_recursor in
-             
+
              let alias_all =
                List.map
                  (fun (original_name, new_name, ty) ->
@@ -301,25 +301,21 @@ let compile_recursive_definition_signature ~(names : Names.Id.t list)
 
 (* Return the compiled module and the generated computational behaviour *)
 let compile_recursive_definition_implementation
-    ~(recursor_names: Names.Id.t list)
-    ~handlers
-    ~(inductive_paths : Libnames.qualid list)
-    ~suffix
-    ~handlers_table : unit B.t =
+    ~(recursor_names : Names.Id.t list) ~handlers
+    ~(inductive_paths : Libnames.qualid list) ~suffix ~handlers_table : unit B.t
+    =
   let prefix =
     let inductive_path = List.hd inductive_paths in
     match inductive_path |> Naming.path_to_list |> List.rev with
     | [] | [ _ ] -> None
     | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
-  in  
+  in
   let computation =
     let motives =
-        recursor_names
-        |> List.map (fun recursor_name ->
-           recursor_name
-           |> Naming.motive_of
-           |> Libnames.qualid_of_ident
-           |> Constrexpr_ops.mkRefC)
+      recursor_names
+      |> List.map (fun recursor_name ->
+             recursor_name |> Naming.motive_of |> Libnames.qualid_of_ident
+             |> Constrexpr_ops.mkRefC)
     in
     let handlers =
       (* We expect that "inherit element" in inheritance.ml put the
@@ -329,17 +325,18 @@ let compile_recursive_definition_implementation
          inheritance.ml is not doing its job properly. *)
       handlers
       |> List.map (fun handler ->
-         handlers_table
-         |> List.assoc handler
-         |> Libnames.qualid_of_ident
-         |> Constrexpr_ops.mkRefC)      
-    in    
+             handlers_table |> List.assoc handler |> Libnames.qualid_of_ident
+             |> Constrexpr_ops.mkRefC)
+    in
     let open B in
     let inductives = inductive_paths |> List.map Naming.extract_path_base in
     let* _ =
       List.combine recursor_names inductives
       |> List.map (fun (name, inductive) ->
-             let recursor = Naming.mutual_principle_name ~inductive ~inductives ~kind:(RecKind.to_string suffix) in
+             let recursor =
+               Naming.mutual_principle_name ~inductive ~inductives
+                 ~kind:(RecKind.to_string suffix)
+             in
              let recursor_path = Naming.qualid_point prefix recursor in
              let body =
                Constrexpr_ops.mkAppC
@@ -348,7 +345,7 @@ let compile_recursive_definition_implementation
              define_term ~name body)
       |> flatmap
     in
-    return ()    
+    return ()
   in
   computation
 
@@ -359,59 +356,61 @@ let compile_computational_axiom_implementation ~axiom_name ~axiom_expr =
       (Tacexpr.TacArg
          (Tacexpr.TacCall
             (CAst.make
-               (Libnames.qualid_of_ident (Names.Id.of_string "prove_comp_axiom"), []))))
+               ( Libnames.qualid_of_ident (Names.Id.of_string "prove_comp_axiom"),
+                 [] ))))
   in
-  let ty = Naming.replace_self_qualification ~target:None axiom_expr in  
-  B.thunk (      
-      B.construct_term_using_proof
-        ~is_starting_plain:true
-        ~name:axiom_name ~proof:auto_tactic ~ty ~opaque:Vernacexpr.Opaque)
+  let ty = Naming.replace_self_qualification ~target:None axiom_expr in
+  B.thunk
+    (B.construct_term_using_proof ~is_starting_plain:true ~name:axiom_name
+       ~proof:auto_tactic ~ty ~opaque:Vernacexpr.Opaque)
 
-let compile_partial_recursor_implementation ~name ~type_name = 
-  let prove_prec_tactic =      
-     let proof = 
-        let open Ltac_plugin in
-        CAst.make 
-          (Tacexpr.TacArg 
-             (Tacexpr.TacCall 
-                (CAst.make 
-                   (Libnames.qualid_of_ident (Names.Id.of_string "prove_prec") ,[]))) ) 
-      in      
-      proof
-  in  
+let compile_partial_recursor_implementation ~name ~type_name =
+  let prove_prec_tactic =
+    let proof =
+      let open Ltac_plugin in
+      CAst.make
+        (Tacexpr.TacArg
+           (Tacexpr.TacCall
+              (CAst.make
+                 (Libnames.qualid_of_ident (Names.Id.of_string "prove_prec"), []))))
+    in
+    proof
+  in
   let ty = Constrexpr_ops.mkIdentC type_name in
-  B.thunk (B.construct_term_using_proof 
-             ~is_starting_plain:true
-             ~name ~proof:prove_prec_tactic 
-             ~ty ~opaque:Vernacexpr.Transparent)
+  B.thunk
+    (B.construct_term_using_proof ~is_starting_plain:true ~name
+       ~proof:prove_prec_tactic ~ty ~opaque:Vernacexpr.Transparent)
 
-let compile_closing_fact_implementation ~name ~type_name ~(script: Ltac_plugin.Tacexpr.raw_tactic_expr) ~plain =   
-  let ty = Constrexpr_ops.mkIdentC type_name in  
-  B.thunk (B.construct_term_using_proof ~is_starting_plain:plain ~name ~proof:script ~ty ~opaque:Vernacexpr.Opaque)
+let compile_closing_fact_implementation ~name ~type_name
+    ~(script : Ltac_plugin.Tacexpr.raw_tactic_expr) ~plain =
+  let ty = Constrexpr_ops.mkIdentC type_name in
+  B.thunk
+    (B.construct_term_using_proof ~is_starting_plain:plain ~name ~proof:script
+       ~ty ~opaque:Vernacexpr.Opaque)
 
 (* The name of the equation to generate axioms for *)
 let compile_computational_axiom_signature
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
-    ~(constructor_name : Names.Id.t)
-    ~(inductive : VernacInductive.t)
+    ~(constructor_name : Names.Id.t) ~(inductive : VernacInductive.t)
     ~(inductive_paths : Libnames.qualid list)
-    (* Ind name -> Recursor Name *)
-    ~(recursor_names : Names.Id.t Names.Id.Map.t)
+    ~(* Ind name -> Recursor Name *)
+    (recursor_names : Names.Id.t Names.Id.Map.t)
     ~(prefix : Libnames.qualid option) :
-      Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t =
+    Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t =
   let inductive_names = inductive_paths |> List.map Naming.extract_path_base in
   let self__ =
     Naming.self_version (Env.Context.family_name (Env.Context.get ()))
-  in  
+  in
   let recursor_paths =
     recursor_names
-    |> Names.Id.Map.map (fun recursor_name -> Naming.list_to_path [ self__; recursor_name ])
+    |> Names.Id.Map.map (fun recursor_name ->
+           Naming.list_to_path [ self__; recursor_name ])
   in
   let constructor_path = Naming.qualid_point prefix constructor_name in
   let context = Some (Env.Context.get ()) in
   let module_name = Naming.fresh_name ~prefix:"ComputationalAxiom" in
   let axiom_name = ref None in
-  let axiom_expr = ref None in  
+  let axiom_expr = ref None in
   let compiled_signature =
     B.run
     @@ B.define_moduletype ~module_name ~parameters:ctx ~body:(fun _ctx ->
@@ -419,9 +418,9 @@ let compile_computational_axiom_signature
            let* _ =
              thunk (fun () ->
                  let name, axiom =
-                   Termutils.generate_one_computational_axiom ~inductive_names ~inductive
-                     ~recursor_names ~recursor_paths ~constructor_name
-                     ~constructor_path ~context
+                   Termutils.generate_one_computational_axiom ~inductive_names
+                     ~inductive ~recursor_names ~recursor_paths
+                     ~constructor_name ~constructor_path ~context
                  in
                  axiom_name := Some name;
                  axiom_expr := Some axiom;
@@ -433,13 +432,10 @@ let compile_computational_axiom_signature
 
 let compile_prec_computational_axiom_signature
     ~(ctx : (Names.Id.t * Constrexpr.module_ast) list)
-    ~(constructor_name : Names.Id.t)
-    ~(constructor_path : Libnames.qualid)
-    ~(handlers: Names.Id.t list)
-    ~(inductive : VernacInductive.t)
-    ~(prec_suffix: Names.Id.t)
-    ~(recursor_path : Libnames.qualid) :    
-    Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t =    
+    ~(constructor_name : Names.Id.t) ~(constructor_path : Libnames.qualid)
+    ~(handlers : Names.Id.t list) ~(inductive : VernacInductive.t)
+    ~(prec_suffix : Names.Id.t) ~(recursor_path : Libnames.qualid) :
+    Names.Id.t * Constrexpr.constr_expr * CompiledModuleType.t =
   let module_name = Naming.fresh_name ~prefix:"ComputationalAxiom" in
   let axiom_name = ref None in
   let axiom_expr = ref None in
@@ -450,10 +446,9 @@ let compile_prec_computational_axiom_signature
            let* _ =
              thunk (fun () ->
                  let name, axiom =
-                   Termutils.generate_one_prec_computational_axiom                     
-                     ~inductive
-                     ~recursor_path ~constructor_name
-                     ~constructor_path ~prec_suffix ~handlers
+                   Termutils.generate_one_prec_computational_axiom ~inductive
+                     ~recursor_path ~constructor_name ~constructor_path
+                     ~prec_suffix ~handlers
                  in
                  axiom_name := Some name;
                  axiom_expr := Some axiom;
@@ -463,22 +458,23 @@ let compile_prec_computational_axiom_signature
   in
   (Option.get !axiom_name, Option.get !axiom_expr, compiled_signature)
 
-let normalize_parameters 
+let normalize_parameters
     ~(default_ctx_params : (Names.Id.t * CompiledModule.t) list)
-    ~(parameters : CompiledModule.t list) =  
-  let is_in_context (param : Libnames.qualid) = 
+    ~(parameters : CompiledModule.t list) =
+  let is_in_context (param : Libnames.qualid) =
     (* remove the location to avoid wrong equality comparison *)
-    let parameters = parameters |> List.map (fun (p: Libnames.qualid) -> p.v) in
-    let param = param.v in 
+    let parameters =
+      parameters |> List.map (fun (p : Libnames.qualid) -> p.v)
+    in
+    let param = param.v in
     List.mem param parameters
-  in 
-  (* Only use parameters that are in the context, 
+  in
+  (* Only use parameters that are in the context,
      other use the default param *)
   default_ctx_params
-  |> List.map (fun (self_name, default) -> 
-     let self_name = Libnames.qualid_of_ident self_name in
-     if is_in_context self_name then self_name
-     else default)  
+  |> List.map (fun (self_name, default) ->
+         let self_name = Libnames.qualid_of_ident self_name in
+         if is_in_context self_name then self_name else default)
 
 let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
@@ -509,13 +505,15 @@ let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
       in
       ( signature_name,
         linkage.context @> [ (Naming.self_version linkage.name, signature) ] )
-  | Bwd.Snoc (fields, ( _, TraitDefinition _)) ->      
-     let context = 
-       match context with 
-       | LinkageCtx.Toplevel linkage -> LinkageCtx.Toplevel { linkage with fields }
-       | LinkageCtx.Nested (upper, linkage) -> LinkageCtx.Nested (upper, { linkage with fields })
-     in
-     compile_linkage_context ~field_name context
+  | Bwd.Snoc (fields, (_, TraitDefinition _)) ->
+      let context =
+        match context with
+        | LinkageCtx.Toplevel linkage ->
+            LinkageCtx.Toplevel { linkage with fields }
+        | LinkageCtx.Nested (upper, linkage) ->
+            LinkageCtx.Nested (upper, { linkage with fields })
+      in
+      compile_linkage_context ~field_name context
   | Bwd.Snoc
       ( _,
         ( _,
@@ -565,12 +563,7 @@ let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
       ( _,
         ( _,
           PartialRecursor
-            {
-              default_ctx_params;
-              compiled_context;
-              compiled_signature;
-              _;
-            } ) )
+            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
         ( _,
@@ -585,7 +578,7 @@ let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
       ( _,
         ( _,
           FamilyDefinition
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )  
+            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
   | Bwd.Snoc
       ( _,
         ( _,
@@ -644,23 +637,22 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
         let* _ = compile_fields fields in
         names
         |> List.map (fun name -> B.define_term ~name (qualify name))
-        |> flatmap    
+        |> flatmap
     | Snoc (fields, (_, ComputationalAxiom { name; _ })) ->
         let open B in
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
-
-    (* traits have no implmentation, so 
+    (* traits have no implmentation, so
        there's nothing to add in the context *)
-    | Snoc (fields, (_, TraitDefinition _)) ->  compile_fields fields    
-    
+    | Snoc (fields, (_, TraitDefinition _)) -> compile_fields fields
     | Snoc (fields, (name, FamilyDefinition _)) ->
         let open B in
         let* _ = compile_fields fields in
-        let module_qualid =
-           [ module_name; name ] |> Naming.list_to_path
+        let module_qualid = [ module_name; name ] |> Naming.list_to_path in
+        let* _ =
+          B.define_module_inline ~name
+            ~value:(Termutils.ident_to_module_expr module_qualid)
         in
-        let* _ = B.define_module_inline ~name ~value:(Termutils.ident_to_module_expr module_qualid) in        
         return ()
     | Snoc (fields, (name, OpaqueFieldDefinition _)) ->
         let open B in
@@ -670,11 +662,11 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
         let open B in
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
-    | Snoc (fields, (name, ClosingFact _ )) ->
+    | Snoc (fields, (name, ClosingFact _)) ->
         let open B in
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
-    | Snoc (fields, (name, PartialRecursor _ )) ->
+    | Snoc (fields, (name, PartialRecursor _)) ->
         let open B in
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
@@ -705,24 +697,28 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
           [ name; Names.Id.of_string "Ctx" ] |> Naming.list_to_path
         in
         let parameters =
-          let parameters = context |> Bwd.to_list |> List.map (fun (n, _) -> Libnames.qualid_of_ident n) in
-          let parameters = normalize_parameters ~default_ctx_params ~parameters in
+          let parameters =
+            context |> Bwd.to_list
+            |> List.map (fun (n, _) -> Libnames.qualid_of_ident n)
+          in
+          let parameters =
+            normalize_parameters ~default_ctx_params ~parameters
+          in
           match parameters with
           | [] -> []
           | l ->
               let l = List.tl l in
-              let current = module_name |> Naming.self_version |> Libnames.qualid_of_ident in
+              let current =
+                module_name |> Naming.self_version |> Libnames.qualid_of_ident
+              in
               l @ [ current ]
         in
         let parameters =
           parameters
           |> List.map (fun parameter ->
-                 parameter 
-                 |> Naming.path_to_list 
-                 |> List.hd 
-                 |> Naming.un_self_version 
-                 |> qualify)
-        in        
+                 parameter |> Naming.path_to_list |> List.hd
+                 |> Naming.un_self_version |> qualify)
+        in
         let module_expr = Termutils.ident_to_module_expr compiled_impl in
         let module_expr =
           Termutils.apply_module ~functor_expr:module_expr ~arguments:parameters
@@ -749,23 +745,24 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         ( fields,
           ( _,
             LinkageElem.RecursorDefinition
-              { inductive_paths; handlers; names; suffix; handlers_table; _ } ) ) ->
-        let open B in
-        let* _ = compile_fields fields ctx in
-        let handlers = handlers |> List.concat_map snd in
-        compile_recursive_definition_implementation          
-          ~recursor_names:names
-          ~handlers ~inductive_paths ~suffix ~handlers_table
-    | Snoc
-        ( fields,
-          (_, TheoremDefinition { inductive_paths; handlers; names; suffix; handlers_table; _ })
+              { inductive_paths; handlers; names; suffix; handlers_table; _ } )
         ) ->
         let open B in
         let* _ = compile_fields fields ctx in
         let handlers = handlers |> List.concat_map snd in
-        compile_recursive_definition_implementation
-          ~recursor_names:names ~inductive_paths
-          ~suffix ~handlers ~handlers_table
+        compile_recursive_definition_implementation ~recursor_names:names
+          ~handlers ~inductive_paths ~suffix ~handlers_table
+    | Snoc
+        ( fields,
+          ( _,
+            TheoremDefinition
+              { inductive_paths; handlers; names; suffix; handlers_table; _ } )
+        ) ->
+        let open B in
+        let* _ = compile_fields fields ctx in
+        let handlers = handlers |> List.concat_map snd in
+        compile_recursive_definition_implementation ~recursor_names:names
+          ~inductive_paths ~suffix ~handlers ~handlers_table
     | Snoc (fields, (_, ComputationalAxiom { name; axiom; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in
@@ -773,23 +770,27 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
           ~axiom_expr:axiom
     | Snoc (fields, (name, ClosingFact { type_name; script; plain; _ })) ->
         let open B in
-        let* _ = compile_fields fields ctx in        
+        let* _ = compile_fields fields ctx in
         compile_closing_fact_implementation ~name ~type_name ~script ~plain
-    | Snoc
-        (fields, (_, PartialRecursor { name; type_name; _ })) -> 
+    | Snoc (fields, (_, PartialRecursor { name; type_name; _ })) ->
         let open B in
-        let* _ = compile_fields fields ctx in        
+        let* _ = compile_fields fields ctx in
         compile_partial_recursor_implementation ~name ~type_name
-
     (* traits have no implementation *)
-    | Snoc (fields, (_, TraitDefinition _ )) -> compile_fields fields ctx
-
+    | Snoc (fields, (_, TraitDefinition _)) -> compile_fields fields ctx
     (* Use the definition if we already have one *)
-    | Snoc (fields, (_, FamilyDefinition { linkage = { name; definition = Some definition; _ }; _ })) ->
-       let open B in
-       let* _ = compile_fields fields ctx in
-       let value = definition |> Libnames.qualid_of_ident |> Termutils.ident_to_module_expr in
-       define_module_inline ~name ~value
+    | Snoc
+        ( fields,
+          ( _,
+            FamilyDefinition
+              { linkage = { name; definition = Some definition; _ }; _ } ) ) ->
+        let open B in
+        let* _ = compile_fields fields ctx in
+        let value =
+          definition |> Libnames.qualid_of_ident
+          |> Termutils.ident_to_module_expr
+        in
+        define_module_inline ~name ~value
     | Snoc (fields, (_, FamilyDefinition { linkage = nested_linkage; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in
@@ -799,7 +800,6 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
             in
             let _ = compile_linkage (Some synth_ctx) nested_linkage in
             return ())
-    
     (* An implementation will be provided by the inductive *)
     | Snoc (fields, (_, InductiveAxiom _)) -> compile_fields fields ctx
     (* Implementation provided by RecursiveDefinition *)
@@ -811,63 +811,63 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
           (_, OpaqueFieldDefinition { default_ctx_params; compiled_impl; _ }) )
     | Snoc
         ( fields,
-          (_, InductiveDefinition { default_ctx_params; compiled_impl; _ }) )    
+          (_, InductiveDefinition { default_ctx_params; compiled_impl; _ }) )
     | Snoc
         (fields, (_, FieldDefinition { default_ctx_params; compiled_impl; _ }))
       ->
         let open B in
         let qualify name =
           [ name; Names.Id.of_string "Ctx" ] |> Naming.list_to_path
-        in        
-        (* Adjust parameters. Basically we're removing the "first" self 
-           because the context for a family will be nested as the 
-           first thing itself, so we need to access it with the name 
-           of the current family, not the upper family. 
-           In some sense, this is like shifting the parameters 
+        in
+        (* Adjust parameters. Basically we're removing the "first" self
+           because the context for a family will be nested as the
+           first thing itself, so we need to access it with the name
+           of the current family, not the upper family.
+           In some sense, this is like shifting the parameters
            one "unit" to the right. *)
-        let shift_parameters linkage parameters = 
+        let shift_parameters linkage parameters =
           let current =
-             name |> Naming.self_version |> Libnames.qualid_of_ident
+            name |> Naming.self_version |> Libnames.qualid_of_ident
           in
-          let rec next (lst: Libnames.qualid list) (name: Libnames.qualid) = match lst with
-              | [] -> Some current
-              | x :: rest -> 
-                  if name.v = x.v then 
-                    match rest with 
-                    | [] -> Some current
-                    | n :: _ -> Some n 
-                  else next rest name
+          let rec next (lst : Libnames.qualid list) (name : Libnames.qualid) =
+            match lst with
+            | [] -> Some current
+            | x :: rest ->
+                if name.v = x.v then
+                  match rest with [] -> Some current | n :: _ -> Some n
+                else next rest name
           in
-          match parameters with 
+          match parameters with
           | [] -> []
-          | _ -> 
-             let ctx_params = Linkage.context_parameters linkage in
-             parameters |> List.filter_map (next ctx_params)             
-        in 
-        let reparam, parameters =          
-          let parameters = 
-            normalize_parameters 
-              ~default_ctx_params 
-              ~parameters:(Linkage.context_parameters linkage) 
-          in                    
+          | _ ->
+              let ctx_params = Linkage.context_parameters linkage in
+              parameters |> List.filter_map (next ctx_params)
+        in
+        let reparam, parameters =
+          let parameters =
+            normalize_parameters ~default_ctx_params
+              ~parameters:(Linkage.context_parameters linkage)
+          in
           (* We shouldn't shift "Reparam" parameters *)
-          (* REPARAM; REPARAM; self__Imp *)          
-          let reparam, parameters = 
-            parameters 
-            |> List.partition (fun id -> 
-                 let n = id |> Naming.path_to_list |> List.hd |> Names.Id.to_string in 
-                 String.starts_with n ~prefix:"Reparam")            
-          in          
-          let parameters = shift_parameters linkage parameters in          
-          reparam, parameters          
-        in                
+          (* REPARAM; REPARAM; self__Imp *)
+          let reparam, parameters =
+            parameters
+            |> List.partition (fun id ->
+                   let n =
+                     id |> Naming.path_to_list |> List.hd |> Names.Id.to_string
+                   in
+                   String.starts_with n ~prefix:"Reparam")
+          in
+          let parameters = shift_parameters linkage parameters in
+          (reparam, parameters)
+        in
         let parameters =
           parameters
           |> List.map (fun parameter ->
                  parameter |> Naming.path_to_list |> List.hd
                  |> Naming.un_self_version |> qualify)
-        in        
-        let parameters = reparam @ parameters in        
+        in
+        let parameters = reparam @ parameters in
         let* _ = compile_fields fields ctx in
         let module_expr = Termutils.ident_to_module_expr compiled_impl in
         let module_expr =
@@ -876,31 +876,33 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         let* _ = include_module ~module_expr in
         return ()
   in
-  match definition with 
-  | None -> 
-     B.run
-     @@ B.define_module ~module_name:name ~parameters:[] ~body:(fun ctx ->
-            let open B in         
-            let* _ =
-              (* Provide the context for a nested family, before 
-                 compiling fields *)
-              B.thunk (fun () ->
-                  match synth_ctx with
-                  | None -> B.return ()
-                  | Some { context; module_name; fields } ->
-                      let _ = synthesize_context ~context ~module_name ~fields in
-                      B.return ())
-            in
-            compile_fields fields ctx)
-  | Some definition -> 
-     let value = 
-       definition |> Libnames.qualid_of_ident 
-       |> Termutils.ident_to_module_expr
-     in 
-     B.run @@ 
-       let open B in
-       let* _ = define_module_inline ~name ~value in 
-       return (Libnames.qualid_of_ident name)
+  match definition with
+  | None ->
+      B.run
+      @@ B.define_module ~module_name:name ~parameters:[] ~body:(fun ctx ->
+             let open B in
+             let* _ =
+               (* Provide the context for a nested family, before
+                  compiling fields *)
+               B.thunk (fun () ->
+                   match synth_ctx with
+                   | None -> B.return ()
+                   | Some { context; module_name; fields } ->
+                       let _ =
+                         synthesize_context ~context ~module_name ~fields
+                       in
+                       B.return ())
+             in
+             compile_fields fields ctx)
+  | Some definition ->
+      let value =
+        definition |> Libnames.qualid_of_ident |> Termutils.ident_to_module_expr
+      in
+      B.run
+      @@
+      let open B in
+      let* _ = define_module_inline ~name ~value in
+      return (Libnames.qualid_of_ident name)
 
 (* Compile a toplevel linkage *)
 let compile_linkage = compile_linkage None
@@ -1011,10 +1013,10 @@ let compile_linkage_signature linkage =
                        (Termutils.ident_to_module_expr compiled_context)
                      ~arguments:ctx
                  in
-                 let* _ = include_module ~module_expr:context_module_expr in                 
+                 let* _ = include_module ~module_expr:context_module_expr in
                  let ctx =
                    normalize_parameters ~default_ctx_params ~parameters:ctx
-                 in                 
+                 in
                  let signature_module_expr =
                    Termutils.apply_module
                      ~functor_expr:
@@ -1025,24 +1027,24 @@ let compile_linkage_signature linkage =
                  return ()))
   in
   let sig_final = Naming.fresh_name ~prefix:"Sig" in
-  let include_signature = 
-     B.(
-       run
-       @@ define_moduletype ~module_name:sig_final
-            ~parameters:(Bwd.to_list context) ~body:(fun ctx ->
-              let helper_module_expr =
-                Termutils.apply_module
-                  ~functor_expr:(Termutils.ident_to_module_expr helper_module)
-                  ~arguments:ctx
-              in
-              (* Declare Name : Helper *)
-              let* _ = declare_module ~module_name:name helper_module_expr in
-              return ()))
-  in 
-  include_signature, helper_module
+  let include_signature =
+    B.(
+      run
+      @@ define_moduletype ~module_name:sig_final
+           ~parameters:(Bwd.to_list context) ~body:(fun ctx ->
+             let helper_module_expr =
+               Termutils.apply_module
+                 ~functor_expr:(Termutils.ident_to_module_expr helper_module)
+                 ~arguments:ctx
+             in
+             (* Declare Name : Helper *)
+             let* _ = declare_module ~module_name:name helper_module_expr in
+             return ()))
+  in
+  (include_signature, helper_module)
 
 (* linkage is definitionally equal to base *)
-let compile_final_linkage_signature ~linkage ~(base: Libnames.qualid) = 
+let compile_final_linkage_signature ~linkage ~(base : Libnames.qualid) =
   let Linkage.{ name; context; _ } = linkage in
   let sig_final = Naming.fresh_name ~prefix:"Sig" in
   B.(
@@ -1052,35 +1054,35 @@ let compile_final_linkage_signature ~linkage ~(base: Libnames.qualid) =
            let module_expr = Termutils.ident_to_module_expr base in
            (* Module Name := Base. *)
            let* _ = define_module_inline ~name ~value:module_expr in
-           (*let* _ = define_module ~module_name:name 
-                      ~parameters:[] ~body:(fun _ -> include_module ~module_expr)
-           in*)
+           (*let* _ = define_module ~module_name:name
+                        ~parameters:[] ~body:(fun _ -> include_module ~module_expr)
+             in*)
            return ()))
 
 (* optimization for empty families with a single base *)
 let compile_same_linkage_signature ~linkage ~signature ~default_ctx_params =
-  default_ctx_params |> List.iter (fun (n, _) -> Printf.printf "N: %s\n" (Names.Id.to_string n));
+  default_ctx_params
+  |> List.iter (fun (n, _) -> Printf.printf "N: %s\n" (Names.Id.to_string n));
   let Linkage.{ name; context; _ } = linkage in
   let sig_final = Naming.fresh_name ~prefix:"Sig" in
-  let include_signature = 
-     B.(
-       run
-       @@ define_moduletype ~module_name:sig_final
-            ~parameters:(Bwd.to_list context) ~body:(fun ctx ->
-              let ctx =
-                normalize_parameters ~default_ctx_params ~parameters:ctx
-              in                 
-              let helper_module_expr =
-                Termutils.apply_module
-                  ~functor_expr:(Termutils.ident_to_module_expr signature)
-                  ~arguments:ctx
-              in              
-              (* Declare Name : Helper *)
-              let* _ = declare_module ~module_name:name helper_module_expr in
-              return ()))
-  in 
+  let include_signature =
+    B.(
+      run
+      @@ define_moduletype ~module_name:sig_final
+           ~parameters:(Bwd.to_list context) ~body:(fun ctx ->
+             let ctx =
+               normalize_parameters ~default_ctx_params ~parameters:ctx
+             in
+             let helper_module_expr =
+               Termutils.apply_module
+                 ~functor_expr:(Termutils.ident_to_module_expr signature)
+                 ~arguments:ctx
+             in
+             (* Declare Name : Helper *)
+             let* _ = declare_module ~module_name:name helper_module_expr in
+             return ()))
+  in
   include_signature
-  
 
 let compile_definition ~(name : Names.Id.t)
     ?(body_type : Constrexpr.constr_expr option)
@@ -1149,8 +1151,10 @@ let compile_default_params
         Errors.fail ~info:"extract_idents: too complex to extract ident"
   in
   let find (map : (Names.Id.t * CompiledModule.t) Bwd.t)
-      (name : Libnames.qualid) =    
-    let map = Bwd.map (fun (name, expr) -> Libnames.qualid_of_ident name, expr) map in
+      (name : Libnames.qualid) =
+    let map =
+      Bwd.map (fun (name, expr) -> (Libnames.qualid_of_ident name, expr)) map
+    in
     match map |> Bwd.to_list |> List.assoc name with
     | name -> name
     | exception Not_found ->
@@ -1163,7 +1167,7 @@ let compile_default_params
   let mapping : (Names.Id.t * CompiledModule.t) Bwd.t = Bwd.Emp in
   (* This is too messy! TODO: make it *beautiful* *)
   List.fold_left
-    (fun map (name, expr) ->      
+    (fun map (name, expr) ->
       let names = expr |> extract_idents |> List.rev in
       let f, args = (List.hd names, List.tl names) in
       let names = f :: List.map (find map) args in

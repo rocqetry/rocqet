@@ -149,14 +149,12 @@ let apply_module ~(functor_expr : Constrexpr.module_ast)
     (fun op x -> CAst.make (CMapply (op, x)))
     functor_expr arguments
 
-let flatten_inductive_constructor_type
-    ~(inductive_names: Names.Id.t list)
-    ~(inductive : VernacInductive.t)
-    ~(constructor : Names.Id.t) =
+let flatten_inductive_constructor_type ~(inductive_names : Names.Id.t list)
+    ~(inductive : VernacInductive.t) ~(constructor : Names.Id.t) =
   let is_rec_name (name : Libnames.qualid) =
     let inductive_names = List.map Libnames.qualid_of_ident inductive_names in
-    List.exists (fun (n: Libnames.qualid) -> name.v = n.v) inductive_names
-  in 
+    List.exists (fun (n : Libnames.qualid) -> name.v = n.v) inductive_names
+  in
   let constructor_type =
     inductive
     |> List.map (fun (inductive_expr, _) ->
@@ -173,7 +171,7 @@ let flatten_inductive_constructor_type
     | CNotation (_, (_, "_ -> _"), ([ domain; codomain ], _, _, _)) -> (
         match domain.v with
         | Constrexpr.CRef (ty_name, _) when is_rec_name ty_name ->
-            let type_name = Naming.extract_path_base ty_name in 
+            let type_name = Naming.extract_path_base ty_name in
             Some type_name :: unflatten codomain
         | _ -> None :: unflatten codomain)
     | _ -> []
@@ -183,17 +181,22 @@ let flatten_inductive_constructor_type
 (* This has to be called with recursor_path and constructor_path exposed *)
 (* i.e is must be called inside a parameterized module *)
 (* it must almost be called when there is LinkageCtx present *)
-let generate_one_computational_axiom
-    ~(inductive_names: Names.Id.t list)
-    ~(inductive: VernacInductive.t)
-    ~(recursor_names: Names.Id.t Names.Id.Map.t)
-    ~(recursor_paths: Libnames.qualid Names.Id.Map.t)
-    ~(constructor_name: Names.Id.t)
-    ~(constructor_path: Libnames.qualid)
+let generate_one_computational_axiom ~(inductive_names : Names.Id.t list)
+    ~(inductive : VernacInductive.t)
+    ~(recursor_names : Names.Id.t Names.Id.Map.t)
+    ~(recursor_paths : Libnames.qualid Names.Id.Map.t)
+    ~(constructor_name : Names.Id.t) ~(constructor_path : Libnames.qualid)
     ~context =
-  let inductive_for_constructor = VernacInductive.lookup_inductive_name ~constructor:constructor_name ~inductive in
-  let recursor_path = Names.Id.Map.find inductive_for_constructor recursor_paths in
-  let _recursor_name = Names.Id.Map.find inductive_for_constructor recursor_names in
+  let inductive_for_constructor =
+    VernacInductive.lookup_inductive_name ~constructor:constructor_name
+      ~inductive
+  in
+  let recursor_path =
+    Names.Id.Map.find inductive_for_constructor recursor_paths
+  in
+  let _recursor_name =
+    Names.Id.Map.find inductive_for_constructor recursor_names
+  in
   let open Constrexpr_ops in
   let constructor_params, fully_applied_constr =
     extract_variables_and_apply (mkRefC constructor_path)
@@ -217,7 +220,7 @@ let generate_one_computational_axiom
     in
     let types =
       flatten_inductive_constructor_type ~inductive_names ~inductive
-        ~constructor:constructor_name 
+        ~constructor:constructor_name
     in
     let arguments =
       constructor_params
@@ -228,27 +231,25 @@ let generate_one_computational_axiom
     let f ty arg =
       match ty with
       | None -> [ arg ]
-      | Some inductive_name ->          
+      | Some inductive_name ->
           let recursor_path = Names.Id.Map.find inductive_name recursor_paths in
           let hypothesis = mkAppC (mkRefC recursor_path, [ arg ]) in
           [ arg; hypothesis ]
     in
     let arguments = List.concat (List.map2 f types arguments) in
-    let recursors = recursor_names |> Names.Id.Map.bindings |> List.map snd  in 
-    let handler =      
+    let recursors = recursor_names |> Names.Id.Map.bindings |> List.map snd in
+    let handler =
       let handler_name =
         match context with
         | None ->
             Libnames.qualid_of_ident
-            @@ Naming.handler_name ~recursors
-                 ~case:constructor_name
+            @@ Naming.handler_name ~recursors ~case:constructor_name
         | Some context ->
             let prefix = Env.Context.family_name context in
             Naming.list_to_path
               [
                 Naming.self_version prefix;
-                Naming.handler_name ~recursors
-                  ~case:constructor_name;
+                Naming.handler_name ~recursors ~case:constructor_name;
               ]
       in
       mkRefC @@ handler_name
@@ -265,7 +266,9 @@ let generate_one_computational_axiom
   (* The final axiom is an equation *)
   let equation = closed_recursor_applied in
   let equation_name =
-    let recursor_names = recursor_names |> Names.Id.Map.bindings |> List.map snd  in 
+    let recursor_names =
+      recursor_names |> Names.Id.Map.bindings |> List.map snd
+    in
     Naming.computational_axiom_name ~recursor_names ~constructor_name
   in
   (equation_name, equation)
@@ -288,8 +291,6 @@ let generate_computational_axioms ~inductive_name ~(inductive : VernacInductive.
   |> List.map (fun (constructor_name, constructor_path) ->
          generate_one_computational_axiom ~inductive_name ~inductive ~recursor_name ~context
            ~recursor_path ~constructor_name ~constructor_path) *)
-
-
 
 (*
 (* Given a recursor name and a compiled recursor return the type
@@ -319,10 +320,8 @@ let handler_types_table inductive_path name (recursor : CompiledRecursor.t)
          in
          (handler_name, handler_type)) *)
 
-let handler_type_for_recursion
-    ~(names : Names.Id.t list)
-    ~(inductive_paths : Libnames.qualid list)
-    ~(recursor : Recursor.t) :
+let handler_type_for_recursion ~(names : Names.Id.t list)
+    ~(inductive_paths : Libnames.qualid list) ~(recursor : Recursor.t) :
     (Names.Id.t * Constrexpr.constr_expr) list =
   let motive_terms =
     names
@@ -333,48 +332,51 @@ let handler_type_for_recursion
        in
        let motive = Naming.list_to_path [ self; motive ] in
        Constrexpr_ops.mkRefC motive
-  in    
+  in
 
   let handlers =
     match inductive_paths with
-    | [] -> assert false 
+    | [] -> assert false
     | [ inductive_path ] ->
-       let inductive_name = inductive_path |> Naming.extract_path_base in
-       recursor.handlers |> Names.Id.Map.find inductive_name
-    | _ ->
-       match recursor.mutual with 
-       | None -> Errors.fail ~info:"no mutual handlers available"
-       | Some mutual -> mutual.mutual_handlers
-  in 
-  
+        let inductive_name = inductive_path |> Naming.extract_path_base in
+        recursor.handlers |> Names.Id.Map.find inductive_name
+    | _ -> (
+        match recursor.mutual with
+        | None -> Errors.fail ~info:"no mutual handlers available"
+        | Some mutual -> mutual.mutual_handlers)
+  in
+
   handlers
   |> List.map (fun (case_name, handler) ->
          let target =
            let inductive_path = List.hd inductive_paths in
            match inductive_path |> Naming.path_to_list |> List.rev with
            | [] | [ _ ] -> None
-            (* Remove the inductive name, leave the family *)
+           (* Remove the inductive name, leave the family *)
            | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
-         in         
+         in
          let handler = Naming.replace_self_qualification ~target handler in
          let handler =
            match target with
            | None -> handler
            | Some path ->
                (*let inductive_names =
-                 inductive_paths |> List.map Naming.extract_path_base
-               in*)
-               let inductive_names = recursor.handlers |> Names.Id.Map.domain |> Names.Id.Set.to_list in
+                   inductive_paths |> List.map Naming.extract_path_base
+                 in*)
+               let inductive_names =
+                 recursor.handlers |> Names.Id.Map.domain
+                 |> Names.Id.Set.to_list
+               in
                let names =
                  case_name :: inductive_names |> Names.Id.Set.of_list
-               in               
+               in
                Naming.add_prefix_path ~path ~names ~target:handler
-         in         
+         in
          let handler =
            Resolver.resolve_constrexpr ~context:(Env.Context.get ())
              ~expression:handler
-         in         
-         let handler_type = Constrexpr_ops.mkAppC (handler, motive_terms ) in
+         in
+         let handler_type = Constrexpr_ops.mkAppC (handler, motive_terms) in
          (case_name, handler_type))
 
 let rec extract_handlers_from_inductive_proof
@@ -420,15 +422,14 @@ let calculate_inductive_proof_goal
   in
   List.fold_right __prod handler_types __True
 
-let mk_prod arguments body = 
-  let open Constrexpr_ops in    
-  let arguments : Names.lname list = 
-    arguments 
-    |> List.map (fun name -> CAst.make @@ Names.Name.Name name) 
-  in 
-  let binder_kind = Constrexpr.Default Glob_term.Explicit in 
-  let hole = CAst.make @@ Constrexpr.CHole None in  
-  mkProdC  (arguments, binder_kind, hole, body)
+let mk_prod arguments body =
+  let open Constrexpr_ops in
+  let arguments : Names.lname list =
+    arguments |> List.map (fun name -> CAst.make @@ Names.Name.Name name)
+  in
+  let binder_kind = Constrexpr.Default Glob_term.Explicit in
+  let hole = CAst.make @@ Constrexpr.CHole None in
+  mkProdC (arguments, binder_kind, hole, body)
 
 let mk_lambda arguments body =
   let f (n : Names.Id.t) =
@@ -465,225 +466,204 @@ let rec extract_functor_name (name : Constrexpr.module_ast) =
   | Constrexpr.CMident name -> name
   | CMapply (name, _) -> extract_functor_name name
   | CMwith (name, _) -> extract_functor_name name
-     
-let extract_handler_types_from_principle
-    ~(inductive : VernacInductive.t)
-    ~(principles : ((Names.Id.t * Constrexpr.constr_expr) list) RecursorStore.t)
-    ~(mutual_principle: Constrexpr.constr_expr RecursorStore.t):
-      Recursors.t =
-  let inductive_constructor = VernacInductive.create_inductive_constructor_map inductive in
+
+let extract_handler_types_from_principle ~(inductive : VernacInductive.t)
+    ~(principles : (Names.Id.t * Constrexpr.constr_expr) list RecursorStore.t)
+    ~(mutual_principle : Constrexpr.constr_expr RecursorStore.t) : Recursors.t =
+  let inductive_constructor =
+    VernacInductive.create_inductive_constructor_map inductive
+  in
   (* let all_names = inductive |> VernacInductive.extract_all_names in*)
   let from_recursor_type_to_subcase_handlers_constructor
-          (cstname : Names.Id.t list) (recursor : Constrexpr.constr_expr) :
-          (Names.Id.t * Constrexpr.constr_expr) list =
-        let open Constrexpr in
-        let open Constrexpr_ops in
-        let isArrow { CAst.v = t; _ } =
-          match t with CNotation (_, (_, "_ -> _"), _) -> true | _ -> false
-        in
-        let destDepProd { CAst.v = t; _ } =
-          match t with
-          | CProdN (al, b) -> (al, b)
-          | _ -> Errors.fail ~info:"unexpected"
-        in
-        let destArrow { CAst.v = t; _ } =
-          match t with
-          | CNotation (_, (_, "_ -> _"), ([ domain; codomain ], _, _, _)) ->
-              (domain, codomain)
-          | _ -> Errors.fail ~info:"unreachable"
-        in
-        let _inputP, _body = destDepProd recursor in
-        let rec collect_handler cstname f =
-          match (cstname, f) with
-          | _ :: t, f when isArrow f ->
-              let currentT, remained_f = destArrow f in
-              let ret, otherparts = collect_handler t remained_f in
-              (ret, currentT :: otherparts)
-          | [], f -> (f, [])
-          | _, _ -> Errors.fail ~info:"unexpected"
-        in
-        let _, all_recursor_handlers = collect_handler cstname _body in
-        let cst_name_corresponding_recursor_handlers_sig =
-          List.combine cstname
-            (* decorate each ai case with a _inputP *)
-            (List.map
-               (fun body -> mkLambdaCN _inputP body)
-               all_recursor_handlers)
-        in
-        cst_name_corresponding_recursor_handlers_sig
-  in    
+      (cstname : Names.Id.t list) (recursor : Constrexpr.constr_expr) :
+      (Names.Id.t * Constrexpr.constr_expr) list =
+    let open Constrexpr in
+    let open Constrexpr_ops in
+    let isArrow { CAst.v = t; _ } =
+      match t with CNotation (_, (_, "_ -> _"), _) -> true | _ -> false
+    in
+    let destDepProd { CAst.v = t; _ } =
+      match t with
+      | CProdN (al, b) -> (al, b)
+      | _ -> Errors.fail ~info:"unexpected"
+    in
+    let destArrow { CAst.v = t; _ } =
+      match t with
+      | CNotation (_, (_, "_ -> _"), ([ domain; codomain ], _, _, _)) ->
+          (domain, codomain)
+      | _ -> Errors.fail ~info:"unreachable"
+    in
+    let _inputP, _body = destDepProd recursor in
+    let rec collect_handler cstname f =
+      match (cstname, f) with
+      | _ :: t, f when isArrow f ->
+          let currentT, remained_f = destArrow f in
+          let ret, otherparts = collect_handler t remained_f in
+          (ret, currentT :: otherparts)
+      | [], f -> (f, [])
+      | _, _ -> Errors.fail ~info:"unexpected"
+    in
+    let _, all_recursor_handlers = collect_handler cstname _body in
+    let cst_name_corresponding_recursor_handlers_sig =
+      List.combine cstname
+        (* decorate each ai case with a _inputP *)
+        (List.map (fun body -> mkLambdaCN _inputP body) all_recursor_handlers)
+    in
+    cst_name_corresponding_recursor_handlers_sig
+  in
   let compile_one_recursor (inductive_name, recursor) =
     (* Future-proofing for mutually inductive types *)
     let relevant_cstrs =
       (* inductive_names |> List.concat_map (fun n -> List.assoc n all_names)*)
-       inductive_constructor |> Names.Id.Map.find inductive_name
-    in    
-    from_recursor_type_to_subcase_handlers_constructor relevant_cstrs recursor        
+      inductive_constructor |> Names.Id.Map.find inductive_name
+    in
+    from_recursor_type_to_subcase_handlers_constructor relevant_cstrs recursor
   in
   let mutual_for_suffix suffix =
     mutual_principle
     |> RecursorStore.find_opt suffix
     |> Option.map (fun mutual_recursor ->
-        (* This is critical: We need the constructors to be in order, so we do it manually here *)
-        let all_constructors =
-          inductive
-          |> List.map fst
-          |> List.concat_map (fun e -> e |> VernacInductive.extract_type_and_cstrs |> snd |> List.map fst)
-        in              
-        let mutual_handlers = from_recursor_type_to_subcase_handlers_constructor all_constructors  mutual_recursor in
-        MutualRecursor.{ mutual_recursor; mutual_handlers; })
-  in 
+           (* This is critical: We need the constructors to be in order, so we do it manually here *)
+           let all_constructors =
+             inductive |> List.map fst
+             |> List.concat_map (fun e ->
+                    e |> VernacInductive.extract_type_and_cstrs |> snd
+                    |> List.map fst)
+           in
+           let mutual_handlers =
+             from_recursor_type_to_subcase_handlers_constructor all_constructors
+               mutual_recursor
+           in
+           MutualRecursor.{ mutual_recursor; mutual_handlers })
+  in
   principles
   |> RecursorStore.mapi (fun suffix principles ->
          let handlers =
            principles
-           |> List.map (fun (i, r) -> i, compile_one_recursor (i, r))
+           |> List.map (fun (i, r) -> (i, compile_one_recursor (i, r)))
            |> Names.Id.Map.of_list
          in
          let recursors = principles |> Names.Id.Map.of_list in
-         let mutual = mutual_for_suffix suffix in 
-         Recursor.{ handlers; recursors; mutual; })
+         let mutual = mutual_for_suffix suffix in
+         Recursor.{ handlers; recursors; mutual })
 
-let rec constants_in_econstr sigma e = 
-  let constants = constants_in_econstr sigma in 
-  let kind = EConstr.kind sigma e in 
+let rec constants_in_econstr sigma e =
+  let constants = constants_in_econstr sigma in
+  let kind = EConstr.kind sigma e in
   match kind with
-  | Constr.Int _
-  | Constr.Float _
-  | Constr.Construct _
-  | Constr.Ind _ 
-  | Constr.Rel _ 
-  | Constr.Var _
-  | Constr.Meta _ 
-  | Constr.Evar _ 
-  | Constr.Sort _ -> []
+  | Constr.Int _ | Constr.Float _ | Constr.Construct _ | Constr.Ind _
+  | Constr.Rel _ | Constr.Var _ | Constr.Meta _ | Constr.Evar _ | Constr.Sort _
+    ->
+      []
   | Constr.Cast (a, _, c) -> constants a @ constants c
-  | Constr.Prod (_, b, c) 
-  | Constr.Lambda (_, b, c) -> constants b @ constants c
+  | Constr.Prod (_, b, c) | Constr.Lambda (_, b, c) -> constants b @ constants c
   | Constr.LetIn (_, a, b, c) -> constants a @ constants b @ constants c
-  | Constr.App (a, b) -> 
-     let b = 
-       b 
-       |> Array.to_list 
-       |> List.concat_map constants 
-     in 
-     constants a @ b
-  | Constr.Const (const, _) -> 
-     let name = 
-       const
-       |> Names.Constant.to_string 
-       |> Libnames.qualid_of_string
-     in
-     [name]
+  | Constr.App (a, b) ->
+      let b = b |> Array.to_list |> List.concat_map constants in
+      constants a @ b
+  | Constr.Const (const, _) ->
+      let name =
+        const |> Names.Constant.to_string |> Libnames.qualid_of_string
+      in
+      [ name ]
   | Constr.Array (_, a, b, c) ->
-      let a = 
-       a
-       |> Array.to_list 
-       |> List.concat_map constants 
-      in
-      a @ constants b @ constants c 
+      let a = a |> Array.to_list |> List.concat_map constants in
+      a @ constants b @ constants c
   | Constr.Case (_, _, pcms, ((_, p), _), Constr.NoInvert, c, bl) ->
-     let constants_list x = 
-       x
-       |> Array.to_list 
-       |> List.concat_map constants 
-      in
-      constants_list pcms @ constants p @ constants c @ constants_list (Array.map snd bl)
-  | Constr.Case
-       (_, _, pcms, ((_, p), _), Constr.CaseInvert { indices }, c, bl)  ->
-     let constants_list x = 
-       x
-       |> Array.to_list 
-       |> List.concat_map constants 
-      in
-      constants_list pcms @ constants p @ constants_list indices @ constants c @ constants_list (Array.map snd bl)     
-  | Constr.Fix (_,(_lna,tl,bl))
-  | Constr.CoFix (_,(_lna,tl,bl)) ->
-     let constants x = 
-       x
-       |> Array.to_list 
-       |> List.concat_map constants 
-      in
+      let constants_list x = x |> Array.to_list |> List.concat_map constants in
+      constants_list pcms @ constants p @ constants c
+      @ constants_list (Array.map snd bl)
+  | Constr.Case (_, _, pcms, ((_, p), _), Constr.CaseInvert { indices }, c, bl)
+    ->
+      let constants_list x = x |> Array.to_list |> List.concat_map constants in
+      constants_list pcms @ constants p @ constants_list indices @ constants c
+      @ constants_list (Array.map snd bl)
+  | Constr.Fix (_, (_lna, tl, bl)) | Constr.CoFix (_, (_lna, tl, bl)) ->
+      let constants x = x |> Array.to_list |> List.concat_map constants in
       constants tl @ constants bl
   | Constr.Proj (_, _, c) -> constants c
 
-let compute_partial_recursor_signature 
-      ~context 
-      ~(inductive_path: Libnames.qualid) =   
+let compute_partial_recursor_signature ~context
+    ~(inductive_path : Libnames.qualid) =
   let inductive, recursors, _ =
     Env.Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
   let suffix = RecKind.Rect in
   let Recursor.{ recursors; _ } = RecursorStore.find suffix recursors in
   let inductive_name = inductive_path |> Naming.extract_path_base in
-  let recursor = recursors |> Names.Id.Map.find inductive_name in 
+  let recursor = recursors |> Names.Id.Map.find inductive_name in
   let open Constrexpr_ops in
-  
-  let is_P (c : Constrexpr.constr_expr) : bool = 
-    let all_params, _ = collect_argument_and_ret_of_type recursor in 
+  let is_P (c : Constrexpr.constr_expr) : bool =
+    let all_params, _ = collect_argument_and_ret_of_type recursor in
     let (ps, _, _), _ = List.hd all_params in
-    let {CAst.v = p; _} = List.hd ps in     
+    let { CAst.v = p; _ } = List.hd ps in
     let p =
-      match p with 
-      | Names.Name p -> p 
-      | _ -> Errors.fail ~info:"compute_partial_recursor_signature: expected Names.Name" 
-    in 
-    match c with 
-    | {CAst.v = CRef (c, _); _} when (Libnames.qualid_is_ident c) -> 
-      let c = Libnames.qualid_basename c in p = c
-    | _ -> false 
-  in  
-  
-  let _option_decoration = 
-    let _option = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "option" in
-    fun t -> mkAppC (_option, [t])
+      match p with
+      | Names.Name p -> p
+      | _ ->
+          Errors.fail
+            ~info:"compute_partial_recursor_signature: expected Names.Name"
+    in
+    match c with
+    | { CAst.v = CRef (c, _); _ } when Libnames.qualid_is_ident c ->
+        let c = Libnames.qualid_basename c in
+        p = c
+    | _ -> false
   in
 
-  let flipped_indrec_type = 
-    let all_params, ret = collect_argument_and_ret_of_type recursor in 
-    (* make the last parameter into the front *)
-    let rec heads_tail (l) = 
-      match l with 
-      | [] -> Errors.fail ~info:"heads_tail: expected non empty list"
-      | h :: [] -> ([], h) 
-      | h :: t -> 
-         let th, tt = heads_tail t in 
-         (h::th, tt) 
-    in 
-    let heads_param, tail_param = heads_tail all_params in 
-    let all_params = List.map fst @@ tail_param :: heads_param in 
-    let res = List.fold_right (fun (a, b, c) body -> mkProdC (a,b,c, body)) all_params ret in 
-    res 
-  in 
+  let _option_decoration =
+    let _option =
+      mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "option"
+    in
+    fun t -> mkAppC (_option, [ t ])
+  in
 
-  let ind_rect_type = flipped_indrec_type in 
+  let flipped_indrec_type =
+    let all_params, ret = collect_argument_and_ret_of_type recursor in
+    (* make the last parameter into the front *)
+    let rec heads_tail l =
+      match l with
+      | [] -> Errors.fail ~info:"heads_tail: expected non empty list"
+      | h :: [] -> ([], h)
+      | h :: t ->
+          let th, tt = heads_tail t in
+          (h :: th, tt)
+    in
+    let heads_param, tail_param = heads_tail all_params in
+    let all_params = List.map fst @@ (tail_param :: heads_param) in
+    let res =
+      List.fold_right
+        (fun (a, b, c) body -> mkProdC (a, b, c, body))
+        all_params ret
+    in
+    res
+  in
+
+  let ind_rect_type = flipped_indrec_type in
   (* then we flip the argument order in ind_rect_type
-      s.t.  *)
+      s.t. *)
   (* we replace the P t into option (P t) *)
-  let replaced_ind_rect_type = 
+  let replaced_ind_rect_type =
     let rec replace_helper _ r =
       match r with
-      | { CAst.v = (Constrexpr.CApp (f, _)) ; _ } as original 
-          when (is_P f)  ->
+      | { CAst.v = Constrexpr.CApp (f, _); _ } as original when is_P f ->
           (* rename the  *)
-        (_option_decoration original)
-      | cn -> map_constr_expr_with_binders (fun _ _ -> ()) replace_helper () cn 
+          _option_decoration original
+      | cn -> map_constr_expr_with_binders (fun _ _ -> ()) replace_helper () cn
     in
     replace_helper () ind_rect_type
   in
 
   (* Use the right self_qualification  *)
-  
   let target =
-     match inductive_path |> Naming.path_to_list |> List.rev with
-     | [] | [ _ ] -> None
-      (* Remove the inductive name, leave the family *)
-     | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
-  in           
-  let ty = Naming.replace_self_qualification ~target replaced_ind_rect_type in 
-  let names = 
-    inductive 
-    |> VernacInductive.extract_all_names 
+    match inductive_path |> Naming.path_to_list |> List.rev with
+    | [] | [ _ ] -> None
+    (* Remove the inductive name, leave the family *)
+    | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
+  in
+  let ty = Naming.replace_self_qualification ~target replaced_ind_rect_type in
+  let names =
+    inductive |> VernacInductive.extract_all_names
     |> List.concat_map (fun (x, l) -> x :: l)
     |> Names.Id.Set.of_list
   in
@@ -691,115 +671,112 @@ let compute_partial_recursor_signature
     match target with
     | None -> ty
     | Some path -> Naming.add_prefix_path ~path ~names ~target:ty
-  in 
-  
+  in
+
   Resolver.resolve_constrexpr ~context ~expression:ty
 
 (* (forall __i : self__Ix.ty,
- forall P : self__Ix.ty -> Type, forall arg回9 : option (P self__Ix.ty_unit), option (P __i)) *)
+   forall P : self__Ix.ty -> Type, forall arg回9 : option (P self__Ix.ty_unit), option (P __i)) *)
 (* Should be called from inside a parameterized module *)
-let generate_one_prec_computational_axiom      
-      ~(inductive: VernacInductive.t)      
-      ~(recursor_path: Libnames.qualid)
-      ~(constructor_name: Names.Id.t)
-      ~(constructor_path: Libnames.qualid)
-      ~(handlers: Names.Id.t list)
-      ~(prec_suffix: Names.Id.t) =      
+let generate_one_prec_computational_axiom ~(inductive : VernacInductive.t)
+    ~(recursor_path : Libnames.qualid) ~(constructor_name : Names.Id.t)
+    ~(constructor_path : Libnames.qualid) ~(handlers : Names.Id.t list)
+    ~(prec_suffix : Names.Id.t) =
   let open Constrexpr_ops in
   let constructor_params, fully_applied_constr =
     extract_variables_and_apply (mkRefC constructor_path)
   in
   let extract_name ({ CAst.v = n; _ } : Names.lname) : Names.Id.t =
-      match n with
-      | Names.Name n -> n
-      | _ -> Errors.fail ~info:"Expected non anonymous argument"
+    match n with
+    | Names.Name n -> n
+    | _ -> Errors.fail ~info:"Expected non anonymous argument"
   in
   (* The arguments to the consructor *)
   let c_arguments =
-      constructor_params
-      |> List.map (fun ((lnames, _, _), _) ->
-             lnames |> List.hd |> extract_name 
-             (*|> Libnames.qualid_of_ident
+    constructor_params
+    |> List.map (fun ((lnames, _, _), _) ->
+           lnames |> List.hd |> extract_name
+           (*|> Libnames.qualid_of_ident
              |> mkRefC*))
   in
   (* The P predicate *)
-  let p_argument = Names.Id.of_string "P" in  
+  let p_argument = Names.Id.of_string "P" in
   let generate_h_strings n =
-     let rec aux i acc =
-       if i > n then
-         List.rev acc
-       else
-         aux (i + 1) (("H" ^ string_of_int i) :: acc)
-     in
-     aux 1 []
+    let rec aux i acc =
+      if i > n then List.rev acc
+      else aux (i + 1) (("H" ^ string_of_int i) :: acc)
+    in
+    aux 1 []
   in
   let find_position x lst =
-     let rec aux current_pos = function
-       | [] -> None
-       | hd :: tl -> 
-           if Names.Id.equal hd x then Some current_pos
-           else aux (current_pos + 1) tl
-     in
-     aux 1 lst
-  in 
+    let rec aux current_pos = function
+      | [] -> None
+      | hd :: tl ->
+          if Names.Id.equal hd x then Some current_pos
+          else aux (current_pos + 1) tl
+    in
+    aux 1 lst
+  in
   let position = find_position constructor_name handlers in
   (* The "H" function of the current handler *)
-  let h_target = 
-    position |> Option.map (fun position -> Names.Id.of_string (Printf.sprintf "H%d" position))
+  let h_target =
+    position
+    |> Option.map (fun position ->
+           Names.Id.of_string (Printf.sprintf "H%d" position))
   in
   (* The H arguments *)
-  let h_arguments = 
-    handlers
-    |> List.length
-    |> generate_h_strings
-    |> List.map Names.Id.of_string
+  let h_arguments =
+    handlers |> List.length |> generate_h_strings |> List.map Names.Id.of_string
   in
-  let partial_recursor_term arguments = 
-    let f = mkRefC recursor_path in 
+  let partial_recursor_term arguments =
+    let f = mkRefC recursor_path in
     mkAppC (f, arguments)
   in
-  let equation_side arg = 
-    let p_and_hs = 
-      (p_argument :: h_arguments) 
-      |> List.map (fun n -> n |> Libnames.qualid_of_ident |> mkRefC) 
+  let equation_side arg =
+    let p_and_hs =
+      p_argument :: h_arguments
+      |> List.map (fun n -> n |> Libnames.qualid_of_ident |> mkRefC)
     in
-    let arguments = arg :: p_and_hs in 
+    let arguments = arg :: p_and_hs in
     partial_recursor_term arguments
   in
   let left_hand_side = equation_side fully_applied_constr in
   let inductive_names =
     inductive |> VernacInductive.extract_all_inductive_names
-  in 
-  let right_hand_side = 
-    let types = 
-      flatten_inductive_constructor_type ~inductive_names
-        ~inductive ~constructor:constructor_name
+  in
+  let right_hand_side =
+    let types =
+      flatten_inductive_constructor_type ~inductive_names ~inductive
+        ~constructor:constructor_name
     in
-    let f ty arg =      
+    let f ty arg =
       match ty with
       | None -> [ arg |> Libnames.qualid_of_ident |> mkRefC ]
-      | Some _ ->          
+      | Some _ ->
           let arg = arg |> Libnames.qualid_of_ident |> mkRefC in
           let rec_arg = equation_side arg in
           [ arg; rec_arg ]
     in
     let arguments = List.concat (List.map2 f types c_arguments) in
     (* If we can't find the arg then it is the None equation kind *)
-    match h_target with 
-    | Some h_target -> 
-       let f = h_target |> Libnames.qualid_of_ident |> mkRefC in
-       mkAppC (f, arguments)
-    | None -> 
-       "None" |> Libnames.qualid_of_string |> mkRefC
+    match h_target with
+    | Some h_target ->
+        let f = h_target |> Libnames.qualid_of_ident |> mkRefC in
+        mkAppC (f, arguments)
+    | None -> "None" |> Libnames.qualid_of_string |> mkRefC
   in
-  let all_arguments = c_arguments @ [p_argument] @ h_arguments in
-  let equation = 
-    let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in
-    mkAppC (eq_cstr, [ left_hand_side; right_hand_side ])    
-  in   
+  let all_arguments = c_arguments @ [ p_argument ] @ h_arguments in
+  let equation =
+    let eq_cstr =
+      mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq"
+    in
+    mkAppC (eq_cstr, [ left_hand_side; right_hand_side ])
+  in
   (*let full_equation = lambda_to_prod @@ mk_lambda all_arguments equation in *)
-  let full_equation = mk_prod all_arguments equation in  
-  let name = Naming.prec_computational_axiom_name ~constructor_name ~prec_suffix in
+  let full_equation = mk_prod all_arguments equation in
+  let name =
+    Naming.prec_computational_axiom_name ~constructor_name ~prec_suffix
+  in
   (name, full_equation)
 
 (*
@@ -823,15 +800,13 @@ let generate_prec_computational_axioms
          generate_one_prec_computational_axiom ~inductive ~prec_suffix
            ~recursor_path ~constructor_name ~constructor_path ~handlers)*)
 
-let is_indexed_inductive (i: VernacInductive.t) =
-  let kind = 
+let is_indexed_inductive (i : VernacInductive.t) =
+  let kind =
     i |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs |> fst |> snd
   in
   match kind with
   | None -> false
-  | Some kind ->
-     match kind.v with
-     | Constrexpr.CNotation (_, (_, "_ -> _"), _) -> true
-     | _ -> false
-
-  
+  | Some kind -> (
+      match kind.v with
+      | Constrexpr.CNotation (_, (_, "_ -> _"), _) -> true
+      | _ -> false)

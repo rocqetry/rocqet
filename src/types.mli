@@ -9,8 +9,8 @@ module VernacInductive : sig
     (* inductive type name * sort/kind  *)
     (Names.Id.t * Constrexpr.constr_expr option)
     * (* constr name * constructor type *)
-      (Names.Id.t * Constrexpr.constr_expr) list
-  
+    (Names.Id.t * Constrexpr.constr_expr) list
+
   val create_inductive_constructor_map : t -> Names.Id.t list Names.Id.Map.t
 
   val extract_all_names_with_type :
@@ -22,7 +22,6 @@ module VernacInductive : sig
   val extract_all_names : t -> (Names.Id.t * Names.Id.t list) list
   val extract_inductive_name : t -> Names.Id.t
   val extract_all_inductive_names : t -> Names.Id.t list
-
   val extract_all_constructors : t -> Names.Id.t list
 
   val definition_mapping :
@@ -31,7 +30,8 @@ module VernacInductive : sig
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
   val concatenate : base:t -> derived:t -> t
 
-  val lookup_inductive_name: constructor:Names.Id.t -> inductive:t -> Names.Id.t
+  val lookup_inductive_name :
+    constructor:Names.Id.t -> inductive:t -> Names.Id.t
 end
 
 module CompiledModule : sig
@@ -57,7 +57,7 @@ module MutualRecursor : sig
   type t = {
     mutual_recursor : Constrexpr.constr_expr;
     mutual_handlers : (Names.Id.t * Constrexpr.constr_expr) list;
-    }
+  }
 end
 
 module Recursor : sig
@@ -77,7 +77,11 @@ module PluginCmd : sig
 end
 
 module PluginCmdScope : sig
-  type t = { command : PluginCmd.t; names : Names.Id.t list; close : unit -> unit }
+  type t = {
+    command : PluginCmd.t;
+    names : Names.Id.t list;
+    close : unit -> unit;
+  }
 end
 
 module rec LinkageElem : sig
@@ -87,7 +91,7 @@ module rec LinkageElem : sig
         recursors : Recursors.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;        
+        compiled_impl : CompiledModule.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | InductiveAxiom of {
@@ -101,8 +105,8 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
-    | TraitDefinition of { 
-        linkage: Linkage.t;
+    | TraitDefinition of {
+        linkage : Linkage.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
@@ -120,7 +124,7 @@ module rec LinkageElem : sig
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | RecursorDefinition of {
-        names : Names.Id.t list;        
+        names : Names.Id.t list;
         handlers : (Names.Id.t * Names.Id.t list) list;
         inductive_paths : Libnames.qualid list;
         suffix : RecKind.t;
@@ -128,7 +132,7 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         arguments : Names.Id.t list;
         prefix : Libnames.qualid;
-        handlers_table : (Names.Id.t * Names.Id.t) list;        
+        handlers_table : (Names.Id.t * Names.Id.t) list;
         behaviour_table : (Names.Id.t * Names.Id.t) list;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
@@ -142,11 +146,11 @@ module rec LinkageElem : sig
         handlers_table : (Names.Id.t * Names.Id.t) list;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
-    | RecursiveAxiom of { 
-      compiled_context : CompiledModuleType.t;
-      compiled_signature : CompiledModuleType.t;
-      default_ctx_params : (Names.Id.t * CompiledModule.t) list;
-    }
+    | RecursiveAxiom of {
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
     | ComputationalAxiom of {
         name : Names.Id.t;
         axiom : Constrexpr.constr_expr;
@@ -156,29 +160,29 @@ module rec LinkageElem : sig
       }
     | MetaDataSection of {
         name : Names.Id.t;
-        bound_names: Names.Id.t list;
+        bound_names : Names.Id.t list;
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
-    | ClosingFact of { 
+    | ClosingFact of {
         type_name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        script: Ltac_plugin.Tacexpr.raw_tactic_expr;
-        plain: bool;
+        script : Ltac_plugin.Tacexpr.raw_tactic_expr;
+        plain : bool;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
-    }
-    | PartialRecursor of { 
-        name: Names.Id.t;
-        type_name: Names.Id.t;
-        inductive_path: Libnames.qualid;
-        handlers: Names.Id.t list;
+      }
+    | PartialRecursor of {
+        name : Names.Id.t;
+        type_name : Names.Id.t;
+        inductive_path : Libnames.qualid;
+        handlers : Names.Id.t list;
         defining_handlers : Names.Id.t list;
-        behaviour: (Names.Id.t * Names.Id.t) list;
+        behaviour : (Names.Id.t * Names.Id.t) list;
         prec_suffix : Names.Id.t;
         compiled_context : CompiledModuleType.t;
-        compiled_signature : CompiledModuleType.t;                
+        compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
 end
@@ -188,7 +192,7 @@ and Linkage : sig
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
     default_ctx_params : (Names.Id.t * CompiledModule.t) list;
     name : Names.Id.t;
-    definition: Names.Id.t option;
+    definition : Names.Id.t option;
     base : t option;
     base_names : Names.Id.t list;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
@@ -208,9 +212,10 @@ and LinkageCtx : sig
   type t = Toplevel of Linkage.t | Nested of t * Linkage.t
 end
 
-module Frec_arg : sig 
-   type t = 
-     { name: Names.Id.t; 
-       inductive: Libnames.qualid;
-       motive: Constrexpr.constr_expr }
-end 
+module Frec_arg : sig
+  type t = {
+    name : Names.Id.t;
+    inductive : Libnames.qualid;
+    motive : Constrexpr.constr_expr;
+  }
+end

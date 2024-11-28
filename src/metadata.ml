@@ -8,7 +8,7 @@ module DB = Backend.Declare
 module Ctx = struct
   type t = {
     name : Names.Id.t;
-    bound_names: Names.Id.t list;
+    bound_names : Names.Id.t list;
     compiled_impl : CompiledModule.t;
     compiled_context : CompiledModuleType.t;
   }
@@ -31,7 +31,7 @@ let open_metadata_with_bound_names name bound_names =
     Codegen.compile_linkage_context ~field_name:name context
   in
   let module_name = Naming.fresh_name ~prefix:"MetaData" in
-  let compiled_impl = DB.start_module module_name parameters in  
+  let compiled_impl = DB.start_module module_name parameters in
   let ctx = Ctx.{ name; bound_names; compiled_impl; compiled_context } in
   Ctx.update ctx
 
@@ -54,7 +54,7 @@ let close_metadata () =
     context |> Context.family_linkage |> function
     | { default_ctx_params; _ } -> default_ctx_params
   in
-  let _ = DB.end_module () in  
+  let _ = DB.end_module () in
   let elem =
     LinkageElem.MetaDataSection
       { name; bound_names; compiled_impl; compiled_context; default_ctx_params }

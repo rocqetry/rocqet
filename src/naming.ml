@@ -4,9 +4,7 @@
 (* Magic constants embedded in these functions *)
 let motive_of name = Nameops.add_prefix "__motiveT" name
 let internal_name name = Nameops.add_prefix "__internal_" name
-
 let inductive_axiom_name = Nameops.add_prefix "ind__"
-
 let recursive_axiom_name = Nameops.add_prefix "rec__"
 
 let recursor_type ~inductive suffix =
@@ -29,7 +27,7 @@ let concat_names names =
   |> List.sort String.compare |> String.concat "_" |> Names.Id.of_string
 
 let handler_name ~recursors ~case =
-  let recursors = concat_names recursors in 
+  let recursors = concat_names recursors in
   Names.Id.to_string recursors ^ Names.Id.to_string case |> Names.Id.of_string
 
 let principle_name ~inductives ~kind =
@@ -39,34 +37,30 @@ let principle_name ~inductives ~kind =
 (* mutual inductive principle
    inductive is the inductive type the recursion/induction is about
    inductives is the list of all the inductives present
- *)
+*)
 let mutual_principle_name ~inductive ~inductives ~kind =
   (* forward non mutual to regular principle *)
   if List.length inductives < 2 then principle_name ~inductives ~kind
-  else 
+  else
     let principle = principle_name ~inductives ~kind in
-    let inductive = Names.Id.to_string inductive ^ "_" in 
+    let inductive = Names.Id.to_string inductive ^ "_" in
     Nameops.add_prefix inductive principle
-    
 
 let computational_axiom_name ~recursor_names ~constructor_name =
-  let recursor_names = concat_names recursor_names in 
+  let recursor_names = concat_names recursor_names in
   Names.Id.to_string recursor_names
   ^ "_"
   ^ Names.Id.to_string constructor_name
   ^ "_eq"
   |> Names.Id.of_string
 
-let partial_recursor_name ~(inductive_name: Names.Id.t) ~(prec_suffix: Names.Id.t) = 
-  Names.Id.to_string inductive_name
-  ^ "_prect_"  
-  ^ Names.Id.to_string prec_suffix
+let partial_recursor_name ~(inductive_name : Names.Id.t)
+    ~(prec_suffix : Names.Id.t) =
+  Names.Id.to_string inductive_name ^ "_prect_" ^ Names.Id.to_string prec_suffix
   |> Names.Id.of_string
 
-let prec_computational_axiom_name ~constructor_name ~prec_suffix = 
-  Names.Id.to_string constructor_name
-  ^ "_eq_"
-  ^ Names.Id.to_string prec_suffix
+let prec_computational_axiom_name ~constructor_name ~prec_suffix =
+  Names.Id.to_string constructor_name ^ "_eq_" ^ Names.Id.to_string prec_suffix
   |> Names.Id.of_string
 
 let point_qualid (f : Names.Id.t) (path : Libnames.qualid) : Libnames.qualid =
@@ -112,7 +106,7 @@ let _to_qualid_name (path : Libnames.qualid) :
     match Names.DirPath.repr prefix_path with
     | [] -> Errors.fail ~info:"Unexpected Error"
     | newbase :: remained ->
-       (Some (make_qualid (Names.DirPath.make remained) newbase), base)
+        (Some (make_qualid (Names.DirPath.make remained) newbase), base)
 
 let path_to_list (path : Libnames.qualid) : Names.Id.t list =
   let prefix, base = Libnames.repr_qualid path in
@@ -201,20 +195,18 @@ let un_self_version name =
     Names.Id.of_string newbeginning
   else name
 
-let replace_self (path: Names.Id.t list) (name : Names.Id.t) = 
+let replace_self (path : Names.Id.t list) (name : Names.Id.t) =
   let find_path lst target =
-     let rec aux acc = function
-       | [] -> None
-       | hd :: tl ->
-           if Names.Id.equal hd target then Some (List.rev (hd :: acc))
-           else aux (hd :: acc) tl
-     in
-     aux [] lst
-  in 
-  let target = un_self_version name in   
-  match find_path path target with 
-  | None -> [name]
-  | Some prefix -> prefix
+    let rec aux acc = function
+      | [] -> None
+      | hd :: tl ->
+          if Names.Id.equal hd target then Some (List.rev (hd :: acc))
+          else aux (hd :: acc) tl
+    in
+    aux [] lst
+  in
+  let target = un_self_version name in
+  match find_path path target with None -> [ name ] | Some prefix -> prefix
 
 let replace_self_qualification ~(target : Libnames.qualid option) =
   let open Constrexpr_ops in
@@ -228,7 +220,7 @@ let replace_self_qualification ~(target : Libnames.qualid option) =
     | None -> list_to_path tail
     | Some target ->
         let target = path_to_list target in
-        let target = replace_self target name in 
+        let target = replace_self target name in
         list_to_path (target @ tail)
   in
   let rec replace_qualid_path _ r =
@@ -239,7 +231,7 @@ let replace_self_qualification ~(target : Libnames.qualid option) =
         let source = Names.Id.to_string (take_root_of_path qid) in
         match String.starts_with ~prefix:"self__" source with
         | true ->
-            let qid = replace_root_of_path qid in            
+            let qid = replace_root_of_path qid in
             CAst.make (CRef (qid, us))
         | false -> x)
     | cn ->
@@ -292,8 +284,6 @@ let add_prefix_path ~(path : Libnames.qualid) ~(names : Names.Id.Set.t)
   in
   go names target
 
-
-
 let unique_id =
   let counter = Summary.ref ~name:"FreshCounter" 0 in
   fun () ->
@@ -322,29 +312,22 @@ let inv_name_map_with f =
     (fun acc name -> Names.Id.Map.add (f name) name acc)
     Names.Id.Map.empty
 
-let is_self_name name = 
-    name |> Names.Id.to_string |> String.starts_with ~prefix:"self__"
+let is_self_name name =
+  name |> Names.Id.to_string |> String.starts_with ~prefix:"self__"
 
-let is_self_qualid path = 
-      path |> path_to_list |> List.exists is_self_name
+let is_self_qualid path = path |> path_to_list |> List.exists is_self_name
 
-let remove_self_qualid name = 
-    let rec remove_self_qual = function 
-        | [] -> Errors.fail ~info:"remove_self_qual: empty list"
-        | p :: path when is_self_name p -> list_to_path path
-        | _ :: path -> remove_self_qual path                             
-    in 
-    remove_self_qual (path_to_list name)
+let remove_self_qualid name =
+  let rec remove_self_qual = function
+    | [] -> Errors.fail ~info:"remove_self_qual: empty list"
+    | p :: path when is_self_name p -> list_to_path path
+    | _ :: path -> remove_self_qual path
+  in
+  remove_self_qual (path_to_list name)
 
-let extract_prefix name = 
-  let prefix = 
-     name 
-     |> remove_self_qualid 
-     |> path_to_list 
-     |> List.rev 
-     |> List.tl 
-     |> List.rev
-  in 
-  match prefix with 
-  | [] -> None 
-  | prefix -> Some (list_to_path prefix)
+let extract_prefix name =
+  let prefix =
+    name |> remove_self_qualid |> path_to_list |> List.rev |> List.tl
+    |> List.rev
+  in
+  match prefix with [] -> None | prefix -> Some (list_to_path prefix)

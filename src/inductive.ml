@@ -26,7 +26,7 @@ let add_inductive_axiom ~name ~ty =
   Context.add_field ~name ~elem
 
 (* Extract the constructors *)
-let constructors inductive =  
+let constructors inductive =
   inductive |> VernacInductive.extract_all_names_with_type |> List.split |> snd
   |> List.concat
 
@@ -53,15 +53,13 @@ let add_new_inductive_definition ~inductive ~inductive_name =
   let compiled_impl, principles, mutual_principle =
     Codegen.compile_inductive_implementation ~ind_def:inductive ~ctx:parameters
       ~family_name
-  in  
-  
+  in
+
   let recursors =
-    Termutils.extract_handler_types_from_principle
-      ~inductive
-      ~principles
+    Termutils.extract_handler_types_from_principle ~inductive ~principles
       ~mutual_principle
-  in  
-  
+  in
+
   let elem =
     LinkageElem.InductiveDefinition
       {
@@ -70,7 +68,7 @@ let add_new_inductive_definition ~inductive ~inductive_name =
         compiled_impl;
         compiled_signature;
         recursors;
-        default_ctx_params;        
+        default_ctx_params;
       }
   in
   Context.add_field ~name:inductive_name ~elem;
@@ -85,11 +83,11 @@ let add_new_inductive_definition ~inductive ~inductive_name =
     |> List.iter (fun (name, ty) -> add_inductive_axiom ~name ~ty)
   in
   ()
-  (* if not (Termutils.is_indexed_inductive inductive) then
-     let inductive_path = Libnames.qualid_of_ident inductive_name in
-     (* Would not work for mutually inductive *)
-     let handlers = constructors inductive |> List.map fst in
-     Partial_recursor.add ~inductive_path ~inherited_handlers:[] ~handlers *)
+(* if not (Termutils.is_indexed_inductive inductive) then
+   let inductive_path = Libnames.qualid_of_ident inductive_name in
+   (* Would not work for mutually inductive *)
+   let handlers = constructors inductive |> List.map fst in
+   Partial_recursor.add ~inductive_path ~inherited_handlers:[] ~handlers *)
 
 let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
     =
@@ -116,8 +114,9 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
       ~family_name
   in
   let recursors =
-    Termutils.extract_handler_types_from_principle ~inductive ~principles ~mutual_principle
-  in 
+    Termutils.extract_handler_types_from_principle ~inductive ~principles
+      ~mutual_principle
+  in
   let elem =
     LinkageElem.InductiveDefinition
       {
@@ -125,7 +124,7 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
         compiled_context;
         compiled_impl;
         compiled_signature;
-        recursors;        
+        recursors;
         default_ctx_params;
       }
   in
@@ -155,13 +154,12 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
 
     new_types |> List.iter (fun (name, ty) -> add_inductive_axiom ~name ~ty)
   in
-  
+
   let inherited_constructors = constructors inherited_inductive in
   let new_constructors =
     list_difference (constructors inductive) inherited_constructors
   in
-  let _ =    
-
+  let _ =
     (* Force inherit old constructors *)
     let _ =
       inherited_constructors
@@ -173,15 +171,15 @@ let extend_inductive_definition ~inherited_inductive ~extension ~inductive_name
     |> List.iter (fun (name, ty) -> add_inductive_axiom ~name ~ty)
   in
   ()
-  
-  (* Partial Recursors *)
-  (* if not (Termutils.is_indexed_inductive inductive) then
-     let inductive_path = Libnames.qualid_of_ident inductive_name in
-     (* Would not work for mutually inductive *)
-     let handlers = new_constructors |> List.map fst in
-     let inherited_handlers = inherited_constructors |> List.map fst in
-     
-     Partial_recursor.extend ~inductive_path ~inherited_handlers ~handlers *)  
+
+(* Partial Recursors *)
+(* if not (Termutils.is_indexed_inductive inductive) then
+   let inductive_path = Libnames.qualid_of_ident inductive_name in
+   (* Would not work for mutually inductive *)
+   let handlers = new_constructors |> List.map fst in
+   let inherited_handlers = inherited_constructors |> List.map fst in
+
+   Partial_recursor.extend ~inductive_path ~inherited_handlers ~handlers *)
 
 let add_inductive_definition inductive =
   let inductive_name = VernacInductive.extract_inductive_name inductive in

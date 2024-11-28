@@ -8,19 +8,15 @@ val family_extends : derived:Names.Id.t -> base:Libnames.qualid -> unit
 
 (* Hanle a `Family ... extends ... using ...`  *)
 val family_extends_list :
-  derived:Names.Id.t ->  
-  bases:Libnames.qualid list ->
-  unit
+  derived:Names.Id.t -> bases:Libnames.qualid list -> unit
 
 (* Handle a `Metadata ...` section *)
 val metadata : Names.Id.t -> unit
-
 val metadata_bound_names : Names.Id.t -> Names.Id.t list -> unit
 
 (* Handle a `FInductive ... := ...` command *)
 val finductive : VernacInductive.t -> unit
-
-val fend_with: Names.Id.t list -> unit
+val fend_with : Names.Id.t list -> unit
 
 (* Handle a `FEnd ...` command *)
 val fend : Names.Id.t -> unit
@@ -45,19 +41,11 @@ val opaque_definition :
   body_expr:Constrexpr.constr_expr ->
   unit
 
-val foverride:
-  name:Names.Id.t ->
-  expr:Constrexpr.constr_expr ->
-  unit
-
-val foverride_lemma :
-  Names.Id.t -> unit
+val foverride : name:Names.Id.t -> expr:Constrexpr.constr_expr -> unit
+val foverride_lemma : Names.Id.t -> unit
 
 (* Handle an `FRecursion ...` *)
-val frecursion :
-  Frec_arg.t list ->
-  RecKind.t ->
-  unit
+val frecursion : Frec_arg.t list -> RecKind.t -> unit
 
 (* Handle an `FRecursion ...` extension *)
 val frecursion_extension : names:Names.Id.t list -> unit
@@ -86,27 +74,16 @@ val flemma : Names.Id.t -> Constrexpr.constr_expr -> unit
 val close_flemma : unit -> unit
 val display_plugin_scope : unit -> unit
 
-val closing_fact : 
-  name:Names.Id.t -> 
-  ty:Constrexpr.constr_expr -> 
-  script:Ltac_plugin.Tacexpr.raw_tactic_expr -> 
+val closing_fact :
+  name:Names.Id.t ->
+  ty:Constrexpr.constr_expr ->
+  script:Ltac_plugin.Tacexpr.raw_tactic_expr ->
   plain:bool ->
   unit
 
 val inherit_name : name:Names.Id.t -> unit
-
 val open_trait_with_base : name:Names.Id.t -> base:Names.Id.t -> unit
-val open_trait_with_base_list:
-  name:Names.Id.t ->
-  bases:Names.Id.t list ->
-  unit
+val open_trait_with_base_list : name:Names.Id.t -> bases:Names.Id.t list -> unit
 val open_trait : name:Names.Id.t -> unit
-
-val final_family : 
-  name:Names.Id.t -> 
-  value : Libnames.qualid -> 
-  unit
-
-val add_wildcard_handler : 
-  handler:Constrexpr.constr_expr 
-  -> unit
+val final_family : name:Names.Id.t -> value:Libnames.qualid -> unit
+val add_wildcard_handler : handler:Constrexpr.constr_expr -> unit

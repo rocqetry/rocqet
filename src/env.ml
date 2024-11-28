@@ -13,12 +13,14 @@ module PluginScopes = struct
     | Some
         {
           command =
-            PluginCmd.(Family | Recursion | Induction | MetaData | Lemma | Trait);
+            PluginCmd.(
+              Family | Recursion | Induction | MetaData | Lemma | Trait);
           _;
         } ->
         scopes := scope :: !scopes
 
-  let names_to_string names = names |> List.map Names.Id.to_string |> String.concat " with "
+  let names_to_string names =
+    names |> List.map Names.Id.to_string |> String.concat " with "
 
   (* Basically, the caller wants to close the scope with
      name `scope_name`. `scope_name` can also serve as a form
@@ -38,13 +40,14 @@ module PluginScopes = struct
           | Induction -> "FInduction"
           | Recursion -> "FRecursion"
           | MetaData -> "MetaData"
-          | Trait -> "Trait"        
-        in        
+          | Trait -> "Trait"
+        in
         let rest =
           rest
-          |> List.map (fun (scope : PluginCmdScope.t) -> names_to_string scope.names)          
+          |> List.map (fun (scope : PluginCmdScope.t) ->
+                 names_to_string scope.names)
           |> String.concat ", "
-        in        
+        in
         let info =
           Printf.sprintf
             "Closing wrong scope: expected to close a scope which was opened \
@@ -56,7 +59,8 @@ module PluginScopes = struct
   let display () =
     let rest =
       !scopes
-      |> List.map (fun (scope : PluginCmdScope.t) -> names_to_string scope.names)
+      |> List.map (fun (scope : PluginCmdScope.t) ->
+             names_to_string scope.names)
       |> String.concat ", "
     in
     Feedback.msg_info (Pp.str rest)
@@ -162,7 +166,8 @@ module Context = struct
           linkage.fields
           |> Bwd.find_map (fun (field_name, elem) ->
                  match elem with
-                 | LinkageElem.FamilyDefinition { linkage; _ } | TraitDefinition { linkage; _ }
+                 | LinkageElem.FamilyDefinition { linkage; _ }
+                 | TraitDefinition { linkage; _ }
                    when Names.Id.equal name field_name ->
                      Some linkage
                  | _ -> None)
@@ -173,7 +178,8 @@ module Context = struct
           linkage.fields
           |> Bwd.find_map (fun (field_name, elem) ->
                  match elem with
-                 | LinkageElem.FamilyDefinition { linkage; _ } | TraitDefinition { linkage; _ }
+                 | LinkageElem.FamilyDefinition { linkage; _ }
+                 | TraitDefinition { linkage; _ }
                    when Names.Id.equal name field_name ->
                      Some linkage
                  | _ -> None)
@@ -181,7 +187,7 @@ module Context = struct
           | None -> walk context
           | linkage -> linkage)
     in
-    let rest = List.tl path in    
+    let rest = List.tl path in
     let linkage =
       match context with
       | None -> Linkages.lookup name
@@ -192,40 +198,38 @@ module Context = struct
     | path ->
         Option.bind linkage (fun linkage -> walk_down_linkage linkage path)
 
-  let linkage_elem_names elem : Names.Id.t list = match elem with
-    | (_, LinkageElem.InductiveDefinition { inductive; _ }) ->       
-         inductive |> VernacInductive.extract_all_names |> List.split |> fst       
-    | (_, RecursorDefinition { names; _ }) -> names
-    | (_, TheoremDefinition { names; _}) -> names
-    | (name, _) -> [name]
-  
+  let linkage_elem_names elem : Names.Id.t list =
+    match elem with
+    | _, LinkageElem.InductiveDefinition { inductive; _ } ->
+        inductive |> VernacInductive.extract_all_names |> List.split |> fst
+    | _, RecursorDefinition { names; _ } -> names
+    | _, TheoremDefinition { names; _ } -> names
+    | name, _ -> [ name ]
+
   let lookup_linkage_elem context (path : Libnames.qualid) =
     let family, name = Naming.path_to_prefix path in
-    let found ~bound_names = bound_names |> List.exists (Names.Id.equal name) in 
+    let found ~bound_names = bound_names |> List.exists (Names.Id.equal name) in
     let result =
       match Option.bind family (lookup (Some context)) with
       | None -> None
       | Some linkage ->
           linkage.fields
           |> Bwd.find_map (fun (found_name, elem) ->
-                 let bound_names = linkage_elem_names (found_name, elem) in 
-                 if found ~bound_names then Some (elem, linkage)
-                 else None)
-    in    
+                 let bound_names = linkage_elem_names (found_name, elem) in
+                 if found ~bound_names then Some (elem, linkage) else None)
+    in
     let rec go context =
       match context with
       | LinkageCtx.Toplevel linkage ->
           linkage.fields
           |> Bwd.find_map (fun (found_name, elem) ->
-                 let bound_names = linkage_elem_names (found_name, elem) in                 
-                 if found ~bound_names then Some (elem, linkage)
-                 else None)
+                 let bound_names = linkage_elem_names (found_name, elem) in
+                 if found ~bound_names then Some (elem, linkage) else None)
       | LinkageCtx.Nested (context, linkage) -> (
           linkage.fields
           |> Bwd.find_map (fun (found_name, elem) ->
-                 let bound_names = linkage_elem_names (found_name, elem) in 
-                 if found ~bound_names then Some (elem, linkage)
-                 else None)
+                 let bound_names = linkage_elem_names (found_name, elem) in
+                 if found ~bound_names then Some (elem, linkage) else None)
           |> function
           | None -> go context
           | Some (elem, linkage) -> Some (elem, linkage))
@@ -312,26 +316,30 @@ module Context = struct
   let base_linkage context =
     match context with
     | LinkageCtx.Toplevel linkage | LinkageCtx.Nested (_, linkage) ->
-       linkage.base  
+        linkage.base
 
   let base_linkage_elem context ~field =
-    let found ~bound_names = bound_names |> List.exists (Names.Id.equal field) in 
+    let found ~bound_names =
+      bound_names |> List.exists (Names.Id.equal field)
+    in
     let lookup (linkage : Linkage.t) =
       linkage.fields
-      |> Bwd.find_map (fun (found_name, elem) ->             
+      |> Bwd.find_map (fun (found_name, elem) ->
              let bound_names = linkage_elem_names (found_name, elem) in
-             if found ~bound_names then Some (linkage, elem) else None)      
+             if found ~bound_names then Some (linkage, elem) else None)
     in
     context |> base_linkage |> Option.map lookup |> Option.flatten
 
   let further_bound_linkage_elem context ~field :
-        ((Names.Id.t * Names.Id.t) * Linkage.t * LinkageElem.t) list =
-    let found ~bound_names = bound_names |> List.exists (Names.Id.equal field) in 
+      ((Names.Id.t * Names.Id.t) * Linkage.t * LinkageElem.t) list =
+    let found ~bound_names =
+      bound_names |> List.exists (Names.Id.equal field)
+    in
     let lookup (inh, (linkage : Linkage.t)) =
       linkage.fields
       |> Bwd.find_map (fun (found_name, elem) ->
              let bound_names = linkage_elem_names (found_name, elem) in
-             if found ~bound_names then Some (inh, linkage, elem) else None)      
+             if found ~bound_names then Some (inh, linkage, elem) else None)
     in
     context |> further_bound_linkage |> List.filter_map lookup
 end

@@ -15,15 +15,19 @@ open Bwd
 let rec linear_ctx_mapping context =
   let f (linkage : Linkage.t) (name, elem) =
     match elem with
-    | LinkageElem.TheoremDefinition { names; handlers; _ } | LinkageElem.RecursorDefinition { names; handlers; _ } ->
-        let recursors = names |> List.map (fun rec_name -> (rec_name, Naming.self_version linkage.name)) in
+    | LinkageElem.TheoremDefinition { names; handlers; _ }
+    | LinkageElem.RecursorDefinition { names; handlers; _ } ->
+        let recursors =
+          names
+          |> List.map (fun rec_name ->
+                 (rec_name, Naming.self_version linkage.name))
+        in
         let handlers =
-          handlers
-          |> List.concat_map snd
+          handlers |> List.concat_map snd
           |> List.map (fun case -> Naming.handler_name ~recursors:names ~case)
           |> List.map (fun name -> (name, Naming.self_version linkage.name))
         in
-         recursors @ handlers
+        recursors @ handlers
     | LinkageElem.InductiveDefinition { inductive; _ } ->
         let names =
           inductive |> VernacInductive.extract_all_names_with_type
@@ -33,9 +37,9 @@ let rec linear_ctx_mapping context =
                         (name, Naming.self_version linkage.name)))
         in
         (name, Naming.self_version linkage.name) :: names
-    | LinkageElem.MetaDataSection { bound_names; _ } -> 
-       let names = name :: bound_names in 
-       names |> List.map (fun name -> (name, Naming.self_version linkage.name))
+    | LinkageElem.MetaDataSection { bound_names; _ } ->
+        let names = name :: bound_names in
+        names |> List.map (fun name -> (name, Naming.self_version linkage.name))
     | _ -> [ (name, Naming.self_version linkage.name) ]
   in
   match context with

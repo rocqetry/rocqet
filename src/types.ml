@@ -25,16 +25,15 @@ module VernacInductive = struct
   (* name -> name list *)
   (* inductive name -> constructors *)
   let create_inductive_constructor_map (inductive : t) =
-    inductive
-    |> List.map fst
+    inductive |> List.map fst
     |> List.map extract_type_and_cstrs
-    |> List.map (fun ((inductive_name, _), constructors) -> inductive_name, List.map fst constructors)
+    |> List.map (fun ((inductive_name, _), constructors) ->
+           (inductive_name, List.map fst constructors))
     |> Names.Id.Map.of_list
 
   let extract_all_constructors inductive =
-    inductive       
-       |> create_inductive_constructor_map
-       |> Names.Id.Map.bindings |> List.concat_map snd 
+    inductive |> create_inductive_constructor_map |> Names.Id.Map.bindings
+    |> List.concat_map snd
 
   let extract_all_names_with_type ind_def =
     ind_def
@@ -58,7 +57,7 @@ module VernacInductive = struct
     ind_def |> extract_all_names |> List.hd |> fst
 
   let extract_all_inductive_names inductive =
-    inductive |> extract_all_names |> List.map fst 
+    inductive |> extract_all_names |> List.map fst
 
   (* Create a "definition mapping" *)
   let definition_mapping ind_def =
@@ -115,7 +114,8 @@ module VernacInductive = struct
 
   (* base -> derived *)
   let path_subtitution (inductive : t) ~source ~target =
-    let check_one_type (((u, paramty, tyty, newcstrs): Vernacexpr.inductive_expr), _) =
+    let check_one_type
+        (((u, paramty, tyty, newcstrs) : Vernacexpr.inductive_expr), _) =
       let childcstrs =
         match newcstrs with
         | Vernacexpr.Constructors constr ->
@@ -129,20 +129,22 @@ module VernacInductive = struct
             Vernacexpr.Constructors base_constr_renamed
         | _ -> Errors.fail ~info:"Record types are not yet supported"
       in
-      let tyty = tyty |> Option.map (Naming.replace_qualid_root ~source ~target) in
+      let tyty =
+        tyty |> Option.map (Naming.replace_qualid_root ~source ~target)
+      in
       let child_ind = (u, paramty, tyty, childcstrs) in
       (child_ind, [])
     in
     inductive |> List.map check_one_type
 
-  let inductive_expr_name (expr : Vernacexpr.inductive_expr) = 
+  let inductive_expr_name (expr : Vernacexpr.inductive_expr) =
     let ( (_coercion_flag, (ind_type_name, _cumul_univ_decl)),
           _ind_params,
           _ind_type,
           _cstrlist ) =
       expr
     in
-    ind_type_name.v  
+    ind_type_name.v
 
   let concatenate ~(base : t) ~(derived : t) : t =
     let remove_duplicates lst =
@@ -169,37 +171,44 @@ module VernacInductive = struct
       let child_ind = (a, b, c, childcstrs) in
       (child_ind, [])
     in
-    let combine (lefts : t) (rights : t) = 
+    let combine (lefts : t) (rights : t) =
       lefts
-      |> List.map (fun ((b, _)as base) ->         
-         let result = 
-           rights
-           |> List.find_opt (fun (d, _) -> 
-                  Names.Id.equal (inductive_expr_name d) 
-                    (inductive_expr_name b)) 
-         in 
-         match result with 
-         | None -> base 
-         | Some derived -> check_one_type (base, derived))      
+      |> List.map (fun ((b, _) as base) ->
+             let result =
+               rights
+               |> List.find_opt (fun (d, _) ->
+                      Names.Id.equal (inductive_expr_name d)
+                        (inductive_expr_name b))
+             in
+             match result with
+             | None -> base
+             | Some derived -> check_one_type (base, derived))
     in
-    let combined = combine base derived in  
-    let combined_names = combined |> List.map (fun (e, _) -> inductive_expr_name e) in
-    let _ = 
-      combined_names |> List.iter (fun n -> Printf.printf "Comb: %s\n" (Names.Id.to_string n))
-    in    
+    let combined = combine base derived in
+    let combined_names =
+      combined |> List.map (fun (e, _) -> inductive_expr_name e)
+    in
+    let _ =
+      combined_names
+      |> List.iter (fun n -> Printf.printf "Comb: %s\n" (Names.Id.to_string n))
+    in
 
-    let rest =       
-      derived |> List.filter (fun (r, _) ->         
-        match combined_names |> List.find_opt (fun l -> Names.Id.equal l (inductive_expr_name r)) with 
-        | None -> true
-        | Some _ -> false)
-    in    
-    combined @ rest    
+    let rest =
+      derived
+      |> List.filter (fun (r, _) ->
+             match
+               combined_names
+               |> List.find_opt (fun l ->
+                      Names.Id.equal l (inductive_expr_name r))
+             with
+             | None -> true
+             | Some _ -> false)
+    in
+    combined @ rest
 
   let lookup_inductive_name ~constructor ~inductive =
-    let result = 
-      inductive
-      |> List.map fst
+    let result =
+      inductive |> List.map fst
       |> List.map extract_type_and_cstrs
       |> List.find_map (fun ((inductive_name, _), constructors) ->
              let constructors = List.map fst constructors in
@@ -210,7 +219,6 @@ module VernacInductive = struct
     match result with
     | None -> Errors.fail ~info:"constructor not bound in any inductive"
     | Some result -> result
-    
 end
 
 (* Module naming *)
@@ -262,13 +270,13 @@ module MutualRecursor = struct
   type t = {
     mutual_recursor : Constrexpr.constr_expr;
     mutual_handlers : (Names.Id.t * Constrexpr.constr_expr) list;
-    }
+  }
 end
 
 module Recursor = struct
-  type t = {    
+  type t = {
     recursors : Constrexpr.constr_expr Names.Id.Map.t;
-    handlers : (Names.Id.t * Constrexpr.constr_expr) list Names.Id.Map.t;    
+    handlers : (Names.Id.t * Constrexpr.constr_expr) list Names.Id.Map.t;
     mutual : MutualRecursor.t option;
   }
 end
@@ -293,11 +301,11 @@ module rec LinkageElem : sig
         recursors : Recursors.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        compiled_impl : CompiledModule.t;        
+        compiled_impl : CompiledModule.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     (* All names bound by an inductive definition:
-       inductive type names and constructor names, as 
+       inductive type names and constructor names, as
        parameters in the context *)
     | InductiveAxiom of {
         compiled_context : CompiledModuleType.t;
@@ -310,8 +318,8 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
-    | TraitDefinition of { 
-        linkage: Linkage.t;
+    | TraitDefinition of {
+        linkage : Linkage.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
@@ -324,7 +332,7 @@ module rec LinkageElem : sig
     (* Opaque definitions are overridable *)
     | OpaqueFieldDefinition of {
         type_name : Names.Id.t;
-        compiled_context : CompiledModuleType.t;        
+        compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
@@ -356,13 +364,13 @@ module rec LinkageElem : sig
         (* handler name -> defined name in family *)
         handlers_table : (Names.Id.t * Names.Id.t) list;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
-    }    
+      }
     (* Axiom about FInduction or FRecursion *)
-    | RecursiveAxiom of { 
-      compiled_context : CompiledModuleType.t;
-      compiled_signature : CompiledModuleType.t;
-      default_ctx_params : (Names.Id.t * CompiledModule.t) list;
-    }
+    | RecursiveAxiom of {
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
     | ComputationalAxiom of {
         name : Names.Id.t;
         axiom : Constrexpr.constr_expr;
@@ -372,34 +380,34 @@ module rec LinkageElem : sig
       }
     | MetaDataSection of {
         name : Names.Id.t;
-        bound_names: Names.Id.t list;
+        bound_names : Names.Id.t list;
         compiled_context : CompiledModuleType.t;
         compiled_impl : CompiledModule.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
-    | ClosingFact of { 
+    | ClosingFact of {
         type_name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
-        script: Ltac_plugin.Tacexpr.raw_tactic_expr;
-        plain: bool;
+        script : Ltac_plugin.Tacexpr.raw_tactic_expr;
+        plain : bool;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
-    }
-    | PartialRecursor of { 
-        name: Names.Id.t;
-        type_name: Names.Id.t;
-        inductive_path: Libnames.qualid;
-        (* Might include some handlers that are inherited, 
+      }
+    | PartialRecursor of {
+        name : Names.Id.t;
+        type_name : Names.Id.t;
+        inductive_path : Libnames.qualid;
+        (* Might include some handlers that are inherited,
            but needed to calculate the right arguments to the prect *)
-        handlers: Names.Id.t list;
+        handlers : Names.Id.t list;
         (* The handlers actually defined with "some" in this extension
            It is important for fdicriminate to know this. *)
         defining_handlers : Names.Id.t list;
         (* constructor name, computational axiom name *)
-        behaviour: (Names.Id.t * Names.Id.t) list;
+        behaviour : (Names.Id.t * Names.Id.t) list;
         prec_suffix : Names.Id.t;
         compiled_context : CompiledModuleType.t;
-        compiled_signature : CompiledModuleType.t;        
+        compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
 end =
@@ -411,10 +419,10 @@ and Linkage : sig
     default_ctx_params : (Names.Id.t * CompiledModule.t) list;
     (* TODO: This should be a Libnames.qualid *)
     name : Names.Id.t;
-    definition: Names.Id.t option;
-    (* currently base is a concatenation of further binding bases 
+    definition : Names.Id.t option;
+    (* currently base is a concatenation of further binding bases
        and normal basses *)
-    base : t option; 
+    base : t option;
     base_names : Names.Id.t list;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
     signature : CompiledModuleType.t option;
@@ -433,9 +441,9 @@ end = struct
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
     default_ctx_params : (Names.Id.t * CompiledModule.t) list;
     name : Names.Id.t;
-    definition: Names.Id.t option;
+    definition : Names.Id.t option;
     base : t option;
-    base_names : Names.Id.t list;    
+    base_names : Names.Id.t list;
     fields : (Names.Id.t * LinkageElem.t) Bwd.t;
     signature : CompiledModuleType.t option;
   }
@@ -450,71 +458,84 @@ end = struct
     | [] -> Naming.self_version linkage.name
     | (name, _) :: _ -> name
 
-  let rec path_substitution_elem elem ~source ~target =      
+  let rec path_substitution_elem elem ~source ~target =
     let g (name, expr) =
-          if Names.Id.equal source name then (target, expr) else (name, expr)
+      if Names.Id.equal source name then (target, expr) else (name, expr)
     in
-    let path_subst_ctx ctx = 
-      ctx |> List.map g
-    in 
+    let path_subst_ctx ctx = ctx |> List.map g in
     match elem with
     | LinkageElem.MetaDataSection metadata ->
         let default_ctx_params = path_subst_ctx metadata.default_ctx_params in
         LinkageElem.MetaDataSection { metadata with default_ctx_params }
-    | ClosingFact fact -> 
-       let default_ctx_params = path_subst_ctx fact.default_ctx_params in
-       ClosingFact { fact with default_ctx_params }
-    | PartialRecursor prec -> 
-       let default_ctx_params = path_subst_ctx prec.default_ctx_params in
-       PartialRecursor { prec with default_ctx_params }
-    | InductiveAxiom axiom -> 
-       let default_ctx_params = path_subst_ctx axiom.default_ctx_params in
-       InductiveAxiom { axiom with default_ctx_params }
-    | RecursiveAxiom axiom -> 
-       let default_ctx_params = path_subst_ctx axiom.default_ctx_params in
-       RecursiveAxiom { axiom with default_ctx_params } 
+    | ClosingFact fact ->
+        let default_ctx_params = path_subst_ctx fact.default_ctx_params in
+        ClosingFact { fact with default_ctx_params }
+    | PartialRecursor prec ->
+        let default_ctx_params = path_subst_ctx prec.default_ctx_params in
+        PartialRecursor { prec with default_ctx_params }
+    | InductiveAxiom axiom ->
+        let default_ctx_params = path_subst_ctx axiom.default_ctx_params in
+        InductiveAxiom { axiom with default_ctx_params }
+    | RecursiveAxiom axiom ->
+        let default_ctx_params = path_subst_ctx axiom.default_ctx_params in
+        RecursiveAxiom { axiom with default_ctx_params }
     | OpaqueFieldDefinition definition ->
         let default_ctx_params = path_subst_ctx definition.default_ctx_params in
-        OpaqueFieldDefinition { definition with default_ctx_params; }
+        OpaqueFieldDefinition { definition with default_ctx_params }
     | ComputationalAxiom comp ->
         let axiom = Naming.replace_qualid_root ~source ~target comp.axiom in
         let default_ctx_params = path_subst_ctx comp.default_ctx_params in
         ComputationalAxiom { comp with axiom; default_ctx_params }
-    | FamilyDefinition family ->        
+    | FamilyDefinition family ->
         let context = family.linkage.context |> Bwd.map g in
         let linkage =
           { (path_subtitution family.linkage ~source ~target) with context }
         in
         let default_ctx_params = path_subst_ctx family.default_ctx_params in
         FamilyDefinition { family with linkage; default_ctx_params }
-    | TraitDefinition trait -> 
-       let context = trait.linkage.context |> Bwd.map g in
+    | TraitDefinition trait ->
+        let context = trait.linkage.context |> Bwd.map g in
         let linkage =
           { (path_subtitution trait.linkage ~source ~target) with context }
         in
         let default_ctx_params = path_subst_ctx trait.default_ctx_params in
         TraitDefinition { trait with linkage; default_ctx_params }
     | InductiveDefinition definition ->
-       let default_ctx_params = path_subst_ctx definition.default_ctx_params in
-       (* TODO: refactor out. Path sustitution on recursors *)
-       let recursors =
-         definition.recursors
-         |> RecursorStore.map (fun (r: Recursor.t) ->
-                let recursors = r.recursors |> Names.Id.Map.map (Naming.replace_qualid_root ~source ~target) in
-                let handlers =
-                  r.handlers
-                  |> Names.Id.Map.map (List.map (fun (n, e) -> (n, Naming.replace_qualid_root ~source ~target e)))
-                in
-                let mutual =
-                  r.mutual
-                  |> Option.map (fun (m : MutualRecursor.t) ->
-                       let mutual_recursor = Naming.replace_qualid_root ~source ~target m.mutual_recursor in
-                       let mutual_handlers = m.mutual_handlers |> List.map (fun (n, e) -> (n, Naming.replace_qualid_root ~source ~target e)) in
-                       MutualRecursor.{ mutual_recursor; mutual_handlers } )
-                in 
-              Recursor.{ recursors; handlers; mutual } )
-       in
-       InductiveDefinition
+        let default_ctx_params = path_subst_ctx definition.default_ctx_params in
+        (* TODO: refactor out. Path sustitution on recursors *)
+        let recursors =
+          definition.recursors
+          |> RecursorStore.map (fun (r : Recursor.t) ->
+                 let recursors =
+                   r.recursors
+                   |> Names.Id.Map.map
+                        (Naming.replace_qualid_root ~source ~target)
+                 in
+                 let handlers =
+                   r.handlers
+                   |> Names.Id.Map.map
+                        (List.map (fun (n, e) ->
+                             (n, Naming.replace_qualid_root ~source ~target e)))
+                 in
+                 let mutual =
+                   r.mutual
+                   |> Option.map (fun (m : MutualRecursor.t) ->
+                          let mutual_recursor =
+                            Naming.replace_qualid_root ~source ~target
+                              m.mutual_recursor
+                          in
+                          let mutual_handlers =
+                            m.mutual_handlers
+                            |> List.map (fun (n, e) ->
+                                   ( n,
+                                     Naming.replace_qualid_root ~source ~target
+                                       e ))
+                          in
+                          MutualRecursor.{ mutual_recursor; mutual_handlers })
+                 in
+                 Recursor.{ recursors; handlers; mutual })
+        in
+        InductiveDefinition
           {
             definition with
             recursors;
@@ -523,15 +544,15 @@ end = struct
               VernacInductive.path_subtitution definition.inductive ~source
                 ~target;
           }
-    | FieldDefinition field -> 
-       let default_ctx_params = path_subst_ctx field.default_ctx_params in
-       FieldDefinition { field with default_ctx_params; }
-    | RecursorDefinition definition -> 
-       let default_ctx_params = path_subst_ctx definition.default_ctx_params in
-       RecursorDefinition { definition with default_ctx_params }
-    | TheoremDefinition definition -> 
-       let default_ctx_params = path_subst_ctx definition.default_ctx_params in
-       TheoremDefinition { definition with default_ctx_params }
+    | FieldDefinition field ->
+        let default_ctx_params = path_subst_ctx field.default_ctx_params in
+        FieldDefinition { field with default_ctx_params }
+    | RecursorDefinition definition ->
+        let default_ctx_params = path_subst_ctx definition.default_ctx_params in
+        RecursorDefinition { definition with default_ctx_params }
+    | TheoremDefinition definition ->
+        let default_ctx_params = path_subst_ctx definition.default_ctx_params in
+        TheoremDefinition { definition with default_ctx_params }
 
   and path_subtitution linkage ~source ~target =
     let f (name, elem) = (name, path_substitution_elem elem ~source ~target) in
@@ -555,12 +576,17 @@ end
 (* A scope is a plugin command enriched with a name and a "closing" handler *)
 (* `close` is a generic handle that is called to close the scope *)
 module PluginCmdScope = struct
-  type t = { command : PluginCmd.t; names : Names.Id.t list; close : unit -> unit }
+  type t = {
+    command : PluginCmd.t;
+    names : Names.Id.t list;
+    close : unit -> unit;
+  }
 end
 
-module Frec_arg = struct  
-   type t = 
-     { name: Names.Id.t; 
-       inductive: Libnames.qualid;
-       motive: Constrexpr.constr_expr }
+module Frec_arg = struct
+  type t = {
+    name : Names.Id.t;
+    inductive : Libnames.qualid;
+    motive : Constrexpr.constr_expr;
+  }
 end

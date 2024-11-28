@@ -56,77 +56,74 @@ let start_proving () =
         (Tacexpr.TacArg
            (Tacexpr.TacCall
               (CAst.make
-                 ( Libnames.qualid_of_ident
-                     (Names.Id.of_string "idtac"),
-                   [] ))))
+                 (Libnames.qualid_of_ident (Names.Id.of_string "idtac"), []))))
     in
     Tacinterp.interp idtac
   in
-  let combine_tactics ~tactics = 
+  let combine_tactics ~tactics =
     List.fold_right (fun t rest -> Tacticals.tclTHEN t rest) tactics idtac
   in
   let unfold_motive_precisely name =
-    let self__motive = 
-      Resolver.resolve_qualid ~context:(Context.get ()) 
+    let self__motive =
+      Resolver.resolve_qualid ~context:(Context.get ())
         ~qualid:(Libnames.qualid_of_ident (Naming.motive_of name))
-    in 
-    let self__motive_tactic =
-      (Tacexpr.TacCall
-         (CAst.make
-            ( self__motive,
-              [] )))      
     in
+    let self__motive_tactic = Tacexpr.TacCall (CAst.make (self__motive, [])) in
     let unfold_self_motive =
       CAst.make
         (Tacexpr.TacArg
            (Tacexpr.TacCall
               (CAst.make
-                 ( Libnames.qualid_of_ident
-                     (Names.Id.of_string "__funfold"),
-                   [self__motive_tactic] ))))
+                 ( Libnames.qualid_of_ident (Names.Id.of_string "__funfold"),
+                   [ self__motive_tactic ] ))))
     in
     Tacinterp.interp unfold_self_motive
-  in    
+  in
   let unfold_motives_precisely =
     let tactics = names |> List.map unfold_motive_precisely in
     combine_tactics ~tactics
-  in 
+  in
   let split_cases_into_goals =
     let helper =
       CAst.make
         (Tacexpr.TacArg
            (Tacexpr.TacCall
               (CAst.make
-                 (Libnames.qualid_of_ident (Names.Id.of_string "split_cases_into_goals"), []))))
+                 ( Libnames.qualid_of_ident
+                     (Names.Id.of_string "split_cases_into_goals"),
+                   [] ))))
     in
     Tacinterp.interp helper
-  in  
+  in
   let starting_operation =
-    combine_tactics ~tactics:[ unfold_motives_precisely; split_cases_into_goals ]      
+    combine_tactics
+      ~tactics:[ unfold_motives_precisely; split_cases_into_goals ]
   in
   let ongoing_proof, _ = Declare.Proof.by starting_operation ongoing_proof in
   ongoing_proof
 
-let open_theorem ~(args : Frec_arg.t list) =    
+let open_theorem ~(args : Frec_arg.t list) =
   let rec split3 xs =
     match xs with
-    | [] -> [], [], []
+    | [] -> ([], [], [])
     | (a, b, c) :: xs ->
-       let (as', bs, cs) = split3 xs in
-       (a :: as', b :: bs, c :: cs)
-  in 
+        let as', bs, cs = split3 xs in
+        (a :: as', b :: bs, c :: cs)
+  in
 
   let names, inductive_paths, motives =
     args
-    |> List.map (fun Frec_arg.{ name; inductive; motive } -> name, inductive, motive)
+    |> List.map (fun Frec_arg.{ name; inductive; motive } ->
+           (name, inductive, motive))
     |> split3
   in
   names |> List.iter (fun name -> Inheritance.inherit_dependencies ~prefix:name);
-  
+
   let context = Context.get () in
   let motives =
     motives
-    |> List.map (fun motive -> Resolver.resolve_constrexpr ~context ~expression:motive)
+    |> List.map (fun motive ->
+           Resolver.resolve_constrexpr ~context ~expression:motive)
   in
   let inductive, recursors, _ =
     let inductive_path = List.hd inductive_paths in
@@ -134,57 +131,55 @@ let open_theorem ~(args : Frec_arg.t list) =
   in
   let suffix = RecKind.IndComplete in
   let recursor = RecursorStore.find suffix recursors in
-  let inherited_elem = Inheritance.lookup_field_in_base ~field:(List.hd names) ~context in 
-  let inherited_names, inherited_handlers,
-      inherited_handlers_table =
+  let inherited_elem =
+    Inheritance.lookup_field_in_base ~field:(List.hd names) ~context
+  in
+  let inherited_names, inherited_handlers, inherited_handlers_table =
     match inherited_elem with
     | Some (TheoremDefinition { names; handlers; handlers_table; _ }) ->
-       names, handlers, handlers_table
-    | _ -> [], [], []
-  in  
+        (names, handlers, handlers_table)
+    | _ -> ([], [], [])
+  in
   let () =
-    List.iter2 (fun name motive ->
+    List.iter2
+      (fun name motive ->
         if not (List.mem name inherited_names) then
           let motive_name = Naming.motive_of name in
           Definition.add_definition ~name:motive_name motive)
-      names
-      motives
+      names motives
   in
   let context = Context.get () in
   let compiled_context, parameters =
-    Codegen.compile_linkage_context ~field_name:(Naming.concat_names names) context
+    Codegen.compile_linkage_context
+      ~field_name:(Naming.concat_names names)
+      context
   in
   let handler_names =
     inductive_paths
     |> List.map Naming.extract_path_base
     |> List.concat_map (fun inductive_name ->
-       inductive
-       |> VernacInductive.create_inductive_constructor_map
-       |> Names.Id.Map.find inductive_name)
-  in 
+           inductive |> VernacInductive.create_inductive_constructor_map
+           |> Names.Id.Map.find inductive_name)
+  in
   (*let implementing_handler_names = handler_names in*)
   let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
   let inherited_handlers = inherited_handlers |> List.concat_map snd in
   let implementing_handler_names =
     handler_names |> List.filter (fun x -> not (inside x inherited_handlers))
-  in  
+  in
   let handler_types =
     Termutils.handler_type_for_recursion ~names ~inductive_paths ~recursor
     |> List.filter_map (fun (name, handler_type) ->
            if inside name implementing_handler_names then Some handler_type
            else None)
   in
-  let goal =
-    Termutils.calculate_inductive_proof_goal
-      ~handler_types
-      ~suffix
-  in
+  let goal = Termutils.calculate_inductive_proof_goal ~handler_types ~suffix in
   let rec_principle_prefix =
     let inductive_path = List.hd inductive_paths in
     Codegen.calculate_rec_principle_prefix ~inductive_path ~context
   in
   let goal_name = Naming.fresh_name ~prefix:"Goal" in
-  let module_name = goal_name in  
+  let module_name = goal_name in
   let ctx =
     Ctx.
       {
@@ -211,31 +206,32 @@ let open_theorem_extension ~(names : Names.Id.t list) =
   names |> List.iter (fun name -> Inheritance.inherit_dependencies ~prefix:name);
   let context = Context.get () in
   let compiled_context, parameters =
-    Codegen.compile_linkage_context ~field_name:(Naming.concat_names names) context
+    Codegen.compile_linkage_context
+      ~field_name:(Naming.concat_names names)
+      context
   in
   let elem = Inheritance.lookup_field_in_base ~field:(List.hd names) ~context in
   let inductive_paths, inherited_handlers, suffix, inherited_handlers_table =
     match elem with
     | None -> Errors.fail ~info:"There is no such FInduction in a base family"
     | Some
-        (LinkageElem.TheoremDefinition { inductive_paths; handlers; suffix; handlers_table; _ })
-      ->
+        (LinkageElem.TheoremDefinition
+          { inductive_paths; handlers; suffix; handlers_table; _ }) ->
         (inductive_paths, handlers, suffix, handlers_table)
     | _ -> Errors.fail ~info:"Expected to inherit an FInduction"
   in
   let inductive, recursors, _ =
-    let inductive_path = List.hd inductive_paths in 
+    let inductive_path = List.hd inductive_paths in
     Context.lookup_inductive_for_recursion ~name:inductive_path context
   in
-  let recursor = RecursorStore.find suffix recursors in  
+  let recursor = RecursorStore.find suffix recursors in
   let handler_names =
     inductive_paths
     |> List.map Naming.extract_path_base
     |> List.concat_map (fun inductive_name ->
-       inductive
-       |> VernacInductive.create_inductive_constructor_map
-       |> Names.Id.Map.find inductive_name)
-  in 
+           inductive |> VernacInductive.create_inductive_constructor_map
+           |> Names.Id.Map.find inductive_name)
+  in
   let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
   let inherited_handlers = inherited_handlers |> List.concat_map snd in
   let implementing_handler_names =
@@ -276,29 +272,30 @@ let open_theorem_extension ~(names : Names.Id.t list) =
   Ctx.update ctx;
   prepare_proving ()
 
-let add_recursive_axiom ~names = 
+let add_recursive_axiom ~names =
   names |> List.iter (fun name -> Inheritance.inherit_dependencies ~prefix:name);
   let context = Context.get () in
-  let family_name = Naming.concat_names names in  
+  let family_name = Naming.concat_names names in
   let default_ctx_params =
     context |> Context.family_linkage |> function
     | { default_ctx_params; _ } -> default_ctx_params
   in
   names
   |> List.iter (fun name ->
-     let axiom_name = Naming.recursive_axiom_name name in
-     let context = Context.get () in    
-     let compiled_context, parameters =
-       Codegen.compile_linkage_context ~field_name:family_name context
-     in      
-     let compiled_signature =
-       Codegen.compile_recursive_definition_signature
-         ~names:[name] ~ctx:parameters ~family_name
-     in
-     let elem =
-       LinkageElem.RecursiveAxiom { compiled_context; compiled_signature; default_ctx_params; }
-     in
-     Context.add_field ~name:axiom_name ~elem)
+         let axiom_name = Naming.recursive_axiom_name name in
+         let context = Context.get () in
+         let compiled_context, parameters =
+           Codegen.compile_linkage_context ~field_name:family_name context
+         in
+         let compiled_signature =
+           Codegen.compile_recursive_definition_signature ~names:[ name ]
+             ~ctx:parameters ~family_name
+         in
+         let elem =
+           LinkageElem.RecursiveAxiom
+             { compiled_context; compiled_signature; default_ctx_params }
+         in
+         Context.add_field ~name:axiom_name ~elem)
 
 let close_theorem () =
   let Ctx.
@@ -336,18 +333,17 @@ let close_theorem () =
   let implemented_handlers =
     Termutils.extract_handlers_from_inductive_proof implementing_handler_names
       (mkIdentC goal_name) suffix
-  in  
+  in
   let inductive_names = inductive_paths |> List.map Naming.extract_path_base in
-  (* We want the names to be in the right order *)  
-  let handlers =     
+  (* We want the names to be in the right order *)
+  let handlers =
     inductive_names
     |> List.map (fun inductive_name ->
-       let handlers = 
-         inductive
-         |> VernacInductive.create_inductive_constructor_map
-         |> Names.Id.Map.find inductive_name
-       in
-       (inductive_name, handlers))
+           let handlers =
+             inductive |> VernacInductive.create_inductive_constructor_map
+             |> Names.Id.Map.find inductive_name
+           in
+           (inductive_name, handlers))
   in
   let implemented_handlers =
     List.map (fun (name, expr) -> (name, expr)) implemented_handlers
@@ -367,13 +363,13 @@ let close_theorem () =
            (handler, Naming.handler_name ~recursors:names ~case:handler))
   in
   let handlers_table = inherited_handlers_table @ handlers_table in
-  let context = Context.get () in  
+  let context = Context.get () in
   let compiled_context, parameters =
-    Codegen.compile_linkage_context ~field_name:(Naming.concat_names names) context
+    Codegen.compile_linkage_context
+      ~field_name:(Naming.concat_names names)
+      context
   in
-  let compiled_signature =
-    Codegen.compile_empty_signature ~ctx:parameters
-  in
+  let compiled_signature = Codegen.compile_empty_signature ~ctx:parameters in
   let elem =
     LinkageElem.TheoremDefinition
       {
@@ -390,12 +386,16 @@ let close_theorem () =
   let name = List.hd names in
   Context.add_field ~name ~elem;
 
-  (* Add non-inherited names axioms *)  
-  let defined_names = names |> List.filter (fun n -> not (List.mem n inherited_names)) in
-  if not (List.is_empty defined_names) then add_recursive_axiom ~names:defined_names ;
+  (* Add non-inherited names axioms *)
+  let defined_names =
+    names |> List.filter (fun n -> not (List.mem n inherited_names))
+  in
+  if not (List.is_empty defined_names) then
+    add_recursive_axiom ~names:defined_names;
 
   (* Inherit axioms *)
   inherited_names
-  |> List.iter (fun n -> Inheritance.inherit_name ~name:(Naming.recursive_axiom_name n));
-  
+  |> List.iter (fun n ->
+         Inheritance.inherit_name ~name:(Naming.recursive_axiom_name n));
+
   Ctx.clear ()
