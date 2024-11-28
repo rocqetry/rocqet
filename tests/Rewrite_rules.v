@@ -13,10 +13,14 @@ Symbol App : expr -> expr -> expr.
 
 Symbol size : expr -> nat.
 
+Definition size_Var_handler := fun (x:nat) => 0.
+Definition size_Abs_handler := fun (x:nat) (x: expr) (size_x: nat) => 1 + size_x.
+Definition size_App_handler := fun (x: expr) (size_x: nat) (y: expr) (size_y: nat) => size_x + size_y.
+
 Rewrite Rules size_rew :=
-| size (Var ?x) => 0
-| size (Abs ?x ?y) => 1 + size ?y
-| size (App ?x ?y) => size ?x + size ?y.
+| size (Var ?x) => size_Var_handler ?x
+| size (Abs ?x ?y) => size_Abs_handler ?x ?y (size ?y)
+| size (App ?x ?y) => size_App_handler ?x (size ?x) ?y (size ?y).
 
 Lemma blah : forall n:nat, size (Var n) = 0.
 Proof.
