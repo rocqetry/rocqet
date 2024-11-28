@@ -3232,9 +3232,50 @@ FEnd C.
 
 Trait Clight_Sloop extends Clight.
 FInductive stmt : Type :=
-  | Sloop: stmt -> stmt -> stmt (* infinite loop *)
-  | Sbreak : stmt (* break statement *)
-  | Scontinue : stmt. (* continue statement *)
+| Sloop: stmt -> stmt -> stmt (* infinite loop *)
+| Sbreak : stmt (* break statement *)
+| Scontinue : stmt. (* continue statement *)
+
+FInductive cont : Type :=
+| Kloop1: stmt -> stmt -> cont -> cont
+| Kloop2: stmt -> stmt -> cont -> cont.
+
+FRecursion call_cont.
+Case Kloop1 s1 s2 k := (call_cont k).
+Case Kloop2 s1 s2 k := (call_cont k).
+FEnd call_cont.
+
+FRecursion is_call_cont.
+Case _ := False.
+FEnd is_call_cont.
+
+FRecursion find_label with find_label_ls.
+Case Sloop s1 s2 :=
+  (fun lbl k =>
+      match find_label s1 lbl (Kloop1 s1 s2 k) with
+      | Some sk => Some sk
+      | None => find_label s2 lbl (Kloop2 s1 s2 k)
+      end).
+Case _ := (fun lbl k => None).
+FEnd find_label with find_label_ls.
+
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_loop : forall ge f s1 s2 k e le m,
+    step ge (self__Clight_Sloop.State f (Sloop s1 s2) k e le m)
+      E0 (self__Clight_Sloop.State f s1 (Kloop1 s1 s2 k) e le m)
+| step_skip_or_continue_loop1 : forall ge f s1 s2 k e le m x,
+    x = Sskip \/ x = Scontinue ->
+    step ge (self__Clight_Sloop.State f x (Kloop1 s1 s2 k) e le m)
+      E0 (self__Clight_Sloop.State f s2 (Kloop2 s1 s2 k) e le m)
+| step_break_loop1 : forall ge f s1 s2 k e le m,
+    step ge (self__Clight_Sloop.State f Sbreak (Kloop1 s1 s2 k) e le m)
+      E0 (self__Clight_Sloop.State f Sskip k e le m)
+| step_skip_loop2 : forall ge f s1 s2 k e le m,
+    step ge (self__Clight_Sloop.State f Sskip (Kloop2 s1 s2 k) e le m)
+      E0 (self__Clight_Sloop.State f (Sloop s1 s2) k e le m)
+| step_break_loop2 : forall ge f s1 s2 k e le m,
+    step ge (self__Clight_Sloop.State f Sbreak (Kloop2 s1 s2 k) e le m)
+      E0 (self__Clight_Sloop.State f Sskip k e le m).
 FEnd Clight_Sloop.
 
 Family Clight extends Clight_Sloop.
