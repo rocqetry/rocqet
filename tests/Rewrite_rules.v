@@ -22,4 +22,8 @@ Lemma blah : forall n:nat, size (Var n) = 0.
 Proof.
   intros. simpl. reflexivity.
 Qed.
+
+Require Extraction.
+
+Extraction size.
   
