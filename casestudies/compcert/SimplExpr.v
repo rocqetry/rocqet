@@ -3073,21 +3073,158 @@ FEnd Base.
 
 Trait Comp_Loops extends Base.
 
-Trait C_Swhile extends C.
+Trait C_Sbreak_Scontinue extends C.
 FInductive stmt : Type :=
-  | Swhile : expr -> stmt -> stmt(* while loop *)
-  | Sbreak : stmt(* break stmt *)
-  | Scontinue : stmt. (* continue statement *)
+  | Sbreak : stmt
+  | Scontinue : stmt.
+
+FRecursion find_label with find_label_ls.
+Case _ := (fun lbl k => None).
+FEnd find_label with find_label_ls.
+FEnd C_Sbreak_Scontinue.
+
+Trait C_Swhile extends C_Sbreak_Scontinue.
+FInductive stmt : Type :=
+  | Swhile : expr -> stmt -> stmt.
+
+FInductive cont : Type :=
+  | Kwhile1 : expr -> stmt -> cont -> cont
+  | Kwhile2 : expr -> stmt -> cont -> cont.
+
+FRecursion call_cont.
+Case Kwhile1 e s k := (call_cont k).
+Case Kwhile2 e s k := (call_cont k).
+FEnd call_cont.
+
+FRecursion is_call_cont.
+Case _ := False.
+FEnd is_call_cont.
+
+FRecursion find_label with find_label_ls.
+Case Swhile a s1 := (fun lbl k => find_label s1 lbl (Kwhile2 a s1 k)).
+FEnd find_label with find_label_ls.
+
+FInductive sstep : genv -> state -> trace -> state -> Prop  :=
+| step_while : forall ge f x s k e m,
+    sstep ge (self__C_Swhile.State f (Swhile x s) k e m)
+      E0 (self__C_Swhile.ExprState f x (Kwhile1 x s k) e m)
+| step_while_false : forall ge f v ty x s k e m,
+    bool_val v ty m = Some false ->
+    sstep ge (self__C_Swhile.ExprState f (Eval v ty) (Kwhile1 x s k) e m)
+      E0 (self__C_Swhile.State f Sskip k e m)
+| step_while_true : forall ge f v ty x s k e m ,
+    bool_val v ty m = Some true ->
+    sstep ge (self__C_Swhile.ExprState f (Eval v ty) (Kwhile1 x s k) e m)
+      E0 (self__C_Swhile.State f s (Kwhile2 x s k) e m)
+| step_skip_or_continue_while : forall ge f s0 x s k e m,
+    s0 = Sskip \/ s0 = Scontinue ->
+    sstep ge (self__C_Swhile.State f s0 (Kwhile2 x s k) e m)
+      E0 (self__C_Swhile.State f (Swhile x s) k e m)
+| step_break_while : forall ge f x s k e m,
+    sstep ge (self__C_Swhile.State f Sbreak (Kwhile2 x s k) e m)
+      E0 (self__C_Swhile.State f Sskip k e m).
 FEnd C_Swhile.
 
-Trait C_Sdowhile extends C.
+Trait C_Sdowhile extends C_Sbreak_Scontinue.
 FInductive stmt : Type :=
 | Sdowhile : expr -> stmt -> stmt. (* do loop *)
+
+FInductive cont : Type :=
+| Kdowhile1 : expr -> stmt -> cont -> cont
+| Kdowhile2 : expr -> stmt -> cont -> cont.
+
+FRecursion call_cont.
+Case Kdowhile1 e s k := (call_cont k).
+Case Kdowhile2 e s k := (call_cont k).
+FEnd call_cont.
+
+FRecursion is_call_cont.
+Case _ := False.
+FEnd is_call_cont.
+
+FRecursion find_label with find_label_ls.
+Case Sdowhile a s1 := (fun lbl k => find_label s1 lbl (Kdowhile1 a s1 k)).
+FEnd find_label with find_label_ls.
+
+FInductive sstep : genv -> state -> trace -> state -> Prop :=
+| step_dowhile : forall ge f a s k e m,
+    sstep ge (self__C_Sdowhile.State f (Sdowhile a s) k e m)
+      E0 (self__C_Sdowhile.State f s (Kdowhile1 a s k) e m)
+| step_skip_or_continue_dowhile : forall ge f s0 x s k e m,
+    s0 = Sskip \/ s0 = Scontinue ->
+    sstep ge (self__C_Sdowhile.State f s0 (Kdowhile1 x s k) e m)
+        E0 (self__C_Sdowhile.ExprState f x (Kdowhile2 x s k) e m)
+| step_dowhile_false : forall ge f v ty x s k e m,
+    bool_val v ty m = Some false ->
+    sstep ge (self__C_Sdowhile.ExprState f (Eval v ty) (Kdowhile2 x s k) e m)
+        E0 (self__C_Sdowhile.State f Sskip k e m)
+| step_dowhile_true : forall ge f v ty x s k e m,
+    bool_val v ty m = Some true ->
+    sstep ge (self__C_Sdowhile.ExprState f (Eval v ty) (Kdowhile2 x s k) e m)
+        E0 (self__C_Sdowhile.State f (Sdowhile x s) k e m)
+| step_break_dowhile : forall ge f a s k e m,
+    sstep ge (self__C_Sdowhile.State f Sbreak (Kdowhile1 a s k) e m)
+        E0 (self__C_Sdowhile.State f Sskip k e m).
 FEnd C_Sdowhile.
 
-Trait C_Sfor extends C.
+Trait C_Sfor extends C_Sbreak_Scontinue.
 FInductive stmt : Type :=
-| Sfor: stmt -> expr -> stmt -> stmt -> stmt. (* for loop *)
+| Sfor : stmt -> expr -> stmt -> stmt -> stmt. (* for loop *)
+
+FInductive cont : Type :=
+| Kfor2 : expr -> stmt -> stmt -> cont -> cont
+| Kfor3 : expr -> stmt -> stmt -> cont -> cont
+| Kfor4 : expr -> stmt -> stmt -> cont -> cont.
+
+FRecursion call_cont.
+Case Kfor2 e2 e3 s k := (call_cont k).
+Case Kfor3 e2 e3 s k := (call_cont k).
+Case Kfor4 e2 e3 s k := (call_cont k).
+FEnd call_cont.
+
+FRecursion is_call_cont.
+Case _ := False.
+FEnd is_call_cont.
+
+FRecursion find_label with find_label_ls.
+Case Sfor a1 a2 a3 s1 :=
+  (fun lbl k =>
+      match find_label a1 lbl (Kseq (Sfor Sskip a2 a3 s1) k) with
+      | Some sk => Some sk
+      | None =>
+          match find_label s1 lbl (Kfor3 a2 a3 s1 k) with
+          | Some sk => Some sk
+          | None => find_label a3 lbl (Kfor4 a2 a3 s1 k)
+          end
+      end).
+FEnd find_label with find_label_ls.
+
+FInductive sstep : genv -> state -> trace -> state -> Prop :=
+| step_for_start : forall ge f a1 a2 a3 s k e m,
+    a1 <> Sskip ->
+    sstep ge (self__C_Sfor.State f (Sfor a1 a2 a3 s) k e m)
+        E0 (self__C_Sfor.State f a1 (Kseq (Sfor Sskip a2 a3 s) k) e m)
+| step_for : forall ge f a2 a3 s k e m,
+    sstep ge (self__C_Sfor.State f (Sfor Sskip a2 a3 s) k e m)
+        E0 (self__C_Sfor.ExprState f a2 (Kfor2 a2 a3 s k) e m)
+| step_for_false : forall ge f v ty a2 a3 s k e m,
+    bool_val v ty m = Some false ->
+    sstep ge (self__C_Sfor.ExprState f (Eval v ty) (Kfor2 a2 a3 s k) e m)
+        E0 (self__C_Sfor.State f Sskip k e m)
+| step_for_true : forall ge f v ty a2 a3 s k e m,
+    bool_val v ty m = Some true ->
+    sstep ge (self__C_Sfor.ExprState f (Eval v ty) (Kfor2 a2 a3 s k) e m)
+        E0 (self__C_Sfor.State f s (Kfor3 a2 a3 s k) e m)
+| step_skip_or_continue_for3 : forall ge f x a2 a3 s k e m,
+    x = Sskip \/ x = Scontinue ->
+    sstep ge (self__C_Sfor.State f x (Kfor3 a2 a3 s k) e m)
+        E0 (self__C_Sfor.State f a3 (Kfor4 a2 a3 s k) e m)
+| step_break_for3 : forall ge f a2 a3 s k e m,
+    sstep ge (self__C_Sfor.State f Sbreak (Kfor3 a2 a3 s k) e m)
+        E0 (self__C_Sfor.State f Sskip k e m)
+| step_skip_for4 : forall ge f a2 a3 s k e m,
+    sstep ge (self__C_Sfor.State f Sskip (Kfor4 a2 a3 s k) e m)
+        E0 (self__C_Sfor.State f (Sfor Sskip a2 a3 s) k e m).
 FEnd C_Sfor.
 
 Family C extends C_Swhile, C_Sdowhile, C_Sfor.
