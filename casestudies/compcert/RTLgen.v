@@ -957,6 +957,33 @@ FDefinition measure_state := fun (s: S.state) =>
 FDefinition lt_state := fun (S1 S2: S.state) =>
   lex_ord lt lt (measure_state S1) (measure_state S2).
 
+FLemma lt_state_intro:
+  forall f1 s1 k1 sp1 e1 m1 f2 s2 k2 sp2 e2 m2,
+  size_stmt s1 + size_cont k1 < size_stmt s2 + size_cont k2
+  \/ (size_stmt s1 + size_cont k1 = size_stmt s2 + size_cont k2
+      /\ size_stmt s1 < size_stmt s2) ->
+  lt_state (S.State f1 s1 k1 sp1 e1 m1)
+           (S.State f2 s2 k2 sp2 e2 m2).
+FProofLemma.
+intros. unfold self__RTLgen.lt_state. simpl. destruct H as [A | [A B]].
+  left. auto. rewrite A. right. auto. 
+Qed. CloseFLemma.
+
+MetaData Lt_state.
+Import self__RTLgen.
+Ltac Lt_state :=
+  apply lt_state_intro; simpl; try lia.
+FEnd Lt_state.
+
+(* Inductive tr_stmt (c: code) (map: mapping):
+     stmt -> node -> node -> list node -> labelmap -> node -> option reg -> Prop :=
+  | tr_Sskip: forall ns nexits ngoto nret rret,
+     tr_stmt c map Sskip ns ns nexits ngoto nret rret *)
+
+(*Closing Fact tr_stmt_skip_inv: 
+  forall c map ns nexits ngoto nret rret,
+  tr_stmt c map Sskip ns ns nexits ngoto nret rret -> *)
+ 
 FInduction transl_step_correct about S.step
   motive (fun ge S1 t S2 (_ : S.step ge S1 t S2) =>
   forall prog tprog tge, match_prog prog tprog -> 
@@ -966,7 +993,10 @@ FInduction transl_step_correct about S.step
   (plus T.step tge R1 t R2 \/ (star T.step tge R1 t R2 /\ lt_state S2 S1))
   /\ match_states S2 R2).
 FProof.
-+ apply cheat.
+all: intros; inv MS.
++ inv TK. econstructor; split. 
+  right; split. apply star_refl. self__RTLgen.Lt_state.
+  econstructor; eauto.
 + apply cheat.
 + apply cheat.
 + apply cheat.
