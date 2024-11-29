@@ -1,28 +1,28 @@
-From NFPOP Require Import Loader.
+From Rocqet Require Import Loader.
 
-From NFPOP Require Import Coqlib.
-From NFPOP Require Import Errors.
-From NFPOP Require Import Values.
-From NFPOP Require Import AST.
-From NFPOP Require Import Integers. 
-From NFPOP Require Import Floats.
-From NFPOP Require Import Memory.
-From NFPOP Require Import Globalenvs.
-From NFPOP Require Import Smallstep.
-From NFPOP Require Import Events.
-From NFPOP Require Import Maps.
-From NFPOP Require Import Linking.
-Require Import NFPOP.CompCert.lib.Ctypes.
-From NFPOP Require Import Cop.
-From NFPOP Require Import Mon.
+From Rocqet Require Import Coqlib.
+From Rocqet Require Import Errors.
+From Rocqet Require Import Values.
+From Rocqet Require Import AST.
+From Rocqet Require Import Integers. 
+From Rocqet Require Import Floats.
+From Rocqet Require Import Memory.
+From Rocqet Require Import Globalenvs.
+From Rocqet Require Import Smallstep.
+From Rocqet Require Import Events.
+From Rocqet Require Import Maps.
+From Rocqet Require Import Linking.
+Require Import Rocqet.CompCert.lib.Ctypes.
+From Rocqet Require Import Cop.
+From Rocqet Require Import Mon.
 Require Import FSets.
 Require Import FSetAVL.
 Require Import Orders.
 Require Import Mergesort.
 Require Import Ordered.
 Require Import Coq.ZArith.ZArith.
-From NFPOP Require Import Prelude.
-From NFPOP Require Import Op.
+From Rocqet Require Import Prelude.
+From Rocqet Require Import Op.
 
 Local Open Scope string_scope.
 Local Open Scope list_scope.
@@ -61,6 +61,149 @@ FDefinition funsig := fun (fd: fundef) =>
   | AST.External ef => ef_sig ef
   end.
 
+FDefinition genv := Genv.t fundef unit.
+       
+(* Function env/stack space *)
+FOpaque Definition fenv : Type := cheat.
+FOpaque Definition empty_fenv : fenv := cheat.
+       
+FDefinition env := PTree.t val.            
+FDefinition empty_env : env := PTree.empty val.
+       
+MetaData set_params.
+Fixpoint set_params (vl: list val) (il: list ident) {struct il} : self__Cfam.env :=
+ match il, vl with
+ | i1 :: is, v1 :: vs => PTree.set i1 v1 (set_params vs is)
+ | i1 :: is, nil => PTree.set i1 Vundef (set_params nil is)
+ | _, _ => PTree.empty val
+ end.
+FEnd set_params.
+
+MetaData set_locals.
+Fixpoint set_locals (il: list ident) (e: self__Cfam.env) {struct il} : self__Cfam.env :=
+  match il with
+  | nil => e
+  | i1 :: is => PTree.set i1 Vundef (set_locals is e)
+  end.
+FEnd set_locals.
+       
+FDefinition init_env : function -> list val -> env := fun f vargs => 
+  set_locals (function_locals f) (set_params vargs (function_params f)).            
+
+(* Semantics for allocation of variables and binding of parameters at function entry. *)
+FOpaque Definition free_fenv : mem -> fenv -> function -> option mem := cheat.            
+FOpaque Definition alloc_fenv : fenv -> mem -> function -> fenv -> mem -> Prop := cheat.
+       
+MetaData create_undef_temps.
+Fixpoint create_undef_temps (temps: list ident) : self__Cfam.env :=
+ match temps with
+ | nil => PTree.empty val
+ | id :: temps' => PTree.set id Vundef (create_undef_temps temps')
+end.
+FEnd create_undef_temps.
+
+MetaData bind_parameters.
+Fixpoint bind_parameters (formals: list ident) (args: list val)
+             (le: self__Cfam.env) : option self__Cfam.env :=
+ match formals, args with
+ | nil, nil => Some le
+ | id :: xl, v :: vl => bind_parameters xl vl (PTree.set id v le)
+ | _, _ => None
+ end.
+FEnd bind_parameters.
+            
+FInductive cont: Type :=
+| Kstop: cont
+| Kseq: stmt -> cont -> cont.
+                   
+MetaData state.
+Inductive state: Type :=
+  | State:(* Execution within a function *)
+      forall (f: self__Cfam.function)(* currently executing function *)
+             (s: self__Cfam.stmt)(* statement under consideration *)
+             (k: self__Cfam.cont)(* its continuation -- what to do next *)
+             (sp: self__Cfam.fenv) (* current "function" environment: i.e stackspace, ... *)
+             (e: self__Cfam.env)(* current local environment *)
+             (m: mem),(* current memory state *)
+      state
+  | Callstate:(* Invocation of a function *)
+      forall (f: self__Cfam.fundef)(* function to invoke *)
+             (args: list val)(* arguments provided by caller *)
+             (k: self__Cfam.cont)(* what to do next *)
+             (m: mem),(* memory state *)
+      state
+  | Returnstate:(* Return from a function *)
+      forall (v: val)(* Return value *)
+             (k: self__Cfam.cont)(* what to do next *)
+             (m: mem),(* memory state *)
+      state.
+FEnd state.
+            
+FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
+Case Kstop := Kstop.
+Case Kseq := (fun s c call_cont_c => call_cont_c).             
+FEnd call_cont.
+               
+FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
+Case Kstop := True.                   
+Case Kseq := (fun s c call_cont_c => False).
+FEnd is_call_cont.              
+
+FDefinition letenv := list val.
+               
+FInductive eval_expr :  genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
+| eval_Evar: forall ge lenv e le m id v,
+    PTree.get id le = Some v ->
+    eval_expr ge e le m lenv (Evar id) v.
+                           
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_skip_seq: forall ge f s k e le m,
+    step ge (self__Cfam.State f Sskip (Kseq s k) e le m)
+      E0 (self__Cfam.State f s k e le m)              
+| step_skip_call: forall ge f k e le m m',
+    is_call_cont k ->                       
+    free_fenv m e f = Some m' ->
+    step ge (self__Cfam.State f Sskip k e le m)
+      E0 (self__Cfam.Returnstate Vundef k m')
+| step_assign: forall lenv ge f id a k e le m v,
+    eval_expr ge e le m lenv a v ->
+    step ge (self__Cfam.State f (Sassign id a) k e le m)
+      E0 (self__Cfam.State f Sskip k e (PTree.set id v le) m)
+| step_seq: forall ge f s1 s2 k e le m,
+    step ge (self__Cfam.State f (Sseq s1 s2) k e le m)
+      E0 (self__Cfam.State f s1 (Kseq s2 k) e le m)              
+| step_return_0: forall ge f k e le m m',                       
+    free_fenv m e f = Some m' ->
+    step ge (self__Cfam.State f (Sreturn None) k e le m)
+      E0 (self__Cfam.Returnstate Vundef (call_cont k) m')            
+| step_return_1: forall lenv ge f a k e le m v m',
+    eval_expr ge e le m lenv a v ->
+    free_fenv m e f = Some m' ->
+    step ge (self__Cfam.State f (Sreturn (Some a)) k e le m)
+      E0 (self__Cfam.Returnstate v (call_cont k) m')
+| step_internal_function: forall ge f vargs k m m1 e le,                                               
+    alloc_fenv empty_fenv m f e m1 ->
+    init_env f vargs = le ->                        
+     step ge (self__Cfam.Callstate (AST.Internal f) vargs k m)
+       E0 (self__Cfam.State f (function_body f) k e le m1).
+            
+MetaData initial_state.
+Inductive initial_state (p: self__Cfam.program): self__Cfam.state -> Prop :=
+| initial_state_intro: forall b f m0,
+    let ge := Genv.globalenv p in
+    Genv.init_mem p = Some m0 ->
+    Genv.find_symbol ge p.(AST.prog_main) = Some b ->
+    Genv.find_funct_ptr ge b = Some f ->
+    self__Cfam.funsig f = signature_main ->               
+    initial_state p (self__Cfam.Callstate f nil self__Cfam.Kstop m0).
+FEnd initial_state.
+            
+MetaData final_state.
+Inductive final_state: self__Cfam.state -> int -> Prop :=
+| final_state_intro: forall r m,
+   final_state (self__Cfam.Returnstate (Vint r) self__Cfam.Kstop m) r.
+FEnd final_state.
+
 FEnd Cfam.
 
 Family CminorSel extends Cfam.
@@ -95,12 +238,60 @@ FOverride Definition function_locals := self__CminorSel.fn_vars.
 FOverride Definition function_params := self__CminorSel.fn_params.
 FOverride Definition function_sig := self__CminorSel.fn_sig.
 
+(* stack pointer *)
+(* Vptr sp Ptrofs.zero *)
+FOverride Definition fenv := block.   
+FOverride Definition free_fenv := fun m sp f => Mem.free m sp 0 f.(self__CminorSel.fn_stackspace).          
+FOverride Definition alloc_fenv := fun sp m f sp' m' => Mem.alloc m 0 f.(self__CminorSel.fn_stackspace) = (m', sp).
+
+FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
+| eval_Eop: forall ge sp e m le op al vl v,
+    eval_exprlist ge sp e m le al vl ->
+    eval_operation ge (Vptr sp Ptrofs.zero) op vl m = Some v ->
+    eval_expr ge sp e m le (Eop op al) v              
+| eval_Econdition: forall ge sp e m le a b c va v,
+    eval_condexpr ge sp e m le a va ->
+    eval_expr ge sp e m le (if va then b else c) v ->
+    eval_expr ge sp e m le (Econdition a b c) v
+| eval_Elet: forall ge sp e m le a b v1 v2,
+    eval_expr ge sp e m le a v1 ->
+    eval_expr ge sp e m (v1 :: le) b v2 ->
+    eval_expr ge sp e m le (Elet a b) v2
+| eval_Eletvar: forall ge sp e m le n v,
+    nth_error le n = Some v ->
+    eval_expr ge sp e m le (Eletvar n) v
+with eval_exprlist: genv -> fenv -> env -> mem -> letenv -> exprlist -> list val -> Prop :=
+| eval_Enil: forall ge sp e m le,
+    eval_exprlist ge sp e m le Enil nil
+| eval_Econs: forall ge sp e m le a1 al v1 vl,
+    eval_expr ge sp e m le a1 v1 -> eval_exprlist ge sp e m le al vl ->
+    eval_exprlist ge sp e m le (Econs a1 al) (v1 :: vl)                  
+with eval_condexpr: genv -> fenv -> env -> mem -> letenv -> condexpr -> bool -> Prop :=
+| eval_CEcond: forall ge sp e m le cond al vl vb,
+    eval_exprlist ge sp e m le al vl ->
+    eval_condition cond vl m = Some vb ->
+    eval_condexpr ge sp e m le (CEcond cond al) vb
+| eval_CEcondition: forall ge sp e m le a b c va v,
+    eval_condexpr ge sp e m le a va ->
+    eval_condexpr ge sp e m le (if va then b else c) v ->
+    eval_condexpr ge sp e m le (CEcondition a b c) v
+| eval_CElet: forall ge sp e m le a b v1 v2,
+    eval_expr ge sp e m le a v1 ->
+    eval_condexpr ge sp e m (v1 :: le) b v2 ->
+    eval_condexpr ge sp e m le (CElet a b) v2.
+
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_ifthenelse: forall ge f c s1 s2 k sp e m b,
+   eval_condexpr ge sp e m nil c b ->
+   step ge (self__CminorSel.State f (Sifthenelse c s1 s2) k sp e m)
+     E0 (self__CminorSel.State f (if b then s1 else s2) k sp e m).
+
 FEnd CminorSel.
 
 Family RTL.
 FDefinition node := positive.
 
-From NFPOP Require Import Registers.
+From Rocqet Require Import Registers.
       
 FInductive instruction: Type :=
 | Inop: node -> instruction
@@ -130,9 +321,102 @@ FDefinition funsig := fun (fd: fundef) =>
   | AST.External ef => ef_sig ef
   end.
 
+(* operational semantics *)             
+FDefinition genv := Genv.t fundef unit.
+FDefinition regset := Regmap.t val.
+
+MetaData init_regs.
+Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : self__RTL.regset :=
+  match rl, vl with
+  | r1 :: rs, v1 :: vs => Regmap.set r1 v1 (init_regs vs rs)
+  | _, _ => Regmap.init Vundef
+  end.
+FEnd init_regs.
+
+MetaData stackframe binds Stackframe.
+Inductive stackframe : Type :=
+  | Stackframe:
+      forall (res: reg)(* where to store the result *)
+             (f: self__RTL.function)(* calling function *)
+             (sp: val)(* stack pointer in calling function *)
+             (pc: self__RTL.node)(* program point in calling function *)
+             (rs: self__RTL.regset),(* register state in calling function *)
+      stackframe.
+FEnd stackframe.
+
+MetaData state binds State, CallState, Returnstate.
+Inductive state : Type :=
+  | State:
+      forall (stack: list self__RTL.stackframe)(* call stack *)
+             (f: self__RTL.function)(* current function *)
+             (sp: val)(* stack pointer *)
+             (pc: self__RTL.node)(* current program point in c *)
+             (rs: self__RTL.regset)(* register state *)
+             (m: mem),(* memory state *)
+      state
+  | Callstate:
+      forall (stack: list self__RTL.stackframe)(* call stack *)
+             (f: self__RTL.fundef)(* function to call *)
+             (args: list val)(* arguments to the call *)
+             (m: mem),(* memory state *)
+      state
+  | Returnstate:
+      forall (stack: list self__RTL.stackframe)(* call stack *)
+             (v: val)(* return value for the call *)
+             (m: mem),(* memory state *)
+      state.           
+FEnd state.
+           
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_Inop:
+    forall ge s f sp pc rs m pc',
+    (self__RTL.fn_code f)!pc = Some(Inop pc') ->
+    step ge (State s f sp pc rs m)
+      E0 (State s f sp pc' rs m)
+| exec_Iop:
+    forall ge s f sp pc rs m op args res pc' v,
+    (self__RTL.fn_code f)!pc = Some(Iop op args res pc') ->
+    eval_operation ge sp op rs##args m = Some v ->
+    step ge (State s f sp pc rs m)
+      E0 (State s f sp pc' (rs#res <- v) m)
+| exec_Icond:
+    forall ge s f sp pc rs m cond args ifso ifnot b pc',
+    (self__RTL.fn_code f)!pc = Some(Icond cond args ifso ifnot) ->
+    eval_condition cond rs##args m = Some b ->
+    pc' = (if b then ifso else ifnot) ->
+    step ge (State s f sp pc rs m)
+      E0 (State s f sp pc' rs m)
+| exec_Ireturn:
+    forall ge s f stk pc rs m or m',
+    (self__RTL.fn_code f)!pc = Some(Ireturn or) ->
+    Mem.free m stk 0 f.(self__RTL.fn_stacksize) = Some m' ->
+    step ge (State s f (Vptr stk Ptrofs.zero) pc rs m)
+      E0 (Returnstate s (regmap_optget or Vundef rs) m')
+| exec_return:
+    forall ge res f sp pc rs s vres m,
+    step ge (Returnstate (Stackframe res f sp pc rs :: s) vres m)
+      E0 (State s f sp pc (rs#res <- vres) m).
+
+MetaData initial_state.
+Inductive initial_state (p: self__RTL.program): self__RTL.state -> Prop :=
+| initial_state_intro: forall b f m0,
+    let ge := Genv.globalenv p in
+    Genv.init_mem p = Some m0 ->
+    Genv.find_symbol ge p.(AST.prog_main) = Some b ->
+    Genv.find_funct_ptr ge b = Some f ->
+    self__RTL.funsig f = signature_main ->
+    initial_state p (self__RTL.Callstate nil f nil m0).
+FEnd initial_state.
+
+MetaData final_state.
+Inductive final_state: self__RTL.state -> int -> Prop :=
+   | final_state_intro: forall r m,
+      final_state (self__RTL.Returnstate nil (Vint r) m) r.
+FEnd final_state.
+
 FEnd RTL.
 
-From NFPOP Require Import RTLmonad.
+From Rocqet Require Import RTLmonad.
 
 (* CminorSel -> RTL *)
 Family RTLgen.
@@ -459,7 +743,7 @@ FEnd RTL_jumptable.
 Family RTL extends RTL_jumptable.
 FEnd RTL.
 
-From NFPOP Require Import RTLmonad.
+From Rocqet Require Import RTLmonad.
 
 Trait RTLgen_Sloop extends RTLgen.
 
@@ -570,7 +854,7 @@ Fixpoint convert_builtin_args {A: Type} (al: list (builtin_arg self__RTLgen.S.ex
   end.
 FEnd convert_builtin_args.
 
-From NFPOP Require Import RTLmonad.
+From Rocqet Require Import RTLmonad.
 
 FRecursion alloc_reg.
 Case _ := (fun map => new_reg).
@@ -644,7 +928,7 @@ FRecursion alloc_reg.
 Case Eload chunkn addr al := (fun map => new_reg).
 FEnd alloc_reg.
 
-From NFPOP Require Import RTLmonad.
+From Rocqet Require Import RTLmonad.
 FRecursion transl_expr
   with transl_exprlist
   with transl_condexpr.
@@ -697,7 +981,7 @@ Family S extends CminorSel. FEnd S.
 Family T extends RTL. FEnd T.
 
 Inherit alloc_regs.
-From NFPOP Require Import RTLmonad.
+From Rocqet Require Import RTLmonad.
 
 FDefinition alloc_optreg : mapping -> option ident -> mon reg := fun map dest =>
   match dest with
@@ -772,7 +1056,7 @@ Trait RTLgen_Switch extends RTLgen.
 
 Inherit labelmap.
 
-From NFPOP Require Import RTLmonad.
+From Rocqet Require Import RTLmonad.
 
 Inherit transl_exit.
 
