@@ -1,4 +1,5 @@
-
+(* -arg -allow-rewrite-rules*)
+                      
 Symbol pplus : nat -> nat -> nat.
 Infix "++" := pplus.
 Rewrite Rules pplus_rew :=
