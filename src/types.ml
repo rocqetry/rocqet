@@ -166,7 +166,7 @@ module VernacInductive = struct
         | ( Vernacexpr.Constructors base_constr,
             Vernacexpr.Constructors derived_constr ) ->
             Vernacexpr.Constructors
-              (remove_duplicates (fun (_, (n, _)) -> n) (base_constr @ derived_constr))
+              (remove_duplicates (fun (_, ((n: Names.lident), _)) -> n.v) (base_constr @ derived_constr))
         | _, _ -> Errors.fail ~info:"Record types are not yet supported"
       in
       let child_ind = (a, b, c, childcstrs) in
