@@ -683,10 +683,7 @@ FRecursion reserve_labels about S.stmt
 Case Sseq s1 s2 := (fun lm => do lm' <- reserve_labels s2 lm; reserve_labels s1 lm').
 Case Sifthenelse e s1 s2 := (fun lm => do lm' <- reserve_labels s2 lm; reserve_labels s1 lm').
 Case Slabel lbl s1 := (fun lm => do lm' <- reserve_labels s1 lm; alloc_label lbl lm').
-Case Sskip := (fun lm => ret lm).
-Case Sassign i e := (fun lm => ret lm).
-Case Sreturn a := (fun lm => ret lm).
-Case Sgoto lbl := (fun lm => ret lm).
+Case _ := (fun lm => ret lm).
 FEnd reserve_labels.
 
 FDefinition ret_reg : signature -> reg -> option reg :=
@@ -722,6 +719,283 @@ FDefinition transl_fundef := transf_partial_fundef transl_function.
 FDefinition transl_program : S.program -> Errors.res T.program := 
   fun (p: S.program) =>
      transform_partial_program transl_fundef p.                 
+
+(* relational spec *)
+
+FDefinition reg_in_map : mapping -> reg -> Prop := fun (m: mapping) (r: reg) =>
+  (exists id, m.(map_vars)!id = Some r) \/ In r m.(map_letvars).
+
+MetaData tr_move.
+Inductive tr_move (c: self__RTLgen.T.code): self__RTLgen.T.node -> reg -> self__RTLgen.T.node -> reg -> Prop :=
+| tr_move_0: forall n r,
+    tr_move c n r n r
+| tr_move_1: forall ns rs nd rd,
+    c!ns = Some (self__RTLgen.T.Iop Op.Omove (rs :: nil) rd nd) ->
+    tr_move c ns rs nd rd.
+FEnd tr_move.
+
+MetaData reg_map_ok.
+Inductive reg_map_ok: mapping -> reg -> option AST.ident -> Prop :=
+| reg_map_ok_novar: forall map rd,
+    ~self__RTLgen.reg_in_map map rd ->
+    reg_map_ok map rd None
+| reg_map_ok_somevar: forall map rd id,
+    map.(map_vars)!id = Some rd ->
+    reg_map_ok map rd (Some id).
+
+Global Hint Resolve reg_map_ok_novar: rtlg.
+FEnd reg_map_ok.
+
+(*MetaData reg_map_ok_open.
+Import self__RTLgen.
+FEnd reg_map_ok_open.*)
+                 
+FInductive tr_expr : T.code -> mapping -> list reg -> S.expr -> T.node -> T.node -> reg -> option AST.ident -> Prop :=
+| tr_Evar: forall c map pr id ns nd r rd dst,
+    map.(map_vars)!id = Some r ->
+    ((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr)) ->
+    tr_move c ns r nd rd ->
+    tr_expr c map pr (S.Evar id) ns nd rd dst            
+| tr_Eop: forall c map pr op al ns nd rd n1 rl dst,
+    tr_exprlist c map pr al ns n1 rl ->
+    c!n1 = Some (T.Iop op rl rd nd) ->
+    reg_map_ok map rd dst -> ~In rd pr ->
+    tr_expr c map pr (S.Eop op al) ns nd rd dst            
+| tr_Econdition: forall c map pr a ifso ifnot ns nd rd ntrue nfalse dst,
+    tr_condition c map pr a ns ntrue nfalse ->
+    tr_expr c map pr ifso ntrue nd rd dst ->
+    tr_expr c map pr ifnot nfalse nd rd dst ->
+    tr_expr c map pr (S.Econdition a ifso ifnot) ns nd rd dst
+| tr_Elet: forall c map pr b1 b2 ns nd rd n1 r dst,
+    ~reg_in_map map r ->
+    tr_expr c map pr b1 ns n1 r None ->
+    tr_expr c (add_letvar map r) pr b2 n1 nd rd dst ->
+    tr_expr c map pr (S.Elet b1 b2) ns nd rd dst
+| tr_Eletvar: forall c map pr n ns nd rd r dst,
+    List.nth_error map.(map_letvars) n = Some r ->
+    ((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr)) ->
+    tr_move c ns r nd rd ->
+    tr_expr c map pr (S.Eletvar n) ns nd rd dst
+with tr_condition : T.code -> mapping -> list reg -> S.condexpr -> T.node -> T.node -> T.node -> Prop :=
+| tr_CEcond: forall c map pr cond bl ns ntrue nfalse n1 rl,
+    tr_exprlist c map pr bl ns n1 rl ->
+    c!n1 = Some (T.Icond cond rl ntrue nfalse) ->
+    tr_condition c map pr (S.CEcond cond bl) ns ntrue nfalse
+| tr_CEcondition: forall c map pr a1 a2 a3 ns ntrue nfalse n2 n3,
+    tr_condition c map pr a1 ns n2 n3 ->
+    tr_condition c map pr a2 n2 ntrue nfalse ->
+    tr_condition c map pr a3 n3 ntrue nfalse ->
+    tr_condition c map pr (S.CEcondition a1 a2 a3) ns ntrue nfalse
+| tr_CElet: forall c map pr a b ns ntrue nfalse r n1,
+    ~reg_in_map map r ->
+    tr_expr c map pr a ns n1 r None ->
+    tr_condition c (add_letvar map r) pr b n1 ntrue nfalse ->
+    tr_condition c map pr (S.CElet a b) ns ntrue nfalse
+with tr_exprlist : T.code -> mapping -> list reg -> S.exprlist -> T.node -> T.node -> list reg -> Prop :=
+| tr_Enil: forall c map pr n,
+    tr_exprlist c map pr S.Enil n n nil
+| tr_Econs: forall c map pr a1 al ns nd r1 rl n1,
+    tr_expr c map pr a1 ns n1 r1 None ->
+    tr_exprlist c map (r1 :: pr) al n1 nd rl ->
+    tr_exprlist c map pr (S.Econs a1 al) ns nd (r1 :: rl).
+    
+FInductive tr_stmt : T.code -> mapping -> S.stmt -> T.node -> T.node -> list T.node -> labelmap -> T.node -> option reg -> Prop :=
+| tr_Sskip: forall c map ns nexits ngoto nret rret,
+    tr_stmt c map S.Sskip ns ns nexits ngoto nret rret            
+| tr_Sassign: forall c map id a ns nd nexits ngoto nret rret r,
+  map.(map_vars)!id = Some r ->
+  tr_expr c map nil a ns nd r (Some id) ->
+  tr_stmt c map (S.Sassign id a) ns nd nexits ngoto nret rret          
+| tr_Sseq: forall c map s1 s2 ns nd nexits ngoto nret rret n,
+  tr_stmt c map s2 n nd nexits ngoto nret rret ->
+  tr_stmt c map s1 ns n nexits ngoto nret rret ->
+  tr_stmt c map (S.Sseq s1 s2) ns nd nexits ngoto nret rret
+| tr_Sifthenelse: forall c map a strue sfalse ns nd nexits ngoto nret rret ntrue nfalse,
+  tr_stmt c map strue ntrue nd nexits ngoto nret rret ->
+  tr_stmt c map sfalse nfalse nd nexits ngoto nret rret ->
+  tr_condition c map nil a ns ntrue nfalse ->
+  tr_stmt c map (S.Sifthenelse a strue sfalse) ns nd nexits ngoto nret rret
+| tr_Sreturn_none: forall c map nret nd nexits ngoto rret,
+  tr_stmt c map (S.Sreturn None) nret nd nexits ngoto nret rret
+| tr_Sreturn_some: forall c map a ns nd nexits ngoto nret rret,
+  tr_expr c map nil a ns nret rret None ->
+  tr_stmt c map (S.Sreturn (Some a)) ns nd nexits ngoto nret (Some rret)
+| tr_Slabel: forall c map lbl s ns nd nexits ngoto nret rret n,
+  ngoto!lbl = Some n ->
+  c!n = Some (T.Inop ns) ->
+  tr_stmt c map s ns nd nexits ngoto nret rret ->
+  tr_stmt c map (S.Slabel lbl s) ns nd nexits ngoto nret rret
+| tr_Sgoto: forall c map lbl ns nd nexits ngoto nret rret,
+  ngoto!lbl = Some ns ->
+  tr_stmt c map (S.Sgoto lbl) ns nd nexits ngoto nret rret.   
+
+MetaData tr_function.
+Inductive tr_function: self__RTLgen.S.function -> self__RTLgen.T.function -> Prop :=
+| tr_function_intro:
+    forall f code rparams map1 s0 s1 i1 rvars map2 s2 i2 nentry ngoto nret rret orret,
+    self__RTLgen.add_vars self__RTLgen.init_mapping f.(self__RTLgen.S.fn_params) s0 = OK (rparams, map1) s1 i1 ->
+    self__RTLgen.add_vars map1 f.(self__RTLgen.S.fn_vars) s1 = OK (rvars, map2) s2 i2 ->
+    orret = self__RTLgen.ret_reg f.(self__RTLgen.S.fn_sig) rret ->
+    self__RTLgen.tr_stmt code map2 f.(self__RTLgen.S.fn_body) nentry nret nil ngoto nret orret ->
+    code!nret = Some(self__RTLgen.T.Ireturn orret) ->
+    tr_function f (self__RTLgen.T.mkfunction
+                    f.(self__RTLgen.S.fn_sig)
+                    rparams
+                    f.(self__RTLgen.S.fn_stackspace)
+                    code
+                    nentry).
+FEnd tr_function.
+
+MetaData tr_fun.
+Inductive tr_fun (tf: self__RTLgen.T.function) (map: mapping)
+                 (f: self__RTLgen.S.function)
+                 (ngoto: self__RTLgen.labelmap) (nret: self__RTLgen.T.node) (rret: option reg) : Prop :=
+  | tr_fun_intro: forall nentry r,
+      rret = self__RTLgen.ret_reg f.(self__RTLgen.S.fn_sig) r ->
+      self__RTLgen.tr_stmt tf.(self__RTLgen.T.fn_code) map f.(self__RTLgen.S.fn_body) nentry nret nil ngoto nret rret ->
+      tf.(self__RTLgen.T.fn_stacksize) = f.(self__RTLgen.S.fn_stackspace) ->
+      tr_fun tf map f ngoto nret rret.
+FEnd tr_fun.
+
+MetaData tr_cont binds match_stacks.
+Import self__RTLgen.
+Inductive tr_cont: T.code -> mapping ->
+                   S.cont -> T.node -> list T.node -> labelmap -> T.node -> option reg ->
+                   list T.stackframe -> Prop :=
+  | tr_Kseq: forall c map s k nd nexits ngoto nret rret cs n,
+      tr_stmt c map s nd n nexits ngoto nret rret ->
+      tr_cont c map k n nexits ngoto nret rret cs ->
+      tr_cont c map (S.Kseq s k) nd nexits ngoto nret rret cs
+  | tr_Kstop: forall c map ngoto nret rret cs,
+      c!nret = Some(T.Ireturn rret) ->
+      match_stacks S.Kstop cs ->
+      tr_cont c map S.Kstop nret nil ngoto nret rret cs             
+with match_stacks: S.cont -> list T.stackframe -> Prop :=
+  | match_stacks_stop:
+    match_stacks S.Kstop nil.
+FEnd tr_cont.
+
+MetaData map_wf.
+Import self__RTLgen.
+Record map_wf (m: mapping) : Prop :=
+  mk_map_wf {
+    map_wf_inj:
+      (forall id1 id2 r,
+         m.(map_vars)!id1 = Some r -> m.(map_vars)!id2 = Some r -> id1 = id2);
+     map_wf_disj:
+      (forall id r,
+         m.(map_vars)!id = Some r -> In r m.(map_letvars) -> False)
+  }.
+FEnd map_wf.
+
+MetaData match_env.
+Import self__RTLgen.
+Record match_env
+      (map: mapping) (e: S.env) (le: S.letenv) (rs: T.regset) : Prop :=
+  mk_match_env {
+    me_vars:
+      (forall id v,
+         e!id = Some v -> exists r, map.(map_vars)!id = Some r /\ Val.lessdef v rs#r);
+    me_letvars:
+      Val.lessdef_list le rs##(map.(map_letvars))
+  }.
+FEnd match_env.
+
+FDefinition match_prog := fun (p: S.program) (tp: T.program) =>
+  match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
+
+MetaData match_states.
+Import self__RTLgen.
+Inductive match_states: S.state -> T.state -> Prop :=
+  | match_state:
+      forall f s k sp e m tm cs tf ns rs map ncont nexits ngoto nret rret
+        (MWF: map_wf map)
+        (TS: tr_stmt tf.(T.fn_code) map s ns ncont nexits ngoto nret rret)
+        (TF: tr_fun tf map f ngoto nret rret)
+        (TK: tr_cont tf.(T.fn_code) map k ncont nexits ngoto nret rret cs)
+        (ME: match_env map e nil rs)
+        (MEXT: Mem.extends m tm),
+      match_states (S.State f s k sp e m)
+                   (T.State cs tf (Vptr sp Ptrofs.zero) ns rs tm)
+  | match_callstate:
+      forall f args targs k m tm cs tf
+        (TF: transl_fundef f = Errors.OK tf)
+        (MS: match_stacks k cs)
+        (LD: Val.lessdef_list args targs)
+        (MEXT: Mem.extends m tm),
+      match_states (S.Callstate f args k m)
+                   (T.Callstate cs tf targs tm)
+  | match_returnstate:
+      forall v tv k m tm cs
+        (MS: match_stacks k cs)
+        (LD: Val.lessdef v tv)
+        (MEXT: Mem.extends m tm),
+      match_states (S.Returnstate v k m)
+        (T.Returnstate cs tv tm).
+FEnd match_states.
+
+FRecursion size_stmt about S.stmt motive (fun (_ : S.stmt) => nat) by _rect.
+Local Open Scope nat_scope.
+Case Sskip := 0.
+Case Sseq s1 s2 := (size_stmt s1 + size_stmt s2 + 1).
+Case Sifthenelse c s1 s2 := (size_stmt s1 + size_stmt s2 + 1).
+Case Slabel lbl s1 := (size_stmt s1 + 1).
+Case _ := 1.
+FEnd size_stmt.
+
+FRecursion size_cont about S.cont motive (fun (_ : S.cont) => nat) by _rect.
+Case Kseq s k1 := (size_stmt s + size_cont k1 + 1).
+Case _ := 0.
+FEnd size_cont.
+
+FDefinition measure_state := fun (s: S.state) =>
+  match s with
+  | self__RTLgen.S.State _ s k _ _ _ => (size_stmt s + size_cont k, size_stmt s)
+  | _ => (0, 0)
+  end.
+
+FDefinition lt_state := fun (S1 S2: S.state) =>
+  lex_ord lt lt (measure_state S1) (measure_state S2).
+
+FInduction transl_step_correct about S.step
+  motive (fun ge S1 t S2 (_ : S.step ge S1 t S2) =>
+  forall prog tprog tge, match_prog prog tprog -> 
+  Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->            
+  forall R1 (MS : match_states S1 R1),
+  exists R2,
+  (plus T.step tge R1 t R2 \/ (star T.step tge R1 t R2 /\ lt_state S2 S1))
+  /\ match_states S2 R2).
+FProof.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
+Qed. FEnd transl_step_correct.
+
+(*
+Variable prog: CminorSel.program.
+Variable tprog: RTL.program.
+Hypothesis TRANSL: match_prog prog tprog.
+
+Let ge : CminorSel.genv := Genv.globalenv prog.
+Let tge : RTL.genv := Genv.globalenv tprog.
+*)
+
+FLemma transl_initial_states: 
+  forall prog tprog, match_prog prog tprog -> 
+  forall S', S.initial_state prog S' ->
+  exists R, T.initial_state tprog R /\ match_states S' R.
+FProofLemma. apply cheat. Qed. CloseFLemma.
+
+FLemma transl_final_states:
+  forall S' R r,
+  match_states S' R -> S.final_state S' r -> T.final_state R r.
+FProofLemma. apply cheat. Qed. CloseFLemma.
+
 FEnd RTLgen.
 
 FEnd Base.
