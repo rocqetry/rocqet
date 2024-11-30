@@ -980,9 +980,16 @@ FEnd Lt_state.
   | tr_Sskip: forall ns nexits ngoto nret rret,
      tr_stmt c map Sskip ns ns nexits ngoto nret rret *)
 
-(*Closing Fact tr_stmt_skip_inv: 
-  forall c map ns nexits ngoto nret rret,
-  tr_stmt c map Sskip ns ns nexits ngoto nret rret -> *)
+Closing Fact tr_stmt_skip_inv: 
+  forall c map ns ncont nexits ngoto nret rret,
+  tr_stmt c map S.Sskip ns ncont nexits ngoto nret rret -> 
+  ncont = ns 
+by plain { intros until rret; intros H; inv H; eauto }.  
+
+Closing Fact Kseq_inv : forall s0 k0 s k,
+    self__RTLgen.S.Kseq s0 k0 = self__RTLgen.S.Kseq s k -> 
+    s0 = s /\ k0 = k
+  by plain { intros until k; intros H; inversion H; eauto }.
  
 FInduction transl_step_correct about S.step
   motive (fun ge S1 t S2 (_ : S.step ge S1 t S2) =>
@@ -993,10 +1000,18 @@ FInduction transl_step_correct about S.step
   (plus T.step tge R1 t R2 \/ (star T.step tge R1 t R2 /\ lt_state S2 S1))
   /\ match_states S2 R2).
 FProof.
-all: intros; inv MS.
-+ inv TK. econstructor; split. 
++ intros until tge. intros A B C.
+  intros R1 MSTATE; inv MSTATE. 
+  apply self__RTLgen.tr_stmt_skip_inv in TS. rewrite <- TS. inv TK. econstructor; split. 
   right; split. apply star_refl. self__RTLgen.Lt_state.
-  econstructor; eauto.
+  apply self__RTLgen.Kseq_inv in H.   
+  do 2 fsimpl. econstructor; eauto. 
+  destruct H as [Y Z]. rewrite Y. rewrite Z. 
+  lia. econstructor. apply MWF. 
+  apply self__RTLgen.Kseq_inv in H. destruct H as [Y Z]. rewrite <- Y. apply H0. apply TF.
+  apply self__RTLgen.Kseq_inv in H. destruct H as [Y Z]. rewrite <- Z.
+  apply H3. apply ME. apply MEXT. 
+  
 + apply cheat.
 + apply cheat.
 + apply cheat.
