@@ -2278,7 +2278,7 @@ FProofLemma.
 Qed. CloseFLemma.
 
 FLemma tr_find_label_expression:
-  forall ce (tge: self__SimplExpr.T.genv) lbl r s a,
+  forall ce (tge: T.genv) lbl r s a,
   tr_expression ce r s a -> forall k, T.find_label s lbl k = None.
 FProofLemma.
   intros. inv H.
@@ -2289,7 +2289,7 @@ FProofLemma.
 Qed. CloseFLemma.
 
 FLemma tr_find_label_expr_stmt:
-  forall ce (tge: self__SimplExpr.T.genv) lbl r s,
+  forall ce (tge: T.genv) lbl r s,
   tr_expr_stmt ce r s -> forall k, T.find_label s lbl k = None.
 FProofLemma.
   intros. inv H.
@@ -2299,26 +2299,10 @@ FProofLemma.
   eauto. apply H.
 Qed. CloseFLemma.
 
-(* FLemma tr_find_label_if:
-  forall ce (tge: self__SimplExpr.T.genv) lbl r s,
-  tr_if ce r S.Sskip S.Sbreak s ->
-  forall k, T.find_label s lbl k = None.
-FProofLemma.
-  intros. inv H.
-  assert (self__SimplExpr.nolabel lbl (self__SimplExpr.makeseq (sl ++ self__SimplExpr.makeif a Sskip Sbreak :: nil))).
-  apply self__SimplExpr.makeseq_nolabel.
-  apply self__SimplExpr.nolabel_list_app.
-  eapply self__SimplExpr.tr_find_label_top with
-    (e := self__SimplExpr.T.empty_env) (le := PTree.empty val) (m := Mem.empty) (tge := tge).
-  eauto.
-  simpl; split; auto. apply self__SimplExpr.makeif_nolabel. red; simpl; auto. red; simpl; auto.
-  apply H.
-Qed. CloseFLemma. *)
-
 FInduction tr_find_label
   about S.stmt
   motive (fun (s : S.stmt) =>
-    forall ce (tge: self__SimplExpr.T.genv) lbl k ts tk
+    forall ce (tge: T.genv) lbl k ts tk
       (TR : tr_stmt ce s ts)
       (MC : match_cont ce k tk),
     match S.find_label s lbl k with
@@ -2333,7 +2317,7 @@ FInduction tr_find_label
 with tr_find_label_ls
   about S.lbl_stmts
   motive (fun (s : S.lbl_stmts) =>
-    forall ce (tge: self__SimplExpr.T.genv) lbl k ts tk
+    forall ce (tge: T.genv) lbl k ts tk
       (TR : tr_lblstmts ce s ts)
       (MC : match_cont ce k tk),
     match S.find_label_ls s lbl k with
@@ -2427,10 +2411,7 @@ FRecursion measure_stmt about S.stmt motive (fun (_ : S.stmt) => nat) by _rect.
 Case Sskip := 0%nat.
 Case Sdo r := (2 + esize r)%nat.
 Case Sifthenelse r s1 s2 := (2 + esize r)%nat.
-Case Slabel lbl s := 0%nat.
-Case Sgoto lbl := 0%nat.
-Case Sseq s1 s2 := 0%nat.
-Case Sreturn e := 0%nat.
+Case _ := 0%nat.
 FEnd measure_stmt.
 
 FDefinition measure : S.state -> nat := fun st =>
@@ -3071,7 +3052,7 @@ FEnd SimplExpr.
 
 FEnd Base.
 
-Trait Comp_Loops extends Base.
+Trait Comp_break_continue extends Base.
 
 Trait C_Sbreak_Scontinue extends C.
 FInductive stmt : Type :=
@@ -3081,9 +3062,124 @@ FInductive stmt : Type :=
 FRecursion find_label with find_label_ls.
 Case _ := (fun lbl k => None).
 FEnd find_label with find_label_ls.
+
+FInductive sstep : genv -> state -> trace -> state -> Prop :=
+| step_continue_seq : forall ge f s k e m,
+    sstep ge (self__C_Sbreak_Scontinue.State f Scontinue (Kseq s k) e m)
+        E0 (self__C_Sbreak_Scontinue.State f Scontinue k e m)
+| step_break_seq : forall ge f s k e m,
+    sstep ge (self__C_Sbreak_Scontinue.State f Sbreak (Kseq s k) e m)
+        E0 (self__C_Sbreak_Scontinue.State f Sbreak k e m).
 FEnd C_Sbreak_Scontinue.
 
-Trait C_Swhile extends C_Sbreak_Scontinue.
+Family C extends C_Sbreak_Scontinue.
+FEnd C.
+
+Trait Clight_Sbreak_Scontinue extends Clight.
+FInductive stmt : Type :=
+| Sbreak : stmt
+| Scontinue : stmt.
+
+FRecursion find_label with find_label_ls.
+Case _ := (fun lbl k => None).
+FEnd find_label with find_label_ls.
+
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_continue_seq: forall ge f s k e le m,
+    step ge (self__Clight_Sbreak_Scontinue.State f Scontinue (Kseq s k) e le m)
+      E0 (self__Clight_Sbreak_Scontinue.State f Scontinue k e le m)
+| step_break_seq: forall ge f s k e le m,
+    step ge (self__Clight_Sbreak_Scontinue.State f Sbreak (Kseq s k) e le m)
+      E0 (self__Clight_Sbreak_Scontinue.State f Sbreak k e le m).
+FEnd Clight_Sbreak_Scontinue.
+
+Family Clight extends Clight_Sbreak_Scontinue.
+FEnd Clight.
+
+From Rocqet Require Import Mon.
+Local Open Scope gensym_monad_scope.
+
+Trait SimplExpr_Sbreak_Scontinue extends SimplExpr.
+FRecursion transl_stmt with transl_lblstmt.
+Case Sbreak := (fun ce => ret T.Sbreak).
+Case Scontinue := (fun ce => ret T.Scontinue).
+FEnd transl_stmt with transl_lblstmt.
+
+FInductive tr_stmt: composite_env -> S.stmt -> T.stmt -> Prop :=
+| tr_break: forall ce,
+    tr_stmt ce S.Sbreak T.Sbreak
+| tr_continue: forall ce,
+    tr_stmt ce S.Scontinue T.Scontinue.
+
+Closing Fact tr_break_inv :
+  forall ce s, tr_stmt ce S.Sbreak s -> s = T.Sbreak
+  by plain {intros until s; intros H; inv H; eauto}.
+
+Closing Fact tr_continue_inv :
+  forall ce s, tr_stmt ce S.Scontinue s -> s = T.Scontinue
+  by plain {intros until s; intros H; inv H; eauto}.
+
+Inherit tr_find_label_expr_stmt.
+
+FLemma tr_find_label_if:
+  forall ce (tge: T.genv) lbl r s,
+  tr_if ce r T.Sskip T.Sbreak s ->
+  forall k, T.find_label s lbl k = None.
+FProofLemma.
+  intros. inv H.
+  assert (self__SimplExpr_Sbreak_Scontinue.nolabel lbl
+    (self__SimplExpr_Sbreak_Scontinue.makeseq
+      (sl ++ self__SimplExpr_Sbreak_Scontinue.makeif a self__SimplExpr_Sbreak_Scontinue.T.Sskip self__SimplExpr_Sbreak_Scontinue.T.Sbreak :: nil))).
+  apply self__SimplExpr_Sbreak_Scontinue.makeseq_nolabel.
+  apply self__SimplExpr_Sbreak_Scontinue.nolabel_list_app.
+  eapply self__SimplExpr_Sbreak_Scontinue.tr_find_label_top with
+    (e := self__SimplExpr_Sbreak_Scontinue.T.empty_env) (le := PTree.empty val) (m := Mem.empty) (tge := tge).
+  eauto.
+  simpl; split; auto. apply self__SimplExpr_Sbreak_Scontinue.makeif_nolabel. red; fsimpl; auto. red; fsimpl; auto.
+  apply H.
+Qed. CloseFLemma.
+
+FInduction tr_find_label with tr_find_label_ls.
+FProof.
+(* break *)
+- intros. apply self__SimplExpr_Sbreak_Scontinue.tr_break_inv in TR; subst.
+  fsimpl. fsimpl. auto.
+(* continue *)
+- intros. apply self__SimplExpr_Sbreak_Scontinue.tr_continue_inv in TR; subst.
+  fsimpl. fsimpl. auto.
+Qed. FEnd tr_find_label with tr_find_label_ls.
+
+FRecursion measure_stmt.
+Case _ := 0%nat.
+FEnd measure_stmt.
+
+FInduction sstep_simulation.
+FProof.
+all: intros; inv MS.
+(* continue seq *)
+- apply self__SimplExpr_Sbreak_Scontinue.tr_continue_inv in TR; subst.
+  apply self__SimplExpr_Sbreak_Scontinue.match_cont_seq_inv in MK; unpack MK; subst.
+  eexists. split.
+  + left. apply plus_one. fconstructor.
+  + econstructor; eauto. fconstructor.
+(* break seq *)
+- apply self__SimplExpr_Sbreak_Scontinue.tr_break_inv in TR; subst.
+  apply self__SimplExpr_Sbreak_Scontinue.match_cont_seq_inv in MK; unpack MK; subst.
+  eexists. split.
+  + left. apply plus_one. fconstructor.
+  + econstructor; eauto. fconstructor.
+Qed. FEnd sstep_simulation.
+FEnd SimplExpr_Sbreak_Scontinue.
+
+Family SimplExpr extends SimplExpr_Sbreak_Scontinue.
+FEnd SimplExpr.
+
+FEnd Comp_break_continue.
+
+
+Trait Comp_Loops extends Comp_break_continue.
+
+Trait C_Swhile extends C.
 FInductive stmt : Type :=
   | Swhile : expr -> stmt -> stmt.
 
@@ -3104,7 +3200,7 @@ FRecursion find_label with find_label_ls.
 Case Swhile a s1 := (fun lbl k => find_label s1 lbl (Kwhile2 a s1 k)).
 FEnd find_label with find_label_ls.
 
-FInductive sstep : genv -> state -> trace -> state -> Prop  :=
+FInductive sstep : genv -> state -> trace -> state -> Prop :=
 | step_while : forall ge f x s k e m,
     sstep ge (self__C_Swhile.State f (Swhile x s) k e m)
       E0 (self__C_Swhile.ExprState f x (Kwhile1 x s k) e m)
@@ -3125,7 +3221,7 @@ FInductive sstep : genv -> state -> trace -> state -> Prop  :=
       E0 (self__C_Swhile.State f Sskip k e m).
 FEnd C_Swhile.
 
-Trait C_Sdowhile extends C_Sbreak_Scontinue.
+Trait C_Sdowhile extends C.
 FInductive stmt : Type :=
 | Sdowhile : expr -> stmt -> stmt. (* do loop *)
 
@@ -3167,7 +3263,7 @@ FInductive sstep : genv -> state -> trace -> state -> Prop :=
         E0 (self__C_Sdowhile.State f Sskip k e m).
 FEnd C_Sdowhile.
 
-Trait C_Sfor extends C_Sbreak_Scontinue.
+Trait C_Sfor extends C.
 FInductive stmt : Type :=
 | Sfor : stmt -> expr -> stmt -> stmt -> stmt. (* for loop *)
 
@@ -3232,9 +3328,7 @@ FEnd C.
 
 Trait Clight_Sloop extends Clight.
 FInductive stmt : Type :=
-| Sloop: stmt -> stmt -> stmt (* infinite loop *)
-| Sbreak : stmt (* break statement *)
-| Scontinue : stmt. (* continue statement *)
+| Sloop: stmt -> stmt -> stmt. (* infinite loop *)
 
 FInductive cont : Type :=
 | Kloop1: stmt -> stmt -> cont -> cont
@@ -3256,7 +3350,6 @@ Case Sloop s1 s2 :=
       | Some sk => Some sk
       | None => find_label s2 lbl (Kloop2 s1 s2 k)
       end).
-Case _ := (fun lbl k => None).
 FEnd find_label with find_label_ls.
 
 FInductive step : genv -> state -> trace -> state -> Prop :=
@@ -3287,48 +3380,435 @@ Local Open Scope gensym_monad_scope.
 Trait SimplExpr_Swhile extends SimplExpr.
 Family S extends C_Swhile. FEnd S.
 
-FRecursion transl_stmt
-           with transl_lblstmt.
+FRecursion transl_stmt with transl_lblstmt.
 Case Swhile e s1 :=
-(fun ce =>
- do s' <- transl_if e T.Sskip T.Sbreak ce;
- do ts1 <- transl_stmt s1 ce;
- ret (T.Sloop (T.Sseq s' ts1) T.Sskip)).
-Case Sbreak := (fun ce => ret T.Sbreak).
-Case Scontinue := (fun ce => ret T.Scontinue).
+  (fun ce =>
+    do s' <- transl_if e T.Sskip T.Sbreak ce;
+    do ts1 <- transl_stmt s1 ce;
+    ret (T.Sloop (T.Sseq s' ts1) T.Sskip)).
 FEnd transl_stmt with transl_lblstmt.
 
+FInductive tr_stmt: composite_env -> S.stmt -> T.stmt -> Prop :=
+| tr_while: forall ce r s1 s' ts1,
+    tr_if ce r T.Sskip T.Sbreak s' ->
+    tr_stmt ce s1 ts1 ->
+    tr_stmt ce (S.Swhile r s1)
+            (T.Sloop (T.Sseq s' ts1) T.Sskip).
+
+Closing Fact tr_while_inv :
+  forall ce r s1 ts,
+  tr_stmt ce (S.Swhile r s1) ts ->
+  exists s' ts1, ts = (T.Sloop (T.Sseq s' ts1) T.Sskip) /\ tr_if ce r T.Sskip T.Sbreak s' /\ tr_stmt ce s1 ts1
+  by plain {intros until ts; intros H; inv H; eauto}.
+
+FInductive match_cont : composite_env -> S.cont -> T.cont -> Prop :=
+| match_Kwhile2 : forall ce r s k s' ts tk,
+    tr_if ce r T.Sskip T.Sbreak s' ->
+    tr_stmt ce s ts ->
+    match_cont ce k tk ->
+    match_cont ce (S.Kwhile2 r s k)
+                  (T.Kloop1 (T.Sseq s' ts) T.Sskip tk)
+with match_cont_exp : composite_env -> destination -> T.expr -> S.cont -> T.cont -> Prop :=
+| match_Kwhile1: forall ce r s k s' a ts tk,
+    tr_if ce r T.Sskip T.Sbreak s' ->
+    tr_stmt ce s ts ->
+    match_cont ce k tk ->
+    match_cont_exp ce For_val a
+        (S.Kwhile1 r s k)
+        (T.Kseq (makeif a T.Sskip T.Sbreak)
+          (T.Kseq ts (T.Kloop1 (T.Sseq s' ts) T.Sskip tk))).
+
+FInduction match_cont_is_call_cont.
+FProof.
+- intros. fsimpl in *. contradiction.
+Qed. FEnd match_cont_is_call_cont.
+
+FInduction match_cont_call_cont.
+FProof.
+- intros; do 2 fsimpl; auto; fconstructor.
+Qed. FEnd match_cont_call_cont.
+
+Closing Fact match_cont_while2_inv :
+  forall ce r s k tk,
+  match_cont ce (S.Kwhile2 r s k) tk ->
+  exists s' ts tk', tk = T.Kloop1 (T.Sseq s' ts) T.Sskip tk' /\ tr_if ce r T.Sskip T.Sbreak s' /\ tr_stmt ce s ts /\ match_cont ce k tk'
+  by plain {intros until tk; intros H; inv H; eauto}.
+
+Closing Fact match_cont_exp_while1_inv :
+  forall ce dst a r s k tk,
+  match_cont_exp ce dst a (S.Kwhile1 r s k) tk ->
+  exists s' ts tk', dst = For_val /\ tk = T.Kseq (makeif a T.Sskip T.Sbreak) (T.Kseq ts (T.Kloop1 (T.Sseq s' ts) T.Sskip tk'))
+    /\ tr_if ce r T.Sskip T.Sbreak s' /\ tr_stmt ce s ts /\ match_cont ce k tk'
+  by plain {intros until tk; intros H; inv H; eauto}.
+
+FInduction tr_find_label with tr_find_label_ls.
+FProof.
+(* while *)
+intros. apply tr_while_inv in TR; unpack TR; subst.
+rename s' into sr. fsimpl.
+exploit (H ce tge lbl (S.Kwhile2 e __i k)); eauto.
+- fconstructor.
+- do 3 fsimpl. rewrite (tr_find_label_if ce tge lbl _ _ TEMP0).
+  destruct (S.find_label __i lbl (S.Kwhile2 e __i k)) as [[s' k'] | ].
+  + intros [ts' [tk' [-> [B C]]]]. exists ts' tk'. auto.
+  + intros ->. auto.
+Qed. FEnd tr_find_label with tr_find_label_ls.
+
+FRecursion measure_stmt.
+Case _ := 0%nat.
+FEnd measure_stmt.
+
+FInduction sstep_simulation.
+FProof.
+all: intros; inv MS.
+(* while *)
+- apply tr_while_inv in TR; unpack TR; subst. inv TEMP0.
+  eexists. split.
+  + left. eapply plus_left. fconstructor.
+    eapply star_left. fconstructor.
+    apply push_seq. reflexivity. reflexivity.
+  + rewrite Kseqlist_app. econstructor; eauto. simpl.
+    fconstructor. econstructor; eauto.
+(* while false *)
+- apply match_cont_exp_while1_inv in MK; unpack MK; subst.
+  exploit tr_top_val_for_val_inv; eauto. intros [A [B C]]. subst.
+  eexists. split.
+  + left. simpl. eapply plus_left. fconstructor.
+    eapply star_trans. apply step_makeif with (v1 := v) (b := false); auto.
+    eapply star_two. fconstructor. apply T.step_break_loop1.
+    reflexivity. reflexivity. reflexivity.
+  + econstructor; eauto. fconstructor.
+(* while true *)
+- apply match_cont_exp_while1_inv in MK; unpack MK; subst.
+  exploit tr_top_val_for_val_inv; eauto. intros [A [B C]]. subst.
+  eexists. split.
+  + left. simpl. eapply plus_left. fconstructor.
+    eapply star_right. apply step_makeif with (v1 := v) (b := true); auto. fconstructor.
+    reflexivity. reflexivity.
+  + econstructor; eauto. fconstructor.
+(* skip-or-continue while *)
+- assert (ts = T.Sskip \/ ts = T.Scontinue).
+  { destruct o; subst s0; [ apply tr_skip_inv in TR | apply tr_continue_inv in TR ]; auto. }
+  apply match_cont_while2_inv in MK; unpack MK; subst.
+  eexists. split.
+  + left. eapply plus_two. apply T.step_skip_or_continue_loop1; auto.
+    apply T.step_skip_loop2. reflexivity.
+  + econstructor; eauto. fconstructor.
+(* break while *)
+- apply tr_break_inv in TR; apply match_cont_while2_inv in MK; unpack MK; subst.
+  eexists. split.
+  + left. apply plus_one. apply T.step_break_loop1.
+  + econstructor; eauto. fconstructor.
+Qed. FEnd sstep_simulation.
 FEnd SimplExpr_Swhile.
 
-Trait SimplExpr_Sdowhile extends SimplExpr.
+Trait SimplExpr_Sdowhile extends SimplExpr_Sbreak_Scontinue.
 Family S extends C_Sdowhile. FEnd S.
 
 FRecursion transl_stmt with transl_lblstmt.
 Case Sdowhile e s1 :=
-(fun ce =>
-   do s' <- transl_if e T.Sskip T.Sbreak ce;
-   do ts1 <- transl_stmt s1 ce;
-   ret (T.Sloop ts1 s')).
+  (fun ce =>
+    do s' <- transl_if e T.Sskip T.Sbreak ce;
+    do ts1 <- transl_stmt s1 ce;
+    ret (T.Sloop ts1 s')).
 FEnd transl_stmt with transl_lblstmt.
 
+FInductive tr_stmt: composite_env -> S.stmt -> T.stmt -> Prop :=
+| tr_dowhile: forall ce r s1 s' ts1,
+    tr_if ce r T.Sskip T.Sbreak s' ->
+    tr_stmt ce s1 ts1 ->
+    tr_stmt ce (S.Sdowhile r s1)
+            (T.Sloop ts1 s').
+
+Closing Fact tr_dowhile_inv :
+  forall ce r s1 ts,
+  tr_stmt ce (S.Sdowhile r s1) ts ->
+  exists s' ts1, ts = (T.Sloop ts1 s') /\ tr_if ce r T.Sskip T.Sbreak s' /\ tr_stmt ce s1 ts1
+  by plain {intros until ts; intros H; inv H; eauto}.
+
+FInductive match_cont : composite_env -> S.cont -> T.cont -> Prop :=
+| match_Kdowhile1: forall ce r s k s' ts tk,
+    tr_if ce r T.Sskip T.Sbreak s' ->
+    tr_stmt ce s ts ->
+    match_cont ce k tk ->
+    match_cont ce (S.Kdowhile1 r s k)
+                  (T.Kloop1 ts s' tk)
+with match_cont_exp : composite_env -> destination -> T.expr -> S.cont -> T.cont -> Prop :=
+| match_Kdowhile2: forall ce r s k s' a ts tk,
+    tr_if ce r T.Sskip T.Sbreak s' ->
+    tr_stmt ce s ts ->
+    match_cont ce k tk ->
+    match_cont_exp ce For_val a
+      (S.Kdowhile2 r s k)
+      (T.Kseq (makeif a T.Sskip T.Sbreak) (T.Kloop2 ts s' tk)).
+
+FInduction match_cont_is_call_cont.
+FProof.
+- intros. fsimpl in *. contradiction.
+Qed. FEnd match_cont_is_call_cont.
+
+FInduction match_cont_call_cont.
+FProof.
+- intros; do 2 fsimpl; auto; fconstructor.
+Qed. FEnd match_cont_call_cont.
+
+Closing Fact match_cont_dowhile1_inv :
+  forall ce r s k tk,
+  match_cont ce (S.Kdowhile1 r s k) tk ->
+  exists s' ts tk', tk = T.Kloop1 ts s' tk' /\ tr_if ce r T.Sskip T.Sbreak s' /\ tr_stmt ce s ts /\ match_cont ce k tk'
+  by plain {intros until tk; intros H; inv H; eauto}.
+
+Closing Fact match_cont_exp_dowhile2_inv :
+  forall ce dst a r s k tk,
+  match_cont_exp ce dst a (S.Kdowhile2 r s k) tk ->
+  exists s' ts tk', dst = For_val /\ tk = T.Kseq (makeif a T.Sskip T.Sbreak) (T.Kloop2 ts s' tk')
+    /\ tr_if ce r T.Sskip T.Sbreak s' /\ tr_stmt ce s ts /\ match_cont ce k tk'
+  by plain {intros until tk; intros H; inv H; eauto}.
+
+FInduction tr_find_label with tr_find_label_ls.
+FProof.
+(* dowhile *)
+intros. apply tr_dowhile_inv in TR; unpack TR; subst.
+rename s' into sr. fsimpl.
+exploit (H ce tge lbl (S.Kdowhile1 e __i k)); eauto.
+- fconstructor.
+- fsimpl. rewrite (tr_find_label_if ce tge lbl _ _ TEMP0).
+  destruct (S.find_label __i lbl (S.Kdowhile1 e __i k)) as [[s' k'] | ].
+  + intros [ts' [tk' [-> [B C]]]]. exists ts' tk'. auto.
+  + intros ->. auto.
+Qed. FEnd tr_find_label with tr_find_label_ls.
+
+FRecursion measure_stmt.
+Case _ := 0%nat.
+FEnd measure_stmt.
+
+FInduction sstep_simulation.
+FProof.
+all: intros; inv MS.
+(* dowhile *)
+- apply tr_dowhile_inv in TR; unpack TR; subst.
+  eexists. split.
+  + left. apply plus_one. apply T.step_loop.
+  + econstructor; eauto. fconstructor.
+(* skip-or-continue dowhile *)
+- assert (ts = T.Sskip \/ ts = T.Scontinue).
+  { destruct o; subst s0; [ apply tr_skip_inv in TR | apply tr_continue_inv in TR ]; auto. }
+  apply match_cont_dowhile1_inv in MK; unpack MK. inv TEMP; subst.
+  eexists. split.
+  + left. eapply plus_left. apply T.step_skip_or_continue_loop1; auto.
+    apply push_seq. reflexivity.
+  + rewrite Kseqlist_app. econstructor; eauto.
+    fconstructor. econstructor; eauto.
+(* dowhile false *)
+- apply match_cont_exp_dowhile2_inv in MK; unpack MK; subst.
+  exploit tr_top_val_for_val_inv; eauto. intros [A [B C]]. subst.
+  eexists. split.
+  + left. simpl. eapply plus_left. fconstructor.
+    eapply star_right. apply step_makeif with (v1 := v) (b := false); auto. fconstructor.
+    reflexivity. reflexivity.
+  + econstructor; eauto. fconstructor.
+(* dowhile true *)
+- apply match_cont_exp_dowhile2_inv in MK; unpack MK; subst.
+  exploit tr_top_val_for_val_inv; eauto. intros [A [B C]]. subst.
+  eexists. split.
+  + left. simpl. eapply plus_left. fconstructor.
+    eapply star_right. apply step_makeif with (v1 := v) (b := true); auto. apply T.step_skip_loop2.
+    reflexivity. reflexivity.
+  + econstructor; eauto. fconstructor.
+(* break dowhile *)
+- apply tr_break_inv in TR; apply match_cont_dowhile1_inv in MK; unpack MK; subst.
+  eexists. split.
+  + left. apply plus_one. apply T.step_break_loop1.
+  + econstructor; eauto. fconstructor.
+Qed. FEnd sstep_simulation.
 FEnd SimplExpr_Sdowhile.
 
-Trait SimplExpr_Sfor extends SimplExpr.
+Trait SimplExpr_Sfor extends SimplExpr_Sbreak_Scontinue.
 Family S extends C_Sfor. FEnd S.
 
 FRecursion transl_stmt with transl_lblstmt.
 Case Sfor s1 e2 s3 s4 :=
-(fun ce =>
- do ts1 <- transl_stmt s1 ce;
- do s' <- transl_if e2 T.Sskip T.Sbreak ce;
- do ts3 <- transl_stmt s3 ce;
- do ts4 <- transl_stmt s4 ce;
- if is_Sskip s1 then
-   ret (T.Sloop (T.Sseq s' ts4) ts3)
- else
-   ret (T.Sseq ts1 (T.Sloop (T.Sseq s' ts4) ts3))).
+  (fun ce =>
+    do ts1 <- transl_stmt s1 ce;
+    do s' <- transl_if e2 T.Sskip T.Sbreak ce;
+    do ts3 <- transl_stmt s3 ce;
+    do ts4 <- transl_stmt s4 ce;
+    if is_Sskip s1 then
+      ret (T.Sloop (T.Sseq s' ts4) ts3)
+    else
+      ret (T.Sseq ts1 (T.Sloop (T.Sseq s' ts4) ts3))).
 FEnd transl_stmt with transl_lblstmt.
 
+FInductive tr_stmt: composite_env -> S.stmt -> T.stmt -> Prop :=
+| tr_for_1: forall ce r s3 s4 s' ts3 ts4,
+    tr_if ce r T.Sskip T.Sbreak s' ->
+    tr_stmt ce s3 ts3 ->
+    tr_stmt ce s4 ts4 ->
+    tr_stmt ce (S.Sfor S.Sskip r s3 s4)
+            (T.Sloop (T.Sseq s' ts4) ts3)
+| tr_for_2: forall ce s1 r s3 s4 s' ts1 ts3 ts4,
+    tr_if ce r T.Sskip T.Sbreak s' ->
+    s1 <> S.Sskip ->
+    tr_stmt ce s1 ts1 ->
+    tr_stmt ce s3 ts3 ->
+    tr_stmt ce s4 ts4 ->
+    tr_stmt ce (S.Sfor s1 r s3 s4)
+            (T.Sseq ts1 (T.Sloop (T.Sseq s' ts4) ts3)).
+
+Closing Fact tr_for_inv :
+  forall ce s1 r s3 s4 ts,
+  tr_stmt ce (S.Sfor s1 r s3 s4) ts ->
+  (exists s' ts3 ts4, s1 = S.Sskip /\ ts = T.Sloop (T.Sseq s' ts4) ts3
+    /\ tr_if ce r T.Sskip T.Sbreak s' /\ tr_stmt ce s3 ts3 /\ tr_stmt ce s4 ts4)
+  \/ (exists s' ts1 ts3 ts4, s1 <> S.Sskip /\ ts = (T.Sseq ts1 (T.Sloop (T.Sseq s' ts4) ts3))
+    /\ tr_if ce r T.Sskip T.Sbreak s' /\ tr_stmt ce s1 ts1 /\ tr_stmt ce s3 ts3 /\ tr_stmt ce s4 ts4)
+  by plain {intros until ts; intros H; inv H; eauto}.
+
+FInductive match_cont : composite_env -> S.cont -> T.cont -> Prop :=
+| match_Kfor3: forall ce r s3 s k ts3 s' ts tk,
+    tr_if ce r T.Sskip T.Sbreak s' ->
+    tr_stmt ce s3 ts3 ->
+    tr_stmt ce s ts ->
+    match_cont ce k tk ->
+    match_cont ce (S.Kfor3 r s3 s k)
+                  (T.Kloop1 (T.Sseq s' ts) ts3 tk)
+| match_Kfor4: forall ce r s3 s k ts3 s' ts tk,
+    tr_if ce r T.Sskip T.Sbreak s' ->
+    tr_stmt ce s3 ts3 ->
+    tr_stmt ce s ts ->
+    match_cont ce k tk ->
+    match_cont ce (S.Kfor4 r s3 s k)
+                  (T.Kloop2 (T.Sseq s' ts) ts3 tk)
+with match_cont_exp : composite_env -> destination -> T.expr -> S.cont -> T.cont -> Prop :=
+| match_Kfor2: forall ce r s3 s k s' a ts3 ts tk,
+    tr_if ce r T.Sskip T.Sbreak s' ->
+    tr_stmt ce s3 ts3 ->
+    tr_stmt ce s ts ->
+    match_cont ce k tk ->
+    match_cont_exp ce For_val a
+      (S.Kfor2 r s3 s k)
+      (T.Kseq (makeif a T.Sskip T.Sbreak)
+        (T.Kseq ts (T.Kloop1 (T.Sseq s' ts) ts3 tk))).
+
+FInduction match_cont_is_call_cont.
+FProof.
+all: intros; fsimpl in *; contradiction.
+Qed. FEnd match_cont_is_call_cont.
+
+FInduction match_cont_call_cont.
+FProof.
+all: intros; do 2 fsimpl; auto; fconstructor.
+Qed. FEnd match_cont_call_cont.
+
+Closing Fact match_cont_for3_inv :
+  forall ce r s3 s k tk,
+  match_cont ce (S.Kfor3 r s3 s k) tk ->
+  exists ts3 s' ts tk', tk = T.Kloop1 (T.Sseq s' ts) ts3 tk' /\ tr_if ce r T.Sskip T.Sbreak s'
+    /\ tr_stmt ce s3 ts3 /\ tr_stmt ce s ts /\ match_cont ce k tk'
+  by plain {intros until tk; intros H; inv H; eauto}.
+
+Closing Fact match_cont_for4_inv :
+  forall ce r s3 s k tk,
+  match_cont ce (S.Kfor4 r s3 s k) tk ->
+  exists ts3 s' ts tk', tk = T.Kloop2 (T.Sseq s' ts) ts3 tk' /\ tr_if ce r T.Sskip T.Sbreak s'
+    /\ tr_stmt ce s3 ts3 /\ tr_stmt ce s ts /\ match_cont ce k tk'
+  by plain {intros until tk; intros H; inv H; eauto}.
+
+Closing Fact match_cont_exp_for2_inv :
+  forall ce dst a r s3 s k tk,
+  match_cont_exp ce dst a (S.Kfor2 r s3 s k) tk ->
+  exists ts3 s' ts tk', dst = For_val /\ tk = T.Kseq (makeif a T.Sskip T.Sbreak) (T.Kseq ts (T.Kloop1 (T.Sseq s' ts) ts3 tk'))
+    /\ tr_if ce r T.Sskip T.Sbreak s' /\ tr_stmt ce s3 ts3 /\ tr_stmt ce s ts /\ match_cont ce k tk'
+  by plain {intros until tk; intros H; inv H; eauto}.
+
+FInduction tr_find_label with tr_find_label_ls.
+FProof.
+intros. apply tr_for_inv in TR as [TR|TR]; unpack TR; subst; rename s' into sr.
+(* for skip *)
+- (* fsimpl not working? *)
+  rewrite S.find_label_find_label_ls_Sfor_eq. unfold S.find_label_find_label_lsSfor.
+  rewrite T.find_label_find_label_ls_Sloop_eq. unfold T.find_label_find_label_lsSloop.
+  rewrite T.find_label_find_label_ls_Sseq_eq. unfold T.find_label_find_label_lsSseq.
+  rewrite (tr_find_label_if ce tge lbl _ _ TEMP1).
+  exploit (H1 ce tge lbl (S.Kfor3 e __i0 __i1 k)); eauto.
+  + fconstructor.
+  + destruct (S.find_label __i1 lbl (S.Kfor3 e __i0 __i1 k)) as [[s' k'] | ].
+    * intros [ts' [tk' [-> [B C]]]]. fsimpl. exists ts' tk'. auto.
+    * intros ->. fsimpl.
+      exploit (H0 ce tge lbl (S.Kfor4 e __i0 __i1 k)); eauto. fconstructor.
+(* for not skip *)
+- rewrite S.find_label_find_label_ls_Sfor_eq. unfold S.find_label_find_label_lsSfor.
+  rewrite T.find_label_find_label_ls_Sseq_eq. unfold T.find_label_find_label_lsSseq.
+  rewrite T.find_label_find_label_ls_Sloop_eq. unfold T.find_label_find_label_lsSloop.
+  rewrite T.find_label_find_label_ls_Sseq_eq. unfold T.find_label_find_label_lsSseq.
+  rewrite (tr_find_label_if ce tge lbl _ _ TEMP1).
+  exploit (H ce tge lbl (S.Kseq (S.Sfor S.Sskip e __i0 __i1) k)); eauto.
+  + fconstructor. fconstructor.
+  + destruct (S.find_label __i lbl (S.Kseq (S.Sfor S.Sskip e __i0 __i1) k)) as [[s' k'] | ].
+    * intros [ts' [tk' [-> [B C]]]]. exists ts' tk'. auto.
+    * intros ->.
+    { exploit (H1 ce tge lbl (S.Kfor3 e __i0 __i1 k)); eauto.
+      - fconstructor.
+      - destruct (S.find_label __i1 lbl (S.Kfor3 e __i0 __i1 k)) as [[s' k'] | ].
+        + intros [ts' [tk' [-> [B C]]]]. exists ts' tk'. auto.
+        + intros ->.
+          exploit (H0 ce tge lbl (S.Kfor4 e __i0 __i1 k)); eauto. fconstructor. }
+Qed. FEnd tr_find_label with tr_find_label_ls.
+
+FRecursion measure_stmt.
+Case _ := 0%nat.
+FEnd measure_stmt.
+
+FInduction sstep_simulation.
+FProof.
+all: intros; inv MS.
+(* for start *)
+- apply tr_for_inv in TR as [TR|TR]; unpack TR; subst; try congruence.
+  eexists. split.
+  + left. apply plus_one. fconstructor.
+  + econstructor; eauto. fconstructor. fconstructor.
+(* for *)
+- apply tr_for_inv in TR as [TR|TR]; unpack TR; subst; try congruence. inv TEMP1.
+  eexists. split.
+  + left. eapply plus_left. apply T.step_loop.
+    eapply star_left. fconstructor. apply push_seq.
+    reflexivity. reflexivity.
+  + rewrite Kseqlist_app. econstructor; eauto. simpl. fconstructor. econstructor; eauto.
+(* for false *)
+- apply match_cont_exp_for2_inv in MK; unpack MK; subst.
+  exploit tr_top_val_for_val_inv; eauto. intros [A [B C]]. subst.
+  eexists. split.
+  + left. simpl. eapply plus_left. fconstructor.
+    eapply star_trans. apply step_makeif with (v1 := v) (b := false); auto.
+    eapply star_two. fconstructor. apply T.step_break_loop1.
+    reflexivity. reflexivity. reflexivity.
+  + econstructor; eauto. fconstructor.
+(* for true *)
+- apply match_cont_exp_for2_inv in MK; unpack MK; subst.
+  exploit tr_top_val_for_val_inv; eauto. intros [A [B C]]. subst.
+  eexists. split.
+  + left. simpl. eapply plus_left. fconstructor.
+    eapply star_right. apply step_makeif with (v1 := v) (b := true); auto. fconstructor.
+    reflexivity. reflexivity.
+  + econstructor; eauto. fconstructor.
+(* skip-or-continue for3 *)
+- assert (ts = T.Sskip \/ ts = T.Scontinue).
+  { destruct o; subst x; [ apply tr_skip_inv in TR | apply tr_continue_inv in TR ]; auto. }
+  apply match_cont_for3_inv in MK; unpack MK; subst.
+  eexists. split.
+  + left. apply plus_one. apply T.step_skip_or_continue_loop1; auto.
+  + econstructor; eauto. fconstructor.
+(* break for3 *)
+- apply tr_break_inv in TR; apply match_cont_for3_inv in MK; unpack MK; subst.
+  eexists. split.
+  + left. apply plus_one. apply T.step_break_loop1.
+  + econstructor; eauto. fconstructor.
+(* skip for4 *)
+- apply tr_skip_inv in TR; apply match_cont_for4_inv in MK; unpack MK; subst.
+  eexists. split.
+  + left. apply plus_one. apply T.step_skip_loop2.
+  + econstructor; eauto. fconstructor.
+Qed. FEnd sstep_simulation.
 FEnd SimplExpr_Sfor.
 
 Family SimplExpr extends
