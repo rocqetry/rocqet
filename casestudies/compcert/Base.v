@@ -293,7 +293,7 @@ Inductive bitfield : Type :=
                    step ge (self__Cfam.Callstate (Internal f) vargs k m)
                      E0 (self__Cfam.State f (function_body f) k e le m1).
        
-       FOpaque Definition is_main_function : fundef -> Prop := cheat.
+       (* FOpaque Definition is_main_function : fundef -> Prop := cheat.*)
             
        MetaData initial_state.
        Inductive initial_state (p: self__Cfam.program): self__Cfam.state -> Prop :=
@@ -302,7 +302,7 @@ Inductive bitfield : Type :=
                Genv.init_mem p = Some m0 ->
                Genv.find_symbol ge p.(prog_main) = Some b ->
                Genv.find_funct_ptr ge b = Some f ->
-               self__Cfam.is_main_function f ->
+               self__Cfam.funsig f = signature_main ->
                initial_state p (self__Cfam.Callstate f nil self__Cfam.Kstop m0).
        FEnd initial_state.
             
@@ -1359,78 +1359,7 @@ Inductive bitfield : Type :=
       Family Target extends CminorSel.
       FEnd Target.
 
-       (* FRecursion sel_constant about Cminor.constant motive (fun (_ : Cminor.constant) => CminorSel.expr) by _rect. *)
-       (*     Case Ointconst := (fun n => CminorSel.Eop (Asm.Ointconst n) CminorSel.Enil). *)
-       (*     Case Ofloatconst := (fun f => CminorSel.Eop (Asm.Ofloatconst f) CminorSel.Enil). *)
-       (*     Case Osingleconst := (fun f =>  CminorSel.Eop (Asm.Osingleconst f) CminorSel.Enil). *)
-       (*     Case Olongconst := (fun n => longconst n).  (replace with cheat) *)
-       (* FEnd sel_constant. *)
-
-       (* FRecursion sel_expr about Cminor.expr motive (fun (_ : Cminor.expr) => CminorSel.expr).           *)
-       (*     Case Evar := (fun id => CminorSel.Evar id). *)
-       (*     Case Econst := (fun cst => sel_constant cst).            *)
-       (* FEnd sel_expr. *)
-       
-       (* FRecursion select_condition about Asm.operation motive (fun (_ : Asm.operation) => CminorSel.exprlist -> condition) by _rect. *)
-       (*     Case Ocmp := (fun c args => CminorSel.CEcond c args). *)
-       (* FEnd select_condition. *)
-       
-       (* FRecursion condexpr_of_expr about CminorSel.expr motive (fun (_ : Cminor.expr) => CminorSel.condexpr) by _rect. *)
-       (*     Case Eop op args := select_condition op args. *)
-       (*     Case Econdition a b c := (CminorSel.CEcondition a (condexpr_of_expr b) (condexpr_of_expr c)) *)
-       (*     Case Elet a b := (CElet a (condexpr_of_expr b)). *)
-       (*     Case Eletvar n := (CminorSel.CEcond (Asm.Ccompuimm Cne Int.zero) (CminorSel.Econs e Cminor.Enil)). *)
-       (*     Case Evar i := (CminorSel.CEcond (Asm.Ccompuimm Cne Int.zero) (CminorSel.Econs e Cminor.Enil)). *)
-       (* FEnd condexpr_of_expr. *)
-
-       (* Function condexpr_of_expr (e: expr) : condexpr := *)
-       (*     match e with *)
-       (*     | Eop (Ocmp c) el => CEcond c el *)
-       (*     | Econdition a b c => CEcondition a (condexpr_of_expr b) (condexpr_of_expr c) *)
-       (*     | Elet a b => CElet a (condexpr_of_expr b) *)
-       (*     | _ => CEcond (Ccompuimm Cne Int.zero) (e ::: Enil) *)
-       (*     end. *)
-       
-       (* FRecursion sel_stmt about Cminor.stmt  *)
-       (*                      motive (fun (_ : Cminor.stmt) => res CminorSel.stmt) by _rect. *)
-       (*    Case Sskip := (OK CminorSel.Sskip). *)
-       (*    Case Sassign id e := (OK (CminorSel.Sassign id (sel_expr e))). *)
-       (*    Case Sseq s1 s2 := ( *)
-       (*           do s1' <- sel_stmt s1 ;  *)
-       (*           do s2' <- sel_stmt s2 ; *)
-       (*           OK (CminorSel.Sseq s1' s2')). *)
-       (*    Case Sifthenelse e ifso ifnot := ( *)
-       (*         (* For simplicity, don't use the *)
-       (*            "if conversion heuristics" present in CompCert *)                       *)
-       (*           do ifso' <- sel_stmt ifso ; *)
-       (*           do ifnot' <- sel_stmt ifnot ; *)
-       (*           OK (Sifthenelse (condexpr_of_expr (sel_expr e)) ifso' ifnot')). *)
-       (*    Case Sloop body := (do body' <- sel_stmt body; OK (CminorSel.Sloop body')). *)
-       (*    Case Sblock s := (do body' <- sel_stmt body; OK (CminorSel.Sblock body')).  *)
-       (*    Case Sexit := (OK (CminorSel.Sexit n)). *)
-       (*    Case Sreturn e := (match e with  *)
-       (*                       | None => OK (CminorSel.Sreturn None)  *)
-       (*                       | Some e => OK (CminorSel.Sreturn (Some (sel_expr e)))). *)
-       (*    Case Slabel lbl body := (do body' <- sel_stmt body; OK (CminorSel.Slabel lbl body'))  *)
-       (*    Case Sgoto := (OK (CminorSel.Sgoto lbl)). *)
-       (*  FEnd sel_stmt. *)
-
-       (* FDefinition sel_function : Cminor.function -> res function := fun f =>              *)
-       (*       do body' <- sel_stmt f.(self__Imp.Cminor.fn_body); *)
-       (*       OK (self__Imp.CminorSel.mkfunction *)
-       (*             f.(self__Imp.Cminor.fn_sig) *)
-       (*             f.(self__Imp.Cminor.fn_params) *)
-       (*             f.(self__Imp.Cminor.fn_vars) *)
-       (*             f.(self__Imp.Cminor.fn_stackspace) *)
-       (*             body'). *)
-
-       (* FDefinition sel_fundef : Cminor.fundef -> res fundef := fun f => *)
-       (*   transf_partial_fundef (sel_function) f. *)
-
-       (* FDefinition sel_program : Cminor.program -> res program := fun p =>          *)
-       (*  transform_partial_program (sel_fundef) p.        *)
-
-       Class helper_functions := mk_helper_functions {
+      Class helper_functions := mk_helper_functions {
          i64_dtos: ident;(* float64 -> signed long *)
          i64_dtou: ident;(* float64 -> unsigned long *)
          i64_stod: ident;(* signed long -> float64 *)
@@ -1476,88 +1405,137 @@ Inductive bitfield : Type :=
           /\ helper_declared p i64_sar "__compcert_i64_sar" sig_li_l
           /\ helper_declared p i64_umulh "__compcert_i64_umulh" sig_ll_l
           /\ helper_declared p i64_smulh "__compcert_i64_smulh" sig_ll_l.
-               
+
+      
+      
+       (* FRecursion sel_constant about Cminor.constant motive (fun (_ : Cminor.constant) => CminorSel.expr) by _rect. *)
+       (*     Case Ointconst := (fun n => CminorSel.Eop (Asm.Ointconst n) CminorSel.Enil). *)
+       (*     Case Ofloatconst := (fun f => CminorSel.Eop (Asm.Ofloatconst f) CminorSel.Enil). *)
+       (*     Case Osingleconst := (fun f =>  CminorSel.Eop (Asm.Osingleconst f) CminorSel.Enil). *)
+       (*     Case Olongconst := (fun n => longconst n).  (replace with cheat) *)
+       (* FEnd sel_constant. *)
+
+       (* FRecursion sel_expr about Cminor.expr motive (fun (_ : Cminor.expr) => CminorSel.expr).           *)
+       (*     Case Evar := (fun id => CminorSel.Evar id). *)
+       (*     Case Econst := (fun cst => sel_constant cst).            *)
+       (* FEnd sel_expr. *)
+       
+       (* FRecursion select_condition about Asm.operation motive (fun (_ : Asm.operation) => CminorSel.exprlist -> condition) by _rect. *)
+       (*     Case Ocmp := (fun c args => CminorSel.CEcond c args). *)
+       (* FEnd select_condition. *)
+       
+       (* FRecursion condexpr_of_expr about CminorSel.expr motive (fun (_ : Cminor.expr) => CminorSel.condexpr) by _rect. *)
+       (*     Case Eop op args := select_condition op args. *)
+       (*     Case Econdition a b c := (CminorSel.CEcondition a (condexpr_of_expr b) (condexpr_of_expr c)) *)
+       (*     Case Elet a b := (CElet a (condexpr_of_expr b)). *)
+       (*     Case Eletvar n := (CminorSel.CEcond (Asm.Ccompuimm Cne Int.zero) (CminorSel.Econs e Cminor.Enil)). *)
+       (*     Case Evar i := (CminorSel.CEcond (Asm.Ccompuimm Cne Int.zero) (CminorSel.Econs e Cminor.Enil)). *)
+       (* FEnd condexpr_of_expr. *)
+
+       (* Function condexpr_of_expr (e: expr) : condexpr := *)
+       (*     match e with *)
+       (*     | Eop (Ocmp c) el => CEcond c el *)
+       (*     | Econdition a b c => CEcondition a (condexpr_of_expr b) (condexpr_of_expr c) *)
+       (*     | Elet a b => CElet a (condexpr_of_expr b) *)
+       (*     | _ => CEcond (Ccompuimm Cne Int.zero) (e ::: Enil) *)
+       (*     end. *)
+
+       Inherit transl_expr. (* TODO: should Cminor extend expr? *)
+       Inherit transl_stmt.
+
+       FOverride Definition transl_function := fun (f: Source.function) =>
+             do body' <- transl_stmt f.(self__Selection.Source.fn_body);
+             OK (self__Selection.Target.mkfunction
+                   f.(self__Selection.Source.fn_sig)
+                   f.(self__Selection.Source.fn_params)
+                   f.(self__Selection.Source.fn_vars)
+                   f.(self__Selection.Source.fn_stackspace)
+                   body').
+
+       FOverride Definition transl_fundef := fun (f: Source.fundef) =>
+         transf_partial_fundef (transl_function) f.
+
+       FOverride Definition transl_program := fun (p: Source.program) =>
+        transform_partial_program (transl_fundef) p.
+
+        FDefinition match_fundef := fun (f: Source.fundef) (tf: Target.fundef) =>
+         transl_fundef f = OK tf.
+
+        FDefinition match_prog := fun (p: Source.program) (tp: Target.program) => match_program (fun cu f tf => self__Selection.transl_fundef f = OK tf) eq p tp.
+
+
+        FLemma symbols_preserved:
+          forall (p: Source.program) (tp: Target.program) (s: ident), match_prog p tp -> Genv.find_symbol (Genv.globalenv tp) s = Genv.find_symbol (Genv.globalenv p) s.
+        FProofLemma.
+          intros.
+          apply (Genv.find_symbol_match H).
+          Qed.
+         CloseFLemma.
+        
+        FLemma function_ptr_translated: forall (b: block) (prog: Source.program) (tprog: Target.program) (f: Source.fundef),
+          match_prog prog tprog ->
+          Genv.find_funct_ptr (Genv.globalenv prog) b = Some f ->
+          exists cu tf, Genv.find_funct_ptr (Genv.globalenv tprog) b = Some tf /\ match_fundef f tf /\ linkorder cu prog.
+      FProofLemma.
+        intros.
+        apply (Genv.find_funct_ptr_match H).
+        exact H0.
+        Qed.
+      CloseFLemma.
+
+      FLemma sig_function_translated: forall f tf, match_fundef f tf -> Target.funsig tf = Source.funsig f.
+      FProofLemma.
+        intros.
+        inversion H. destruct f. monadInv H1; monadInv EQ. auto.
+        monadInv H1. auto.
+        Qed.
+      CloseFLemma.
+
+      FOverride Definition match_mem := fun mi m1 m2 => Mem.inject mi m1 m2.
+      
         Inherit match_cont.
         
-       (* MetaData match_states. *)
-       (* Inductive match_states: self__Selection.Source.state -> self__Selection.Target.state -> Prop := *)
-       (*  | match_state: forall cunit hf f f' s k s' k' sp e m e' m' env *)
-       (*      (LINK: linkorder cunit prog) *)
-       (*      (HF: helper_functions_declared cunit hf) *)
-       (*      (TF: sel_function (prog_defmap cunit) hf f = OK f') *)
-       (*      (TYF: type_function f = OK env) *)
-       (*      (TS: sel_stmt (prog_defmap cunit) (known_id f) env s = OK s') *)
-       (*      (MC: match_cont cunit hf (known_id f) env k k') *)
-       (*      (LD: env_lessdef e e') *)
-       (*      (ME: Mem.extends m m'), *)
-       (*      match_states *)
-       (*      (self__Selection.Source.State f s k sp e m) *)
-       (*      (self__Selection.Target.State f' s' k' sp e' m') *)
-       (*  | match_callstate: forall cunit f f' args args' k k' m m' *)
-       (*      (LINK: linkorder cunit prog) *)
-       (*      (TF: match_fundef cunit f f') *)
-       (*      (MC: match_call_cont k k') *)
-       (*      (LD: Val.lessdef_list args args') *)
-       (*      (ME: Mem.extends m m'), *)
-       (*      match_states *)
-       (*      (Cminor.Callstate f args k m) *)
-       (*      (Callstate f' args' k' m') *)
-       (*  | match_returnstate: forall v v' k k' m m' *)
-       (*      (MC: match_call_cont k k') *)
-       (*      (LD: Val.lessdef v v') *)
-       (*      (ME: Mem.extends m m'), *)
-       (*      match_states *)
-       (*      (Cminor.Returnstate v k m) *)
-       (*      (Returnstate v' k' m') *)
-       (*  | match_builtin_1: forall cunit hf ef args optid f sp e k m al f' e' k' m' env *)
-       (*      (LINK: linkorder cunit prog) *)
-       (*      (HF: helper_functions_declared cunit hf) *)
-       (*      (TF: sel_function (prog_defmap cunit) hf f = OK f') *)
-       (*      (TYF: type_function f = OK env) *)
-       (*      (MC: match_cont cunit hf (known_id f) env k k') *)
-       (*      (EA: Cminor.eval_exprlist ge sp e m al args) *)
-       (*      (LDE: env_lessdef e e') *)
-       (*      (ME: Mem.extends m m'), *)
-       (*      match_states *)
-       (*      (Cminor.Callstate (External ef) args (Cminor.Kcall optid f sp e k) m) *)
-       (*      (State f' (sel_builtin optid ef al) k' sp e' m') *)
-       (*  | match_builtin_2: forall cunit hf v v' optid f sp e k m f' e' m' k' env *)
-       (*      (LINK: linkorder cunit prog) *)
-       (*      (HF: helper_functions_declared cunit hf) *)
-       (*      (TF: sel_function (prog_defmap cunit) hf f = OK f') *)
-       (*      (TYF: type_function f = OK env) *)
-       (*      (MC: match_cont cunit hf (known_id f) env k k') *)
-       (*      (LDV: Val.lessdef v v') *)
-       (*      (LDE: env_lessdef (set_optvar optid v e) e') *)
-       (*      (ME: Mem.extends m m'), *)
-       (*      match_states *)
-       (*      (Cminor.Returnstate v (Cminor.Kcall optid f sp e k) m) *)
-       (*      (State f' Sskip k' sp e' m'). *)
-        
+        Inherit match_states.
+
         FOverride Definition measure := fun st =>
             match st with
             | self__Selection.Source.Callstate _ _ _ _ => 0%nat
             | self__Selection.Source.State _ _ _ _ _ _ => 1%nat
             | self__Selection.Source.Returnstate _ _ _ => 2%nat
             end.
-        (* Finducution transl_step_correct *)
-        FLemma sel_step_correct:
-            forall S1 t S2, self__Selection.Source.step ge S1 t S2 ->
-            forall T1, match_states S1 T1 -> (* omit wt_state; we don't need typing *)
-            (exists T2, plus step tge T1 t T2 /\ match_states S2 T2)
-            \/ (measure S2 < measure S1 /\ t = E0 /\ match_states S2 T1)%nat
-            \/ (exists T2 n, step tge T1 t T2 /\ eventually n S2 (fun S3 => match_states S3 T2)).
-        Proof.
+
+        FInduction transl_step_correct.
+        FProof.
+        Qed. FEnd transl_step_correct.
         
-        Lemma sel_initial_states:
-            forall S, Cminor.initial_state prog S ->
-            exists R, initial_state tprog R /\ match_states S R.
-        Proof.
-        
-        Lemma sel_final_states:
+        FLemma transl_initial_states:
+            forall S prog tprog, Source.initial_state prog S ->
+            match_prog prog tprog ->
+            exists R, Target.initial_state tprog R /\ match_states S R.
+        FProofLemma.
+          destruct 1.
+          exploit self__Selection.function_ptr_translated; eauto. apply cheat. (* TODO *)
+          intros (cu & f' & A & B & C).
+          econstructor; split.
+          econstructor.
+          eapply (Genv.init_mem_match H3). eauto.
+          rewrite (match_program_main H3).
+          rewrite (self__Selection.symbols_preserved prog tprog _). eauto. exact H3.
+          eexact A.
+          rewrite <- H2. 
+          eapply (self__Selection.sig_function_translated f f'). eauto.
+          econstructor; eauto. apply Mem.extends_refl.
+
+          Qed.
+        CloseFLemma.
+
+        FLemma sel_final_states:
             forall S R r,
             match_states S R -> Cminor.final_state S r -> final_state R r.
-        Proof.
+        FProofLemma.
+          apply cheat.
+          Qed.
+        CloseFLemma.
 
   FEnd Selection.
          
