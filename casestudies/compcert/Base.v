@@ -1443,6 +1443,12 @@ Inductive bitfield : Type :=
        Inherit transl_expr. (* TODO: should Cminor extend expr? *)
        Inherit transl_stmt.
 
+       (* FDefinition known_id := fun (f: Cminor.function) => *)
+       (*   let add (ki: known_idents) (id: ident) := PTree.set id tt ki in *)
+       (*   List.fold_left add f.(self__Selection.Source.fn_vars) *)
+       (*   (List.fold_left add f.(Cminor.fn_params) (PTree.empty unit)). *)
+
+       
        FOverride Definition transl_function := fun (f: Source.function) =>
              do body' <- transl_stmt f.(self__Selection.Source.fn_body);
              OK (self__Selection.Target.mkfunction
@@ -1491,12 +1497,69 @@ Inductive bitfield : Type :=
         Qed.
       CloseFLemma.
 
-      FOverride Definition match_mem := fun mi m1 m2 => Mem.inject mi m1 m2.
+      FDefinition env_lessdef := fun (e1 e2: Source.env) =>
+  forall id v1, e1!id = Some v1 -> exists v2, e2!id = Some v2 /\ Val.lessdef v1 v2.
+      
+      FOverride Definition match_mem := fun _ m1 m2 => Mem.extends m1 m2.
       
         Inherit match_cont.
         
-        Inherit match_states.
+        (* Inherit match_states. *)
 
+        MetaData match_states.
+        Inductive match_states: self__Selection.Source.state -> self__Selection.Target.state -> Prop :=
+  | match_state: forall cunit prog f f' s k s' k' sp e m e' m'
+        (LINK: linkorder cunit prog)
+        (* (HF: helper_functions_declared cunit hf) *)
+        (TF: self__Selection.transl_function f = OK f')
+        (TS: self__Selection.transl_stmt s = OK s')
+        (MC: self__Selection.match_cont k k')
+        (LD: self__Selection.env_lessdef e e')
+        (ME: Mem.extends m m'),
+      match_states
+        (self__Selection.Source.State f s k sp e m)
+        (self__Selection.Target.State f' s' k' sp e' m')
+  | match_callstate: forall prog cunit f f' args args' k k' m m'
+        (LINK: linkorder cunit prog)
+        (TF: self__Selection.match_fundef f f')
+        (MC: self__Selection.match_cont k k')
+        (LD: Val.lessdef_list args args')
+        (ME: Mem.extends m m'),
+      match_states
+        (self__Selection.Source.Callstate f args k m)
+        (self__Selection.Target.Callstate f' args' k' m')
+  | match_returnstate: forall v v' k k' m m'
+        (MC: self__Selection.match_cont k k')
+        (LD: Val.lessdef v v')
+        (ME: Mem.extends m m'),
+      match_states
+        (self__Selection.Source.Returnstate v k m)
+        (self__Selection.Target.Returnstate v' k' m').
+  (* | match_builtin_1: forall prog cunit hf ef args optid f sp e k m al f' e' k' m' env *)
+  (*       (LINK: linkorder cunit prog) *)
+  (*       (HF: helper_functions_declared cunit hf) *)
+  (*       (TF: self__Selection.transl_function f = OK f') *)
+  (*       (MC: self__Selection.match_cont k k') *)
+  (*       (* (EA: self__Selection.Source.eval_exprlist ge sp e m al args) *) *)
+  (*       (LDE: self__Selection.env_lessdef e e') *)
+  (*       (ME: Mem.extends m m'), *)
+  (*     match_states *)
+  (*       (self__Selection.Source.Callstate (External ef) args (Cminor.Kcall optid f sp e k) m) *)
+  (*       (self__Selection.Target.State f' (transl_builtin optid ef al) k' sp e' m') *)
+  (* | match_builtin_2: forall cunit hf v v' optid f sp e k m f' e' m' k' env *)
+  (*       (LINK: linkorder cunit prog) *)
+  (*       (HF: helper_functions_declared cunit hf) *)
+  (*       (TF: sel_function (prog_defmap cunit) hf f = OK f') *)
+  (*       (TYF: type_function f = OK env) *)
+  (*       (MC: match_cont cunit hf (known_id f) env k k') *)
+  (*       (LDV: Val.lessdef v v') *)
+  (*       (LDE: env_lessdef (set_optvar optid v e) e') *)
+  (*       (ME: Mem.extends m m'), *)
+  (*     match_states *)
+  (*       (Cminor.Returnstate v (Cminor.Kcall optid f sp e k) m) *)
+  (*       (State f' Sskip k' sp e' m'). *)
+        FEnd match_states.
+        
         FOverride Definition measure := fun st =>
             match st with
             | self__Selection.Source.Callstate _ _ _ _ => 0%nat
@@ -1514,22 +1577,24 @@ Inductive bitfield : Type :=
             exists R, Target.initial_state tprog R /\ match_states S R.
         FProofLemma.
           destruct 1.
-          exploit self__Selection.function_ptr_translated; eauto. apply cheat. (* TODO *)
+          intros Hm.
+          exploit self__Selection.function_ptr_translated. eauto. eauto.
           intros (cu & f' & A & B & C).
           econstructor; split.
           econstructor.
-          eapply (Genv.init_mem_match H3). eauto.
-          rewrite (match_program_main H3).
-          rewrite (self__Selection.symbols_preserved prog tprog _). eauto. exact H3.
+          eapply (Genv.init_mem_match Hm). eauto.
+          rewrite (match_program_main Hm).
+          rewrite (self__Selection.symbols_preserved prog tprog _). eauto. exact Hm.
           eexact A.
           rewrite <- H2. 
           eapply (self__Selection.sig_function_translated f f'). eauto.
-          econstructor; eauto. apply Mem.extends_refl.
-
+          econstructor; eauto.
+          apply Mem.extends_refl.
+          constructor.
           Qed.
         CloseFLemma.
 
-        FLemma sel_final_states:
+          FLemma sel_final_states:
             forall S R r,
             match_states S R -> Cminor.final_state S r -> final_state R r.
         FProofLemma.
@@ -3883,7 +3948,7 @@ Inductive bitfield : Type :=
        Inductive match_states: Cminor.state -> CminorSel.state -> Prop :=
          | match_state: forall cunit hf f f' s k s' k' sp e m e' m' env
                (LINK: linkorder cunit prog)
-               (HF: helper_functions_declared cunit hf)
+               (* (HF: helper_functions_declared cunit hf) *)
                (TF: sel_function (prog_defmap cunit) hf f = OK f')
                (TYF: type_function f = OK env)
                (TS: sel_stmt (prog_defmap cunit) (known_id f) env s = OK s')
