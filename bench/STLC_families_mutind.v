@@ -109,21 +109,21 @@ FEnd subst_tm with subst_val.
 
 FDefinition context : Type := partial_map ty.
 
-FInductive step : self__STLC.tm -> self__STLC.tm -> Prop :=
+FInductive step : tm -> tm -> Prop :=
   | st_app0 : forall a a' b,
     (step a a') ->
     (step
-      (self__STLC.tm_app a b)
-      (self__STLC.tm_app a' b))
+      (tm_app a b)
+      (tm_app a' b))
   | st_app1 : forall a b b',
     (step b b') ->
     (step
-      (self__STLC.tm_app (self__STLC.tm_val a) b)
-      (self__STLC.tm_app (self__STLC.tm_val a) b'))
+      (tm_app (tm_val a) b)
+      (tm_app (tm_val a) b'))
   | st_app2 : forall b x body,
     (step
-      (self__STLC.tm_app (self__STLC.tm_val (self__STLC.val_abs x body)) (self__STLC.tm_val b))
-      (self__STLC.subst_tm body x (self__STLC.tm_val b))).
+      (tm_app (tm_val (val_abs x body)) (tm_val b))
+      (subst_tm body x (tm_val b))).
 
 
 Closing Fact not_step_tm_var:
@@ -150,31 +150,31 @@ Closing Fact step_tm_app_inv:
       try (right; left; repeat eexists; eauto; fail);
       try (right; right; repeat eexists; eauto; fail)}.
 
-MetaData _steps.
+MetaData steps.
 (* We want a non-extensible steps
     such that inversion on it is possible *)
-Inductive steps : self__STLC.tm -> self__STLC.tm -> Prop :=
+Inductive steps : tm -> tm -> Prop :=
   | sts_refl : forall x, steps x x
-  | sts_trans : forall x y z, self__STLC.step x y -> steps y z -> steps x z.
-FEnd _steps.
+  | sts_trans : forall x y z, step x y -> steps y z -> steps x z.
+FEnd steps.
 
-FInductive has_type_tm : self__STLC.context -> self__STLC.tm -> self__STLC.ty -> Prop :=
+FInductive has_type_tm : context -> tm -> ty -> Prop :=
   | ht_var : forall G x T1,
       G x = Some T1 ->
-      has_type_tm G (self__STLC.tm_var x) T1
+      has_type_tm G (tm_var x) T1
   | ht_app : forall G x y T1 T2,
-      has_type_tm G x (self__STLC.ty_arrow T1 T2) ->
+      has_type_tm G x (ty_arrow T1 T2) ->
       has_type_tm G y T1 ->
-      has_type_tm G (self__STLC.tm_app x y) T2
+      has_type_tm G (tm_app x y) T2
   | ht_val : forall G v T1,
       has_type_val G v T1 ->
-      has_type_tm G (self__STLC.tm_val v) T1
-with has_type_val : self__STLC.context -> self__STLC.val -> self__STLC.ty -> Prop :=
+      has_type_tm G (tm_val v) T1
+with has_type_val : context -> val -> ty -> Prop :=
   | ht_abs : forall G x body T1 T2,
       has_type_tm (x |-> T1; G) body T2 ->
-      has_type_val G (self__STLC.val_abs x body) (self__STLC.ty_arrow T1 T2)
+      has_type_val G (val_abs x body) (ty_arrow T1 T2)
   | ht_unit : forall G,
-      has_type_val G self__STLC.val_unit self__STLC.ty_unit.
+      has_type_val G val_unit ty_unit.
       
 Closing Fact ht_inv_tm_val :
   forall G v T1,
@@ -205,12 +205,12 @@ FProof.
 - intros. subst. right. destruct H.
   + reflexivity.
   + destruct H. subst.
-    apply self__STLC.ht_inv_tm_val in __i.
-    apply self__STLC.value_arrow_type_abs in __i as (?&?&?). subst.
+    apply ht_inv_tm_val in __i.
+    apply value_arrow_type_abs in __i as (?&?&?). subst.
     destruct (H0 eq_refl).
-    * destruct H. subst. eexists. eapply self__STLC.st_app2.
-    * destruct H. eexists. eapply self__STLC.st_app1. eassumption.
-  + destruct H. eexists. eapply self__STLC.st_app0. eassumption.
+    * destruct H. subst. eexists. eapply st_app2.
+    * destruct H. eexists. eapply st_app1. eassumption.
+  + destruct H. eexists. eapply st_app0. eassumption.
 - intros. subst. left. eauto.
 Qed. FEnd progress.
 
@@ -232,31 +232,31 @@ FProof.
   destruct (PeanoNat.Nat.eqb_spec x0 x); subst.
   + rewrite update_eq in e. injection e as e. subst. apply H0.
   + rewrite update_neq in e.
-    * apply self__STLC.ht_var. assumption.
+    * apply ht_var. assumption.
     * assumption.
 - intros. fsimpl. fconstructor. 
 - intros. fsimpl. 
-  apply self__STLC.ht_val. eapply H; eauto.
+  apply ht_val. eapply H; eauto.
 - intros. fsimpl. 
-  destruct (PeanoNat.Nat.eqb_spec x0 x); subst; eapply self__STLC.ht_abs.
+  destruct (PeanoNat.Nat.eqb_spec x0 x); subst; eapply ht_abs.
   + rewrite update_shadow in __i. assumption.
   + eapply H; eauto. apply update_permute; assumption.
 - intros. fsimpl. 
-  apply self__STLC.ht_unit.
+  apply ht_unit.
 Qed. FEnd subst_tm_lemma with subst_val_lemma.
 
-FInductive fv_tm : ident -> self__STLC.tm -> Prop :=
+FInductive fv_tm : ident -> tm -> Prop :=
   | fv_tm_var : forall x,
-      fv_tm x (self__STLC.tm_var x)
+      fv_tm x (tm_var x)
   | fv_tm_app1 : forall x a b,
-      fv_tm x a -> fv_tm x (self__STLC.tm_app a b)
+      fv_tm x a -> fv_tm x (tm_app a b)
   | fv_tm_app2 : forall x a b,
-      fv_tm x b -> fv_tm x (self__STLC.tm_app a b)
+      fv_tm x b -> fv_tm x (tm_app a b)
   | fv_tm_val : forall x v,
-      fv_val x v -> fv_tm x (self__STLC.tm_val v)
-with fv_val : ident -> self__STLC.val -> Prop :=
+      fv_val x v -> fv_tm x (tm_val v)
+with fv_val : ident -> val -> Prop :=
   | fv_val_abs :  forall x v body,
-      fv_tm x body -> x <> v -> fv_val x (self__STLC.val_abs v body).
+      fv_tm x body -> x <> v -> fv_val x (val_abs v body).
 
 Closing Fact fv_inv_tm_var :
   forall x x',
@@ -299,12 +299,12 @@ FInduction
     fv_val x v ->
     exists U, G x = Some U).
 FProof.
-- intros. apply self__STLC.fv_inv_tm_var in H. subst. eauto.
-- intros. apply self__STLC.fv_inv_tm_app in H1 as []; eauto.
-- intros. apply self__STLC.fv_inv_tm_val in H0. eauto.
-- intros. apply self__STLC.fv_inv_val_abs in H0 as [].
+- intros. apply fv_inv_tm_var in H. subst. eauto.
+- intros. apply fv_inv_tm_app in H1 as []; eauto.
+- intros. apply fv_inv_tm_val in H0. eauto.
+- intros. apply fv_inv_val_abs in H0 as [].
   erewrite <- update_neq; eauto.
-- intros. apply self__STLC.fv_inv_val_unit in H as [].
+- intros. apply fv_inv_val_unit in H as [].
 Qed. FEnd free_var_tm_in_ctx with free_var_val_in_ctx.
 
 FInduction
@@ -319,17 +319,17 @@ FInduction
     (forall x, fv_val x v -> G1 x = G2 x) ->
     has_type_val G2 v T).
 FProof.
-- intros. apply self__STLC.ht_var. rewrite <- e. symmetry.
-  auto using self__STLC.fv_tm_var.
-- intros. eapply self__STLC.ht_app;
-    eauto using self__STLC.fv_tm_app1, self__STLC.fv_tm_app2.
-- intros. apply self__STLC.ht_val.
-  auto using self__STLC.fv_tm_val.
-- intros. apply self__STLC.ht_abs. apply H. intros.
+- intros. apply ht_var. rewrite <- e. symmetry.
+  auto using fv_tm_var.
+- intros. eapply ht_app;
+    eauto using fv_tm_app1, fv_tm_app2.
+- intros. apply ht_val.
+  auto using fv_tm_val.
+- intros. apply ht_abs. apply H. intros.
   destruct (PeanoNat.Nat.eqb_spec x x0).
   + subst. repeat rewrite update_eq. reflexivity.
-  + repeat rewrite update_neq; auto using self__STLC.fv_val_abs.
-- intros. apply self__STLC.ht_unit.
+  + repeat rewrite update_neq; auto using fv_val_abs.
+- intros. apply ht_unit.
 Qed. FEnd free_var_tm_matters with free_var_val_matters.
 
 
@@ -338,9 +338,9 @@ FLemma weakening_lemma_tm :
   has_type_tm empty k T ->
   (forall G, has_type_tm G k T).
 FProofLemma.
-intros. eapply self__STLC.free_var_tm_matters.
+intros. eapply free_var_tm_matters.
 - eassumption.
-- intros. destruct (self__STLC.free_var_tm_in_ctx _ _ _ H _ H0).
+- intros. destruct (free_var_tm_in_ctx _ _ _ H _ H0).
   unfold empty in H1. discriminate.
 Qed. CloseFLemma. (* weakening_lemma_tm.*)
 
@@ -349,9 +349,9 @@ FLemma weakening_lemma_val :
   has_type_val empty k T ->
   (forall G, has_type_val G k T).
 FProofLemma.
-intros. eapply self__STLC.free_var_val_matters.
+intros. eapply free_var_val_matters.
 - eassumption.
-- intros. destruct (self__STLC.free_var_val_in_ctx _ _ _ H _ H0).
+- intros. destruct (free_var_val_in_ctx _ _ _ H _ H0).
   unfold empty in H1. discriminate.
 Qed. CloseFLemma. (* FEnd weakening_lemma_val.*)
 
@@ -366,38 +366,38 @@ FInduction preservation
 FProof.
 - intros. subst. unfold empty in e. discriminate. 
 - intros.
-  destruct (self__STLC.step_tm_app_inv _ _ _ H2)
+  destruct (step_tm_app_inv _ _ _ H2)
     as [[?[]]|[[?[?[? ?]]]|[?[?[?[[? ?]?]]]]]];
-    subst; try (eapply self__STLC.ht_app; eauto).
-  + eapply self__STLC.subst_tm_lemma.
-    * apply self__STLC.ht_inv_tm_val in __i.
-      apply self__STLC.ht_inv_val_abs in __i.
+    subst; try (eapply ht_app; eauto).
+  + eapply subst_tm_lemma.
+    * apply ht_inv_tm_val in __i.
+      apply ht_inv_val_abs in __i.
       apply __i.
     * reflexivity.
-    * intros. apply self__STLC.weakening_lemma_tm. assumption. 
-- intros. apply self__STLC.not_step_tm_val in H0 as [].
+    * intros. apply weakening_lemma_tm. assumption. 
+- intros. apply not_step_tm_val in H0 as [].
 Qed. FEnd preservation.
 
 
 FLemma preservation2 :
   forall t t',
-    self__STLC.steps t t' ->
+    steps t t' ->
     forall T,
     has_type_tm empty t T ->
     has_type_tm empty t' T.
 FProofLemma.
-intros t t' h. induction h; intros; subst; eauto using self__STLC.preservation.
-eapply IHh; eauto. eapply self__STLC.preservation; eauto.
+intros t t' h. induction h; intros; subst; eauto using preservation.
+eapply IHh; eauto. eapply preservation; eauto.
 Qed. CloseFLemma. (* FEnd preservation2.*)
 
 
 FLemma type_safety:
   forall t t' T,
     has_type_tm empty t T ->
-    self__STLC.steps t t' ->
+    steps t t' ->
     (exists v, t' = tm_val v) \/ (exists t'', step t' t'').
 FProofLemma.
-intros. eapply self__STLC.progress; eauto using self__STLC.preservation2.
+intros. eapply progress; eauto using preservation2.
 Qed. CloseFLemma. (* FEnd type_safety.*)
 
 FEnd STLC.
@@ -427,13 +427,13 @@ Case tm_if :=
 FEnd subst_tm with subst_val.
 
 
-FInductive step : self__STLC_bool.tm -> self__STLC_bool.tm -> Prop :=
+FInductive step : tm -> tm -> Prop :=
   | st_if0 : forall c c' a b,
-    (step c c') -> (step (self__STLC_bool.tm_if c a b) (self__STLC_bool.tm_if c' a b))
+    (step c c') -> (step (tm_if c a b) (tm_if c' a b))
   | st_if1 : forall a b,
-    (step (self__STLC_bool.tm_if (self__STLC_bool.tm_val self__STLC_bool.val_true) a b) a)
+    (step (tm_if (tm_val val_true) a b) a)
   | st_if2 : forall a b,
-    (step (self__STLC_bool.tm_if (self__STLC_bool.tm_val self__STLC_bool.val_false) a b) b).
+    (step (tm_if (tm_val val_false) a b) b).
 
 Closing Fact step_tm_if_inv:
   forall c a b t,
@@ -443,17 +443,17 @@ Closing Fact step_tm_if_inv:
     \/ (c = tm_val val_false /\ t = b)
   by { inversion 1; eauto }.
 
-FInductive has_type_tm : self__STLC_bool.context -> self__STLC_bool.tm -> self__STLC_bool.ty -> Prop :=
+FInductive has_type_tm : context -> tm -> ty -> Prop :=
   | ht_if : forall G c a b T,
-      has_type_tm G c self__STLC_bool.ty_bool ->
+      has_type_tm G c ty_bool ->
       has_type_tm G a T ->
       has_type_tm G b T ->
-      has_type_tm G (self__STLC_bool.tm_if c a b) T
-with has_type_val : self__STLC_bool.context -> self__STLC_bool.val -> self__STLC_bool.ty -> Prop :=
+      has_type_tm G (tm_if c a b) T
+with has_type_val : context -> val -> ty -> Prop :=
   | ht_true : forall G,
-      has_type_val G self__STLC_bool.val_true self__STLC_bool.ty_bool
+      has_type_val G val_true ty_bool
   | ht_false : forall G,
-      has_type_val G self__STLC_bool.val_false self__STLC_bool.ty_bool.
+      has_type_val G val_false ty_bool.
 
 Closing Fact value_bool_type_true_false:
   forall v,
@@ -464,10 +464,10 @@ by { inversion 1; eauto }.
 FInduction progress.
 FProof.
 intros. subst. right. destruct (H eq_refl) as [[]|[]]; subst.
-- apply self__STLC_bool.ht_inv_tm_val in __i.
-  apply self__STLC_bool.value_bool_type_true_false in __i as [|];
-    subst; eauto using self__STLC_bool.st_if1, self__STLC_bool.st_if2.
-- eauto using self__STLC_bool.st_if0.
+- apply ht_inv_tm_val in __i.
+  apply value_bool_type_true_false in __i as [|];
+    subst; eauto using st_if1, st_if2.
+- eauto using st_if0.
 Qed. FEnd progress.
 
 FInduction subst_tm_lemma with subst_val_lemma.
@@ -477,14 +477,14 @@ FProof.
 - intros. fsimpl. fconstructor. 
 Qed. FEnd subst_tm_lemma with subst_val_lemma.
 
-FInductive fv_tm : ident -> self__STLC_bool.tm -> Prop :=
+FInductive fv_tm : ident -> tm -> Prop :=
 | fv_if0 : forall x c a b,
-    fv_tm x c -> fv_tm x (self__STLC_bool.tm_if c a b)
+    fv_tm x c -> fv_tm x (tm_if c a b)
 | fv_if1 : forall x c a b,
-    fv_tm x a -> fv_tm x (self__STLC_bool.tm_if c a b)
+    fv_tm x a -> fv_tm x (tm_if c a b)
 | fv_if2 : forall x c a b,
-    fv_tm x b -> fv_tm x (self__STLC_bool.tm_if c a b)
-with fv_val : ident -> self__STLC_bool.val -> Prop := .
+    fv_tm x b -> fv_tm x (tm_if c a b)
+with fv_val : ident -> val -> Prop := .
 
 Closing Fact fv_inv_tm_if:
 forall x c a b,
@@ -504,25 +504,25 @@ by { unfold not; inversion 1; auto }.
 
 FInduction free_var_tm_in_ctx with free_var_val_in_ctx.
 FProof.
-- intros. apply self__STLC_bool.fv_inv_tm_if in H2 as [|[|]]; eauto.
-- intros. apply self__STLC_bool.fv_inv_val_true in H as [].
-- intros. apply self__STLC_bool.fv_inv_val_false in H as [].
+- intros. apply fv_inv_tm_if in H2 as [|[|]]; eauto.
+- intros. apply fv_inv_val_true in H as [].
+- intros. apply fv_inv_val_false in H as [].
 Qed. FEnd free_var_tm_in_ctx with free_var_val_in_ctx.
 
 FInduction free_var_tm_matters with free_var_val_matters.
 FProof.
-- intros. apply self__STLC_bool.ht_if;
-    eauto using self__STLC_bool.fv_if0, self__STLC_bool.fv_if1, self__STLC_bool.fv_if2.
-- intros. apply self__STLC_bool.ht_true.
-- intros. apply self__STLC_bool.ht_false.
+- intros. apply ht_if;
+    eauto using fv_if0, fv_if1, fv_if2.
+- intros. apply ht_true.
+- intros. apply ht_false.
 Qed. FEnd free_var_tm_matters with free_var_val_matters.
 
 
 FInduction preservation.
 FProof.
 intros. subst.
-apply self__STLC_bool.step_tm_if_inv in H3 as [[?[? ?]]|[[? ?]|[? ?]]];
-  subst; eauto using self__STLC_bool.ht_if.
+apply step_tm_if_inv in H3 as [[?[? ?]]|[[? ?]|[? ?]]];
+  subst; eauto using ht_if.
 Qed. FEnd preservation.
 
 FEnd STLC_bool.
@@ -554,23 +554,23 @@ Case val_prod :=
   (fun a rec_a b rec_b x t => val_prod (rec_a x t) (rec_b x t)).
 FEnd subst_tm with subst_val.
 
-FInductive step : self__STLC_prod.tm -> self__STLC_prod.tm -> Prop :=
+FInductive step : tm -> tm -> Prop :=
   | st_prod0 : forall a a' b,
-    (step a a') -> (step (self__STLC_prod.tm_prod a b) (self__STLC_prod.tm_prod a' b))
+    (step a a') -> (step (tm_prod a b) (tm_prod a' b))
   | st_prod1 : forall a b b',
-    (step b b') -> (step (self__STLC_prod.tm_prod (self__STLC_prod.tm_val a) b) (self__STLC_prod.tm_prod (self__STLC_prod.tm_val a) b'))
+    (step b b') -> (step (tm_prod (tm_val a) b) (tm_prod (tm_val a) b'))
   | st_prod2 : forall a b,
-    (step (self__STLC_prod.tm_prod (self__STLC_prod.tm_val a) (self__STLC_prod.tm_val b)) (self__STLC_prod.tm_val (self__STLC_prod.val_prod a b)))
+    (step (tm_prod (tm_val a) (tm_val b)) (tm_val (val_prod a b)))
   | st_pi10 : forall a a',
     step a a' ->
-    (step (self__STLC_prod.tm_pi1 a) (self__STLC_prod.tm_pi1 a'))
+    (step (tm_pi1 a) (tm_pi1 a'))
   | st_pi11 : forall a b,
-    (step (self__STLC_prod.tm_pi1 (self__STLC_prod.tm_val (self__STLC_prod.val_prod a b))) (self__STLC_prod.tm_val a))
+    (step (tm_pi1 (tm_val (val_prod a b))) (tm_val a))
   | st_pi20 : forall a a',
     step a a' ->
-    (step (self__STLC_prod.tm_pi2 a) (self__STLC_prod.tm_pi2 a'))
+    (step (tm_pi2 a) (tm_pi2 a'))
   | st_pi21 : forall a b,
-    (step (self__STLC_prod.tm_pi2 (self__STLC_prod.tm_val (self__STLC_prod.val_prod a b))) (self__STLC_prod.tm_val b)).
+    (step (tm_pi2 (tm_val (val_prod a b))) (tm_val b)).
 
     
 Closing Fact st_prod_inv:
@@ -596,22 +596,22 @@ Closing Fact st_pi2_inv:
 by { inversion 1; eauto }.
 
 
-FInductive has_type_tm : self__STLC_prod.context -> self__STLC_prod.tm -> self__STLC_prod.ty -> Prop :=
+FInductive has_type_tm : context -> tm -> ty -> Prop :=
   | ht_pi1 : forall G t A B,
-      has_type_tm G t (self__STLC_prod.ty_prod A B) ->
-      has_type_tm G (self__STLC_prod.tm_pi1 t) A
+      has_type_tm G t (ty_prod A B) ->
+      has_type_tm G (tm_pi1 t) A
   | ht_pi2 : forall G t A B,
-      has_type_tm G t (self__STLC_prod.ty_prod A B) ->
-      has_type_tm G (self__STLC_prod.tm_pi2 t) B
+      has_type_tm G t (ty_prod A B) ->
+      has_type_tm G (tm_pi2 t) B
   | ht_tm_prod : forall G a b A B,
       has_type_tm G a A ->
       has_type_tm G b B ->
-      has_type_tm G (self__STLC_prod.tm_prod a b) (self__STLC_prod.ty_prod A B)
-with has_type_val : self__STLC_prod.context -> self__STLC_prod.val -> self__STLC_prod.ty -> Prop :=
+      has_type_tm G (tm_prod a b) (ty_prod A B)
+with has_type_val : context -> val -> ty -> Prop :=
   | ht_val_prod : forall G a b A B,
       has_type_val G a A ->
       has_type_val G b B ->
-      has_type_val G (self__STLC_prod.val_prod a b) (self__STLC_prod.ty_prod A B).
+      has_type_val G (val_prod a b) (ty_prod A B).
 
 (* Canonical form *)
 Closing Fact value_prod_type_inv:
@@ -623,21 +623,21 @@ by { inversion 1; eauto }.
 FInduction progress.
 FProof.
 - intros. subst. right. destruct (H eq_refl) as [[]|[]]; subst.
-  + apply self__STLC_prod.ht_inv_tm_val in __i.
-    apply self__STLC_prod.value_prod_type_inv in __i as (?&?&?&?&?). subst.
-    eauto using self__STLC_prod.st_pi11.
-  + eauto using self__STLC_prod.st_pi10.
+  + apply ht_inv_tm_val in __i.
+    apply value_prod_type_inv in __i as (?&?&?&?&?). subst.
+    eauto using st_pi11.
+  + eauto using st_pi10.
 - intros. subst. right. destruct (H eq_refl) as [[]|[]]; subst.
-  + apply self__STLC_prod.ht_inv_tm_val in __i.
-    apply self__STLC_prod.value_prod_type_inv in __i as (?&?&?&?&?). subst.
-    eauto using self__STLC_prod.st_pi21.
-  + eauto using self__STLC_prod.st_pi20.
+  + apply ht_inv_tm_val in __i.
+    apply value_prod_type_inv in __i as (?&?&?&?&?). subst.
+    eauto using st_pi21.
+  + eauto using st_pi20.
 - intros. subst. right.
   destruct (H eq_refl) as [[]|[]], (H0 eq_refl) as [[]|[]]; subst.
-  + eauto using self__STLC_prod.st_prod2.
-  + eauto using self__STLC_prod.st_prod1.
-  + eauto using self__STLC_prod.st_prod0.
-  + eauto using self__STLC_prod.st_prod0.
+  + eauto using st_prod2.
+  + eauto using st_prod1.
+  + eauto using st_prod0.
+  + eauto using st_prod0.
 Qed. FEnd progress.
 
 
@@ -649,20 +649,20 @@ FProof.
 + intros. fsimpl. fconstructor.  
 Qed. FEnd subst_tm_lemma with subst_val_lemma.
 
-FInductive fv_tm : ident -> self__STLC_prod.tm -> Prop :=
+FInductive fv_tm : ident -> tm -> Prop :=
   | fv_tm_prod0 : forall x a b,
-      fv_tm x a -> fv_tm x (self__STLC_prod.tm_prod a b)
+      fv_tm x a -> fv_tm x (tm_prod a b)
   | fv_tm_prod1 : forall x a b,
-      fv_tm x b -> fv_tm x (self__STLC_prod.tm_prod a b)
+      fv_tm x b -> fv_tm x (tm_prod a b)
   | fv_pi1 : forall x a,
-      fv_tm x a -> fv_tm x (self__STLC_prod.tm_pi1 a)
+      fv_tm x a -> fv_tm x (tm_pi1 a)
   | fv_pi2 : forall x a,
-      fv_tm x a -> fv_tm x (self__STLC_prod.tm_pi2 a)
-with fv_val : ident -> self__STLC_prod.val -> Prop :=
+      fv_tm x a -> fv_tm x (tm_pi2 a)
+with fv_val : ident -> val -> Prop :=
   | fv_val_prod0 : forall x a b,
-      fv_val x a -> fv_val x (self__STLC_prod.val_prod a b)
+      fv_val x a -> fv_val x (val_prod a b)
   | fv_val_prod1 : forall x a b,
-      fv_val x b -> fv_val x (self__STLC_prod.val_prod a b).
+      fv_val x b -> fv_val x (val_prod a b).
 
 
 Closing Fact fv_inv_tm_prod:
@@ -691,23 +691,23 @@ by { inversion 1; auto }.
 
 FInduction free_var_tm_in_ctx with free_var_val_in_ctx.
 FProof.
-- intros. eauto using self__STLC_prod.fv_inv_tm_pi1.
-- intros. eauto using self__STLC_prod.fv_inv_tm_pi2.
-- intros. apply self__STLC_prod.fv_inv_tm_prod in H1 as []; eauto.
-- intros. apply self__STLC_prod.fv_inv_val_prod in H1 as []; eauto.
+- intros. eauto using fv_inv_tm_pi1.
+- intros. eauto using fv_inv_tm_pi2.
+- intros. apply fv_inv_tm_prod in H1 as []; eauto.
+- intros. apply fv_inv_val_prod in H1 as []; eauto.
 Qed. FEnd free_var_tm_in_ctx with free_var_val_in_ctx.
 
 
 FInduction free_var_tm_matters with free_var_val_matters.
 FProof.
-- intros. eapply self__STLC_prod.ht_pi1. eauto using self__STLC_prod.fv_pi1.
-- intros. eapply self__STLC_prod.ht_pi2. eauto using self__STLC_prod.fv_pi2.
-- intros. eapply self__STLC_prod.ht_tm_prod.
-  + eauto using self__STLC_prod.fv_tm_prod0.
-  + eauto using self__STLC_prod.fv_tm_prod1.
-- intros. eapply self__STLC_prod.ht_val_prod.
-  + eauto using self__STLC_prod.fv_val_prod0.
-  + eauto using self__STLC_prod.fv_val_prod1.
+- intros. eapply ht_pi1. eauto using fv_pi1.
+- intros. eapply ht_pi2. eauto using fv_pi2.
+- intros. eapply ht_tm_prod.
+  + eauto using fv_tm_prod0.
+  + eauto using fv_tm_prod1.
+- intros. eapply ht_val_prod.
+  + eauto using fv_val_prod0.
+  + eauto using fv_val_prod1.
 Qed. FEnd free_var_tm_matters with free_var_val_matters.
 
 
@@ -727,21 +727,21 @@ by { inversion 1; auto }.
 
 FInduction preservation.
 FProof.
-- intros. subst. apply self__STLC_prod.st_pi1_inv in H1 as [[?[]]|[?[?[]]]]; subst.
-  + eauto using self__STLC_prod.ht_pi1.
-  + apply self__STLC_prod.ht_inv_tm_val in __i.
-    apply self__STLC_prod.value_prod_type_inv in __i as (?&?&?&?&?).
-    apply self__STLC_prod.inject_val_prod in H0 as []. subst.
-    apply self__STLC_prod.ht_val. assumption.
-- intros. subst. apply self__STLC_prod.st_pi2_inv in H1 as [[?[]]|[?[?[]]]]; subst.
-  + eauto using self__STLC_prod.ht_pi2.
-  + apply self__STLC_prod.ht_inv_tm_val in __i.
-    apply self__STLC_prod.value_prod_type_inv in __i as (?&?&?&?&?).
-    apply self__STLC_prod.inject_val_prod in H0 as []. subst.
-    apply self__STLC_prod.ht_val. assumption.
-- intros. subst. apply self__STLC_prod.st_prod_inv in H2 as [[?[]]|[[[][?[]]]|[?[?[?[]]]]]];
-    subst; eauto using self__STLC_prod.ht_tm_prod.
-  + eauto using self__STLC_prod.ht_val, self__STLC_prod.ht_val_prod, self__STLC_prod.ht_inv_tm_val.
+- intros. subst. apply st_pi1_inv in H1 as [[?[]]|[?[?[]]]]; subst.
+  + eauto using ht_pi1.
+  + apply ht_inv_tm_val in __i.
+    apply value_prod_type_inv in __i as (?&?&?&?&?).
+    apply inject_val_prod in H0 as []. subst.
+    apply ht_val. assumption.
+- intros. subst. apply st_pi2_inv in H1 as [[?[]]|[?[?[]]]]; subst.
+  + eauto using ht_pi2.
+  + apply ht_inv_tm_val in __i.
+    apply value_prod_type_inv in __i as (?&?&?&?&?).
+    apply inject_val_prod in H0 as []. subst.
+    apply ht_val. assumption.
+- intros. subst. apply st_prod_inv in H2 as [[?[]]|[[[][?[]]]|[?[?[?[]]]]]];
+    subst; eauto using ht_tm_prod.
+  + eauto using ht_val, ht_val_prod, ht_inv_tm_val.
 Qed. FEnd preservation.
 
 Time FEnd STLC_prod.
@@ -806,63 +806,63 @@ FEnd subst_tm with subst_val.
 
 (* Closing Fact subst_tm_inl :
 forall a,
-self__STLC_sum.subst (self__STLC_sum.tm_inl a) = self__STLC_sum.subst_handler.tm_inl a (self__STLC_sum.subst a)
+subst (tm_inl a) = subst_handler.tm_inl a (subst a)
 by { intros; eauto }.
 
 Closing Fact subst_tm_inr :
 forall a,
-self__STLC_sum.subst (self__STLC_sum.tm_inr a) = self__STLC_sum.subst_handler.tm_inr a (self__STLC_sum.subst a)
+subst (tm_inr a) = subst_handler.tm_inr a (subst a)
 by { intros; eauto }.
 
 Closing Fact subst_tm_case :
 forall cond i lb rb,
-self__STLC_sum.subst (self__STLC_sum.tm_case cond i lb rb) = self__STLC_sum.subst_handler.tm_case cond (self__STLC_sum.subst cond) i lb (self__STLC_sum.subst lb) rb (self__STLC_sum.subst rb)
+subst (tm_case cond i lb rb) = subst_handler.tm_case cond (subst cond) i lb (subst lb) rb (subst rb)
 by { intros; eauto }. *)
 
 
 
 (* Inherit Field context.*)
 
-FInductive step : self__STLC_sum.tm -> self__STLC_sum.tm -> Prop :=
+FInductive step : tm -> tm -> Prop :=
   | st_inl0 : forall a a',
     step a a' ->
-    step (self__STLC_sum.tm_inl a) (self__STLC_sum.tm_inl a')
+    step (tm_inl a) (tm_inl a')
   | st_inl1 : forall a,
-    step (self__STLC_sum.tm_inl (self__STLC_sum.tm_val a)) (self__STLC_sum.tm_val (self__STLC_sum.val_inl a))
+    step (tm_inl (tm_val a)) (tm_val (val_inl a))
   | st_inr0 : forall a a',
     step a a' ->
-    step (self__STLC_sum.tm_inr a) (self__STLC_sum.tm_inr a')
+    step (tm_inr a) (tm_inr a')
   | st_inr1 : forall a,
-    step (self__STLC_sum.tm_inr (self__STLC_sum.tm_val a)) (self__STLC_sum.tm_val (self__STLC_sum.val_inr a))
+    step (tm_inr (tm_val a)) (tm_val (val_inr a))
   | st_case0: forall c c' i lb rb,
     step c c' ->
-    step (self__STLC_sum.tm_case c i lb rb) (self__STLC_sum.tm_case c' i lb rb)
+    step (tm_case c i lb rb) (tm_case c' i lb rb)
   | st_case1: forall i lb rb v,
-    step (self__STLC_sum.tm_case (self__STLC_sum.tm_val (self__STLC_sum.val_inl v)) i lb rb) (self__STLC_sum.subst_tm lb i (self__STLC_sum.tm_val v))
+    step (tm_case (tm_val (val_inl v)) i lb rb) (subst_tm lb i (tm_val v))
   | st_case2: forall i lb rb v,
-    step (self__STLC_sum.tm_case (self__STLC_sum.tm_val (self__STLC_sum.val_inr v)) i lb rb) (self__STLC_sum.subst_tm rb i (self__STLC_sum.tm_val v)).
+    step (tm_case (tm_val (val_inr v)) i lb rb) (subst_tm rb i (tm_val v)).
 
 (* Inherit Until Field has_type. *)
 
-FInductive has_type_tm : self__STLC_sum.context -> self__STLC_sum.tm -> self__STLC_sum.ty -> Prop :=
+FInductive has_type_tm : context -> tm -> ty -> Prop :=
   | ht_sum0 : forall G t L R,
       has_type_tm G t L ->
-      has_type_tm G (self__STLC_sum.tm_inl t) (self__STLC_sum.ty_sum L R)
+      has_type_tm G (tm_inl t) (ty_sum L R)
   | ht_sum1 : forall G t L R,
       has_type_tm G t R ->
-      has_type_tm G (self__STLC_sum.tm_inr t) (self__STLC_sum.ty_sum L R)
+      has_type_tm G (tm_inr t) (ty_sum L R)
   | ht_case : forall G c L R T lb rb i,
-      has_type_tm G c (self__STLC_sum.ty_sum L R) ->
+      has_type_tm G c (ty_sum L R) ->
       has_type_tm (i |-> L ; G) lb T ->
       has_type_tm (i |-> R ; G) rb T ->
-      has_type_tm G (self__STLC_sum.tm_case c i lb rb) T
-with has_type_val : self__STLC_sum.context -> self__STLC_sum.val -> self__STLC_sum.ty -> Prop :=
+      has_type_tm G (tm_case c i lb rb) T
+with has_type_val : context -> val -> ty -> Prop :=
   | ht_val_sum0 : forall G v L R,
       has_type_val G v L ->
-      has_type_val G (self__STLC_sum.val_inl v) (self__STLC_sum.ty_sum L R)
+      has_type_val G (val_inl v) (ty_sum L R)
   | ht_val_sum1 : forall G v L R,
       has_type_val G v R ->
-      has_type_val G (self__STLC_sum.val_inr v) (self__STLC_sum.ty_sum L R).
+      has_type_val G (val_inr v) (ty_sum L R).
 
 (* Inherit Until Field progress.*)
 
@@ -875,17 +875,17 @@ by { inversion 1; eauto }.
 FInduction progress.
 FProof.
 - intros. right. subst. destruct (H eq_refl) as [[]|[]]; clear H; subst.
-  + eauto using self__STLC_sum.st_inl1.
-  + eauto using self__STLC_sum.st_inl0.
+  + eauto using st_inl1.
+  + eauto using st_inl0.
 - intros. right. subst. destruct (H eq_refl) as [[]|[]]; clear H; subst.
-  + eauto using self__STLC_sum.st_inr1.
-  + eauto using self__STLC_sum.st_inr0.
+  + eauto using st_inr1.
+  + eauto using st_inr0.
 - intros. right. subst. destruct (H eq_refl) as [[]|[]]; clear H; subst.
-  + apply self__STLC_sum.ht_inv_tm_val in __i.
-    apply self__STLC_sum.value_sum_type_inv in __i as [[]|[]]; subst.
-    * eauto using self__STLC_sum.st_case1.
-    * eauto using self__STLC_sum.st_case2.
-  + eauto using self__STLC_sum.st_case0.
+  + apply ht_inv_tm_val in __i.
+    apply value_sum_type_inv in __i as [[]|[]]; subst.
+    * eauto using st_case1.
+    * eauto using st_case2.
+  + eauto using st_case0.
 Qed. FEnd progress.
 
 
@@ -894,37 +894,37 @@ FProof.
 + intros. fsimpl. fconstructor.
 + intros. fsimpl. fconstructor.
 + intros. fsimpl. destruct (PeanoNat.Nat.eqb_spec i x); subst.
-  - rewrite update_shadow in *. eauto using self__STLC_sum.ht_case.
-  - eapply self__STLC_sum.ht_case; eauto using update_permute.
+  - rewrite update_shadow in *. eauto using ht_case.
+  - eapply ht_case; eauto using update_permute.
 + intros. fsimpl. fconstructor.
 + intros. fsimpl. fconstructor. 
 Qed. FEnd subst_tm_lemma with subst_val_lemma.
 
-FInductive fv_tm : ident -> self__STLC_sum.tm -> Prop :=
+FInductive fv_tm : ident -> tm -> Prop :=
   | fv_tm_inl : forall x a,
       fv_tm x a ->
-      fv_tm x (self__STLC_sum.tm_inl a)
+      fv_tm x (tm_inl a)
   | fv_tm_inr : forall x a,
       fv_tm x a ->
-      fv_tm x (self__STLC_sum.tm_inr a)
+      fv_tm x (tm_inr a)
   | fv_case : forall x c i lb rb,
       fv_tm x c ->
-      fv_tm x (self__STLC_sum.tm_case c i lb rb)
+      fv_tm x (tm_case c i lb rb)
   | fv_case1 : forall x c i lb rb,
       fv_tm x lb ->
       i <> x ->
-      fv_tm x (self__STLC_sum.tm_case c i lb rb)
+      fv_tm x (tm_case c i lb rb)
   | fv_case2 : forall x c i lb rb,
       fv_tm x rb ->
       i <> x ->
-      fv_tm x (self__STLC_sum.tm_case c i lb rb)
-with fv_val : ident -> self__STLC_sum.val -> Prop :=
+      fv_tm x (tm_case c i lb rb)
+with fv_val : ident -> val -> Prop :=
   | fv_val_inl : forall x a,
       fv_val x a ->
-      fv_val x (self__STLC_sum.val_inl a)
+      fv_val x (val_inl a)
   | fv_val_inr : forall x a,
       fv_val x a ->
-      fv_val x (self__STLC_sum.val_inr a).
+      fv_val x (val_inr a).
 
 Closing Fact fv_inv_tm_inl:
   forall x t, fv_tm x (tm_inl t) -> fv_tm x t
@@ -953,57 +953,57 @@ by { inversion 1; auto }.
 
 FInduction free_var_tm_in_ctx with free_var_val_in_ctx.
 FProof.
-+ intros. auto using self__STLC_sum.fv_inv_tm_inl,
-    self__STLC_sum.fv_inv_tm_inr,
-    self__STLC_sum.fv_inv_val_inl,
-    self__STLC_sum.fv_inv_val_inr.
-+   intros. auto using self__STLC_sum.fv_inv_tm_inl,
-    self__STLC_sum.fv_inv_tm_inr,
-    self__STLC_sum.fv_inv_val_inl,
-      self__STLC_sum.fv_inv_val_inr.
-+ intros. auto using self__STLC_sum.fv_inv_tm_inl,
-    self__STLC_sum.fv_inv_tm_inr,
-    self__STLC_sum.fv_inv_val_inl,
-    self__STLC_sum.fv_inv_val_inr.
-   apply self__STLC_sum.fv_inv_tm_case in H2 as [|[[]|[]]];
++ intros. auto using fv_inv_tm_inl,
+    fv_inv_tm_inr,
+    fv_inv_val_inl,
+    fv_inv_val_inr.
++   intros. auto using fv_inv_tm_inl,
+    fv_inv_tm_inr,
+    fv_inv_val_inl,
+      fv_inv_val_inr.
++ intros. auto using fv_inv_tm_inl,
+    fv_inv_tm_inr,
+    fv_inv_val_inl,
+    fv_inv_val_inr.
+   apply fv_inv_tm_case in H2 as [|[[]|[]]];
   auto; try erewrite <- update_neq; eauto.
-+ intros. auto using self__STLC_sum.fv_inv_tm_inl,
-    self__STLC_sum.fv_inv_tm_inr,
-    self__STLC_sum.fv_inv_val_inl,
-    self__STLC_sum.fv_inv_val_inr.
-+ intros. auto using self__STLC_sum.fv_inv_tm_inl,
-    self__STLC_sum.fv_inv_tm_inr,
-    self__STLC_sum.fv_inv_val_inl,
-    self__STLC_sum.fv_inv_val_inr.
++ intros. auto using fv_inv_tm_inl,
+    fv_inv_tm_inr,
+    fv_inv_val_inl,
+    fv_inv_val_inr.
++ intros. auto using fv_inv_tm_inl,
+    fv_inv_tm_inr,
+    fv_inv_val_inl,
+    fv_inv_val_inr.
 Qed. FEnd free_var_tm_in_ctx with free_var_val_in_ctx.
 
 
 FInduction free_var_tm_matters with free_var_val_matters.
 FProof.
-+ intros. eauto using self__STLC_sum.ht_sum0, self__STLC_sum.ht_sum1,
-    self__STLC_sum.ht_val_sum0, self__STLC_sum.ht_val_sum1,
-    self__STLC_sum.fv_tm_inl, self__STLC_sum.fv_tm_inr,
-    self__STLC_sum.fv_val_inl, self__STLC_sum.fv_val_inr.
-+   intros. eauto using self__STLC_sum.ht_sum0, self__STLC_sum.ht_sum1,
-    self__STLC_sum.ht_val_sum0, self__STLC_sum.ht_val_sum1,
-    self__STLC_sum.fv_tm_inl, self__STLC_sum.fv_tm_inr,
-      self__STLC_sum.fv_val_inl, self__STLC_sum.fv_val_inr.
-+  intros. eapply self__STLC_sum.ht_case.
-    - eauto using self__STLC_sum.fv_case.
++ intros. eauto using ht_sum0, ht_sum1,
+    ht_val_sum0, ht_val_sum1,
+    fv_tm_inl, fv_tm_inr,
+    fv_val_inl, fv_val_inr.
++   intros. eauto using ht_sum0, ht_sum1,
+    ht_val_sum0, ht_val_sum1,
+    fv_tm_inl, fv_tm_inr,
+      fv_val_inl, fv_val_inr.
++  intros. eapply ht_case.
+    - eauto using fv_case.
     -  apply H0. intros x ?. destruct (PeanoNat.Nat.eqb_spec i x).
        ++ subst. repeat rewrite update_eq. reflexivity.
-       ++ repeat rewrite update_neq; eauto using self__STLC_sum.fv_case1.
+       ++ repeat rewrite update_neq; eauto using fv_case1.
     - apply H1. intros x ?. destruct (PeanoNat.Nat.eqb_spec i x).
   ++ subst. repeat rewrite update_eq. reflexivity.
-  ++ repeat rewrite update_neq; eauto using self__STLC_sum.fv_case2.
-+   intros. eauto using self__STLC_sum.ht_sum0, self__STLC_sum.ht_sum1,
-    self__STLC_sum.ht_val_sum0, self__STLC_sum.ht_val_sum1,
-    self__STLC_sum.fv_tm_inl, self__STLC_sum.fv_tm_inr,
-      self__STLC_sum.fv_val_inl, self__STLC_sum.fv_val_inr.
-+   intros. eauto using self__STLC_sum.ht_sum0, self__STLC_sum.ht_sum1,
-    self__STLC_sum.ht_val_sum0, self__STLC_sum.ht_val_sum1,
-    self__STLC_sum.fv_tm_inl, self__STLC_sum.fv_tm_inr,
-      self__STLC_sum.fv_val_inl, self__STLC_sum.fv_val_inr.        
+  ++ repeat rewrite update_neq; eauto using fv_case2.
++   intros. eauto using ht_sum0, ht_sum1,
+    ht_val_sum0, ht_val_sum1,
+    fv_tm_inl, fv_tm_inr,
+      fv_val_inl, fv_val_inr.
++   intros. eauto using ht_sum0, ht_sum1,
+    ht_val_sum0, ht_val_sum1,
+    fv_tm_inl, fv_tm_inr,
+      fv_val_inl, fv_val_inr.        
 Qed. FEnd free_var_tm_matters with free_var_val_matters.
 
 
@@ -1047,20 +1047,20 @@ Closing Fact ht_inr_inv:
 
 FInduction preservation.
 FProof.
-- intros. subst. apply self__STLC_sum.step_tm_inl_inv in H1 as [[?[]]|[?[]]]; subst.
-  + eauto using self__STLC_sum.ht_sum0.
-  + eauto using self__STLC_sum.ht_inv_tm_val, self__STLC_sum.ht_val, self__STLC_sum.ht_val_sum0.
-- intros. subst. apply self__STLC_sum.step_tm_inr_inv in H1 as [[?[]]|[?[]]]; subst.
-  + eauto using self__STLC_sum.ht_sum1.
-  + eauto using self__STLC_sum.ht_inv_tm_val, self__STLC_sum.ht_val, self__STLC_sum.ht_val_sum1.
-- intros. subst. apply self__STLC_sum.step_tm_case_inv in H3 as [[?[]]|[[?[]]|[?[]]]]; subst.
-  + eauto using self__STLC_sum.ht_case.
-  + eapply self__STLC_sum.subst_tm_lemma;
-      eauto using self__STLC_sum.ht_val, self__STLC_sum.ht_inv_tm_val,
-        self__STLC_sum.ht_inl_inv, self__STLC_sum.weakening_lemma_val.
-  + eapply self__STLC_sum.subst_tm_lemma;
-      eauto using self__STLC_sum.ht_val, self__STLC_sum.ht_inv_tm_val,
-        self__STLC_sum.ht_inr_inv, self__STLC_sum.weakening_lemma_val.
+- intros. subst. apply step_tm_inl_inv in H1 as [[?[]]|[?[]]]; subst.
+  + eauto using ht_sum0.
+  + eauto using ht_inv_tm_val, ht_val, ht_val_sum0.
+- intros. subst. apply step_tm_inr_inv in H1 as [[?[]]|[?[]]]; subst.
+  + eauto using ht_sum1.
+  + eauto using ht_inv_tm_val, ht_val, ht_val_sum1.
+- intros. subst. apply step_tm_case_inv in H3 as [[?[]]|[[?[]]|[?[]]]]; subst.
+  + eauto using ht_case.
+  + eapply subst_tm_lemma;
+      eauto using ht_val, ht_inv_tm_val,
+        ht_inl_inv, weakening_lemma_val.
+  + eapply subst_tm_lemma;
+      eauto using ht_val, ht_inv_tm_val,
+        ht_inr_inv, weakening_lemma_val.
 Qed. FEnd preservation.
 
 Time FEnd STLC_sum.
@@ -1092,30 +1092,30 @@ FEnd subst_tm with subst_val.
 
 (* Inherit Field context. *)
 
-FInductive step : self__STLC_fix.tm -> self__STLC_fix.tm -> Prop :=
+FInductive step : tm -> tm -> Prop :=
   | st_fix : forall i body,
-    step (self__STLC_fix.tm_fix i body) (self__STLC_fix.subst_tm body i (self__STLC_fix.tm_fix i body)).
+    step (tm_fix i body) (subst_tm body i (tm_fix i body)).
 
 
-FInductive has_type_tm : (partial_map self__STLC_fix.ty) -> self__STLC_fix.tm -> self__STLC_fix.ty -> Prop :=
+FInductive has_type_tm : (partial_map ty) -> tm -> ty -> Prop :=
   | ht_fix : forall G x body T,
       has_type_tm (x |-> T; G) body T ->
-      has_type_tm G (self__STLC_fix.tm_fix x body) T
-with has_type_val : (partial_map self__STLC_fix.ty) -> self__STLC_fix.val -> self__STLC_fix.ty -> Prop := .
+      has_type_tm G (tm_fix x body) T
+with has_type_val : (partial_map ty) -> val -> ty -> Prop := .
 
 
 (* Closing Fact value_fix_type_inv:
   forall t i T,
-  self__STLC_fix.value t ->
-  self__STLC_fix.has_type empty t (self__STLC_fix.ty_fix i T) ->
-  (exists t', t = self__STLC_fix.tm_fold t' /\ self__STLC_fix.value t')
+  value t ->
+  has_type empty t (ty_fix i T) ->
+  (exists t', t = tm_fold t' /\ value t')
 by {
   intros t i T h h1;
   inversion h; subst; eauto; inversion h1; subst; eauto}.*)
 
 FInduction progress.
 FProof.
-intros. subst. right. eauto using self__STLC_fix.st_fix.
+intros. subst. right. eauto using st_fix.
 Qed. FEnd progress.
 
 
@@ -1124,15 +1124,15 @@ FInduction subst_tm_lemma with subst_val_lemma.
 FProof.
 intros. fsimpl. 
 destruct (PeanoNat.Nat.eqb_spec x0 x);
-  subst; eapply self__STLC_fix.ht_fix.
+  subst; eapply ht_fix.
 - rewrite update_shadow in *. eauto.
 - eauto using update_permute.
 Qed. FEnd subst_tm_lemma with subst_val_lemma.
 
-FInductive fv_tm : ident -> self__STLC_fix.tm -> Prop :=
+FInductive fv_tm : ident -> tm -> Prop :=
 | fv_fix :  forall x v body,
-  fv_tm x body -> x <> v -> fv_tm x (self__STLC_fix.tm_fix v body)
-with fv_val : ident -> self__STLC_fix.val -> Prop := .
+  fv_tm x body -> x <> v -> fv_tm x (tm_fix v body)
+with fv_val : ident -> val -> Prop := .
 
 
 Closing Fact fv_inv_tm_fix:
@@ -1146,7 +1146,7 @@ by { inversion 1; auto }.
 
 FInduction free_var_tm_in_ctx with free_var_val_in_ctx.
 FProof.
-intros. apply self__STLC_fix.fv_inv_tm_fix in H0 as [].
+intros. apply fv_inv_tm_fix in H0 as [].
 erewrite <- update_neq; eauto.
 Qed. FEnd free_var_tm_in_ctx with free_var_val_in_ctx.
 
@@ -1154,10 +1154,10 @@ Qed. FEnd free_var_tm_in_ctx with free_var_val_in_ctx.
 
 FInduction free_var_tm_matters with free_var_val_matters.
 FProof.
-intros. apply self__STLC_fix.ht_fix. apply H. intros.
+intros. apply ht_fix. apply H. intros.
 destruct (PeanoNat.Nat.eqb_spec x0 x).
 - subst. repeat rewrite update_eq. reflexivity.
-- repeat rewrite update_neq; eauto using self__STLC_fix.fv_fix.
+- repeat rewrite update_neq; eauto using fv_fix.
 Qed. FEnd free_var_tm_matters with free_var_val_matters.
 
 
@@ -1172,9 +1172,9 @@ by { inversion 1; auto }.
 
 (* Closing Fact step_tm_unfold_inv:
   forall x y,
-  self__STLC_fix.step (self__STLC_fix.tm_unfold x) y ->
-    (exists x', y = self__STLC_fix.tm_unfold x' /\ self__STLC_fix.step x x') \/
-    (exists v, x = self__STLC_fix.tm_fold v /\ self__STLC_fix.value v /\ y = v)
+  step (tm_unfold x) y ->
+    (exists x', y = tm_unfold x' /\ step x x') \/
+    (exists v, x = tm_fold v /\ value v /\ y = v)
 by { intros x y h; inversion h; subst; eauto }. *)
 
 Closing Fact ht_fix_inv:
@@ -1185,10 +1185,10 @@ by { inversion 1; auto }.
 
 FInduction preservation.
 FProof.
-intros. apply self__STLC_fix.step_tm_fix_inv in H1. subst.
-eapply self__STLC_fix.subst_tm_lemma; eauto.
-intros. apply self__STLC_fix.weakening_lemma_tm.
-apply self__STLC_fix.ht_fix. assumption.
+intros. apply step_tm_fix_inv in H1. subst.
+eapply subst_tm_lemma; eauto.
+intros. apply weakening_lemma_tm.
+apply ht_fix. assumption.
 Qed. FEnd preservation.
 
 FEnd STLC_fix.
