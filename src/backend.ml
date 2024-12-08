@@ -257,6 +257,15 @@ module Vernac = struct
       (VernacSynterp
          (VernacInclude [ (module_expr, Declaremods.DefaultInline) ]))
 
+  let import_modules ~(module_names : Names.Id.t list) : unit t =
+    let open Vernacexpr in
+    vernac_
+      (VernacSynterp
+         (VernacImport
+            ( (Import, None),
+              module_names
+              |> List.map (fun n -> (Libnames.qualid_of_ident n, ImportAll)) )))
+
   let assume_parameter ~(name : Names.Id.t) ~(ty : Constrexpr.constr_expr) :
       unit t =
     let open Vernacexpr in
@@ -334,6 +343,7 @@ module Declare = struct
       Declaremods.start_module export name modified_parameters
         (Declaremods.Check [])
     in
+    Vernac.(run @@ import_modules ~module_names:(List.map fst parameters));
     module_path |> Names.ModPath.to_string |> Libnames.qualid_of_string
 
   let end_module () =
