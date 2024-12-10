@@ -1,4 +1,5 @@
 From Rocqet Require Import Loader.
+From Rocqet Require Import LibTactics.
 
 From Rocqet Require Import Coqlib.
 From Rocqet Require Import Errors.
@@ -111,6 +112,12 @@ Fixpoint bind_parameters (formals: list ident) (args: list val)
  | _, _ => None
  end.
 FEnd bind_parameters.
+
+FDefinition set_optvar : option ident -> val -> env -> env := fun optid v e =>
+  match optid with
+  | None => e
+  | Some id => PTree.set id v e
+  end.
             
 FInductive cont: Type :=
 | Kstop: cont
@@ -907,6 +914,76 @@ FEnd match_env.
 FDefinition match_prog := fun (p: S.program) (tp: T.program) =>
   match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
 
+FInduction transl_expr_correct about S.eval_expr motive
+   (fun ge sp e m le a v
+     (_ : S.eval_expr ge sp e m le a v) =>
+   forall prog tprog tge, match_prog prog tprog ->
+   ge = Genv.globalenv prog ->
+   tge = Genv.globalenv tprog -> 
+   forall tm cs f map pr ns nd rd rs dst   
+   (TE : tr_expr (T.fn_code f) map pr a ns nd rd dst)
+   (MWF: map_wf map)  
+   (ME: match_env map e le rs)
+   (EXT: Mem.extends m tm),
+      exists rs', exists tm',
+         star T.step tge (T.State cs f (Vptr sp Ptrofs.zero) ns rs tm) E0 (T.State cs f (Vptr sp Ptrofs.zero) nd rs' tm')
+      /\ match_env map (S.set_optvar dst v e) le rs'
+      /\ Val.lessdef v rs'#rd
+      /\ (forall r, In r pr -> rs'#r = rs#r)
+         /\ Mem.extends m tm')
+   
+with transl_exprlist_correct about S.eval_exprlist motive
+  (fun ge sp e m le al vl
+       (_ : S.eval_exprlist ge sp e m le al vl) =>
+      forall prog tprog tge, match_prog prog tprog ->
+      ge = Genv.globalenv prog ->
+      tge = Genv.globalenv tprog -> 
+      forall tm cs f map pr ns nd rl rs
+      (MWF: map_wf map)
+      (TE: tr_exprlist (T.fn_code f) map pr al ns nd rl)
+      (ME: match_env map e le rs)
+      (EXT: Mem.extends m tm),
+      exists rs', exists tm',
+         star T.step tge (T.State cs f (Vptr sp Ptrofs.zero) ns rs tm) E0 (T.State cs f (Vptr sp Ptrofs.zero) nd rs' tm')
+      /\ match_env map e le rs'
+      /\ Val.lessdef_list vl rs'##rl
+      /\ (forall r, In r pr -> rs'#r = rs#r)
+      /\ Mem.extends m tm')
+
+with transl_condexpr_correct about S.eval_condexpr motive
+  (fun ge sp e m le a v
+     (_ : S.eval_condexpr ge sp e m le a v) =>
+    forall prog tprog tge, match_prog prog tprog ->
+    ge = Genv.globalenv prog ->
+    tge = Genv.globalenv tprog ->  
+    forall tm cs f map pr ns ntrue nfalse rs
+    (MWF: map_wf map)
+    (TE: tr_condition (T.fn_code f) map pr a ns ntrue nfalse)
+    (ME: match_env map e le rs)
+    (EXT: Mem.extends m tm),
+    exists rs', exists tm',
+       plus T.step tge (T.State cs f (Vptr sp Ptrofs.zero) ns rs tm) E0 (T.State cs f (Vptr sp Ptrofs.zero) (if v then ntrue else nfalse) rs' tm')
+    /\ match_env map e le rs'
+    /\ (forall r, In r pr -> rs'#r = rs#r)
+    /\ Mem.extends m tm').
+     
+FProof.
+
++ apply cheat.
++ apply cheat.  
++ apply cheat.
++ apply cheat.
++ apply cheat.
+
++ apply cheat.
++ apply cheat.
+
++ apply cheat.
++ apply cheat.
++ apply cheat.  
+
+Qed. FEnd transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
+
 MetaData match_states.
 
 Inductive match_states: S.state -> T.state -> Prop :=
@@ -979,24 +1056,27 @@ Ltac Lt_state :=
   apply lt_state_intro; simpl; try lia.
 FEnd Lt_state.
 
-(* Inductive tr_stmt (c: code) (map: mapping):
-     stmt -> node -> node -> list node -> labelmap -> node -> option reg -> Prop :=
-  | tr_Sskip: forall ns nexits ngoto nret rret,
-     tr_stmt c map Sskip ns ns nexits ngoto nret rret *)
-
 Closing Fact tr_stmt_skip_inv: 
   forall c map ns ncont nexits ngoto nret rret,
   tr_stmt c map S.Sskip ns ncont nexits ngoto nret rret -> 
   ncont = ns 
     by plain { intros until rret; intros H; inv H; eauto }.
 
+Closing Fact tr_stmt_assign_inv :
+  forall id a c map ns nd nexits ngoto nret rret,
+  tr_stmt c map (S.Sassign id a) ns nd nexits ngoto nret rret ->
+  exists r,
+    map.(map_vars)!id = Some r /\
+    tr_expr c map nil a ns nd r (Some id)
+  by plain { intros until rret; intros H; inv H; eauto }.
+          
 Closing Fact Kseq_inv : forall s0 k0 s k,
     self__RTLgen.S.Kseq s0 k0 = self__RTLgen.S.Kseq s k -> 
     s0 = s /\ k0 = k
   by plain { intros until k; intros H; inversion H; eauto }.
 
 Closing Fact stop_kseq_discriminate: forall s k, S.Kstop = S.Kseq s k -> False
-  by plain { intros until k; intros H; discriminate }.
+    by plain { intros until k; intros H; discriminate }.
                                
 FInduction transl_step_correct about S.step
   motive (fun ge S1 t S2 (_ : S.step ge S1 t S2) =>
@@ -1030,8 +1110,9 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   rewrite H1. eauto.
   constructor; auto.
 
++ apply tr_stmt_assign_inv in TS; unpack TS; subst. 
   
-+ apply cheat.
+  
 + apply cheat.
 + apply cheat.
 + apply cheat.
