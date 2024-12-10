@@ -1008,17 +1008,29 @@ FInduction transl_step_correct about S.step
   (plus T.step tge R1 t R2 \/ (star T.step tge R1 t R2 /\ lt_state S2 S1))
   /\ match_states S2 R2).
 FProof.
-+ intros until tge. intros TRANSL A B.
-  intros R1 MSTATE; inv MSTATE.
-  apply tr_stmt_skip_inv in TS. subst ns. inv TK.
+all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
++ apply tr_stmt_skip_inv in TS. subst ns. inv TK.
   econstructor; split.
   right; split. apply star_refl.
   apply Kseq_inv in H. destruct H; subst s0 k0.
   apply lt_state_intro; do 2 fsimpl; try lia. (* Lt_state.*)
   apply Kseq_inv in H. destruct H; subst s0 k0.
   econstructor; eauto. apply stop_kseq_discriminate in H. exfalso; apply H.
+
++ apply tr_stmt_skip_inv in TS; subst ns. 
+  assert ((T.fn_code tf)!ncont = Some(T.Ireturn rret)
+          /\ match_stacks k cs).
+    inv TK; fsimpl in i; try contradiction; auto. 
+  destruct H.
+  assert (T.fn_stacksize tf = S.fn_stackspace f).
+    inv TF. auto.
+  edestruct Mem.free_parallel_extends as [tm' []]; eauto.
+  econstructor; split.
+  left; apply plus_one. eapply T.exec_Ireturn. eauto. 
+  rewrite H1. eauto.
+  constructor; auto.
+
   
-+ apply cheat.
 + apply cheat.
 + apply cheat.
 + apply cheat.
