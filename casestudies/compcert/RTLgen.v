@@ -71,7 +71,7 @@ FDefinition env := PTree.t val.
 FDefinition empty_env : env := PTree.empty val.
        
 MetaData set_params.
-Fixpoint set_params (vl: list val) (il: list ident) {struct il} : self__Cfam.env :=
+Fixpoint set_params (vl: list val) (il: list ident) {struct il} : env :=
  match il, vl with
  | i1 :: is, v1 :: vs => PTree.set i1 v1 (set_params vs is)
  | i1 :: is, nil => PTree.set i1 Vundef (set_params nil is)
@@ -80,7 +80,7 @@ Fixpoint set_params (vl: list val) (il: list ident) {struct il} : self__Cfam.env
 FEnd set_params.
 
 MetaData set_locals.
-Fixpoint set_locals (il: list ident) (e: self__Cfam.env) {struct il} : self__Cfam.env :=
+Fixpoint set_locals (il: list ident) (e: env) {struct il} : env :=
   match il with
   | nil => e
   | i1 :: is => PTree.set i1 Vundef (set_locals is e)
@@ -88,14 +88,14 @@ Fixpoint set_locals (il: list ident) (e: self__Cfam.env) {struct il} : self__Cfa
 FEnd set_locals.
        
 FDefinition init_env : function -> list val -> env := fun f vargs => 
-  set_locals (function_locals f) (set_params vargs (function_params f)).            
+  set_locals (function_locals f) (set_params vargs (function_params f)).
 
 (* Semantics for allocation of variables and binding of parameters at function entry. *)
 FOpaque Definition free_fenv : mem -> fenv -> function -> option mem := cheat.            
 FOpaque Definition alloc_fenv : fenv -> mem -> function -> fenv -> mem -> Prop := cheat.
        
 MetaData create_undef_temps.
-Fixpoint create_undef_temps (temps: list ident) : self__Cfam.env :=
+Fixpoint create_undef_temps (temps: list ident) : env :=
  match temps with
  | nil => PTree.empty val
  | id :: temps' => PTree.set id Vundef (create_undef_temps temps')
@@ -104,7 +104,7 @@ FEnd create_undef_temps.
 
 MetaData bind_parameters.
 Fixpoint bind_parameters (formals: list ident) (args: list val)
-             (le: self__Cfam.env) : option self__Cfam.env :=
+             (le: env) : option env :=
  match formals, args with
  | nil, nil => Some le
  | id :: xl, v :: vl => bind_parameters xl vl (PTree.set id v le)
@@ -116,25 +116,25 @@ FInductive cont: Type :=
 | Kstop: cont
 | Kseq: stmt -> cont -> cont.
                    
-MetaData state.
+MetaData state binds State, Callstate, Returnstate.
 Inductive state: Type :=
   | State:(* Execution within a function *)
-      forall (f: self__Cfam.function)(* currently executing function *)
-             (s: self__Cfam.stmt)(* statement under consideration *)
-             (k: self__Cfam.cont)(* its continuation -- what to do next *)
-             (sp: self__Cfam.fenv) (* current "function" environment: i.e stackspace, ... *)
-             (e: self__Cfam.env)(* current local environment *)
+      forall (f: function)(* currently executing function *)
+             (s: stmt)(* statement under consideration *)
+             (k: cont)(* its continuation -- what to do next *)
+             (sp: fenv) (* current "function" environment: i.e stackspace, ... *)
+             (e: env)(* current local environment *)
              (m: mem),(* current memory state *)
       state
   | Callstate:(* Invocation of a function *)
-      forall (f: self__Cfam.fundef)(* function to invoke *)
+      forall (f: fundef)(* function to invoke *)
              (args: list val)(* arguments provided by caller *)
-             (k: self__Cfam.cont)(* what to do next *)
+             (k: cont)(* what to do next *)
              (m: mem),(* memory state *)
       state
   | Returnstate:(* Return from a function *)
       forall (v: val)(* Return value *)
-             (k: self__Cfam.cont)(* what to do next *)
+             (k: cont)(* what to do next *)
              (m: mem),(* memory state *)
       state.
 FEnd state.
@@ -158,50 +158,50 @@ FInductive eval_expr :  genv -> fenv -> env -> mem -> letenv -> expr -> val -> P
                            
 FInductive step : genv -> state -> trace -> state -> Prop :=
 | step_skip_seq: forall ge f s k e le m,
-    step ge (self__Cfam.State f Sskip (Kseq s k) e le m)
-      E0 (self__Cfam.State f s k e le m)              
+    step ge (State f Sskip (Kseq s k) e le m)
+      E0 (State f s k e le m)              
 | step_skip_call: forall ge f k e le m m',
     is_call_cont k ->                       
     free_fenv m e f = Some m' ->
-    step ge (self__Cfam.State f Sskip k e le m)
-      E0 (self__Cfam.Returnstate Vundef k m')
+    step ge (State f Sskip k e le m)
+      E0 (Returnstate Vundef k m')
 | step_assign: forall lenv ge f id a k e le m v,
     eval_expr ge e le m lenv a v ->
-    step ge (self__Cfam.State f (Sassign id a) k e le m)
-      E0 (self__Cfam.State f Sskip k e (PTree.set id v le) m)
+    step ge (State f (Sassign id a) k e le m)
+      E0 (State f Sskip k e (PTree.set id v le) m)
 | step_seq: forall ge f s1 s2 k e le m,
-    step ge (self__Cfam.State f (Sseq s1 s2) k e le m)
-      E0 (self__Cfam.State f s1 (Kseq s2 k) e le m)              
+    step ge (State f (Sseq s1 s2) k e le m)
+      E0 (State f s1 (Kseq s2 k) e le m)              
 | step_return_0: forall ge f k e le m m',                       
     free_fenv m e f = Some m' ->
-    step ge (self__Cfam.State f (Sreturn None) k e le m)
-      E0 (self__Cfam.Returnstate Vundef (call_cont k) m')            
+    step ge (State f (Sreturn None) k e le m)
+      E0 (Returnstate Vundef (call_cont k) m')            
 | step_return_1: forall lenv ge f a k e le m v m',
     eval_expr ge e le m lenv a v ->
     free_fenv m e f = Some m' ->
-    step ge (self__Cfam.State f (Sreturn (Some a)) k e le m)
-      E0 (self__Cfam.Returnstate v (call_cont k) m')
+    step ge (State f (Sreturn (Some a)) k e le m)
+      E0 (Returnstate v (call_cont k) m')
 | step_internal_function: forall ge f vargs k m m1 e le,                                               
     alloc_fenv empty_fenv m f e m1 ->
     init_env f vargs = le ->                        
-     step ge (self__Cfam.Callstate (AST.Internal f) vargs k m)
-       E0 (self__Cfam.State f (function_body f) k e le m1).
+     step ge (Callstate (AST.Internal f) vargs k m)
+       E0 (State f (function_body f) k e le m1).
             
 MetaData initial_state.
-Inductive initial_state (p: self__Cfam.program): self__Cfam.state -> Prop :=
+Inductive initial_state (p: program): state -> Prop :=
 | initial_state_intro: forall b f m0,
     let ge := Genv.globalenv p in
     Genv.init_mem p = Some m0 ->
     Genv.find_symbol ge p.(AST.prog_main) = Some b ->
     Genv.find_funct_ptr ge b = Some f ->
     self__Cfam.funsig f = signature_main ->               
-    initial_state p (self__Cfam.Callstate f nil self__Cfam.Kstop m0).
+    initial_state p (Callstate f nil Kstop m0).
 FEnd initial_state.
             
 MetaData final_state.
 Inductive final_state: self__Cfam.state -> int -> Prop :=
 | final_state_intro: forall r m,
-   final_state (self__Cfam.Returnstate (Vint r) self__Cfam.Kstop m) r.
+   final_state (Returnstate (Vint r) Kstop m) r.
 FEnd final_state.
 
 FEnd Cfam.
@@ -222,27 +222,27 @@ with condexpr : Type :=
        
 FInductive stmt : Type := Sifthenelse: condexpr -> stmt -> stmt -> stmt.
 
-MetaData fn.
+MetaData fn binds fn_sig, fn_params, fn_vars, fn_stackspace, fn_body.
 Record fn : Type := mkfunction {
    fn_sig: signature;
    fn_params: list ident;
    fn_vars: list ident;
    fn_stackspace: Z;
-   fn_body: self__CminorSel.stmt
+   fn_body: stmt
 }.
 FEnd fn.
 
 FOverride Definition function := fn.
-FOverride Definition function_body := self__CminorSel.fn_body.
-FOverride Definition function_locals := self__CminorSel.fn_vars.
-FOverride Definition function_params := self__CminorSel.fn_params.
-FOverride Definition function_sig := self__CminorSel.fn_sig.
+FOverride Definition function_body := fn_body.
+FOverride Definition function_locals := fn_vars.
+FOverride Definition function_params := fn_params.
+FOverride Definition function_sig := fn_sig.
 
 (* stack pointer *)
 (* Vptr sp Ptrofs.zero *)
 FOverride Definition fenv := block.   
-FOverride Definition free_fenv := fun m sp f => Mem.free m sp 0 f.(self__CminorSel.fn_stackspace).          
-FOverride Definition alloc_fenv := fun sp m f sp' m' => Mem.alloc m 0 f.(self__CminorSel.fn_stackspace) = (m', sp).
+FOverride Definition free_fenv := fun m sp f => Mem.free m sp 0 (fn_stackspace f).          
+FOverride Definition alloc_fenv := fun sp m f sp' m' => Mem.alloc m 0 (fn_stackspace f) = (m', sp).
 
 FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
 | eval_Eop: forall ge sp e m le op al vl v,
@@ -283,8 +283,8 @@ with eval_condexpr: genv -> fenv -> env -> mem -> letenv -> condexpr -> bool -> 
 FInductive step : genv -> state -> trace -> state -> Prop :=
 | step_ifthenelse: forall ge f c s1 s2 k sp e m b,
    eval_condexpr ge sp e m nil c b ->
-   step ge (self__CminorSel.State f (Sifthenelse c s1 s2) k sp e m)
-     E0 (self__CminorSel.State f (if b then s1 else s2) k sp e m).
+   step ge (State f (Sifthenelse c s1 s2) k sp e m)
+     E0 (State f (if b then s1 else s2) k sp e m).
 
 FEnd CminorSel.
 
@@ -301,13 +301,13 @@ FInductive instruction: Type :=
 
 FDefinition code: Type := PTree.t instruction.
 
-MetaData function.
+MetaData function binds fn_sig, fn_params, fn_stacksize, fn_code, fn_entrypoint.
 Record function: Type := mkfunction {
   fn_sig: signature;
   fn_params: list reg;
   fn_stacksize: Z;
-  fn_code: self__RTL.code;
-  fn_entrypoint: self__RTL.node
+  fn_code: code;
+  fn_entrypoint: node
 }.
 FEnd function.
 
@@ -317,7 +317,7 @@ FDefinition program := AST.program fundef unit.
 
 FDefinition funsig := fun (fd: fundef) => 
   match fd with
-  | AST.Internal f => self__RTL.fn_sig f
+  | AST.Internal f => fn_sig f
   | AST.External ef => ef_sig ef
   end.
 
@@ -326,7 +326,7 @@ FDefinition genv := Genv.t fundef unit.
 FDefinition regset := Regmap.t val.
 
 MetaData init_regs.
-Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : self__RTL.regset :=
+Fixpoint init_regs (vl: list val) (rl: list reg) {struct rl} : regset :=
   match rl, vl with
   | r1 :: rs, v1 :: vs => Regmap.set r1 v1 (init_regs vs rs)
   | _, _ => Regmap.init Vundef
@@ -337,31 +337,31 @@ MetaData stackframe binds Stackframe.
 Inductive stackframe : Type :=
   | Stackframe:
       forall (res: reg)(* where to store the result *)
-             (f: self__RTL.function)(* calling function *)
+             (f: function)(* calling function *)
              (sp: val)(* stack pointer in calling function *)
-             (pc: self__RTL.node)(* program point in calling function *)
-             (rs: self__RTL.regset),(* register state in calling function *)
+             (pc: node)(* program point in calling function *)
+             (rs: regset),(* register state in calling function *)
       stackframe.
 FEnd stackframe.
 
 MetaData state binds State, CallState, Returnstate.
 Inductive state : Type :=
   | State:
-      forall (stack: list self__RTL.stackframe)(* call stack *)
-             (f: self__RTL.function)(* current function *)
+      forall (stack: list stackframe)(* call stack *)
+             (f: function)(* current function *)
              (sp: val)(* stack pointer *)
-             (pc: self__RTL.node)(* current program point in c *)
-             (rs: self__RTL.regset)(* register state *)
+             (pc: node)(* current program point in c *)
+             (rs: regset)(* register state *)
              (m: mem),(* memory state *)
       state
   | Callstate:
-      forall (stack: list self__RTL.stackframe)(* call stack *)
-             (f: self__RTL.fundef)(* function to call *)
+      forall (stack: list stackframe)(* call stack *)
+             (f: fundef)(* function to call *)
              (args: list val)(* arguments to the call *)
              (m: mem),(* memory state *)
       state
   | Returnstate:
-      forall (stack: list self__RTL.stackframe)(* call stack *)
+      forall (stack: list stackframe)(* call stack *)
              (v: val)(* return value for the call *)
              (m: mem),(* memory state *)
       state.           
@@ -398,20 +398,20 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       E0 (State s f sp pc (rs#res <- vres) m).
 
 MetaData initial_state.
-Inductive initial_state (p: self__RTL.program): self__RTL.state -> Prop :=
+Inductive initial_state (p: program): state -> Prop :=
 | initial_state_intro: forall b f m0,
     let ge := Genv.globalenv p in
     Genv.init_mem p = Some m0 ->
     Genv.find_symbol ge p.(AST.prog_main) = Some b ->
     Genv.find_funct_ptr ge b = Some f ->
-    self__RTL.funsig f = signature_main ->
-    initial_state p (self__RTL.Callstate nil f nil m0).
+    funsig f = signature_main ->
+    initial_state p (Callstate nil f nil m0).
 FEnd initial_state.
 
 MetaData final_state.
-Inductive final_state: self__RTL.state -> int -> Prop :=
+Inductive final_state: state -> int -> Prop :=
    | final_state_intro: forall r m,
-      final_state (self__RTL.Returnstate nil (Vint r) m) r.
+      final_state (Returnstate nil (Vint r) m) r.
 FEnd final_state.
 
 FEnd RTL.
@@ -531,12 +531,12 @@ FDefinition add_var : mapping -> ident -> mon (reg * mapping) := fun map name =>
 
 MetaData add_vars.
 Fixpoint add_vars (map: mapping) (names: list ident)
-                  {struct names} : self__RTLgen.mon (list reg * mapping) :=
+                  {struct names} : mon (list reg * mapping) :=
   match names with
   | nil => ret (nil, map)
   | n1 :: nl =>
       do (rl, map1) <- add_vars map nl;
-      do (r1, map2) <- self__RTLgen.add_var map1 n1;
+      do (r1, map2) <- add_var map1 n1;
       ret (r1 :: rl, map2)
   end.
 FEnd add_vars.
@@ -858,7 +858,7 @@ Inductive tr_fun (tf: self__RTLgen.T.function) (map: mapping)
 FEnd tr_fun.
 
 MetaData tr_cont binds match_stacks.
-Import self__RTLgen.
+
 Inductive tr_cont: T.code -> mapping ->
                    S.cont -> T.node -> list T.node -> labelmap -> T.node -> option reg ->
                    list T.stackframe -> Prop :=
@@ -873,10 +873,11 @@ Inductive tr_cont: T.code -> mapping ->
 with match_stacks: S.cont -> list T.stackframe -> Prop :=
   | match_stacks_stop:
     match_stacks S.Kstop nil.
+
 FEnd tr_cont.
 
 MetaData map_wf.
-Import self__RTLgen.
+
 Record map_wf (m: mapping) : Prop :=
   mk_map_wf {
     map_wf_inj:
@@ -885,11 +886,12 @@ Record map_wf (m: mapping) : Prop :=
      map_wf_disj:
       (forall id r,
          m.(map_vars)!id = Some r -> In r m.(map_letvars) -> False)
-  }.
+    }.
+
 FEnd map_wf.
 
 MetaData match_env.
-Import self__RTLgen.
+
 Record match_env
       (map: mapping) (e: S.env) (le: S.letenv) (rs: T.regset) : Prop :=
   mk_match_env {
@@ -899,13 +901,14 @@ Record match_env
     me_letvars:
       Val.lessdef_list le rs##(map.(map_letvars))
   }.
+
 FEnd match_env.
 
 FDefinition match_prog := fun (p: S.program) (tp: T.program) =>
   match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
 
 MetaData match_states.
-Import self__RTLgen.
+
 Inductive match_states: S.state -> T.state -> Prop :=
   | match_state:
       forall f s k sp e m tm cs tf ns rs map ncont nexits ngoto nret rret
@@ -932,6 +935,7 @@ Inductive match_states: S.state -> T.state -> Prop :=
         (MEXT: Mem.extends m tm),
       match_states (S.Returnstate v k m)
         (T.Returnstate cs tv tm).
+
 FEnd match_states.
 
 FRecursion size_stmt about S.stmt motive (fun (_ : S.stmt) => nat) by _rect.
@@ -984,33 +988,35 @@ Closing Fact tr_stmt_skip_inv:
   forall c map ns ncont nexits ngoto nret rret,
   tr_stmt c map S.Sskip ns ncont nexits ngoto nret rret -> 
   ncont = ns 
-by plain { intros until rret; intros H; inv H; eauto }.  
+    by plain { intros until rret; intros H; inv H; eauto }.
 
 Closing Fact Kseq_inv : forall s0 k0 s k,
     self__RTLgen.S.Kseq s0 k0 = self__RTLgen.S.Kseq s k -> 
     s0 = s /\ k0 = k
   by plain { intros until k; intros H; inversion H; eauto }.
- 
+
+Closing Fact stop_kseq_discriminate: forall s k, S.Kstop = S.Kseq s k -> False
+  by plain { intros until k; intros H; discriminate }.
+                               
 FInduction transl_step_correct about S.step
   motive (fun ge S1 t S2 (_ : S.step ge S1 t S2) =>
   forall prog tprog tge, match_prog prog tprog -> 
-  Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->            
+  ge = Genv.globalenv prog ->
+  tge = Genv.globalenv tprog ->
   forall R1 (MS : match_states S1 R1),
   exists R2,
   (plus T.step tge R1 t R2 \/ (star T.step tge R1 t R2 /\ lt_state S2 S1))
   /\ match_states S2 R2).
 FProof.
-+ intros until tge. intros A B C.
-  intros R1 MSTATE; inv MSTATE. 
-  apply self__RTLgen.tr_stmt_skip_inv in TS. rewrite <- TS. inv TK. econstructor; split. 
-  right; split. apply star_refl. self__RTLgen.Lt_state.
-  apply self__RTLgen.Kseq_inv in H.   
-  do 2 fsimpl. econstructor; eauto. 
-  destruct H as [Y Z]. rewrite Y. rewrite Z. 
-  lia. econstructor. apply MWF. 
-  apply self__RTLgen.Kseq_inv in H. destruct H as [Y Z]. rewrite <- Y. apply H0. apply TF.
-  apply self__RTLgen.Kseq_inv in H. destruct H as [Y Z]. rewrite <- Z.
-  apply H3. apply ME. apply MEXT. 
++ intros until tge. intros TRANSL A B.
+  intros R1 MSTATE; inv MSTATE.
+  apply tr_stmt_skip_inv in TS. subst ns. inv TK.
+  econstructor; split.
+  right; split. apply star_refl.
+  apply Kseq_inv in H. destruct H; subst s0 k0.
+  apply lt_state_intro; do 2 fsimpl; try lia. (* Lt_state.*)
+  apply Kseq_inv in H. destruct H; subst s0 k0.
+  econstructor; eauto. apply stop_kseq_discriminate in H. exfalso; apply H.
   
 + apply cheat.
 + apply cheat.
