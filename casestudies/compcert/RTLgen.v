@@ -172,8 +172,8 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
     free_fenv m e f = Some m' ->
     step ge (State f Sskip k e le m)
       E0 (Returnstate Vundef k m')
-| step_assign: forall lenv ge f id a k e le m v,
-    eval_expr ge e le m lenv a v ->
+| step_assign: forall ge f id a k e le m v,
+    eval_expr ge e le m nil a v ->
     step ge (State f (Sassign id a) k e le m)
       E0 (State f Sskip k e (PTree.set id v le) m)
 | step_seq: forall ge f s1 s2 k e le m,
@@ -1111,7 +1111,12 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   constructor; auto.
 
 + apply tr_stmt_assign_inv in TS; unpack TS; subst. 
-  
+  exploit transl_expr_correct; eauto.
+  intros [rs' [tm' [A [B [C [D E]]]]]].
+  econstructor; split.
+  right; split. eauto.
+  apply lt_state_intro; do 2 fsimpl; try lia. (* Lt_state.*)
+  econstructor; eauto. fconstructor.
   
 + apply cheat.
 + apply cheat.
