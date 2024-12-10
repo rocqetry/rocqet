@@ -1,5 +1,20 @@
 Require Import Rocqet.Loader.
 
+FInductive tr_cont: T.code -> mapping ->
+                   S.cont -> T.node -> list T.node -> labelmap -> T.node -> option reg ->
+                   list T.stackframe -> Prop :=
+  | tr_Kseq: forall c map s k nd nexits ngoto nret rret cs n,
+      tr_stmt c map s nd n nexits ngoto nret rret ->
+      tr_cont c map k n nexits ngoto nret rret cs ->
+      tr_cont c map (S.Kseq s k) nd nexits ngoto nret rret cs
+  | tr_Kstop: forall c map ngoto nret rret cs,
+      c!nret = Some(T.Ireturn rret) ->
+      match_stacks S.Kstop cs ->
+      tr_cont c map S.Kstop nret nil ngoto nret rret cs             
+with match_stacks: S.cont -> list T.stackframe -> Prop :=
+  | match_stacks_stop:
+      match_stacks S.Kstop nil.
+
 Definition ident := nat.
 
 Inductive tm : Set :=
