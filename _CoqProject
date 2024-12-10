@@ -1,3 +1,4 @@
 -R _build/default/theories Rocqet
 -R _build/default/casestudies/compcert/lib Rocqet.CompCert.lib
+-R _build/default/tests Rocqet.Tests
 -I _build/default/src
