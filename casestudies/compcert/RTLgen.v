@@ -1052,8 +1052,8 @@ Qed. CloseFLemma.
 
 MetaData Lt_state.
 Import self__RTLgen.
-Ltac Lt_state :=
-  apply lt_state_intro; simpl; try lia.
+Ltac Lt_state :=  
+  apply lt_state_intro; do 2 fsimpl; simpl; try lia.
 FEnd Lt_state.
 
 Closing Fact tr_stmt_skip_inv: 
@@ -1093,7 +1093,7 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   econstructor; split.
   right; split. apply star_refl.
   apply Kseq_inv in H. destruct H; subst s0 k0.
-  apply lt_state_intro; do 2 fsimpl; try lia. (* Lt_state.*)
+  Lt_state.
   apply Kseq_inv in H. destruct H; subst s0 k0.
   econstructor; eauto. apply stop_kseq_discriminate in H. exfalso; apply H.
 
@@ -1114,8 +1114,7 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   exploit transl_expr_correct; eauto.
   intros [rs' [tm' [A [B [C [D E]]]]]].
   econstructor; split.
-  right; split. eauto.
-  apply lt_state_intro; do 2 fsimpl; try lia. (* Lt_state.*)
+  right; split. eauto. Lt_state.
   econstructor; eauto. fconstructor.
   
 + apply cheat.
