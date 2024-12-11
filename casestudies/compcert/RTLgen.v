@@ -1076,7 +1076,16 @@ Closing Fact tr_stmt_sseq_inv :
   exists n,  
   tr_stmt c map s2 n nd nexits ngoto nret rret /\
   tr_stmt c map s1 ns n nexits ngoto nret rret 
-  by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { intros until rret; intros H; inv H; eauto }.
+
+Closing Fact tr_stmt_sifthenelse_inv :
+  forall c map a strue sfalse ns nd nexits ngoto nret rret,
+  tr_stmt c map (S.Sifthenelse a strue sfalse) ns nd nexits ngoto nret rret ->
+  exists ntrue nfalse,  
+  tr_stmt c map strue ntrue nd nexits ngoto nret rret /\
+  tr_stmt c map sfalse nfalse nd nexits ngoto nret rret /\
+  tr_condition c map nil a ns ntrue nfalse
+  by plain { intros until rret; intros H; inv H; eauto }.              
           
 Closing Fact Kseq_inv : forall s0 k0 s k,
     self__RTLgen.S.Kseq s0 k0 = self__RTLgen.S.Kseq s k -> 
@@ -1130,10 +1139,15 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   right; split. apply star_refl. Lt_state.
   econstructor; eauto. econstructor; eauto.
   
++ apply cheat.  
 + apply cheat.
 + apply cheat.
-+ apply cheat.
-+ apply cheat.
+  
++ apply tr_stmt_sifthenelse_inv in TS; unpack TS.
+  exploit transl_condexpr_correct; eauto. intros [rs' [tm' [A [B [C D]]]]].
+  econstructor; split.
+  left. eexact A.
+  destruct b; econstructor; eauto.
 Qed. FEnd transl_step_correct.
 
 (*
