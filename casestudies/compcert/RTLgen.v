@@ -1068,6 +1068,14 @@ Closing Fact tr_stmt_assign_inv :
   exists r,
     map.(map_vars)!id = Some r /\
     tr_expr c map nil a ns nd r (Some id)
+    by plain { intros until rret; intros H; inv H; eauto }.
+
+Closing Fact tr_stmt_sseq_inv : 
+  forall c map s1 s2 ns nd nexits ngoto nret rret,
+  tr_stmt c map (S.Sseq s1 s2) ns nd nexits ngoto nret rret ->
+  exists n,  
+  tr_stmt c map s2 n nd nexits ngoto nret rret /\
+  tr_stmt c map s1 ns n nexits ngoto nret rret 
   by plain { intros until rret; intros H; inv H; eauto }.
           
 Closing Fact Kseq_inv : forall s0 k0 s k,
@@ -1117,7 +1125,11 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   right; split. eauto. Lt_state.
   econstructor; eauto. fconstructor.
   
-+ apply cheat.
++ apply tr_stmt_sseq_inv in TS; unpack TS.
+  econstructor; split.
+  right; split. apply star_refl. Lt_state.
+  econstructor; eauto. econstructor; eauto.
+  
 + apply cheat.
 + apply cheat.
 + apply cheat.
