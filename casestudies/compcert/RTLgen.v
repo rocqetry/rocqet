@@ -1106,6 +1106,8 @@ FInduction transl_step_correct about S.step
   /\ match_states S2 R2).
 FProof.
 all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
+
+(* skip seq *)
 + apply tr_stmt_skip_inv in TS. subst ns. inv TK.
   econstructor; split.
   right; split. apply star_refl.
@@ -1114,6 +1116,7 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   apply Kseq_inv in H. destruct H; subst s0 k0.
   econstructor; eauto. apply stop_kseq_discriminate in H. exfalso; apply H.
 
+(* skip call *)  
 + apply tr_stmt_skip_inv in TS; subst ns. 
   assert ((T.fn_code tf)!ncont = Some(T.Ireturn rret)
           /\ match_stacks k cs).
@@ -1127,22 +1130,30 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   rewrite H1. eauto.
   constructor; auto.
 
+(* assign *)
 + apply tr_stmt_assign_inv in TS; unpack TS; subst. 
   exploit transl_expr_correct; eauto.
   intros [rs' [tm' [A [B [C [D E]]]]]].
   econstructor; split.
   right; split. eauto. Lt_state.
   econstructor; eauto. fconstructor.
-  
+
+(* seq *)  
 + apply tr_stmt_sseq_inv in TS; unpack TS.
   econstructor; split.
   right; split. apply star_refl. Lt_state.
   econstructor; eauto. econstructor; eauto.
-  
-+ apply cheat.  
+
+(* return none *)
 + apply cheat.
+
+(* return some *)  
 + apply cheat.
-  
+
+(* internal function *)  
++ apply cheat.
+
+(* ifthenelse *)  
 + apply tr_stmt_sifthenelse_inv in TS; unpack TS.
   exploit transl_condexpr_correct; eauto. intros [rs' [tm' [A [B [C D]]]]].
   econstructor; split.
