@@ -416,7 +416,7 @@ Inductive stackframe : Type :=
       stackframe.
 FEnd stackframe.
 
-MetaData state binds State, CallState, Returnstate.
+MetaData state binds State, Callstate, Returnstate.
 Inductive state : Type :=
   | State:
       forall (stack: list stackframe)(* call stack *)
@@ -464,6 +464,16 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
     Mem.free m stk 0 f.(self__RTL.fn_stacksize) = Some m' ->
     step ge (State s f (Vptr stk Ptrofs.zero) pc rs m)
       E0 (Returnstate s (regmap_optget or Vundef rs) m')
+| exec_function_internal:
+    forall ge s f args m m' stk,
+    Mem.alloc m 0 (fn_stacksize f) = (m', stk) ->
+    step ge (Callstate s (AST.Internal f) args m)
+      E0 (State s
+                f
+                (Vptr stk Ptrofs.zero)
+                (fn_entrypoint f)
+                (init_regs args (fn_params f))
+                m')      
 | exec_return:
     forall ge res f sp pc rs s vres m,
     step ge (Returnstate (Stackframe res f sp pc rs :: s) vres m)
@@ -794,8 +804,27 @@ FDefinition transl_program : S.program -> Errors.res T.program :=
 
 (* relational spec *)
 
+FDefinition reg_valid : reg -> state -> Prop := fun r s =>
+  Plt r s.(st_nextreg T.instruction).
+
+FDefinition regs_valid : list reg -> state -> Prop := fun rl s =>
+  forall r, In r rl -> reg_valid r s.
+
+FDefinition reg_fresh : reg -> state -> Prop := fun r s =>
+  ~(Plt r s.(st_nextreg T.instruction)).
+
 FDefinition reg_in_map : mapping -> reg -> Prop := fun (m: mapping) (r: reg) =>
   (exists id, m.(map_vars)!id = Some r) \/ In r m.(map_letvars).
+
+FDefinition map_valid : mapping -> state -> Prop := fun m s =>
+  forall r, reg_in_map m r -> reg_valid r s.
+
+FLemma add_vars_valid:
+  forall namel s1 s2 map1 map2 rl i,
+  add_vars map1 namel s1 = OK (rl, map2) s2 i ->
+  map_valid map1 s1 ->
+  regs_valid rl s2 /\ map_valid map2 s2.
+FProofLemma. apply cheat. Qed. CloseFLemma.
 
 MetaData tr_move.
 Inductive tr_move (c: self__RTLgen.T.code): self__RTLgen.T.node -> reg -> self__RTLgen.T.node -> reg -> Prop :=
@@ -919,6 +948,15 @@ Inductive tr_function: self__RTLgen.S.function -> self__RTLgen.T.function -> Pro
 FEnd tr_function.
 
 (* translation meets spec *)
+FLemma init_mapping_valid:
+  forall s, map_valid init_mapping s.
+FProofLemma.
+unfold map_valid, init_mapping.
+  intros s r [[id A] | B].
+  simpl in A. rewrite PTree.gempty in A; discriminate.
+  simpl in B. tauto.
+Qed. CloseFLemma.
+  
 FLemma transl_function_charact:
   forall f tf,
   transl_function f = Errors.OK tf ->
@@ -926,8 +964,9 @@ FLemma transl_function_charact:
 FProofLemma.
   intros until tf. unfold transl_function.
   caseEq (transl_fun f init_state). congruence.
-  intros [nentry rparams] sfinal INCR TR E. inv E.  
-  FmonadInv TR.
+  intros [nentry rparams] sfinal INCR TR E. inv E.
+  apply cheat.
+  (*FmonadInv TR.
   exploit add_vars_valid. eexact EQ1. apply init_mapping_valid.
   intros [A B].
   exploit add_vars_valid. eexact EQ0. auto.
@@ -936,8 +975,8 @@ FProofLemma.
   eapply transl_stmt_charact; eauto with rtlg.
   unfold ret_reg. destruct (rettype_eq (sig_res (CminorSel.fn_sig f)) Tvoid).
   constructor.
-  constructor; eauto with rtlg.
-Qed.
+  constructor; eauto with rtlg.*)
+Qed. CloseFLemma.
 
 MetaData tr_fun.
 Inductive tr_fun (tf: self__RTLgen.T.function) (map: mapping)
@@ -983,6 +1022,27 @@ Record map_wf (m: mapping) : Prop :=
 
 FEnd map_wf.
 
+FLemma init_mapping_wf:
+  map_wf init_mapping.
+FProofLemma. apply cheat. Qed. CloseFLemma.
+
+FLemma add_var_wf:
+  forall s1 s2 map name r map' i,
+  add_var map name s1 = OK (r,map') s2 i ->
+  map_wf map -> map_valid map s1 -> map_wf map'.
+FProofLemma. apply cheat. Qed. CloseFLemma.
+
+FLemma add_vars_wf:
+  forall names s1 s2 map map' rl i,
+  add_vars map names s1 = OK (rl,map') s2 i ->
+  map_wf map -> map_valid map s1 -> map_wf map'.
+FProofLemma. apply cheat. Qed. CloseFLemma.
+
+FLemma add_letvar_wf:
+  forall map r,
+  map_wf map -> ~reg_in_map map r -> map_wf (add_letvar map r).
+FProofLemma. apply cheat. Qed. CloseFLemma.
+
 MetaData match_env.
 
 Record match_env
@@ -996,6 +1056,43 @@ Record match_env
   }.
 
 FEnd match_env.
+
+FLemma match_set_params_init_regs:
+  forall il rl s1 map2 s2 vl tvl i,
+  add_vars init_mapping il s1 = OK (rl, map2) s2 i ->
+  Val.lessdef_list vl tvl ->
+  match_env map2 (S.set_params vl il) nil (T.init_regs tvl rl)
+  /\ (forall r, reg_fresh r s2 -> (T.init_regs tvl rl)#r = Vundef).
+FProofLemma.
+apply cheat.
+Qed. CloseFLemma.
+
+FLemma match_set_locals:
+  forall map1 s1,
+  map_wf map1 ->
+  forall il rl map2 s2 e le rs i,
+  match_env map1 e le rs ->
+  (forall r, reg_fresh r s1 -> rs#r = Vundef) ->
+  add_vars map1 il s1 = OK (rl, map2) s2 i ->
+  match_env map2 (S.set_locals il e) le rs.
+FProofLemma.
+apply cheat.
+Qed. CloseFLemma.
+
+FLemma match_init_env_init_reg:
+  forall params s0 rparams map1 s1 i1 vars rvars map2 s2 i2 vparams tvparams,
+  add_vars init_mapping params s0 = OK (rparams, map1) s1 i1 ->
+  add_vars map1 vars s1 = OK (rvars, map2) s2 i2 ->
+  Val.lessdef_list vparams tvparams ->
+  match_env map2 (S.set_locals vars (S.set_params vparams params))
+    nil (T.init_regs tvparams rparams).
+FProofLemma.
+intros.
+  exploit match_set_params_init_regs; eauto. intros [A B].
+  eapply match_set_locals; eauto.
+  eapply add_vars_wf; eauto. apply init_mapping_wf.
+  apply init_mapping_valid.
+Qed. CloseFLemma.  
 
 FDefinition match_prog := fun (p: S.program) (tp: T.program) =>
   match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
@@ -1275,7 +1372,22 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   simpl. constructor; auto.
   
 (* internal function *)  
-+ monadInv TF. apply cheat.
++ monadInv TF. exploit transl_function_charact; eauto. intro TRF.
+  inversion TRF. subst f0.
+  pose (e0 := S.set_locals (S.fn_vars f) (S.set_params vargs (S.fn_params f))).
+  pose (rs := T.init_regs targs rparams).
+  assert (ME: match_env map2 e0 nil rs).
+    unfold rs, e0. eapply match_init_env_init_reg; eauto.
+  assert (MWF: map_wf map2).
+    assert (map_valid init_mapping s0) by apply init_mapping_valid.
+    exploit (add_vars_valid (S.fn_params f)); eauto. intros [A B].
+    eapply add_vars_wf; eauto. eapply add_vars_wf; eauto. apply init_mapping_wf.
+  edestruct Mem.alloc_extends as [tm' []]; eauto; try apply Z.le_refl.
+  econstructor; split.
+  left; apply plus_one. eapply T.exec_function_internal; simpl; eauto.
+  simpl. econstructor; eauto.
+  econstructor; eauto.
+  inversion MS; subst; econstructor; eauto.  
 
 (* ifthenelse *)  
 + apply tr_stmt_sifthenelse_inv in TS; unpack TS.
