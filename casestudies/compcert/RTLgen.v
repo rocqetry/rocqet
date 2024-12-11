@@ -183,8 +183,8 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
     free_fenv m e f = Some m' ->
     step ge (State f (Sreturn None) k e le m)
       E0 (Returnstate Vundef (call_cont k) m')            
-| step_return_1: forall lenv ge f a k e le m v m',
-    eval_expr ge e le m lenv a v ->
+| step_return_1: forall ge f a k e le m v m',
+    eval_expr ge e le m nil a v ->
     free_fenv m e f = Some m' ->
     step ge (State f (Sreturn (Some a)) k e le m)
       E0 (Returnstate v (call_cont k) m')
@@ -1092,6 +1092,13 @@ Closing Fact tr_stmt_sreturn_none_inv :
   tr_stmt c map (S.Sreturn None) ns nd nexits ngoto nret rret ->
   ns = nret
   by plain { intros until rret; intros H; inv H; eauto }.
+
+Closing Fact tr_stmt_sreturn_some_inv :
+  forall c map a ns nd nexits ngoto nret rret,
+  tr_stmt c map (S.Sreturn (Some a)) ns nd nexits ngoto nret rret ->
+  exists rret0, 
+  tr_expr c map nil a ns nret rret0 None /\ rret = Some rret0
+  by plain { intros until rret; intros H; inv H; eauto }.
           
 Closing Fact Kseq_inv : forall s0 k0 s k,
     self__RTLgen.S.Kseq s0 k0 = self__RTLgen.S.Kseq s k -> 
@@ -1170,8 +1177,17 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   constructor; auto.
     
 (* return some *)  
-+ apply cheat.
-
++ apply tr_stmt_sreturn_some_inv in TS; unpack TS; subst rret.
+  exploit transl_expr_correct; eauto.
+  intros [rs' [tm' [A [B [C [D E]]]]]].
+  exploit match_stacks_call_cont; eauto. intros [U V].
+  inversion TF.
+  edestruct Mem.free_parallel_extends as [tm'' []]; eauto.
+  econstructor; split.
+  left; eapply plus_right. eexact A. eapply T.exec_Ireturn; eauto.
+  rewrite H1; eauto. traceEq.
+  simpl. constructor; auto.
+  
 (* internal function *)  
 + apply cheat.
 
