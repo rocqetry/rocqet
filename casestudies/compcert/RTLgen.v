@@ -29,9 +29,74 @@ Local Open Scope string_scope.
 Local Open Scope list_scope.
 Open Scope asm.
 
+(** * Reasoning over monadic computations *)
+
+(** The [monadInv H] tactic below simplifies hypotheses of the form
+<<
+        H: (do x <- a; b) = OK res
+>>
+    By definition of the bind operation, both computations [a] and
+    [b] must succeed for their composition to succeed.  The tactic
+    therefore generates the following hypotheses:
+
+         x: ...
+        H1: a = OK x
+        H2: b x = OK res
+*)
+
+Ltac FmonadInv1 H :=
+  match type of H with
+  | (OK _ = OK _) =>
+      inversion H; clear H; try subst
+  | (Error _ = OK _) =>
+      discriminate
+  | (bind ?F ?G = OK ?X) =>
+      let x := fresh "x" in (
+      let EQ1 := fresh "EQ" in (
+      let EQ2 := fresh "EQ" in (
+      destruct (bind_inversion F G H) as [x [EQ1 EQ2]];
+      clear H;
+      try (FmonadInv1 EQ2))))
+  | (bind2 ?F ?G = OK ?X) =>
+      let x1 := fresh "x" in (
+      let x2 := fresh "x" in (
+      let EQ1 := fresh "EQ" in (
+      let EQ2 := fresh "EQ" in (
+      destruct (bind2_inversion F G H) as [x1 [x2 [EQ1 EQ2]]];
+      clear H;
+      try (FmonadInv1 EQ2)))))
+  | (match ?X with left _ => _ | right _ => assertion_failed end = OK _) =>
+      destruct X; [try (FmonadInv1 H) | discriminate]
+  | (match (negb ?X) with true => _ | false => assertion_failed end = OK _) =>
+      destruct X as [] eqn:?; simpl negb in H; [discriminate | try (FmonadInv1 H)]
+  | (match ?X with true => _ | false => assertion_failed end = OK _) =>
+      destruct X as [] eqn:?; [try (FmonadInv1 H) | discriminate]
+  | (mmap ?F ?L = OK ?M) =>
+      generalize (mmap_inversion F L H); intro
+  end.
+
+Ltac FmonadInv H :=
+  FmonadInv1 H ||
+  match type of H with
+  | (?F _ _ _ _ _ _ _ _ = OK _) =>
+      ((progress fsimpl in H) || unfold F in H); FmonadInv1 H
+  | (?F _ _ _ _ _ _ _ = OK _) =>
+      ((progress fsimpl in H) || unfold F in H); FmonadInv1 H
+  | (?F _ _ _ _ _ _ = OK _) =>
+      ((progress fsimpl in H) || unfold F in H); FmonadInv1 H
+  | (?F _ _ _ _ _ = OK _) =>
+      ((progress fsimpl in H) || unfold F in H); FmonadInv1 H
+  | (?F _ _ _ _ = OK _) =>
+      ((progress fsimpl in H) || unfold F in H); FmonadInv1 H
+  | (?F _ _ _ = OK _) =>
+      ((progress fsimpl in H) || unfold F in H); FmonadInv1 H
+  | (?F _ _ = OK _) =>
+      ((progress fsimpl in H) || unfold F in H); FmonadInv1 H
+  | (?F _ = OK _) =>
+      ((progress fsimpl in H) || unfold F in H); FmonadInv1 H
+  end.
+
 Trait Base.
-
-
 
 Family Cfam.
 
@@ -853,6 +918,27 @@ Inductive tr_function: self__RTLgen.S.function -> self__RTLgen.T.function -> Pro
                     nentry).
 FEnd tr_function.
 
+(* translation meets spec *)
+FLemma transl_function_charact:
+  forall f tf,
+  transl_function f = Errors.OK tf ->
+  tr_function f tf.
+FProofLemma.
+  intros until tf. unfold transl_function.
+  caseEq (transl_fun f init_state). congruence.
+  intros [nentry rparams] sfinal INCR TR E. inv E.  
+  FmonadInv TR.
+  exploit add_vars_valid. eexact EQ1. apply init_mapping_valid.
+  intros [A B].
+  exploit add_vars_valid. eexact EQ0. auto.
+  intros [C D].
+  eapply tr_function_intro; eauto with rtlg.
+  eapply transl_stmt_charact; eauto with rtlg.
+  unfold ret_reg. destruct (rettype_eq (sig_res (CminorSel.fn_sig f)) Tvoid).
+  constructor.
+  constructor; eauto with rtlg.
+Qed.
+
 MetaData tr_fun.
 Inductive tr_fun (tf: self__RTLgen.T.function) (map: mapping)
                  (f: self__RTLgen.S.function)
@@ -1189,7 +1275,7 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   simpl. constructor; auto.
   
 (* internal function *)  
-+ apply cheat.
++ monadInv TF. apply cheat.
 
 (* ifthenelse *)  
 + apply tr_stmt_sifthenelse_inv in TS; unpack TS.
