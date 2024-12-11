@@ -1085,7 +1085,13 @@ Closing Fact tr_stmt_sifthenelse_inv :
   tr_stmt c map strue ntrue nd nexits ngoto nret rret /\
   tr_stmt c map sfalse nfalse nd nexits ngoto nret rret /\
   tr_condition c map nil a ns ntrue nfalse
-  by plain { intros until rret; intros H; inv H; eauto }.              
+  by plain { intros until rret; intros H; inv H; eauto }.       
+
+Closing Fact tr_stmt_sreturn_none_inv : 
+  forall c map ns nd nexits ngoto nret rret,
+  tr_stmt c map (S.Sreturn None) ns nd nexits ngoto nret rret ->
+  ns = nret
+  by plain { intros until rret; intros H; inv H; eauto }.
           
 Closing Fact Kseq_inv : forall s0 k0 s k,
     self__RTLgen.S.Kseq s0 k0 = self__RTLgen.S.Kseq s k -> 
@@ -1094,6 +1100,15 @@ Closing Fact Kseq_inv : forall s0 k0 s k,
 
 Closing Fact stop_kseq_discriminate: forall s k, S.Kstop = S.Kseq s k -> False
     by plain { intros until k; intros H; discriminate }.
+
+(* Should be FInduction after tr_cont becomes FInductive *)
+FLemma match_stacks_call_cont:
+  forall c map k ncont nexits ngoto nret rret cs,
+  tr_cont c map k ncont nexits ngoto nret rret cs ->
+  match_stacks (S.call_cont k) cs /\ c!nret = Some(T.Ireturn rret).
+FProofLemma.
+  induction 1; fsimpl; auto.
+Qed. CloseFLemma.
                                
 FInduction transl_step_correct about S.step
   motive (fun ge S1 t S2 (_ : S.step ge S1 t S2) =>
@@ -1145,8 +1160,15 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   econstructor; eauto. econstructor; eauto.
 
 (* return none *)
-+ apply cheat.
-
++ apply tr_stmt_sreturn_none_inv in TS; subst ns.
+  exploit match_stacks_call_cont; eauto. intros [U V].
+  inversion TF.
+  edestruct Mem.free_parallel_extends as [tm'' []]; eauto.
+  econstructor; split.
+  left; apply plus_one. eapply T.exec_Ireturn; eauto.
+  rewrite H1; eauto.
+  constructor; auto.
+    
 (* return some *)  
 + apply cheat.
 
