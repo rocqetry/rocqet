@@ -268,11 +268,11 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
       find_label (function_body f) lbl (call_cont k) = Some(s', k') ->
       step ge (State f (Sgoto lbl) k sp e m)
         E0 (State f s' k' sp e m)      
-| step_internal_function: forall ge f vargs k m m1 e le,                                               
-    alloc_fenv empty_fenv m f e m1 ->
+| step_internal_function: forall ge f vargs k m m1 sp le,                                               
+    alloc_fenv empty_fenv m f sp m1 ->
     init_env f vargs = le ->                        
      step ge (Callstate (AST.Internal f) vargs k m)
-       E0 (State f (function_body f) k e le m1).
+       E0 (State f (function_body f) k sp le m1).
             
 MetaData initial_state.
 Inductive initial_state (p: program): state -> Prop :=
@@ -329,7 +329,7 @@ FOverride Definition function_sig := fn_sig.
 (* Vptr sp Ptrofs.zero *)
 FOverride Definition fenv := block.   
 FOverride Definition free_fenv := fun m sp f => Mem.free m sp 0 (fn_stackspace f).          
-FOverride Definition alloc_fenv := fun sp m f sp' m' => Mem.alloc m 0 (fn_stackspace f) = (m', sp).
+FOverride Definition alloc_fenv := fun sp m f sp' m' => Mem.alloc m 0 (fn_stackspace f) = (m', sp').
 
 FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
 | eval_Eop: forall ge sp e m le op al vl v,
@@ -1473,8 +1473,8 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
     eapply add_vars_wf; eauto. eapply add_vars_wf; eauto. apply init_mapping_wf.
   edestruct Mem.alloc_extends as [tm' []]; eauto; try apply Z.le_refl.
   econstructor; split.
-  left; apply plus_one. eapply T.exec_function_internal; simpl; eauto.
-  simpl. econstructor; eauto.
+  left; apply plus_one. eapply T.exec_function_internal; fsimpl; simpl; eauto.
+  fsimpl; simpl. econstructor; eauto.
   econstructor; eauto.
   inversion MS; subst; econstructor; eauto.  
 
@@ -1499,7 +1499,9 @@ FLemma transl_initial_states:
   forall prog tprog, match_prog prog tprog -> 
   forall S', S.initial_state prog S' ->
   exists R, T.initial_state tprog R /\ match_states S' R.
-FProofLemma. apply cheat. Qed. CloseFLemma.
+FProofLemma.
+apply cheat.
+Qed. CloseFLemma.
 
 FLemma transl_final_states:
   forall S' R r,
