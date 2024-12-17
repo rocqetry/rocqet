@@ -1253,12 +1253,11 @@ FLemma lt_state_intro:
   lt_state (S.State f1 s1 k1 sp1 e1 m1)
            (S.State f2 s2 k2 sp2 e2 m2).
 FProofLemma.
-intros. unfold self__RTLgen.lt_state. simpl. destruct H as [A | [A B]].
+intros. unfold lt_state. simpl. destruct H as [A | [A B]].
   left. auto. rewrite A. right. auto. 
 Qed. CloseFLemma.
 
 MetaData Lt_state.
-Import self__RTLgen.
 Ltac Lt_state :=  
   apply lt_state_intro; do 2 fsimpl; simpl; try lia.
 FEnd Lt_state.
