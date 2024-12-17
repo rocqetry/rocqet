@@ -1176,19 +1176,35 @@ with transl_condexpr_correct about S.eval_condexpr motive
 
 FProof.
 
+(* Evar *)
 + apply cheat.
+
+(* Eop *)  
++ apply cheat.
+
+(* Econdition *)  
++ apply cheat.
+
+(* Elet *)  
++ apply cheat.
+
+(* Eletvar *)  
++ apply cheat.
+
+(* Enil *)  
++ apply cheat.
+
+(* Econs *)  
++ apply cheat.
+
+(* CEcond *)  
++ apply cheat.
+
+(* CEcondition *)  
++ apply cheat.
+
+(* CElet *)  
 + apply cheat.  
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
-
-+ apply cheat.
-+ apply cheat.
-
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.  
-
 Qed. FEnd transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
 
 MetaData match_states.
