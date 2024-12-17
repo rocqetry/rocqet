@@ -1339,6 +1339,15 @@ FProofLemma.
   induction 1; fsimpl; auto.
 Qed. CloseFLemma.
 
+(* Same as above *)
+FLemma tr_cont_call_cont:
+  forall c map k ncont nexits ngoto nret rret cs,
+  tr_cont c map k ncont nexits ngoto nret rret cs ->
+  tr_cont c map (S.call_cont k) nret nil ngoto nret rret cs.
+FProofLemma.
+  induction 1; fsimpl; auto; econstructor; eauto.
+Qed. CloseFLemma.
+
 FInduction tr_find_label about S.stmt motive
   (fun (s : S.stmt) =>
     forall c map lbl n (ngoto: labelmap) nret rret s' k' cs,
@@ -1371,20 +1380,7 @@ all: intros until nexits1; fsimpl; try congruence.
   inv H3. apply tr_stmt_sifthenelse_inv in H4; unpack H4; subst.
   eapply H; eauto.
   apply tr_stmt_sifthenelse_inv in H4; unpack H4; subst. eapply H0; eauto.
-Qed. FEnd tr_find_label.  
-  
-Lemma tr_find_label:
-  forall c map lbl n (ngoto: labelmap) nret rret s' k' cs,
-  ngoto!lbl = Some n ->
-  forall s k ns1 nd1 nexits1,
-  find_label lbl s k = Some (s', k') ->
-  tr_stmt c map s ns1 nd1 nexits1 ngoto nret rret ->
-  tr_cont c map k nd1 nexits1 ngoto nret rret cs ->
-  exists ns2, exists nd2, exists nexits2,
-     c!n = Some(Inop ns2)
-  /\ tr_stmt c map s' ns2 nd2 nexits2 ngoto nret rret
-  /\ tr_cont c map k' nd2 nexits2 ngoto nret rret cs.
-
+Qed. FEnd tr_find_label.
                                
 FInduction transl_step_correct about S.step
   motive (fun ge S1 t S2 (_ : S.step ge S1 t S2) =>
@@ -1462,7 +1458,7 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   exploit tr_find_label; eauto. eapply tr_cont_call_cont; eauto.
   intros [ns2 [nd2 [nexits2 [A [B C]]]]].
   econstructor; split.
-  left; apply plus_one. eapply exec_Inop; eauto.
+  left; apply plus_one. eapply T.exec_Inop; eauto.
   econstructor; eauto.
   
 (* internal function *)  
