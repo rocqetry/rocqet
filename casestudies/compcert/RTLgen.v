@@ -227,6 +227,17 @@ FInductive eval_expr :  genv -> fenv -> env -> mem -> letenv -> expr -> val -> P
 | eval_Evar: forall ge lenv e le m id v,
     PTree.get id le = Some v ->
     eval_expr ge e le m lenv (Evar id) v.
+
+FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect.
+Case Sseq s1 s2 :=
+  (fun lbl k =>
+     match find_label s1 lbl (Kseq s2 k) with
+      | Some sk => Some sk
+      | None => find_label s2 lbl k
+      end).
+Case Slabel lbl' s' := (fun lbl k => if ident_eq lbl lbl' then Some(s', k) else find_label s' lbl k).
+Case _ := (fun lbl k => None).
+FEnd find_label.
                            
 FInductive step : genv -> state -> trace -> state -> Prop :=
 | step_skip_seq: forall ge f s k e le m,
@@ -253,6 +264,10 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
     free_fenv m e f = Some m' ->
     step ge (State f (Sreturn (Some a)) k e le m)
       E0 (Returnstate v (call_cont k) m')
+| step_goto: forall ge f lbl k sp e m s' k',
+      find_label (function_body f) lbl (call_cont k) = Some(s', k') ->
+      step ge (State f (Sgoto lbl) k sp e m)
+        E0 (State f s' k' sp e m)      
 | step_internal_function: forall ge f vargs k m m1 e le,                                               
     alloc_fenv empty_fenv m f e m1 ->
     init_env f vargs = le ->                        
@@ -351,6 +366,15 @@ with eval_condexpr: genv -> fenv -> env -> mem -> letenv -> condexpr -> bool -> 
     eval_expr ge sp e m le a v1 ->
     eval_condexpr ge sp e m (v1 :: le) b v2 ->
     eval_condexpr ge sp e m le (CElet a b) v2.
+
+FRecursion find_label.
+Case Sifthenelse c s1 s2 :=
+  (fun lbl k =>
+    match find_label s1 lbl k with
+    | Some sk => Some sk
+    | None => find_label s2 lbl k
+    end).
+FEnd find_label.
 
 FInductive step : genv -> state -> trace -> state -> Prop :=
 | step_ifthenelse: forall ge f c s1 s2 k sp e m b,
@@ -1148,8 +1172,8 @@ with transl_condexpr_correct about S.eval_condexpr motive
        plus T.step tge (T.State cs f (Vptr sp Ptrofs.zero) ns rs tm) E0 (T.State cs f (Vptr sp Ptrofs.zero) (if v then ntrue else nfalse) rs' tm')
     /\ match_env map e le rs'
     /\ (forall r, In r pr -> rs'#r = rs#r)
-    /\ Mem.extends m tm').
-     
+    /\ Mem.extends m tm').     
+
 FProof.
 
 + apply cheat.
@@ -1281,7 +1305,22 @@ Closing Fact tr_stmt_sreturn_some_inv :
   tr_stmt c map (S.Sreturn (Some a)) ns nd nexits ngoto nret rret ->
   exists rret0, 
   tr_expr c map nil a ns nret rret0 None /\ rret = Some rret0
-  by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { intros until rret; intros H; inv H; eauto }.
+
+Closing Fact tr_stmt_sgoto_inv :
+  forall c map lbl ns nd nexits ngoto nret rret,
+    tr_stmt c map (S.Sgoto lbl) ns nd nexits ngoto nret rret ->
+    ngoto!lbl = Some ns
+    by plain { intros until rret; intros H; inv H; eauto }.
+
+Closing Fact tr_stmt_slabel_inv :
+  forall c map lbl s ns nd nexits ngoto nret rret,
+    tr_stmt c map (S.Slabel lbl s) ns nd nexits ngoto nret rret  ->
+    exists n,
+      ngoto!lbl = Some n /\
+      c!n = Some (T.Inop ns) /\
+      tr_stmt c map s ns nd nexits ngoto nret rret  
+    by plain { intros until rret; intros H; inv H; eauto }.             
           
 Closing Fact Kseq_inv : forall s0 k0 s k,
     self__RTLgen.S.Kseq s0 k0 = self__RTLgen.S.Kseq s k -> 
@@ -1299,6 +1338,53 @@ FLemma match_stacks_call_cont:
 FProofLemma.
   induction 1; fsimpl; auto.
 Qed. CloseFLemma.
+
+FInduction tr_find_label about S.stmt motive
+  (fun (s : S.stmt) =>
+    forall c map lbl n (ngoto: labelmap) nret rret s' k' cs,
+    ngoto!lbl = Some n ->
+    forall k ns1 nd1 nexits1,
+    S.find_label s lbl k = Some (s', k') ->
+    tr_stmt c map s ns1 nd1 nexits1 ngoto nret rret ->
+    tr_cont c map k nd1 nexits1 ngoto nret rret cs ->
+    exists ns2, exists nd2, exists nexits2,
+       c!n = Some(T.Inop ns2)
+    /\ tr_stmt c map s' ns2 nd2 nexits2 ngoto nret rret
+    /\ tr_cont c map k' nd2 nexits2 ngoto nret rret cs).
+FProof.
+all: intros until nexits1; fsimpl; try congruence.
+(* seq *)
++ caseEq (S.find_label __i lbl (S.Kseq __i0 k)); intros.
+  inv H3. apply tr_stmt_sseq_inv in H4; unpack H4; subst.
+  eapply H; eauto. econstructor; eauto.
+  apply tr_stmt_sseq_inv in H4; unpack H4; subst. eapply H0; eauto.
+  
+(* label *)
++ destruct (ident_eq lbl l); intros.
+  inv H1. apply tr_stmt_slabel_inv in H2; unpack H2; subst.
+  assert (n0 = n). change positive with node in TEMP0. congruence. subst n0.
+  exists ns1; exists nd1; exists nexits1; auto.
+  apply tr_stmt_slabel_inv in H2; unpack H2; subst. eapply H; eauto.
+
+(* ifthenelse *)  
++ caseEq (S.find_label __i lbl k); intros.
+  inv H3. apply tr_stmt_sifthenelse_inv in H4; unpack H4; subst.
+  eapply H; eauto.
+  apply tr_stmt_sifthenelse_inv in H4; unpack H4; subst. eapply H0; eauto.
+Qed. FEnd tr_find_label.  
+  
+Lemma tr_find_label:
+  forall c map lbl n (ngoto: labelmap) nret rret s' k' cs,
+  ngoto!lbl = Some n ->
+  forall s k ns1 nd1 nexits1,
+  find_label lbl s k = Some (s', k') ->
+  tr_stmt c map s ns1 nd1 nexits1 ngoto nret rret ->
+  tr_cont c map k nd1 nexits1 ngoto nret rret cs ->
+  exists ns2, exists nd2, exists nexits2,
+     c!n = Some(Inop ns2)
+  /\ tr_stmt c map s' ns2 nd2 nexits2 ngoto nret rret
+  /\ tr_cont c map k' nd2 nexits2 ngoto nret rret cs.
+
                                
 FInduction transl_step_correct about S.step
   motive (fun ge S1 t S2 (_ : S.step ge S1 t S2) =>
@@ -1370,6 +1456,14 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   left; eapply plus_right. eexact A. eapply T.exec_Ireturn; eauto.
   rewrite H1; eauto. traceEq.
   simpl. constructor; auto.
+
+(* goto *)  
++ apply tr_stmt_sgoto_inv in TS.  inversion TF; subst.
+  exploit tr_find_label; eauto. eapply tr_cont_call_cont; eauto.
+  intros [ns2 [nd2 [nexits2 [A [B C]]]]].
+  econstructor; split.
+  left; apply plus_one. eapply exec_Inop; eauto.
+  econstructor; eauto.
   
 (* internal function *)  
 + monadInv TF. exploit transl_function_charact; eauto. intro TRF.
