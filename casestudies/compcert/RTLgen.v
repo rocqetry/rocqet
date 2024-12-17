@@ -1498,14 +1498,38 @@ Let tge : RTL.genv := Genv.globalenv tprog.
 FLemma function_ptr_translated:
   forall prog tprog ge tge, match_prog prog tprog ->
   ge = Genv.globalenv prog ->
-  tge = Genv.globalenv tprog ->                     
+  tge = Genv.globalenv tprog ->
   forall (b: block) (f: S.fundef),
   Genv.find_funct_ptr ge b = Some f ->
   exists tf,
   Genv.find_funct_ptr tge b = Some tf /\ transl_fundef f = Errors.OK tf.
 FProofLemma.
-intros until tge; intros TRANSL _ _.
-apply (Genv.find_funct_ptr_transf_partial TRANSL).
+intros until tge; intros TRANSL A B. rewrite A. rewrite B.
+apply Genv.find_funct_ptr_transf_partial; eauto.
+Qed. CloseFLemma.
+
+FLemma symbols_preserved:
+  forall prog tprog ge tge, match_prog prog tprog ->
+  ge = Genv.globalenv prog ->
+  tge = Genv.globalenv tprog ->
+  forall (s: ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
+FProofLemma.
+intros until tge; intros TRANSL A B. rewrite A. rewrite B.
+apply (Genv.find_symbol_transf_partial TRANSL).
+Qed. CloseFLemma.
+
+FLemma sig_transl_function:
+  forall (f: S.fundef) (tf: T.fundef),
+  transl_fundef f = Errors.OK tf ->
+  T.funsig tf = S.funsig f.
+FProofLemma.
+  intros until tf. unfold transl_fundef, transf_partial_fundef.
+  case f; intro.
+  unfold transl_function.
+  case (transl_fun f0 (init_state)); simpl; intros.
+  discriminate.
+  destruct p. simpl in H. inversion H. reflexivity.
+  intro. inversion H. reflexivity.
 Qed. CloseFLemma.
 
 FLemma transl_initial_states: 
@@ -1513,14 +1537,14 @@ FLemma transl_initial_states:
   forall S', S.initial_state prog S' ->
   exists R, T.initial_state tprog R /\ match_states S' R.
 FProofLemma.
- induction 1.
+ induction 2.
   exploit function_ptr_translated; eauto. intros [tf [A B]].
   econstructor; split.
-  econstructor. apply (Genv.init_mem_transf_partial TRANSL); eauto.
-  replace (prog_main tprog) with (prog_main prog). rewrite symbols_preserved; eauto.
+  econstructor. apply (Genv.init_mem_transf_partial H); eauto.
+  replace (AST.prog_main tprog) with (AST.prog_main prog). rewrite symbols_preserved with (prog:=prog) (tprog:=tprog) (ge:=ge); eauto.
   symmetry; eapply match_program_main; eauto.
   eexact A.
-  rewrite <- H2. apply sig_transl_function; auto.
+  rewrite <- H3. apply sig_transl_function; auto.
   constructor. auto. constructor.
   constructor. apply Mem.extends_refl.
 Qed. CloseFLemma.
