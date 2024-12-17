@@ -1493,20 +1493,42 @@ Hypothesis TRANSL: match_prog prog tprog.
 
 Let ge : CminorSel.genv := Genv.globalenv prog.
 Let tge : RTL.genv := Genv.globalenv tprog.
-*)
+ *)
+
+FLemma function_ptr_translated:
+  forall prog tprog ge tge, match_prog prog tprog ->
+  ge = Genv.globalenv prog ->
+  tge = Genv.globalenv tprog ->                     
+  forall (b: block) (f: S.fundef),
+  Genv.find_funct_ptr ge b = Some f ->
+  exists tf,
+  Genv.find_funct_ptr tge b = Some tf /\ transl_fundef f = Errors.OK tf.
+FProofLemma.
+intros until tge; intros TRANSL _ _.
+apply (Genv.find_funct_ptr_transf_partial TRANSL).
+Qed. CloseFLemma.
 
 FLemma transl_initial_states: 
   forall prog tprog, match_prog prog tprog -> 
   forall S', S.initial_state prog S' ->
   exists R, T.initial_state tprog R /\ match_states S' R.
 FProofLemma.
-apply cheat.
+ induction 1.
+  exploit function_ptr_translated; eauto. intros [tf [A B]].
+  econstructor; split.
+  econstructor. apply (Genv.init_mem_transf_partial TRANSL); eauto.
+  replace (prog_main tprog) with (prog_main prog). rewrite symbols_preserved; eauto.
+  symmetry; eapply match_program_main; eauto.
+  eexact A.
+  rewrite <- H2. apply sig_transl_function; auto.
+  constructor. auto. constructor.
+  constructor. apply Mem.extends_refl.
 Qed. CloseFLemma.
 
 FLemma transl_final_states:
   forall S' R r,
   match_states S' R -> S.final_state S' r -> T.final_state R r.
-FProofLemma. apply cheat. Qed. CloseFLemma.
+FProofLemma. intros. inv H0. inv H. inv MS. inv LD. constructor. Qed. CloseFLemma.
 
 FEnd RTLgen.
 
