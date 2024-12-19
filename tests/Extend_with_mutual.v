@@ -1,9 +1,20 @@
 Require Import Rocqet.Loader.
 
+Family X.
+
+FInductive tr_cont: nat ->  Prop :=
+  | tr_Kseq: forall x:nat, tr_cont x
+  | tr_Kstop: forall x, match_stacks x -> tr_cont x 
+with match_stacks: nat  -> Prop :=
+  | match_stacks_stop: match_stacks 0.
+
+FEnd X.
+
 (*FRecursion subst
   with subst_ls about lbl_expr motive (fun (_ : expr) => ...) by _rect.
 
 FEnd subst with subst_ls.*)
+
 
 Axiom cheat : forall {x}, x.
 

@@ -106,10 +106,7 @@ module Vernac = struct
       | RecKind.Ind | RecKind.IndComplete -> Sorts.InProp
       | RecKind.Rec -> Sorts.InSet
       | RecKind.Rect -> Sorts.InType
-    in
-    let internal_indp_name =
-      Naming.principle_name ~inductives ~kind:(RecKind.to_string suffix)
-    in
+    in    
     let names =
       inductives
       |> List.map (fun inductive ->
@@ -136,13 +133,7 @@ module Vernac = struct
                  sch_sort = sort;
                } ))
     in
-    let* _ = vernac_ (VernacSynPure (VernacScheme scheme)) in
-    let* _ =
-      vernac_
-        (VernacSynPure
-           (VernacCombinedScheme
-              (CAst.make internal_indp_name, List.map fst names)))
-    in
+    let* _ = vernac_ (VernacSynPure (VernacScheme scheme)) in    
     return ()
 
   let define_term ?(ty : Constrexpr.constr_expr option) ~(name : Names.Id.t)

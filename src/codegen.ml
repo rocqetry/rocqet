@@ -97,27 +97,38 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
   in
   (* Filter principles not defined on this inductive *)
   let filter_mutual_principle suffixes =
+    if Termutils.is_prop_indexed_inductive ind_def
+    then [ RecKind.IndComplete ]
+    else     
     suffixes
     |> List.filter_map (fun suffix ->
            RecursorStore.find_opt suffix !defined_recursors
            |> Option.map (Fun.const suffix))
   in
   let collect_mutual_recursor () : unit B.t =
-    possible_mutual_suffixes |> filter_mutual_principle
-    |> List.iter (fun suffix ->
-           let principle =
-             Naming.principle_name ~inductives:type_names
-               ~kind:(RecKind.to_string suffix)
-           in
-           let recursor_type =
-             principle |> Constrexpr_ops.mkIdentC |> Termutils.checked_type_of
-             |> Termutils.reflect_checked_term
-             |> Constrexpr_ops.replace_vars_constr_expr
-                  remove_internal_prefix_map
-           in
-           defined_mutual_recursor :=
-             RecursorStore.add suffix recursor_type !defined_mutual_recursor);
-    B.return ()
+    if List.length type_names > 1 then 
+      (possible_mutual_suffixes
+      |> filter_mutual_principle
+      |> List.iter (fun suffix ->
+             let one_type_name = List.hd type_names in
+             let principle =
+               Naming.principle_name ~inductives:type_names
+                 ~kind:(RecKind.to_string suffix)
+             in
+             let principle =
+               Names.Id.of_string
+                 (Names.Id.to_string one_type_name ^ "_" ^ Names.Id.to_string principle)
+             in
+             let recursor_type =
+               principle |> Constrexpr_ops.mkIdentC |> Termutils.checked_type_of
+               |> Termutils.reflect_checked_term
+               |> Constrexpr_ops.replace_vars_constr_expr
+                    remove_internal_prefix_map
+             in
+             defined_mutual_recursor :=
+               RecursorStore.add suffix recursor_type !defined_mutual_recursor);
+       B.return ())
+    else B.return ()
   in
   let compiled_impl =
     B.(

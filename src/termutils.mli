@@ -130,3 +130,5 @@ val generate_one_prec_computational_axiom :
     (Names.Id.t * Constrexpr.constr_expr) list*)
 
 val is_indexed_inductive : VernacInductive.t -> bool
+
+val is_prop_indexed_inductive : VernacInductive.t -> bool

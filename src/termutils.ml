@@ -810,3 +810,21 @@ let is_indexed_inductive (i : VernacInductive.t) =
       match kind.v with
       | Constrexpr.CNotation (_, (_, "_ -> _"), _) -> true
       | _ -> false)
+
+let is_prop_indexed_inductive (i : VernacInductive.t) =
+  let kind =
+    i |> List.hd |> fst |> VernacInductive.extract_type_and_cstrs |> fst |> snd
+  in
+  let rec go (kind: Constrexpr.constr_expr) =
+     match kind.v with
+     | CNotation (_, (_, "_ -> _"), ([ _domain; codomain ], _, _, _)) -> go codomain
+     | CSort (UNamed (_, l)) ->
+        let sort_name, _ = l |> List.hd in        
+        (match sort_name with
+        | CProp | CSProp -> true 
+        | _ -> false) 
+     | _ -> false 
+  in
+  match kind with
+  | None -> false
+  | Some kind -> go kind 
