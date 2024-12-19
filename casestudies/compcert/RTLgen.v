@@ -1013,9 +1013,9 @@ Inductive tr_fun (tf: self__RTLgen.T.function) (map: mapping)
       tr_fun tf map f ngoto nret rret.
 FEnd tr_fun.
 
-MetaData tr_cont binds match_stacks.
+(*MetaData tr_cont binds match_stacks.*)
 
-Inductive tr_cont: T.code -> mapping ->
+FInductive tr_cont: T.code -> mapping ->
                    S.cont -> T.node -> list T.node -> labelmap -> T.node -> option reg ->
                    list T.stackframe -> Prop :=
   | tr_Kseq: forall c map s k nd nexits ngoto nret rret cs n,
@@ -1030,7 +1030,7 @@ with match_stacks: S.cont -> list T.stackframe -> Prop :=
   | match_stacks_stop:
     match_stacks S.Kstop nil.
 
-FEnd tr_cont.
+(* FEnd tr_cont.*)
 
 MetaData map_wf.
 
@@ -1177,7 +1177,7 @@ with transl_condexpr_correct about S.eval_condexpr motive
 FProof.
 
 (* Evar *)
-+ apply cheat.
++ intros. inv TE. apply cheat.
 
 (* Eop *)  
 + apply cheat.
