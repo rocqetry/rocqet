@@ -1368,7 +1368,7 @@ all: intros until nexits1; fsimpl; try congruence.
 (* seq *)
 + caseEq (S.find_label __i lbl (S.Kseq __i0 k)); intros.
   inv H3. apply tr_stmt_sseq_inv in H4; unpack H4; subst.
-  eapply H; eauto. econstructor; eauto.
+  eapply H; eauto. fconstructor; eauto.
   apply tr_stmt_sseq_inv in H4; unpack H4; subst. eapply H0; eauto.
   
 (* label *)
