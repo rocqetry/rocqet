@@ -1013,8 +1013,6 @@ Inductive tr_fun (tf: self__RTLgen.T.function) (map: mapping)
       tr_fun tf map f ngoto nret rret.
 FEnd tr_fun.
 
-(*MetaData tr_cont binds match_stacks.*)
-
 FInductive tr_cont: T.code -> mapping ->
                    S.cont -> T.node -> list T.node -> labelmap -> T.node -> option reg ->
                    list T.stackframe -> Prop :=
@@ -1030,10 +1028,7 @@ with match_stacks: S.cont -> list T.stackframe -> Prop :=
   | match_stacks_stop:
     match_stacks S.Kstop nil.
 
-(* FEnd tr_cont.*)
-
 MetaData map_wf.
-
 Record map_wf (m: mapping) : Prop :=
   mk_map_wf {
     map_wf_inj:
@@ -1043,7 +1038,6 @@ Record map_wf (m: mapping) : Prop :=
       (forall id r,
          m.(map_vars)!id = Some r -> In r m.(map_letvars) -> False)
     }.
-
 FEnd map_wf.
 
 FLemma init_mapping_wf:
@@ -1068,7 +1062,6 @@ FLemma add_letvar_wf:
 FProofLemma. apply cheat. Qed. CloseFLemma.
 
 MetaData match_env.
-
 Record match_env
       (map: mapping) (e: S.env) (le: S.letenv) (rs: T.regset) : Prop :=
   mk_match_env {
@@ -1078,7 +1071,6 @@ Record match_env
     me_letvars:
       Val.lessdef_list le rs##(map.(map_letvars))
   }.
-
 FEnd match_env.
 
 FLemma match_set_params_init_regs:
@@ -1177,7 +1169,7 @@ with transl_condexpr_correct about S.eval_condexpr motive
 FProof.
 
 (* Evar *)
-+ intros. inv TE. apply cheat.
++ intros. apply cheat.
 
 (* Eop *)  
 + apply cheat.
@@ -1208,7 +1200,6 @@ FProof.
 Qed. FEnd transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
 
 MetaData match_states.
-
 Inductive match_states: S.state -> T.state -> Prop :=
   | match_state:
       forall f s k sp e m tm cs tf ns rs map ncont nexits ngoto nret rret
@@ -1235,7 +1226,6 @@ Inductive match_states: S.state -> T.state -> Prop :=
         (MEXT: Mem.extends m tm),
       match_states (S.Returnstate v k m)
         (T.Returnstate cs tv tm).
-
 FEnd match_states.
 
 FRecursion size_stmt about S.stmt motive (fun (_ : S.stmt) => nat) by _rect.
@@ -1345,23 +1335,21 @@ Closing Fact Kseq_inv : forall s0 k0 s k,
 Closing Fact stop_kseq_discriminate: forall s k, S.Kstop = S.Kseq s k -> False
     by plain { intros until k; intros H; discriminate }.
 
-(* Should be FInduction after tr_cont becomes FInductive *)
-FLemma match_stacks_call_cont:
-  forall c map k ncont nexits ngoto nret rret cs,
-  tr_cont c map k ncont nexits ngoto nret rret cs ->
-  match_stacks (S.call_cont k) cs /\ c!nret = Some(T.Ireturn rret).
-FProofLemma.
-  induction 1; fsimpl; auto.
-Qed. CloseFLemma.
+FInduction match_stacks_call_cont about tr_cont motive
+  (fun c map k ncont nexits ngoto nret rret cs
+       (_ : tr_cont c map k ncont nexits ngoto nret rret cs) =>
+       match_stacks (S.call_cont k) cs /\ c!nret = Some(T.Ireturn rret)).
+FProof.
+all: intros; fsimpl; auto.
+Qed. FEnd match_stacks_call_cont.
 
-(* Same as above *)
-FLemma tr_cont_call_cont:
-  forall c map k ncont nexits ngoto nret rret cs,
-  tr_cont c map k ncont nexits ngoto nret rret cs ->
-  tr_cont c map (S.call_cont k) nret nil ngoto nret rret cs.
-FProofLemma.
-  induction 1; fsimpl; auto; econstructor; eauto.
-Qed. CloseFLemma.
+FInduction tr_cont_call_cont about tr_cont motive 
+  (fun c map k ncont nexits ngoto nret rret cs
+    (_ : tr_cont c map k ncont nexits ngoto nret rret cs) =>
+    tr_cont c map (S.call_cont k) nret nil ngoto nret rret cs).
+FProof.
+all: intros; fsimpl; auto; fconstructor; eauto.
+Qed. FEnd tr_cont_call_cont.
 
 FInduction tr_find_label about S.stmt motive
   (fun (s : S.stmt) =>
