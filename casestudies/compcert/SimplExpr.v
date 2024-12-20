@@ -78,13 +78,13 @@ with lbl_stmts : Type :=(* cases of a switch *)
 | LSnil: lbl_stmts
 | LScons: option Z -> stmt -> lbl_stmts -> lbl_stmts.
 
-MetaData function.
+MetaData function binds fn_return, fn_callconv, fn_params, fn_vars, fn_body.
 Record function : Type := mkfunction {
   fn_return: type;
   fn_callconv: calling_convention;
   fn_params: list (ident * type);
   fn_vars: list (ident * type);
-  fn_body: self__C.stmt
+  fn_body: stmt
 }.
 FEnd function.
 
@@ -94,7 +94,7 @@ FDefinition var_names := fun (vars: list(ident * type)) =>
 FDefinition fundef := Ctypes.fundef function.
 
 FDefinition type_of_function : function -> type := fun f =>
-  Tfunction (type_of_params (self__C.fn_params f)) (self__C.fn_return f) (self__C.fn_callconv f).
+  Tfunction (type_of_params (fn_params f)) (fn_return f) (fn_callconv f).
 
 FDefinition type_of_fundef : fundef -> type := fun f =>
   match f with
@@ -111,8 +111,8 @@ Case LScons i s sl' := (Sseq s (seq_of_labeled_statement sl')).
 FEnd seq_of_labeled_statement.
 
 (* Semantics *)
-MetaData genv.
-Record genv := { genv_genv :> Genv.t self__C.fundef type; genv_cenv :> composite_env }.
+MetaData genv binds genv_genv, genv_cenv.
+Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env }.
 FEnd genv.
 
 FDefinition globalenv : program -> genv := fun p =>
@@ -122,13 +122,13 @@ FDefinition env := PTree.t (block * type).
 FDefinition empty_env: env := (PTree.empty (block * type)).
 
 FDefinition block_of_binding := fun (ge: genv) (id_b_ty: ident * (block * type)) =>
-  match id_b_ty with (id, (b, ty)) => (b, 0, Ctypes.sizeof (self__C.genv_cenv ge) ty) end.
+  match id_b_ty with (id, (b, ty)) => (b, 0, Ctypes.sizeof (genv_cenv ge) ty) end.
 
 FDefinition blocks_of_env : genv -> env -> list (block * Z * Z) := fun ge e =>
     List.map (block_of_binding ge) (PTree.elements e).
 
 MetaData assign_loc.
-Inductive assign_loc (ge : self__C.genv) (ty: type) (m: mem) (b: block) (ofs: ptrofs):
+Inductive assign_loc (ge : genv) (ty: type) (m: mem) (b: block) (ofs: ptrofs):
                               bitfield -> val -> trace -> mem -> val -> Prop :=
   | assign_loc_value: forall v chunk m',
       access_mode ty = By_value chunk ->
@@ -137,16 +137,16 @@ Inductive assign_loc (ge : self__C.genv) (ty: type) (m: mem) (b: block) (ofs: pt
       assign_loc ge ty m b ofs Full v E0 m' v
   | assign_loc_volatile: forall v chunk t m',
       access_mode ty = By_value chunk -> type_is_volatile ty = true ->
-      volatile_store (self__C.genv_genv ge) chunk m b ofs v t m' ->
+      volatile_store (genv_genv ge) chunk m b ofs v t m' ->
       assign_loc ge ty m b ofs Full v t m' v
   | assign_loc_copy: forall b' ofs' bytes m',
       access_mode ty = By_copy ->
-      (alignof_blockcopy (self__C.genv_cenv ge) ty | Ptrofs.unsigned ofs') ->
-      (alignof_blockcopy (self__C.genv_cenv ge) ty | Ptrofs.unsigned ofs) ->
+      (alignof_blockcopy (genv_cenv ge) ty | Ptrofs.unsigned ofs') ->
+      (alignof_blockcopy (genv_cenv ge) ty | Ptrofs.unsigned ofs) ->
       b' <> b \/ Ptrofs.unsigned ofs' = Ptrofs.unsigned ofs
-              \/ Ptrofs.unsigned ofs' + sizeof (self__C.genv_cenv ge) ty <= Ptrofs.unsigned ofs
-              \/ Ptrofs.unsigned ofs + sizeof (self__C.genv_cenv ge) ty <= Ptrofs.unsigned ofs' ->
-      Mem.loadbytes m b' (Ptrofs.unsigned ofs') (sizeof (self__C.genv_cenv ge) ty) = Some bytes ->
+              \/ Ptrofs.unsigned ofs' + sizeof (genv_cenv ge) ty <= Ptrofs.unsigned ofs
+              \/ Ptrofs.unsigned ofs + sizeof (genv_cenv ge) ty <= Ptrofs.unsigned ofs' ->
+      Mem.loadbytes m b' (Ptrofs.unsigned ofs') (sizeof (genv_cenv ge) ty) = Some bytes ->
       Mem.storebytes m b (Ptrofs.unsigned ofs) bytes = Some m' ->
       assign_loc ge ty m b ofs Full (Vptr b' ofs') E0 m' (Vptr b' ofs')
   | assign_loc_bitfield: forall sz sg pos width v m' v',
@@ -155,21 +155,21 @@ Inductive assign_loc (ge : self__C.genv) (ty: type) (m: mem) (b: block) (ofs: pt
 FEnd assign_loc.
 
 MetaData alloc_variables.
-Inductive alloc_variables (ge : self__C.genv) : self__C.env -> mem ->
+Inductive alloc_variables (ge : genv) : env -> mem ->
                            list (ident * type) ->
-                           self__C.env -> mem -> Prop :=
+                           env -> mem -> Prop :=
   | alloc_variables_nil:
       forall e m,
       alloc_variables ge e m nil e m
   | alloc_variables_cons:
       forall e m id ty vars m1 b1 m2 e2,
-      Mem.alloc m 0 (sizeof (self__C.genv_cenv ge) ty) = (m1, b1) ->
+      Mem.alloc m 0 (sizeof (genv_cenv ge) ty) = (m1, b1) ->
       alloc_variables ge (PTree.set id (b1, ty) e) m1 vars e2 m2 ->
       alloc_variables ge e m ((id, ty) :: vars) e2 m2.
 FEnd alloc_variables.
 
 MetaData bind_parameters.
-Inductive bind_parameters (ge : self__C.genv) (e: self__C.env):
+Inductive bind_parameters (ge : genv) (e: env):
                            mem -> list (ident * type) -> list val ->
                            mem -> Prop :=
   | bind_parameters_nil:
@@ -178,7 +178,7 @@ Inductive bind_parameters (ge : self__C.genv) (e: self__C.env):
   | bind_parameters_cons:
       forall m id ty params v1 vl v1' b m1 m2,
       PTree.get id e = Some(b, ty) ->
-      self__C.assign_loc ge ty m b Ptrofs.zero Full v1 E0 m1 v1' ->
+      assign_loc ge ty m b Ptrofs.zero Full v1 E0 m1 v1' ->
       bind_parameters ge e m1 params vl m2 ->
       bind_parameters ge e m ((id, ty) :: params) (v1 :: vl) m2.
 FEnd bind_parameters.
@@ -206,19 +206,19 @@ Case Kifthenelse s1 s2 k := False.
 Case Kreturn k := False.
 FEnd is_call_cont.
 
-MetaData state.
+MetaData state binds State, ExprState, Callstate, Returnstate.
 Inductive state: Type :=
 | State(* execution of a stmt *)
-    (f: self__C.function) (s: self__C.stmt)
-    (k: self__C.cont) (e: self__C.env) (m: mem) : state
+    (f: function) (s: stmt)
+    (k: cont) (e: env) (m: mem) : state
 | ExprState(* reduction of an expression *)
-    (f: self__C.function) (r: self__C.expr)
-    (k: self__C.cont) (e: self__C.env) (m: mem) : state
+    (f: function) (r: expr)
+    (k: cont) (e: env) (m: mem) : state
 | Callstate(* calling a function *)
-    (fd: self__C.fundef) (args: list val)
-    (k: self__C.cont) (m: mem) : state
+    (fd: fundef) (args: list val)
+    (k: cont) (m: mem) : state
 | Returnstate(* returning from a function *)
-    (res: val) (k: self__C.cont) (m: mem) : state
+    (res: val) (k: cont) (m: mem) : state
 | Stuckstate. (* undefined behavior occurred *)
 FEnd state.
 
@@ -278,20 +278,20 @@ FInductive eval_simple_rvalue: genv -> env -> mem -> expr -> val -> Prop :=
     eval_simple_rvalue ge e m (Eunop op r1 ty) v
 | esr_binop: forall ge e m op r1 r2 ty v1 v2 v,
     eval_simple_rvalue ge e m r1 v1 -> eval_simple_rvalue ge e m r2 v2 ->
-    sem_binary_operation (self__C.genv_cenv ge) op v1 (typeof r1) v2 (typeof r2) m = Some v ->
+    sem_binary_operation (genv_cenv ge) op v1 (typeof r1) v2 (typeof r2) m = Some v ->
     eval_simple_rvalue ge e m (Ebinop op r1 r2 ty) v
 | esr_cast: forall ge e m ty r1 v1 v,
     eval_simple_rvalue ge e m r1 v1 ->
     Cop.sem_cast v1 (typeof r1) ty m = Some v ->
     eval_simple_rvalue ge e m (Ecast r1 ty) v
 | esr_sizeof: forall ge e m ty1 ty,
-    eval_simple_rvalue ge e m (Esizeof ty1 ty) (Vptrofs (Ptrofs.repr (Ctypes.sizeof (self__C.genv_cenv ge) ty1)))
+    eval_simple_rvalue ge e m (Esizeof ty1 ty) (Vptrofs (Ptrofs.repr (Ctypes.sizeof (genv_cenv ge) ty1)))
 | esr_alignof: forall ge e m ty1 ty,
-    eval_simple_rvalue ge e m (Ealignof ty1 ty) (Vptrofs (Ptrofs.repr (Ctypes.alignof (self__C.genv_cenv ge) ty1))).
+    eval_simple_rvalue ge e m (Ealignof ty1 ty) (Vptrofs (Ptrofs.repr (Ctypes.alignof (genv_cenv ge) ty1))).
 
 FDefinition is_val : expr -> Prop := fun e => exists v ty, e = Eval v ty.
 
-MetaData kind.
+MetaData kind binds LV, RV.
 Inductive kind : Type := LV | RV.
 FEnd kind.
 
@@ -299,28 +299,28 @@ FInductive leftcontext: kind -> kind -> (expr -> expr) -> Prop :=
 | lctx_top: forall k,
     leftcontext k k (fun x => x)
 | lctx_unop: forall k C op ty,
-    leftcontext k self__C.RV C -> leftcontext k self__C.RV (fun x => Eunop op (C x) ty)
+    leftcontext k RV C -> leftcontext k RV (fun x => Eunop op (C x) ty)
 | lctx_binop_left: forall k C op e2 ty,
-    leftcontext k self__C.RV C -> leftcontext k self__C.RV (fun x => Ebinop op (C x) e2 ty)
+    leftcontext k RV C -> leftcontext k RV (fun x => Ebinop op (C x) e2 ty)
 | lctx_binop_right: forall k C op e1 ty,
-    simple e1 = true -> leftcontext k self__C.RV C ->
-    leftcontext k self__C.RV (fun x => Ebinop op e1 (C x) ty)
+    simple e1 = true -> leftcontext k RV C ->
+    leftcontext k RV (fun x => Ebinop op e1 (C x) ty)
 | lctx_cast: forall k F ty,
-    leftcontext k self__C.RV F -> leftcontext k self__C.RV (fun x => Ecast (F x) ty)
+    leftcontext k RV F -> leftcontext k RV (fun x => Ecast (F x) ty)
 | lctx_seqand: forall k F r2 ty,
-    leftcontext k self__C.RV F -> leftcontext k self__C.RV (fun x => Eseqand (F x) r2 ty)
+    leftcontext k RV F -> leftcontext k RV (fun x => Eseqand (F x) r2 ty)
 | lctx_seqor: forall k F r2 ty,
-    leftcontext k self__C.RV F -> leftcontext k self__C.RV (fun x => Eseqor (F x) r2 ty)
+    leftcontext k RV F -> leftcontext k RV (fun x => Eseqor (F x) r2 ty)
 | lctx_condition: forall k F r2 r3 ty,
-    leftcontext k self__C.RV F -> leftcontext k self__C.RV (fun x => Econdition (F x) r2 r3 ty)
+    leftcontext k RV F -> leftcontext k RV (fun x => Econdition (F x) r2 r3 ty)
 | lctx_comma: forall k F e2 ty,
-    leftcontext k self__C.RV F -> leftcontext k self__C.RV (fun x => Ecomma (F x) e2 ty)
+    leftcontext k RV F -> leftcontext k RV (fun x => Ecomma (F x) e2 ty)
 | lctx_paren: forall k F tycast ty,
-    leftcontext k self__C.RV F -> leftcontext k self__C.RV (fun x => Eparen (F x) tycast ty)
+    leftcontext k RV F -> leftcontext k RV (fun x => Eparen (F x) tycast ty)
 
 with leftcontextlist: kind -> (expr -> exprlist) -> Prop :=
   | lctx_list_head: forall k C el,
-      leftcontext k self__C.RV C -> leftcontextlist k (fun x => Econs (C x) el)
+      leftcontext k RV C -> leftcontextlist k (fun x => Econs (C x) el)
   | lctx_list_tail: forall k C e1,
       simple e1 = true -> leftcontextlist k C ->
       leftcontextlist k (fun x => Econs e1 (C x)).
@@ -337,131 +337,131 @@ FInductive estep: genv -> state -> trace -> state -> Prop :=
     eval_simple_rvalue ge e m r v ->
     ~ is_val r ->
     ty = typeof r ->
-    estep ge (self__C.ExprState f r k e m)
-      E0 (self__C.ExprState f (Eval v ty) k e m)
+    estep ge (ExprState f r k e m)
+      E0 (ExprState f (Eval v ty) k e m)
 
 | step_seqand_true: forall ge f F r1 r2 ty k e m v,
-    leftcontext self__C.RV self__C.RV F ->
+    leftcontext RV RV F ->
     eval_simple_rvalue ge e m r1 v ->
     Cop.bool_val v (typeof r1) m = Some true ->
-    estep ge (self__C.ExprState f (F (Eseqand r1 r2 ty)) k e m)
-      E0 (self__C.ExprState f (F (Eparen r2 type_bool ty)) k e m)
+    estep ge (ExprState f (F (Eseqand r1 r2 ty)) k e m)
+      E0 (ExprState f (F (Eparen r2 type_bool ty)) k e m)
 | step_seqand_false: forall ge f F r1 r2 ty k e m v,
-    leftcontext self__C.RV self__C.RV F ->
+    leftcontext RV RV F ->
     eval_simple_rvalue ge e m r1 v ->
     Cop.bool_val v (typeof r1) m = Some false ->
-    estep ge (self__C.ExprState f (F (Eseqand r1 r2 ty)) k e m)
-      E0 (self__C.ExprState f (F (Eval (Vint Int.zero) ty)) k e m)
+    estep ge (ExprState f (F (Eseqand r1 r2 ty)) k e m)
+      E0 (ExprState f (F (Eval (Vint Int.zero) ty)) k e m)
 
 | step_seqor_true: forall ge f F r1 r2 ty k e m v,
-    leftcontext self__C.RV self__C.RV F ->
+    leftcontext RV RV F ->
     eval_simple_rvalue ge e m r1 v ->
     Cop.bool_val v (typeof r1) m = Some true ->
-    estep ge (self__C.ExprState f (F (Eseqor r1 r2 ty)) k e m)
-      E0 (self__C.ExprState f (F (Eval (Vint Int.one) ty)) k e m)
+    estep ge (ExprState f (F (Eseqor r1 r2 ty)) k e m)
+      E0 (ExprState f (F (Eval (Vint Int.one) ty)) k e m)
 | step_seqor_false: forall ge f F r1 r2 ty k e m v,
-    leftcontext self__C.RV self__C.RV F ->
+    leftcontext RV RV F ->
     eval_simple_rvalue ge e m r1 v ->
     Cop.bool_val v (typeof r1) m = Some false ->
-    estep ge (self__C.ExprState f (F (Eseqor r1 r2 ty)) k e m)
-      E0 (self__C.ExprState f (F (Eparen r2 type_bool ty)) k e m)
+    estep ge (ExprState f (F (Eseqor r1 r2 ty)) k e m)
+      E0 (ExprState f (F (Eparen r2 type_bool ty)) k e m)
 
 | step_condition: forall ge f F r1 r2 r3 ty k e m v b,
-    leftcontext self__C.RV self__C.RV F ->
+    leftcontext RV RV F ->
     eval_simple_rvalue ge e m r1 v ->
     Cop.bool_val v (typeof r1) m = Some b ->
-    estep ge (self__C.ExprState f (F (Econdition r1 r2 r3 ty)) k e m)
-      E0 (self__C.ExprState f (F (Eparen (if b then r2 else r3) ty ty)) k e m)
+    estep ge (ExprState f (F (Econdition r1 r2 r3 ty)) k e m)
+      E0 (ExprState f (F (Eparen (if b then r2 else r3) ty ty)) k e m)
 
 | step_comma: forall ge f F r1 r2 ty k e m v,
-    leftcontext self__C.RV self__C.RV F ->
+    leftcontext RV RV F ->
     eval_simple_rvalue ge e m r1 v ->
     ty = typeof r2 ->
-    estep ge (self__C.ExprState f (F (Ecomma r1 r2 ty)) k e m)
-      E0 (self__C.ExprState f (F r2) k e m)
+    estep ge (ExprState f (F (Ecomma r1 r2 ty)) k e m)
+      E0 (ExprState f (F r2) k e m)
 
 | step_paren: forall ge f F r tycast ty k e m v1 v,
-    leftcontext self__C.RV self__C.RV F ->
+    leftcontext RV RV F ->
     eval_simple_rvalue ge e m r v1 ->
     sem_cast v1 (typeof r) tycast m = Some v ->
-    estep ge (self__C.ExprState f (F (Eparen r tycast ty)) k e m)
-      E0 (self__C.ExprState f (F (Eval v ty)) k e m).
+    estep ge (ExprState f (F (Eparen r tycast ty)) k e m)
+      E0 (ExprState f (F (Eval v ty)) k e m).
 
 FInductive sstep: genv -> state -> trace -> state -> Prop :=
 | step_do_1: forall ge f x k e m,
-    sstep ge (self__C.State f (Sdo x) k e m)
-      E0 (self__C.ExprState f x (Kdo k) e m)
+    sstep ge (State f (Sdo x) k e m)
+      E0 (ExprState f x (Kdo k) e m)
 | step_do_2: forall ge f v ty k e m,
-    sstep ge (self__C.ExprState f (Eval v ty) (Kdo k) e m)
-      E0 (self__C.State f Sskip k e m)
+    sstep ge (ExprState f (Eval v ty) (Kdo k) e m)
+      E0 (State f Sskip k e m)
 
 | step_seq: forall ge f s1 s2 k e m,
-    sstep ge (self__C.State f (Sseq s1 s2) k e m)
-      E0 (self__C.State f s1 (Kseq s2 k) e m)
+    sstep ge (State f (Sseq s1 s2) k e m)
+      E0 (State f s1 (Kseq s2 k) e m)
 | step_skip_seq: forall ge f s k e m,
-    sstep ge (self__C.State f Sskip (Kseq s k) e m)
-      E0 (self__C.State f s k e m)
+    sstep ge (State f Sskip (Kseq s k) e m)
+      E0 (State f s k e m)
 
 | step_ifthenelse_1: forall ge f a s1 s2 k e m,
-    sstep ge (self__C.State f (Sifthenelse a s1 s2) k e m)
-      E0 (self__C.ExprState f a (Kifthenelse s1 s2 k) e m)
+    sstep ge (State f (Sifthenelse a s1 s2) k e m)
+      E0 (ExprState f a (Kifthenelse s1 s2 k) e m)
 | step_ifthenelse_2: forall ge f v ty s1 s2 k e m b,
     Cop.bool_val v ty m = Some b ->
-    sstep ge (self__C.ExprState f (Eval v ty) (Kifthenelse s1 s2 k) e m)
-      E0 (self__C.State f (if b then s1 else s2) k e m)
+    sstep ge (ExprState f (Eval v ty) (Kifthenelse s1 s2 k) e m)
+      E0 (State f (if b then s1 else s2) k e m)
 
 | step_return_0: forall ge f k e m m',
     Mem.free_list m (blocks_of_env ge e) = Some m' ->
-    sstep ge (self__C.State f (Sreturn None) k e m)
-      E0 (self__C.Returnstate Vundef (call_cont k) m')
+    sstep ge (State f (Sreturn None) k e m)
+      E0 (Returnstate Vundef (call_cont k) m')
 | step_return_1: forall ge f x k e m,
-      sstep ge (self__C.State f (Sreturn (Some x)) k e m)
-        E0 (self__C.ExprState f x (Kreturn k) e m)
+      sstep ge (State f (Sreturn (Some x)) k e m)
+        E0 (ExprState f x (Kreturn k) e m)
 | step_return_2: forall ge f v1 ty k e m v2 m',
-      Cop.sem_cast v1 ty (self__C.fn_return f) m = Some v2 ->
+      Cop.sem_cast v1 ty (fn_return f) m = Some v2 ->
       Mem.free_list m (blocks_of_env ge e) = Some m' ->
-      sstep ge (self__C.ExprState f (Eval v1 ty) (Kreturn k) e m)
-        E0 (self__C.Returnstate v2 (call_cont k) m')
+      sstep ge (ExprState f (Eval v1 ty) (Kreturn k) e m)
+        E0 (Returnstate v2 (call_cont k) m')
 | step_skip_call: forall ge f k e m m',
    is_call_cont k ->
    Mem.free_list m (blocks_of_env ge e) = Some m' ->
-   sstep ge (self__C.State f Sskip k e m)
-     E0 (self__C.Returnstate Vundef k m')
+   sstep ge (State f Sskip k e m)
+     E0 (Returnstate Vundef k m')
 
 | step_label: forall ge f lbl s k e m,
-      sstep ge (self__C.State f (Slabel lbl s) k e m)
-         E0 (self__C.State f s k e m)
+      sstep ge (State f (Slabel lbl s) k e m)
+         E0 (State f s k e m)
 
 | step_goto: forall ge f lbl k e m s' k',
-    find_label (self__C.fn_body f) lbl (call_cont k) = Some (s', k') ->
-    sstep ge (self__C.State f (Sgoto lbl) k e m)
-       E0 (self__C.State f s' k' e m)
+    find_label (fn_body f) lbl (call_cont k) = Some (s', k') ->
+    sstep ge (State f (Sgoto lbl) k e m)
+       E0 (State f s' k' e m)
 
 | step_internal_function: forall ge f vargs k m e m1 m2,
-   list_norepet (var_names (self__C.fn_params f) ++ var_names (self__C.fn_vars f)) ->
-   alloc_variables ge empty_env m ((self__C.fn_params f) ++ (self__C.fn_vars f)) e m1 ->
-   bind_parameters ge e m1 (self__C.fn_params f) vargs m2 ->
-   sstep ge (self__C.Callstate (Internal f) vargs k m)
-      E0 (self__C.State f (self__C.fn_body f) k e m2).
+   list_norepet (var_names (fn_params f) ++ var_names (fn_vars f)) ->
+   alloc_variables ge empty_env m ((fn_params f) ++ (fn_vars f)) e m1 ->
+   bind_parameters ge e m1 (fn_params f) vargs m2 ->
+   sstep ge (Callstate (Internal f) vargs k m)
+      E0 (State f (fn_body f) k e m2).
 
 FDefinition step : genv -> state -> trace -> state -> Prop := fun ge S t S' =>
   estep ge S t S' \/ sstep ge S t S'.
 
 MetaData initial_state.
-Inductive initial_state (p: self__C.program): self__C.state -> Prop :=
+Inductive initial_state (p: program): state -> Prop :=
   | initial_state_intro: forall b f m0,
-      let ge := self__C.globalenv p in
+      let ge := globalenv p in
       Genv.init_mem p = Some m0 ->
-      Genv.find_symbol (self__C.genv_genv ge) p.(prog_main) = Some b ->
-      Genv.find_funct_ptr (self__C.genv_genv ge) b = Some f ->
-      self__C.type_of_fundef f = Tfunction nil type_int32s cc_default ->
-      initial_state p (self__C.Callstate f nil self__C.Kstop m0).
+      Genv.find_symbol (genv_genv ge) p.(prog_main) = Some b ->
+      Genv.find_funct_ptr (genv_genv ge) b = Some f ->
+      type_of_fundef f = Tfunction nil type_int32s cc_default ->
+      initial_state p (Callstate f nil Kstop m0).
 FEnd initial_state.
 
 MetaData final_state.
-Inductive final_state: self__C.state -> int -> Prop :=
+Inductive final_state: state -> int -> Prop :=
   | final_state_intro: forall r m,
-      final_state (self__C.Returnstate (Vint r) self__C.Kstop m) r.
+      final_state (Returnstate (Vint r) Kstop m) r.
 FEnd final_state.
 
 FEnd C.
@@ -508,14 +508,14 @@ with lbl_stmts : Type :=(* cases of a switch *)
 | LSnil: lbl_stmts
 | LScons: option Z -> stmt -> lbl_stmts -> lbl_stmts.
 
-MetaData function.
+MetaData function binds fn_return, fn_callconv, fn_params, fn_vars, fn_body.
 Record function : Type := mkfunction {
   fn_return: type;
   fn_callconv: calling_convention;
   fn_params: list (ident * type);
   fn_vars: list (ident * type);
   fn_temps: list (ident * type);
-  fn_body: self__Clight.stmt
+  fn_body: stmt
 }.
 FEnd function.
 
@@ -525,7 +525,7 @@ FDefinition var_names := fun (vars: list(ident * type)) =>
 FDefinition fundef := Ctypes.fundef function.
 
 FDefinition type_of_function : function -> type := fun f =>
-  Tfunction (type_of_params (self__Clight.fn_params f)) (self__Clight.fn_return f) (self__Clight.fn_callconv f).
+  Tfunction (type_of_params (fn_params f)) (fn_return f) (fn_callconv f).
 
 FDefinition type_of_fundef : fundef -> type := fun f =>
   match f with
@@ -543,8 +543,8 @@ FEnd seq_of_labeled_statement.
 
 (* Semantics *)
 
-MetaData genv.
-Record genv := { genv_genv :> Genv.t self__Clight.fundef type; genv_cenv :> composite_env }.
+MetaData genv binds genv_genv, genv_cenv.
+Record genv := { genv_genv :> Genv.t fundef type; genv_cenv :> composite_env }.
 FEnd genv.
 FDefinition globalenv : program -> genv := fun p =>
   {| self__Clight.genv_genv := Genv.globalenv p; self__Clight.genv_cenv := p.(prog_comp_env) |}.
@@ -577,21 +577,21 @@ Inductive assign_loc (ce: composite_env) (ty: type) (m: mem) (b: block) (ofs: pt
 FEnd assign_loc.
 
 MetaData alloc_variables.
-Inductive alloc_variables (ge : self__Clight.genv) : self__Clight.env -> mem ->
+Inductive alloc_variables (ge : genv) : env -> mem ->
                            list (ident * type) ->
-                           self__Clight.env -> mem -> Prop :=
+                           env -> mem -> Prop :=
   | alloc_variables_nil:
       forall e m,
       alloc_variables ge e m nil e m
   | alloc_variables_cons:
       forall e m id ty vars m1 b1 m2 e2,
-      Mem.alloc m 0 (sizeof (self__Clight.genv_cenv ge) ty) = (m1, b1) ->
+      Mem.alloc m 0 (sizeof (genv_cenv ge) ty) = (m1, b1) ->
       alloc_variables ge (PTree.set id (b1, ty) e) m1 vars e2 m2 ->
       alloc_variables ge e m ((id, ty) :: vars) e2 m2.
 FEnd alloc_variables.
 
 MetaData bind_parameters.
-Inductive bind_parameters (ge : self__Clight.genv) (e: self__Clight.env):
+Inductive bind_parameters (ge : genv) (e: env):
                            mem -> list (ident * type) -> list val ->
                            mem -> Prop :=
   | bind_parameters_nil:
@@ -600,7 +600,7 @@ Inductive bind_parameters (ge : self__Clight.genv) (e: self__Clight.env):
   | bind_parameters_cons:
       forall m id ty params v1 vl b m1 m2,
       PTree.get id e = Some(b, ty) ->
-      self__Clight.assign_loc (self__Clight.genv_cenv ge) ty m b Ptrofs.zero Full v1 m1 ->
+      assign_loc (genv_cenv ge) ty m b Ptrofs.zero Full v1 m1 ->
       bind_parameters ge e m1 params vl m2 ->
       bind_parameters ge e m ((id, ty) :: params) (v1 :: vl) m2.
 FEnd bind_parameters.
@@ -621,7 +621,7 @@ FInductive eval_expr : genv -> env -> temp_env -> mem -> expr -> val -> Prop :=
 | eval_Ebinop: forall ge e le m op a1 a2 ty v1 v2 v,
     eval_expr ge e le m a1 v1 ->
     eval_expr ge e le m a2 v2 ->
-    sem_binary_operation (self__Clight.genv_cenv ge) op v1 (typeof a1) v2 (typeof a2) m = Some v ->
+    sem_binary_operation (genv_cenv ge) op v1 (typeof a1) v2 (typeof a2) m = Some v ->
     eval_expr ge e le m (Ebinop op a1 a2 ty) v
 | eval_Ecast: forall ge e le m a ty v1 v,
     eval_expr ge e le m a v1 ->
@@ -631,9 +631,9 @@ FInductive eval_expr : genv -> env -> temp_env -> mem -> expr -> val -> Prop :=
     PTree.get id le = Some v ->
     eval_expr ge e le m (Etempvar id ty) v
 | eval_Esizeof: forall ge e le m ty1 ty,
-    eval_expr ge e le m (Esizeof ty1 ty) (Vptrofs (Ptrofs.repr (Ctypes.sizeof (self__Clight.genv_cenv ge) ty1)))
+    eval_expr ge e le m (Esizeof ty1 ty) (Vptrofs (Ptrofs.repr (Ctypes.sizeof (genv_cenv ge) ty1)))
 | eval_Ealignof: forall ge e le m ty1 ty,
-    eval_expr ge e le m (Ealignof ty1 ty) (Vptrofs (Ptrofs.repr (Ctypes.alignof (self__Clight.genv_cenv ge) ty1))).
+    eval_expr ge e le m (Ealignof ty1 ty) (Vptrofs (Ptrofs.repr (Ctypes.alignof (genv_cenv ge) ty1))).
 
 FInductive cont: Type :=
 | Kstop: cont
@@ -679,28 +679,28 @@ Case LScons i s sl' :=
     end).
 FEnd find_label with find_label_ls.
 
-MetaData state.
+MetaData state binds State, Callstate, Returnstate.
 Inductive state: Type :=
   | State
-      (f: self__Clight.function)
-      (s: self__Clight.stmt)
-      (k: self__Clight.cont)
-      (e: self__Clight.env)
-      (le: self__Clight.temp_env)
+      (f: function)
+      (s: stmt)
+      (k: cont)
+      (e: env)
+      (le: temp_env)
       (m: mem) : state
   | Callstate
-      (fd: self__Clight.fundef)
+      (fd: fundef)
       (args: list val)
-      (k: self__Clight.cont)
+      (k: cont)
       (m: mem) : state
   | Returnstate
       (res: val)
-      (k: self__Clight.cont)
+      (k: cont)
       (m: mem) : state.
 FEnd state.
 
 FDefinition block_of_binding := fun (ge: genv) (id_b_ty: ident * (block * type)) =>
-  match id_b_ty with (id, (b, ty)) => (b, 0, Ctypes.sizeof (self__Clight.genv_cenv ge) ty) end.
+  match id_b_ty with (id, (b, ty)) => (b, 0, Ctypes.sizeof (genv_cenv ge) ty) end.
 
 FDefinition blocks_of_env : genv -> env -> list (block * Z * Z)  := fun ge e =>
   List.map (block_of_binding ge) (PTree.elements e).
@@ -710,62 +710,62 @@ FOpaque Definition function_entry : genv -> function -> list val -> mem -> env -
 
 FInductive step : genv -> state -> trace -> state -> Prop :=
 | step_skip_seq: forall ge f s k e le m,
-  step ge (self__Clight.State f Sskip (Kseq s k) e le m)
-    E0 (self__Clight.State f s k e le m)
+  step ge (State f Sskip (Kseq s k) e le m)
+    E0 (State f s k e le m)
 | step_set: forall ge f id a k e le m v,
   eval_expr ge e le m a v ->
-  step ge (self__Clight.State f (Sset id a) k e le m)
-    E0 (self__Clight.State f Sskip k e (PTree.set id v le) m)
+  step ge (State f (Sset id a) k e le m)
+    E0 (State f Sskip k e (PTree.set id v le) m)
 | step_seq: forall ge f s1 s2 k e le m,
-  step ge (self__Clight.State f (Sseq s1 s2) k e le m)
-    E0 (self__Clight.State f s1 (Kseq s2 k) e le m)
+  step ge (State f (Sseq s1 s2) k e le m)
+    E0 (State f s1 (Kseq s2 k) e le m)
 | step_ifthenelse: forall ge f a s1 s2 k e le m v1 b,
     eval_expr ge e le m a v1 ->
     Cop.bool_val v1 (typeof a) m = Some b ->
-    step ge (self__Clight.State f (Sifthenelse a s1 s2) k e le m)
-      E0 (self__Clight.State f (if b then s1 else s2) k e le m)
+    step ge (State f (Sifthenelse a s1 s2) k e le m)
+      E0 (State f (if b then s1 else s2) k e le m)
 | step_return_0: forall ge f k e le m m',
     Mem.free_list m (blocks_of_env ge e) = Some m' ->
-    step ge (self__Clight.State f (Sreturn None) k e le m)
-      E0 (self__Clight.Returnstate Vundef (call_cont k) m')
+    step ge (State f (Sreturn None) k e le m)
+      E0 (Returnstate Vundef (call_cont k) m')
 | step_return_1: forall ge f a k e le m v v' m',
     eval_expr ge e le m a v ->
-    Cop.sem_cast v (typeof a) (self__Clight.fn_return f) m = Some v' ->
+    Cop.sem_cast v (typeof a) (fn_return f) m = Some v' ->
     Mem.free_list m (blocks_of_env ge e) = Some m' ->
-    step ge (self__Clight.State f (Sreturn (Some a)) k e le m)
-      E0 (self__Clight.Returnstate v' (call_cont k) m')
+    step ge (State f (Sreturn (Some a)) k e le m)
+      E0 (Returnstate v' (call_cont k) m')
 | step_skip_call: forall ge f k e le m m',
     is_call_cont k ->
     Mem.free_list m (blocks_of_env ge e) = Some m' ->
-    step ge (self__Clight.State f Sskip k e le m)
-      E0 (self__Clight.Returnstate Vundef k m')
+    step ge (State f Sskip k e le m)
+      E0 (Returnstate Vundef k m')
 | step_label: forall ge f lbl s k e le m,
-  step ge (self__Clight.State f (Slabel lbl s) k e le m)
-    E0 (self__Clight.State f s k e le m)
+  step ge (State f (Slabel lbl s) k e le m)
+    E0 (State f s k e le m)
 | step_goto: forall ge f lbl k e le m s' k',
-  find_label (self__Clight.fn_body f) lbl (call_cont k) = Some (s', k') ->
-  step ge (self__Clight.State f (Sgoto lbl) k e le m)
-    E0 (self__Clight.State f s' k' e le m)
+  find_label (fn_body f) lbl (call_cont k) = Some (s', k') ->
+  step ge (State f (Sgoto lbl) k e le m)
+    E0 (State f s' k' e le m)
 | step_internal_function: forall ge f vargs k m e le m1,
       function_entry ge f vargs m e le m1 ->
-      step ge (self__Clight.Callstate (Internal f) vargs k m)
-        E0 (self__Clight.State f (self__Clight.fn_body f) k e le m1).
+      step ge (Callstate (Internal f) vargs k m)
+        E0 (State f (fn_body f) k e le m1).
 
 MetaData initial_state.
-Inductive initial_state (p: self__Clight.program): self__Clight.state -> Prop :=
+Inductive initial_state (p: program): state -> Prop :=
   | initial_state_intro: forall b f m0,
       let ge := Genv.globalenv p in
       Genv.init_mem p = Some m0 ->
       Genv.find_symbol ge p.(prog_main) = Some b ->
       Genv.find_funct_ptr ge b = Some f ->
-      self__Clight.type_of_fundef f = Tfunction nil type_int32s cc_default ->
-      initial_state p (self__Clight.Callstate f nil self__Clight.Kstop m0).
+      type_of_fundef f = Tfunction nil type_int32s cc_default ->
+      initial_state p (Callstate f nil Kstop m0).
 FEnd initial_state.
 
 MetaData final_state.
-Inductive final_state: self__Clight.state -> int -> Prop :=
+Inductive final_state: state -> int -> Prop :=
   | final_state_intro: forall r m,
-      final_state (self__Clight.Returnstate (Vint r) self__Clight.Kstop m) r.
+      final_state (Returnstate (Vint r) Kstop m) r.
 FEnd final_state.
 
 FEnd Clight.
@@ -786,12 +786,12 @@ Family T extends Clight.
   Inherit bind_parameters.
 
   MetaData function_entry1.
-  Inductive function_entry1 (ge: self__T.genv) (f: self__T.function) (vargs: list val) (m: mem) (e: self__T.env) (le: self__T.temp_env) (m': mem) : Prop :=
+  Inductive function_entry1 (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (le: temp_env) (m': mem) : Prop :=
   | function_entry1_intro: forall m1,
-      list_norepet (self__T.var_names (self__T.fn_params f) ++ self__T.var_names (self__T.fn_vars f)) ->
-      self__T.alloc_variables ge self__T.empty_env m ((self__T.fn_params f) ++ (self__T.fn_vars f)) e m1 ->
-      self__T.bind_parameters ge e m1 (self__T.fn_params f) vargs m' ->
-      le = self__T.create_undef_temps (self__T.fn_temps f) ->
+      list_norepet (var_names (fn_params f) ++ var_names (fn_vars f)) ->
+      alloc_variables ge empty_env m ((fn_params f) ++ (fn_vars f)) e m1 ->
+      bind_parameters ge e m1 (fn_params f) vargs m' ->
+      le = create_undef_temps (fn_temps f) ->
       function_entry1 ge f vargs m e le m'.
   FEnd function_entry1.
   FOverride Definition function_entry := function_entry1.
@@ -800,15 +800,15 @@ FEnd T.
 Local Open Scope gensym_monad_scope.
 
 MetaData makeseq_rec.
-Fixpoint makeseq_rec (s: self__SimplExpr.T.stmt) (l: list self__SimplExpr.T.stmt) : self__SimplExpr.T.stmt :=
+Fixpoint makeseq_rec (s: T.stmt) (l: list T.stmt) : T.stmt :=
    match l with
    | nil => s
-   | s' :: l' => makeseq_rec (self__SimplExpr.T.Sseq s s') l'
+   | s' :: l' => makeseq_rec (T.Sseq s s') l'
     end.
 FEnd makeseq_rec.
 
-FDefinition makeseq : list self__SimplExpr.T.stmt -> self__SimplExpr.T.stmt := fun l =>
-  makeseq_rec self__SimplExpr.T.Sskip l.
+FDefinition makeseq : list T.stmt -> T.stmt := fun l =>
+  makeseq_rec T.Sskip l.
 
 MetaData set_destination binds SDbase, SDcons.
 Inductive set_destination : Type :=
@@ -820,14 +820,14 @@ MetaData destination binds For_val, For_effects, For_set.
 Inductive destination : Type :=
 | For_val
 | For_effects
-| For_set (sd: self__SimplExpr.set_destination).
+| For_set (sd: set_destination).
 FEnd destination.
 
 MetaData do_set.
-Fixpoint do_set (sd: self__SimplExpr.set_destination) (a: self__SimplExpr.T.expr) : list self__SimplExpr.T.stmt :=
+Fixpoint do_set (sd: set_destination) (a: T.expr) : list T.stmt :=
     match sd with
-    | self__SimplExpr.SDbase tycast ty tmp => self__SimplExpr.T.Sset tmp (self__SimplExpr.T.Ecast a tycast) :: nil
-    | self__SimplExpr.SDcons tycast ty tmp sd' => self__SimplExpr.T.Sset tmp (self__SimplExpr.T.Ecast a tycast) :: do_set sd' (self__SimplExpr.T.Etempvar tmp ty)
+    | SDbase tycast ty tmp => T.Sset tmp (T.Ecast a tycast) :: nil
+    | SDcons tycast ty tmp sd' => T.Sset tmp (T.Ecast a tycast) :: do_set sd' (T.Etempvar tmp ty)
     end.
 FEnd do_set.
 
@@ -866,14 +866,14 @@ Case _ := None.
 FEnd eval_simpl_expr.
 
 MetaData makeif.
-Function makeif (a: self__SimplExpr.T.expr) (s1 s2: self__SimplExpr.T.stmt) : self__SimplExpr.T.stmt :=
-  match self__SimplExpr.eval_simpl_expr a with
+Function makeif (a: T.expr) (s1 s2: T.stmt) : T.stmt :=
+  match eval_simpl_expr a with
   | Some v =>
-      match Cop.bool_val v (self__SimplExpr.T.typeof a) Mem.empty with
+      match Cop.bool_val v (T.typeof a) Mem.empty with
       | Some b => if b then s1 else s2
-      | None => self__SimplExpr.T.Sifthenelse a s1 s2
+      | None => T.Sifthenelse a s1 s2
       end
-  | None => self__SimplExpr.T.Sifthenelse a s1 s2
+  | None => T.Sifthenelse a s1 s2
   end.
 FEnd makeif.
 
@@ -892,79 +892,79 @@ Case Ecast r1 ty :=
   (fun ce dst =>
       match dst with
       | self__SimplExpr.For_val | self__SimplExpr.For_set _ =>
-          do (sl1, a1) <- transl_expr r1 ce self__SimplExpr.For_val;
+          do (sl1, a1) <- transl_expr r1 ce For_val;
           ret (finish dst sl1 (T.Ecast a1 ty))
       | self__SimplExpr.For_effects =>
-          transl_expr r1 ce self__SimplExpr.For_effects end).
+          transl_expr r1 ce For_effects end).
 Case Ecomma r1 r2 ty :=
    (fun ce dst =>
-      do (sl1, a1) <- transl_expr r1 ce self__SimplExpr.For_effects;
+      do (sl1, a1) <- transl_expr r1 ce For_effects;
       do (sl2, a2) <- transl_expr r2 ce dst;
       ret (sl1 ++ sl2, a2)).
 Case Econdition r1 r2 r3 ty :=
   (fun ce dst =>
-      do (sl1, a1) <- transl_expr r1 ce self__SimplExpr.For_val;
+      do (sl1, a1) <- transl_expr r1 ce For_val;
       match dst with
       | self__SimplExpr.For_val =>
           do t <- gensym ty;
-          let sd := self__SimplExpr.SDbase ty ty t in
-          do (sl2, a2) <- transl_expr r2 ce (self__SimplExpr.For_set sd);
-          do (sl3, a3) <- transl_expr r3 ce (self__SimplExpr.For_set sd);
+          let sd := SDbase ty ty t in
+          do (sl2, a2) <- transl_expr r2 ce (For_set sd);
+          do (sl3, a3) <- transl_expr r3 ce (For_set sd);
           ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
                T.Etempvar t ty)
       | self__SimplExpr.For_effects =>
-          do (sl2, a2) <- transl_expr r2 ce self__SimplExpr.For_effects;
-          do (sl3, a3) <- transl_expr r3 ce self__SimplExpr.For_effects;
+          do (sl2, a2) <- transl_expr r2 ce For_effects;
+          do (sl3, a3) <- transl_expr r3 ce For_effects;
           ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
                dummy_expr)
       | self__SimplExpr.For_set sd =>
           do t <- temp_for_sd ty sd;
-          let sd' := self__SimplExpr.SDcons ty ty t sd in
-          do (sl2, a2) <- transl_expr r2 ce (self__SimplExpr.For_set sd');
-          do (sl3, a3) <- transl_expr r3 ce (self__SimplExpr.For_set sd');
+          let sd' := SDcons ty ty t sd in
+          do (sl2, a2) <- transl_expr r2 ce (For_set sd');
+          do (sl3, a3) <- transl_expr r3 ce (For_set sd');
           ret (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil,
                dummy_expr)
       end).
 Case Eseqor r1 r2 ty :=
   (fun ce dst =>
-    do (sl1, a1) <- transl_expr r1 ce self__SimplExpr.For_val;
+    do (sl1, a1) <- transl_expr r1 ce For_val;
       match dst with
       | self__SimplExpr.For_val =>
           do t <- gensym ty;
-          let sd := self__SimplExpr.SDbase type_bool ty t in
-          do (sl2, a2) <- transl_expr r2 ce (self__SimplExpr.For_set sd);
+          let sd := SDbase type_bool ty t in
+          do (sl2, a2) <- transl_expr r2 ce (For_set sd);
           ret (sl1 ++
                makeif a1 (T.Sset t (T.Econst_int Int.one ty)) (makeseq sl2) :: nil,
                T.Etempvar t ty)
       | self__SimplExpr.For_effects =>
-          do (sl2, a2) <- transl_expr r2 ce self__SimplExpr.For_effects;
+          do (sl2, a2) <- transl_expr r2 ce For_effects;
           ret (sl1 ++ makeif a1 T.Sskip (makeseq sl2) :: nil, dummy_expr)
       | self__SimplExpr.For_set sd =>
           do t <- temp_for_sd ty sd;
-          let sd' := self__SimplExpr.SDcons type_bool ty t sd in
-          do (sl2, a2) <- transl_expr r2 ce (self__SimplExpr.For_set sd');
+          let sd' := SDcons type_bool ty t sd in
+          do (sl2, a2) <- transl_expr r2 ce (For_set sd');
           ret (sl1 ++
                makeif a1 (makeseq (do_set sd (T.Econst_int Int.one ty))) (makeseq sl2) :: nil,
                dummy_expr)
       end).
 Case Eseqand r1 r2 ty :=
   (fun ce dst =>
-    do (sl1, a1) <- transl_expr r1 ce self__SimplExpr.For_val;
+    do (sl1, a1) <- transl_expr r1 ce For_val;
       match dst with
       | self__SimplExpr.For_val =>
           do t <- gensym ty;
-          let sd := self__SimplExpr.SDbase type_bool ty t in
-          do (sl2, a2) <- transl_expr r2 ce (self__SimplExpr.For_set sd);
+          let sd := SDbase type_bool ty t in
+          do (sl2, a2) <- transl_expr r2 ce (For_set sd);
           ret (sl1 ++
                makeif a1 (makeseq sl2) (T.Sset t (T.Econst_int Int.zero ty)) :: nil,
                T.Etempvar t ty)
       | self__SimplExpr.For_effects =>
-          do (sl2, a2) <- transl_expr r2 ce self__SimplExpr.For_effects;
+          do (sl2, a2) <- transl_expr r2 ce For_effects;
           ret (sl1 ++ makeif a1 (makeseq sl2) T.Sskip :: nil, dummy_expr)
       | self__SimplExpr.For_set sd =>
           do t <- temp_for_sd ty sd;
-          let sd' := self__SimplExpr.SDcons type_bool ty t sd in
-          do (sl2, a2) <- transl_expr r2 ce (self__SimplExpr.For_set sd');
+          let sd' := SDcons type_bool ty t sd in
+          do (sl2, a2) <- transl_expr r2 ce (For_set sd');
           ret (sl1 ++
                makeif a1 (makeseq sl2) (makeseq (do_set sd (T.Econst_int Int.zero ty))) :: nil,
                dummy_expr)
@@ -974,30 +974,30 @@ Case Ealignof ty' ty := (fun ce dst => ret (finish dst nil (T.Ealignof ty' ty)))
 Case Eparen e tycast ty := (fun ce dst => error (msg "SimplExpr.transl_expr: paren")).
 Case Eunop op r1 ty :=
   (fun ce dst =>
-    do (sl1, a1) <- transl_expr r1 ce self__SimplExpr.For_val;
+    do (sl1, a1) <- transl_expr r1 ce For_val;
     ret (finish dst sl1 (T.Eunop op a1 ty))).
 Case Ebinop op r1 r2 ty :=
   (fun ce dst =>
-     do (sl1, a1) <- transl_expr r1 ce self__SimplExpr.For_val;
-     do (sl2, a2) <- transl_expr r2 ce self__SimplExpr.For_val;
+     do (sl1, a1) <- transl_expr r1 ce For_val;
+     do (sl2, a2) <- transl_expr r2 ce For_val;
      ret (finish dst (sl1 ++ sl2) (T.Ebinop op a1 a2 ty))).
 
 Case Enil := (fun ce => ret (nil, nil)).
 Case Econs r1 rl2 :=
   (fun ce =>
-     do (sl1, a1) <- transl_expr r1 ce self__SimplExpr.For_val;
+     do (sl1, a1) <- transl_expr r1 ce For_val;
      do (sl2, al2) <- transl_exprlist rl2 ce;
       ret (sl1 ++ sl2, a1 :: al2)).
 FEnd transl_expr with transl_exprlist.
 
 FDefinition transl_expression : S.expr -> composite_env -> mon (T.stmt * T.expr) := fun r ce =>
-  do (sl, a) <- transl_expr r ce self__SimplExpr.For_val; ret (makeseq sl, a).
+  do (sl, a) <- transl_expr r ce For_val; ret (makeseq sl, a).
 
 FDefinition transl_expr_stmt : S.expr -> composite_env -> mon T.stmt := fun r ce =>
-  do (sl, a) <- transl_expr r ce self__SimplExpr.For_effects; ret (makeseq sl).
+  do (sl, a) <- transl_expr r ce For_effects; ret (makeseq sl).
 
 FDefinition transl_if : S.expr -> T.stmt -> T.stmt -> composite_env -> mon T.stmt  := fun r s1 s2 ce =>
-  do (sl, a) <- transl_expr r ce self__SimplExpr.For_val;
+  do (sl, a) <- transl_expr r ce For_val;
   ret (makeseq (sl ++ makeif a s1 s2 :: nil)).
 
 Closing Fact is_Sskip:
@@ -1077,7 +1077,7 @@ FDefinition transl_program : S.program -> res T.program := fun p =>
         prog_comp_env_eq := prog_comp_env_eq p |}.
 
 (* Relational specification of translation *)
-FDefinition final : self__SimplExpr.destination -> T.expr -> list T.stmt := fun dst a =>
+FDefinition final : destination -> T.expr -> list T.stmt := fun dst a =>
 match dst with
 | self__SimplExpr.For_val => nil
 | self__SimplExpr.For_effects => nil
@@ -1086,19 +1086,19 @@ end.
 
 FInductive tr_expr : composite_env -> T.temp_env -> destination -> S.expr -> list T.stmt -> T.expr -> list ident -> Prop :=
 | tr_val_effect: forall ce le v ty any tmp,
-    tr_expr ce le self__SimplExpr.For_effects (S.Eval v ty) nil any tmp
+    tr_expr ce le For_effects (S.Eval v ty) nil any tmp
 | tr_val_value: forall ce le v ty a tmp,
     T.typeof a = ty ->
     (forall tge e le' m,
       (forall id, In id tmp -> le'!id = le!id) ->
       T.eval_expr tge e le' m a v) ->
-    tr_expr ce le self__SimplExpr.For_val (S.Eval v ty) nil a tmp
+    tr_expr ce le For_val (S.Eval v ty) nil a tmp
 | tr_val_set: forall ce le sd v ty a any tmp,
     T.typeof a = ty ->
     (forall tge e le' m,
       (forall id, In id tmp -> le'!id = le!id) ->
       T.eval_expr tge e le' m a v) ->
-    tr_expr ce le (self__SimplExpr.For_set sd) (S.Eval v ty)
+    tr_expr ce le (For_set sd) (S.Eval v ty)
                 (do_set sd a) any tmp
 | tr_sizeof: forall ce le dst ty' ty tmp,
     tr_expr ce le dst (S.Esizeof ty' ty)
@@ -1109,131 +1109,131 @@ FInductive tr_expr : composite_env -> T.temp_env -> destination -> S.expr -> lis
         (final dst (T.Ealignof ty' ty))
         (T.Ealignof ty' ty) tmp
 | tr_unop: forall ce le dst op e1 ty tmp sl1 a1,
-    tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp ->
+    tr_expr ce le For_val e1 sl1 a1 tmp ->
     tr_expr ce le dst (S.Eunop op e1 ty)
                 (sl1 ++ final dst (T.Eunop op a1 ty))
                 (T.Eunop op a1 ty) tmp
 | tr_binop: forall ce le dst op e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 tmp,
-    tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
-    tr_expr ce le self__SimplExpr.For_val e2 sl2 a2 tmp2 ->
+    tr_expr ce le For_val e1 sl1 a1 tmp1 ->
+    tr_expr ce le For_val e2 sl2 a2 tmp2 ->
     list_disjoint tmp1 tmp2 -> incl tmp1 tmp -> incl tmp2 tmp ->
     tr_expr ce le dst (S.Ebinop op e1 e2 ty)
                 (sl1 ++ sl2 ++ final dst (T.Ebinop op a1 a2 ty))
                 (T.Ebinop op a1 a2 ty) tmp
 | tr_cast_effects: forall ce le e1 ty sl1 a1 any tmp,
-    tr_expr ce le self__SimplExpr.For_effects e1 sl1 a1 tmp ->
-    tr_expr ce le self__SimplExpr.For_effects (S.Ecast e1 ty)
+    tr_expr ce le For_effects e1 sl1 a1 tmp ->
+    tr_expr ce le For_effects (S.Ecast e1 ty)
                 sl1 any tmp
 | tr_cast_val: forall ce le dst e1 ty sl1 a1 tmp,
-    tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp ->
+    tr_expr ce le For_val e1 sl1 a1 tmp ->
     tr_expr ce le dst (S.Ecast e1 ty)
                 (sl1 ++ final dst (T.Ecast a1 ty))
                 (T.Ecast a1 ty) tmp
 | tr_seqand_val: forall ce le e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 tmp,
-    tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
-    tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDbase type_bool ty t)) e2 sl2 a2 tmp2 ->
+    tr_expr ce le For_val e1 sl1 a1 tmp1 ->
+    tr_expr ce le (For_set (SDbase type_bool ty t)) e2 sl2 a2 tmp2 ->
     list_disjoint tmp1 tmp2 ->
     incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
-    tr_expr ce le self__SimplExpr.For_val (S.Eseqand e1 e2 ty)
+    tr_expr ce le For_val (S.Eseqand e1 e2 ty)
           (sl1 ++ makeif a1 (makeseq sl2)
                             (T.Sset t (T.Econst_int Int.zero ty)) :: nil)
           (T.Etempvar t ty) tmp
 | tr_seqand_effects: forall ce le e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 any tmp,
-    tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
-    tr_expr ce le self__SimplExpr.For_effects e2 sl2 a2 tmp2 ->
+    tr_expr ce le For_val e1 sl1 a1 tmp1 ->
+    tr_expr ce le For_effects e2 sl2 a2 tmp2 ->
     list_disjoint tmp1 tmp2 ->
     incl tmp1 tmp -> incl tmp2 tmp ->
-    tr_expr ce le self__SimplExpr.For_effects (S.Eseqand e1 e2 ty)
+    tr_expr ce le For_effects (S.Eseqand e1 e2 ty)
                   (sl1 ++ makeif a1 (makeseq sl2) T.Sskip :: nil)
                   any tmp
 | tr_seqand_set: forall ce le sd e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 any tmp,
-    tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
-    tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDcons type_bool ty t sd)) e2 sl2 a2 tmp2 ->
+    tr_expr ce le For_val e1 sl1 a1 tmp1 ->
+    tr_expr ce le (For_set (SDcons type_bool ty t sd)) e2 sl2 a2 tmp2 ->
     list_disjoint tmp1 tmp2 ->
     incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
-    tr_expr ce le (self__SimplExpr.For_set sd) (S.Eseqand e1 e2 ty)
+    tr_expr ce le (For_set sd) (S.Eseqand e1 e2 ty)
                   (sl1 ++ makeif a1 (makeseq sl2)
                                     (makeseq (do_set sd (T.Econst_int Int.zero ty))) :: nil)
                   any tmp
 | tr_seqor_val: forall ce le e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 tmp,
-    tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
-    tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDbase type_bool ty t)) e2 sl2 a2 tmp2 ->
+    tr_expr ce le For_val e1 sl1 a1 tmp1 ->
+    tr_expr ce le (For_set (SDbase type_bool ty t)) e2 sl2 a2 tmp2 ->
     list_disjoint tmp1 tmp2 ->
     incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
-    tr_expr ce le self__SimplExpr.For_val (S.Eseqor e1 e2 ty)
+    tr_expr ce le For_val (S.Eseqor e1 e2 ty)
                   (sl1 ++ makeif a1 (T.Sset t (T.Econst_int Int.one ty))
                                     (makeseq sl2) :: nil)
                   (T.Etempvar t ty) tmp
 | tr_seqor_effects: forall ce le e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 any tmp,
-    tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
-    tr_expr ce le self__SimplExpr.For_effects e2 sl2 a2 tmp2 ->
+    tr_expr ce le For_val e1 sl1 a1 tmp1 ->
+    tr_expr ce le For_effects e2 sl2 a2 tmp2 ->
     list_disjoint tmp1 tmp2 ->
     incl tmp1 tmp -> incl tmp2 tmp ->
-    tr_expr ce le self__SimplExpr.For_effects (S.Eseqor e1 e2 ty)
+    tr_expr ce le For_effects (S.Eseqor e1 e2 ty)
                   (sl1 ++ makeif a1 T.Sskip (makeseq sl2) :: nil)
                   any tmp
 | tr_seqor_set: forall ce le sd e1 e2 ty sl1 a1 tmp1 t sl2 a2 tmp2 any tmp,
-    tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
-    tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDcons type_bool ty t sd)) e2 sl2 a2 tmp2 ->
+    tr_expr ce le For_val e1 sl1 a1 tmp1 ->
+    tr_expr ce le (For_set (SDcons type_bool ty t sd)) e2 sl2 a2 tmp2 ->
     list_disjoint tmp1 tmp2 ->
     incl tmp1 tmp -> incl tmp2 tmp -> In t tmp ->
-    tr_expr ce le (self__SimplExpr.For_set sd) (S.Eseqor e1 e2 ty)
+    tr_expr ce le (For_set sd) (S.Eseqor e1 e2 ty)
                   (sl1 ++ makeif a1 (makeseq (do_set sd (T.Econst_int Int.one ty)))
                                     (makeseq sl2) :: nil)
                   any tmp
 | tr_condition_val: forall ce le e1 e2 e3 ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 t tmp,
-    tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
-    tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDbase ty ty t)) e2 sl2 a2 tmp2 ->
-    tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDbase ty ty t)) e3 sl3 a3 tmp3 ->
+    tr_expr ce le For_val e1 sl1 a1 tmp1 ->
+    tr_expr ce le (For_set (SDbase ty ty t)) e2 sl2 a2 tmp2 ->
+    tr_expr ce le (For_set (SDbase ty ty t)) e3 sl3 a3 tmp3 ->
     list_disjoint tmp1 tmp2 ->
     list_disjoint tmp1 tmp3 ->
     incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp -> In t tmp ->
-    tr_expr ce le self__SimplExpr.For_val (S.Econdition e1 e2 e3 ty)
+    tr_expr ce le For_val (S.Econdition e1 e2 e3 ty)
                     (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil)
                     (T.Etempvar t ty) tmp
 | tr_condition_effects: forall ce le e1 e2 e3 ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 any tmp,
-    tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
-    tr_expr ce le self__SimplExpr.For_effects e2 sl2 a2 tmp2 ->
-    tr_expr ce le self__SimplExpr.For_effects e3 sl3 a3 tmp3 ->
+    tr_expr ce le For_val e1 sl1 a1 tmp1 ->
+    tr_expr ce le For_effects e2 sl2 a2 tmp2 ->
+    tr_expr ce le For_effects e3 sl3 a3 tmp3 ->
     list_disjoint tmp1 tmp2 ->
     list_disjoint tmp1 tmp3 ->
     incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp ->
-    tr_expr ce le self__SimplExpr.For_effects (S.Econdition e1 e2 e3 ty)
+    tr_expr ce le For_effects (S.Econdition e1 e2 e3 ty)
                     (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil)
                     any tmp
 | tr_condition_set: forall ce le sd t e1 e2 e3 ty sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3 any tmp,
-    tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
-    tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDcons ty ty t sd)) e2 sl2 a2 tmp2 ->
-    tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDcons ty ty t sd)) e3 sl3 a3 tmp3 ->
+    tr_expr ce le For_val e1 sl1 a1 tmp1 ->
+    tr_expr ce le (For_set (SDcons ty ty t sd)) e2 sl2 a2 tmp2 ->
+    tr_expr ce le (For_set (SDcons ty ty t sd)) e3 sl3 a3 tmp3 ->
     list_disjoint tmp1 tmp2 ->
     list_disjoint tmp1 tmp3 ->
     incl tmp1 tmp -> incl tmp2 tmp -> incl tmp3 tmp -> In t tmp ->
-    tr_expr ce le (self__SimplExpr.For_set sd) (S.Econdition e1 e2 e3 ty)
+    tr_expr ce le (For_set sd) (S.Econdition e1 e2 e3 ty)
                     (sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil)
                     any tmp
 | tr_comma: forall ce le dst e1 e2 ty sl1 a1 tmp1 sl2 a2 tmp2 tmp,
-    tr_expr ce le self__SimplExpr.For_effects e1 sl1 a1 tmp1 ->
+    tr_expr ce le For_effects e1 sl1 a1 tmp1 ->
     tr_expr ce le dst e2 sl2 a2 tmp2 ->
     list_disjoint tmp1 tmp2 ->
     incl tmp1 tmp -> incl tmp2 tmp ->
     tr_expr ce le dst (S.Ecomma e1 e2 ty) (sl1 ++ sl2) a2 tmp
 | tr_paren_val: forall ce le e1 tycast ty sl1 a1 t tmp,
-    tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDbase tycast ty t)) e1 sl1 a1 tmp ->
+    tr_expr ce le (For_set (SDbase tycast ty t)) e1 sl1 a1 tmp ->
     In t tmp ->
-    tr_expr ce le self__SimplExpr.For_val (S.Eparen e1 tycast ty) sl1 (T.Etempvar t ty) tmp
+    tr_expr ce le For_val (S.Eparen e1 tycast ty) sl1 (T.Etempvar t ty) tmp
 | tr_paren_effects: forall ce le e1 tycast ty sl1 a1 tmp any,
-    tr_expr ce le self__SimplExpr.For_effects e1 sl1 a1 tmp ->
-    tr_expr ce le self__SimplExpr.For_effects (S.Eparen e1 tycast ty) sl1 any tmp
+    tr_expr ce le For_effects e1 sl1 a1 tmp ->
+    tr_expr ce le For_effects (S.Eparen e1 tycast ty) sl1 any tmp
 | tr_paren_set: forall ce le t sd e1 tycast ty sl1 a1 tmp any,
-    tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDcons tycast ty t sd)) e1 sl1 a1 tmp ->
+    tr_expr ce le (For_set (SDcons tycast ty t sd)) e1 sl1 a1 tmp ->
     In t tmp ->
-    tr_expr ce le (self__SimplExpr.For_set sd) (S.Eparen e1 tycast ty) sl1 any tmp
+    tr_expr ce le (For_set sd) (S.Eparen e1 tycast ty) sl1 any tmp
 
 with tr_exprlist : composite_env -> T.temp_env -> S.exprlist -> list T.stmt -> list T.expr -> list ident -> Prop :=
 | tr_nil: forall ce le tmp,
     tr_exprlist ce le S.Enil nil nil tmp
 | tr_cons: forall ce le e1 el2 sl1 a1 tmp1 sl2 al2 tmp2 tmp,
-      tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1 ->
+      tr_expr ce le For_val e1 sl1 a1 tmp1 ->
       tr_exprlist ce le el2 sl2 al2 tmp2 ->
       list_disjoint tmp1 tmp2 ->
       incl tmp1 tmp -> incl tmp2 tmp ->
@@ -1279,7 +1279,7 @@ Closing Fact tr_unop_inv :
   exists sl1 a1,
   sl = sl1 ++ final dst (T.Eunop op a1 ty)
   /\ a = T.Eunop op a1 ty
-  /\ tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp
+  /\ tr_expr ce le For_val e1 sl1 a1 tmp
   by plain {intros until tmp; intros H; inv H; repeat eexists; eauto}.
 
 Closing Fact tr_binop_inv :
@@ -1288,16 +1288,16 @@ Closing Fact tr_binop_inv :
   exists sl1 a1 tmp1 sl2 a2 tmp2,
   sl = sl1 ++ sl2 ++ final dst (T.Ebinop op a1 a2 ty)
   /\ a = T.Ebinop op a1 a2 ty
-  /\ tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1
-  /\ tr_expr ce le self__SimplExpr.For_val e2 sl2 a2 tmp2
+  /\ tr_expr ce le For_val e1 sl1 a1 tmp1
+  /\ tr_expr ce le For_val e2 sl2 a2 tmp2
   /\ list_disjoint tmp1 tmp2 /\ incl tmp1 tmp /\ incl tmp2 tmp
   by plain {intros until tmp; intros H; inv H; repeat eexists; eauto}.
 
 Closing Fact tr_cast_inv :
   forall ce le dst e1 ty sl a tmp,
   tr_expr ce le dst (S.Ecast e1 ty) sl a tmp ->
-  (exists a1, dst = self__SimplExpr.For_effects /\ tr_expr ce le self__SimplExpr.For_effects e1 sl a1 tmp)
-  \/ (exists sl1 a1, sl = sl1 ++ final dst (T.Ecast a1 ty) /\ a = T.Ecast a1 ty /\ tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp)
+  (exists a1, dst = For_effects /\ tr_expr ce le For_effects e1 sl a1 tmp)
+  \/ (exists sl1 a1, sl = sl1 ++ final dst (T.Ecast a1 ty) /\ a = T.Ecast a1 ty /\ tr_expr ce le For_val e1 sl1 a1 tmp)
   by plain {intros until tmp; intros H; inv H; [ left; eauto | right; eauto ]}.
 
 Closing Fact tr_seqand_inv :
@@ -1309,15 +1309,15 @@ Closing Fact tr_seqand_inv :
     sl = sl1 ++ makeif a1 (makeseq sl2)
       (T.Sset t (T.Econst_int Int.zero ty)) :: nil
     /\ a = T.Etempvar t ty
-    /\ tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1
-    /\ tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDbase type_bool ty t)) e2 sl2 a2 tmp2
+    /\ tr_expr ce le For_val e1 sl1 a1 tmp1
+    /\ tr_expr ce le (For_set (SDbase type_bool ty t)) e2 sl2 a2 tmp2
     /\ list_disjoint tmp1 tmp2
     /\ incl tmp1 tmp /\ incl tmp2 tmp /\ In t tmp
   | self__SimplExpr.For_effects =>
     exists sl1 a1 tmp1 sl2 a2 tmp2,
     sl = sl1 ++ makeif a1 (makeseq sl2) T.Sskip :: nil
-    /\ tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1
-    /\ tr_expr ce le self__SimplExpr.For_effects e2 sl2 a2 tmp2
+    /\ tr_expr ce le For_val e1 sl1 a1 tmp1
+    /\ tr_expr ce le For_effects e2 sl2 a2 tmp2
     /\ list_disjoint tmp1 tmp2
     /\ incl tmp1 tmp /\ incl tmp2 tmp
   | self__SimplExpr.For_set sd =>
@@ -1326,8 +1326,8 @@ Closing Fact tr_seqand_inv :
       (makeseq sl2)
       (makeseq (do_set sd (T.Econst_int Int.zero ty)))
       :: nil
-    /\ tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1
-    /\ tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDcons type_bool ty t sd)) e2 sl2 a2 tmp2
+    /\ tr_expr ce le For_val e1 sl1 a1 tmp1
+    /\ tr_expr ce le (For_set (SDcons type_bool ty t sd)) e2 sl2 a2 tmp2
     /\ list_disjoint tmp1 tmp2
     /\ incl tmp1 tmp /\ incl tmp2 tmp /\ In t tmp
   end
@@ -1344,15 +1344,15 @@ Closing Fact tr_seqor_inv :
       (makeseq sl2)
       :: nil
     /\ a = T.Etempvar t ty
-    /\ tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1
-    /\ tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDbase type_bool ty t)) e2 sl2 a2 tmp2
+    /\ tr_expr ce le For_val e1 sl1 a1 tmp1
+    /\ tr_expr ce le (For_set (SDbase type_bool ty t)) e2 sl2 a2 tmp2
     /\ list_disjoint tmp1 tmp2
     /\ incl tmp1 tmp /\ incl tmp2 tmp /\ In t tmp
   | self__SimplExpr.For_effects =>
     exists sl1 a1 tmp1 sl2 a2 tmp2,
     sl = sl1 ++ makeif a1 T.Sskip (makeseq sl2) :: nil
-    /\ tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1
-    /\ tr_expr ce le self__SimplExpr.For_effects e2 sl2 a2 tmp2
+    /\ tr_expr ce le For_val e1 sl1 a1 tmp1
+    /\ tr_expr ce le For_effects e2 sl2 a2 tmp2
     /\ list_disjoint tmp1 tmp2
     /\ incl tmp1 tmp /\ incl tmp2 tmp
   | self__SimplExpr.For_set sd =>
@@ -1361,8 +1361,8 @@ Closing Fact tr_seqor_inv :
       (makeseq (do_set sd (T.Econst_int Int.one ty)))
       (makeseq sl2)
       :: nil
-    /\ tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1
-    /\ tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDcons type_bool ty t sd)) e2 sl2 a2 tmp2
+    /\ tr_expr ce le For_val e1 sl1 a1 tmp1
+    /\ tr_expr ce le (For_set (SDcons type_bool ty t sd)) e2 sl2 a2 tmp2
     /\ list_disjoint tmp1 tmp2
     /\ incl tmp1 tmp /\ incl tmp2 tmp /\ In t tmp
   end
@@ -1376,25 +1376,25 @@ Closing Fact tr_condition_inv :
     exists t sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3,
     sl = sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil
     /\ a = T.Etempvar t ty
-    /\ tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1
-    /\ tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDbase ty ty t)) e2 sl2 a2 tmp2
-    /\ tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDbase ty ty t)) e3 sl3 a3 tmp3
+    /\ tr_expr ce le For_val e1 sl1 a1 tmp1
+    /\ tr_expr ce le (For_set (SDbase ty ty t)) e2 sl2 a2 tmp2
+    /\ tr_expr ce le (For_set (SDbase ty ty t)) e3 sl3 a3 tmp3
     /\ list_disjoint tmp1 tmp2 /\ list_disjoint tmp1 tmp3
     /\ incl tmp1 tmp /\ incl tmp2 tmp /\ incl tmp3 tmp /\ In t tmp
   | self__SimplExpr.For_effects =>
     exists sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3,
     sl = sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil
-    /\ tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1
-    /\ tr_expr ce le self__SimplExpr.For_effects e2 sl2 a2 tmp2
-    /\ tr_expr ce le self__SimplExpr.For_effects e3 sl3 a3 tmp3
+    /\ tr_expr ce le For_val e1 sl1 a1 tmp1
+    /\ tr_expr ce le For_effects e2 sl2 a2 tmp2
+    /\ tr_expr ce le For_effects e3 sl3 a3 tmp3
     /\ list_disjoint tmp1 tmp2 /\ list_disjoint tmp1 tmp3
     /\ incl tmp1 tmp /\ incl tmp2 tmp /\ incl tmp3 tmp
   | self__SimplExpr.For_set sd =>
     exists t sl1 a1 tmp1 sl2 a2 tmp2 sl3 a3 tmp3,
     sl = sl1 ++ makeif a1 (makeseq sl2) (makeseq sl3) :: nil
-    /\ tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1
-    /\ tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDcons ty ty t sd)) e2 sl2 a2 tmp2
-    /\ tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDcons ty ty t sd)) e3 sl3 a3 tmp3
+    /\ tr_expr ce le For_val e1 sl1 a1 tmp1
+    /\ tr_expr ce le (For_set (SDcons ty ty t sd)) e2 sl2 a2 tmp2
+    /\ tr_expr ce le (For_set (SDcons ty ty t sd)) e3 sl3 a3 tmp3
     /\ list_disjoint tmp1 tmp2 /\ list_disjoint tmp1 tmp3
     /\ incl tmp1 tmp /\ incl tmp2 tmp /\ incl tmp3 tmp /\ In t tmp
   end
@@ -1405,7 +1405,7 @@ Closing Fact tr_comma_inv :
   tr_expr ce le dst (S.Ecomma e1 e2 ty) sl a2 tmp ->
   exists sl1 a1 tmp1 sl2 tmp2,
   sl = sl1 ++ sl2
-  /\ tr_expr ce le self__SimplExpr.For_effects e1 sl1 a1 tmp1
+  /\ tr_expr ce le For_effects e1 sl1 a1 tmp1
   /\ tr_expr ce le dst e2 sl2 a2 tmp2
   /\ list_disjoint tmp1 tmp2
   /\ incl tmp1 tmp /\ incl tmp2 tmp
@@ -1418,13 +1418,13 @@ Closing Fact tr_paren_inv :
   | self__SimplExpr.For_val =>
     exists a1 t,
     a = T.Etempvar t ty
-    /\ tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDbase tycast ty t)) e1 sl1 a1 tmp
+    /\ tr_expr ce le (For_set (SDbase tycast ty t)) e1 sl1 a1 tmp
     /\ In t tmp
   | self__SimplExpr.For_effects =>
-    exists a1, tr_expr ce le self__SimplExpr.For_effects e1 sl1 a1 tmp
+    exists a1, tr_expr ce le For_effects e1 sl1 a1 tmp
   | self__SimplExpr.For_set sd =>
     exists t a1,
-    tr_expr ce le (self__SimplExpr.For_set (self__SimplExpr.SDcons tycast ty t sd)) e1 sl1 a1 tmp
+    tr_expr ce le (For_set (SDcons tycast ty t sd)) e1 sl1 a1 tmp
     /\ In t tmp
   end
   by plain {intros until tmp; intros H; inv H; repeat eexists; eauto}.
@@ -1440,7 +1440,7 @@ Closing Fact tr_cons_inv :
   tr_exprlist ce le (S.Econs e1 el2) sl al tmp ->
   exists sl1 a1 tmp1 sl2 al2 tmp2,
   sl = sl1 ++ sl2 /\ al = a1 :: al2
-  /\ tr_expr ce le self__SimplExpr.For_val e1 sl1 a1 tmp1
+  /\ tr_expr ce le For_val e1 sl1 a1 tmp1
   /\ tr_exprlist ce le el2 sl2 al2 tmp2
   /\ list_disjoint tmp1 tmp2 /\ incl tmp1 tmp /\ incl tmp2 tmp
   by plain {intros until tmp; intros H; inv H; repeat eexists; eauto}.
@@ -1477,37 +1477,37 @@ Qed. FEnd tr_expr_monotone with tr_exprlist_monotone.
 
 MetaData tr_top.
 Inductive tr_top (ce : composite_env):
-  self__SimplExpr.T.genv -> self__SimplExpr.T.env ->
-  self__SimplExpr.T.temp_env -> mem ->  self__SimplExpr.destination ->
-  self__SimplExpr.S.expr -> list self__SimplExpr.T.stmt ->
-  self__SimplExpr.T.expr -> list ident -> Prop :=
+  T.genv -> T.env ->
+  T.temp_env -> mem ->  destination ->
+  S.expr -> list T.stmt ->
+  T.expr -> list ident -> Prop :=
 | tr_top_val_val: forall ge e le m v ty a tmp,
-    self__SimplExpr.T.typeof a = ty -> self__SimplExpr.T.eval_expr ge e le m a v ->
-    tr_top ce ge e le m self__SimplExpr.For_val (self__SimplExpr.S.Eval v ty) nil a tmp
+    T.typeof a = ty -> T.eval_expr ge e le m a v ->
+    tr_top ce ge e le m For_val (S.Eval v ty) nil a tmp
 | tr_top_base: forall ge e le m dst r sl a tmp,
-    self__SimplExpr.tr_expr ce le dst r sl a tmp ->
+    tr_expr ce le dst r sl a tmp ->
     tr_top ce ge e le m dst r sl a tmp.
 FEnd tr_top.
 
 MetaData tr_expression.
-Inductive tr_expression (ce : composite_env): self__SimplExpr.S.expr -> self__SimplExpr.T.stmt -> self__SimplExpr.T.expr -> Prop :=
+Inductive tr_expression (ce : composite_env): S.expr -> T.stmt -> T.expr -> Prop :=
 | tr_expression_intro: forall r sl a tmps,
-    (forall ge e le m, self__SimplExpr.tr_top ce ge e le m self__SimplExpr.For_val r sl a tmps) ->
-    tr_expression ce r (self__SimplExpr.makeseq sl) a.
+    (forall ge e le m, tr_top ce ge e le m For_val r sl a tmps) ->
+    tr_expression ce r (makeseq sl) a.
 FEnd tr_expression.
 
 MetaData tr_expr_stmt.
-Inductive tr_expr_stmt (ce : composite_env) : self__SimplExpr.S.expr -> self__SimplExpr.T.stmt -> Prop :=
+Inductive tr_expr_stmt (ce : composite_env) : S.expr -> T.stmt -> Prop :=
 | tr_expr_stmt_intro: forall r sl a tmps,
-    (forall ge e le m, self__SimplExpr.tr_top ce ge e le m self__SimplExpr.For_effects r sl a tmps) ->
-    tr_expr_stmt ce r (self__SimplExpr.makeseq sl).
+    (forall ge e le m, tr_top ce ge e le m For_effects r sl a tmps) ->
+    tr_expr_stmt ce r (makeseq sl).
 FEnd tr_expr_stmt.
 
 MetaData tr_if.
-Inductive tr_if (ce : composite_env) : self__SimplExpr.S.expr -> self__SimplExpr.T.stmt -> self__SimplExpr.T.stmt -> self__SimplExpr.T.stmt  -> Prop :=
+Inductive tr_if (ce : composite_env) : S.expr -> T.stmt -> T.stmt -> T.stmt  -> Prop :=
 | tr_if_intro: forall r s1 s2 sl a tmps,
-    (forall ge e le m, self__SimplExpr.tr_top ce ge e le m self__SimplExpr.For_val r sl a tmps) ->
-    tr_if ce r s1 s2 (self__SimplExpr.makeseq (sl ++ self__SimplExpr.makeif a s1 s2 :: nil)).
+    (forall ge e le m, tr_top ce ge e le m For_val r sl a tmps) ->
+    tr_if ce r s1 s2 (makeseq (sl ++ makeif a s1 s2 :: nil)).
 FEnd tr_if.
 
 FInductive tr_stmt: composite_env -> S.stmt -> T.stmt -> Prop :=
@@ -1604,20 +1604,20 @@ Closing Fact tr_ls_cons_inv :
   by plain {intros until ts; intros H; inv H; eauto}.
 
 MetaData tr_function.
-Inductive tr_function (ce : composite_env) :  self__SimplExpr.S.function -> self__SimplExpr.T.function -> Prop :=
+Inductive tr_function (ce : composite_env) :  S.function -> T.function -> Prop :=
 | tr_function_intro: forall f tf,
-    self__SimplExpr.tr_stmt ce f.(self__SimplExpr.S.fn_body) tf.(self__SimplExpr.T.fn_body) ->
-    self__SimplExpr.T.fn_return tf = self__SimplExpr.S.fn_return f ->
-    self__SimplExpr.T.fn_callconv tf = self__SimplExpr.S.fn_callconv f ->
-    self__SimplExpr.T.fn_params tf = self__SimplExpr.S.fn_params f ->
-    self__SimplExpr.T.fn_vars tf = self__SimplExpr.S.fn_vars f ->
+    tr_stmt ce f.(S.fn_body) tf.(T.fn_body) ->
+    T.fn_return tf = S.fn_return f ->
+    T.fn_callconv tf = S.fn_callconv f ->
+    T.fn_params tf = S.fn_params f ->
+    T.fn_vars tf = S.fn_vars f ->
     tr_function ce f tf.
 FEnd tr_function.
 
 MetaData tr_fundef.
-Inductive tr_fundef (p: self__SimplExpr.S.program): self__SimplExpr.S.fundef -> self__SimplExpr.T.fundef -> Prop :=
+Inductive tr_fundef (p: S.program): S.fundef -> T.fundef -> Prop :=
     | tr_internal: forall f tf,
-        self__SimplExpr.tr_function p.(prog_comp_env) f tf ->
+        tr_function p.(prog_comp_env) f tf ->
         tr_fundef p (Internal f) (Internal tf).
 FEnd tr_fundef.
 
@@ -1645,14 +1645,14 @@ Qed. CloseFLemma.
 FInduction tr_simple_expr_nil
   about tr_expr
   motive (fun ce le dst r sl a tmps (_ : tr_expr ce le dst r sl a tmps) =>
-    dst = self__SimplExpr.For_val \/ dst = self__SimplExpr.For_effects -> S.simple r = true -> sl = nil)
+    dst = For_val \/ dst = For_effects -> S.simple r = true -> sl = nil)
 with tr_simple_exprlist_nil
   about tr_exprlist
   motive (fun ce le rl sl al tmps (_ : tr_exprlist ce le rl sl al tmps) =>
     S.simplelist rl = true -> sl = nil).
 FProof.
 all:
-  assert (A: forall dst a, dst = self__SimplExpr.For_val \/ dst = self__SimplExpr.For_effects -> self__SimplExpr.final dst a = nil)
+  assert (A: forall dst a, dst = For_val \/ dst = For_effects -> final dst a = nil)
   by (intros; destruct H; subst dst; auto).
 all: intros; fsimpl in *; auto; try (destruct H; discriminate).
 - rewrite H; auto. simpl; auto.
@@ -1679,14 +1679,14 @@ FInduction tr_simple_rvalue
 FProof.
 (* val *)
 - intros. fsimpl.
-  apply self__SimplExpr.tr_val_inv in H2.
+  apply tr_val_inv in H2.
   destruct dst; destruct H2; intuition eauto.
 (* unop *)
 - intros. fsimpl.
-  apply self__SimplExpr.tr_unop_inv in H3; unpack H3.
+  apply tr_unop_inv in H3; unpack H3.
   exploit (H prog tprog tge); eauto. intros [A [B C]].
   subst sl sl1 a. simpl.
-  assert (self__SimplExpr.T.eval_expr tge e le m (self__SimplExpr.T.Eunop op a1 ty) v).
+  assert (T.eval_expr tge e le m (T.Eunop op a1 ty) v).
   { fconstructor. congruence. }
   destruct dst.
   + fsimpl. auto.
@@ -1694,46 +1694,46 @@ FProof.
   + simpl. eexists; repeat split; fsimpl; auto.
 (* binop *)
 - intros. fsimpl.
-  apply self__SimplExpr.tr_binop_inv in H4; unpack H4.
+  apply tr_binop_inv in H4; unpack H4.
   exploit (H prog tprog tge); eauto. intros [A [B C]].
   exploit (H0 prog tprog tge); eauto. intros [D [E F]].
   subst sl sl1 sl2 a. simpl.
-  assert (self__SimplExpr.T.eval_expr tge e le m (self__SimplExpr.T.Ebinop op a1 a2 ty) v).
-  { fconstructor. rewrite (self__SimplExpr.comp_env_preserved prog tprog ge tge); congruence. }
+  assert (T.eval_expr tge e le m (T.Ebinop op a1 a2 ty) v).
+  { fconstructor. rewrite (comp_env_preserved prog tprog ge tge); congruence. }
   destruct dst.
   + fsimpl. auto.
   + auto.
   + simpl. eexists; repeat split; fsimpl; auto.
 (* cast *)
 - intros. fsimpl.
-  apply self__SimplExpr.tr_cast_inv in H3 as [[a1 []] | [sl1 [a1 [? []]]]].
+  apply tr_cast_inv in H3 as [[a1 []] | [sl1 [a1 [? []]]]].
   (* effects *)
   + destruct dst; try discriminate.
     exploit (H prog tprog tge); eauto.
   (* val *)
   + exploit (H prog tprog tge); eauto.
     intros [A [B C]]. subst sl sl1 a. simpl.
-    assert (self__SimplExpr.T.eval_expr tge e le m (self__SimplExpr.T.Ecast a1 ty) v).
+    assert (T.eval_expr tge e le m (T.Ecast a1 ty) v).
     { fconstructor. congruence. }
     destruct dst.
     * fsimpl. auto.
     * auto.
     * simpl. eexists; repeat split; fsimpl; auto.
 (* sizeof *)
-- intros. rewrite <- (self__SimplExpr.comp_env_preserved prog tprog ge tge); try assumption.
-  fsimpl. apply self__SimplExpr.tr_sizeof_inv in H2 as []; subst sl a; simpl.
+- intros. rewrite <- (comp_env_preserved prog tprog ge tge); try assumption.
+  fsimpl. apply tr_sizeof_inv in H2 as []; subst sl a; simpl.
   destruct dst.
   + repeat split; fsimpl; auto. fconstructor.
   + auto.
-  + exists (self__SimplExpr.T.Esizeof ty1 ty).
+  + exists (T.Esizeof ty1 ty).
     repeat split; fsimpl; auto. fconstructor.
 (* sizeof *)
-- intros. rewrite <- (self__SimplExpr.comp_env_preserved prog tprog ge tge); try assumption.
-  fsimpl. apply self__SimplExpr.tr_alignof_inv in H2 as []; subst sl a; simpl.
+- intros. rewrite <- (comp_env_preserved prog tprog ge tge); try assumption.
+  fsimpl. apply tr_alignof_inv in H2 as []; subst sl a; simpl.
   destruct dst.
   + repeat split; fsimpl; auto. fconstructor.
   + auto.
-  + exists (self__SimplExpr.T.Ealignof ty1 ty).
+  + exists (T.Ealignof ty1 ty).
     repeat split; fsimpl; auto. fconstructor.
 Qed. FEnd tr_simple_rvalue.
 
@@ -1792,180 +1792,180 @@ Ltac UNCHANGED :=
   + red. auto.
   + intros. rewrite app_nil_r; auto.
 (* unop *)
-- intros. apply self__SimplExpr.tr_unop_inv in H0; unpack H0; subst.
+- intros. apply tr_unop_inv in H0; unpack H0; subst.
   exploit H; eauto.
   intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
   * subst sl1. rewrite app_assoc. eauto.
   * auto.
   * intros. rewrite app_assoc. fconstructor.
 (* binop left *)
-- intros. apply self__SimplExpr.tr_binop_inv in H0; unpack H0; subst.
+- intros. apply tr_binop_inv in H0; unpack H0; subst.
   exploit H; eauto.
   intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
   * subst sl1. rewrite <- app_assoc. eauto.
   * red. auto.
   * intros. rewrite app_assoc. fconstructor.
-    eapply self__SimplExpr.tr_expr_invariant; eauto. UNCHANGED.
+    eapply tr_expr_invariant; eauto. UNCHANGED.
 (* binop right *)
-- intros. apply self__SimplExpr.tr_binop_inv in H0; unpack H0; subst.
-  assert (sl1 = nil) by (eapply self__SimplExpr.tr_simple_expr_nil; eauto). subst sl1; simpl.
+- intros. apply tr_binop_inv in H0; unpack H0; subst.
+  assert (sl1 = nil) by (eapply tr_simple_expr_nil; eauto). subst sl1; simpl.
   exploit H; eauto.
   intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
   + subst sl2. rewrite app_assoc. eauto.
   + red. auto.
   + intros. rewrite app_assoc. change (sl3 ++ sl2') with (nil ++ sl3 ++ sl2'). rewrite <- app_assoc.
-    fconstructor. eapply self__SimplExpr.tr_expr_invariant; eauto. UNCHANGED.
+    fconstructor. eapply tr_expr_invariant; eauto. UNCHANGED.
 (* cast *)
-- intros. apply self__SimplExpr.tr_cast_inv in H0 as [[a1 []] | [sl1 [a1 [? []]]]].
+- intros. apply tr_cast_inv in H0 as [[a1 []] | [sl1 [a1 [? []]]]].
   (* for effects *)
   + exploit H; eauto.
     intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
     * eauto.
     * auto.
-    * intros. subst dst. eauto using self__SimplExpr.tr_cast_effects.
+    * intros. subst dst. eauto using tr_cast_effects.
   (* generic *)
   + exploit H; eauto.
     intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
     * subst sl sl1. rewrite app_assoc. eauto.
     * auto.
-    * intros. rewrite app_assoc. subst a. eauto using self__SimplExpr.tr_cast_val.
+    * intros. rewrite app_assoc. subst a. eauto using tr_cast_val.
 (* seqand *)
-- intros. apply self__SimplExpr.tr_seqand_inv in H0. destruct dst.
+- intros. apply tr_seqand_inv in H0. destruct dst.
   (* for val *)
   + unpack H0. subst. exploit H; eauto.
     intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
     * rewrite Q. rewrite app_assoc. eauto.
     * red. auto.
-    * intros. rewrite app_assoc. eapply self__SimplExpr.tr_seqand_val.
+    * intros. rewrite app_assoc. eapply tr_seqand_val.
       -- apply S; auto.
-      -- eapply self__SimplExpr.tr_expr_invariant; eauto. UNCHANGED.
+      -- eapply tr_expr_invariant; eauto. UNCHANGED.
       -- auto. -- auto. -- auto. -- auto.
   (* for effects *)
   + unpack H0. subst. exploit H; eauto.
     intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
     * rewrite Q. rewrite app_assoc. eauto.
     * red. auto.
-    * intros. rewrite app_assoc. eapply self__SimplExpr.tr_seqand_effects.
+    * intros. rewrite app_assoc. eapply tr_seqand_effects.
       -- apply S; auto.
-      -- eapply self__SimplExpr.tr_expr_invariant; eauto. UNCHANGED.
+      -- eapply tr_expr_invariant; eauto. UNCHANGED.
       -- auto. -- auto. -- auto.
   (* for set *)
   + unpack H0. subst. exploit H; eauto.
     intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
     * rewrite Q. rewrite app_assoc. eauto.
     * red. auto.
-    * intros. rewrite app_assoc. eapply self__SimplExpr.tr_seqand_set.
+    * intros. rewrite app_assoc. eapply tr_seqand_set.
       -- apply S; auto.
-      -- eapply self__SimplExpr.tr_expr_invariant; eauto. UNCHANGED.
+      -- eapply tr_expr_invariant; eauto. UNCHANGED.
       -- auto. -- auto. -- auto. -- auto.
 (* seqor *)
-- intros. apply self__SimplExpr.tr_seqor_inv in H0. destruct dst.
+- intros. apply tr_seqor_inv in H0. destruct dst.
   (* for val *)
   + unpack H0. subst. exploit H; eauto.
     intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
     * rewrite Q. rewrite app_assoc. eauto.
     * red. auto.
-    * intros. rewrite app_assoc. eapply self__SimplExpr.tr_seqor_val.
+    * intros. rewrite app_assoc. eapply tr_seqor_val.
       -- apply S; auto.
-      -- eapply self__SimplExpr.tr_expr_invariant; eauto. UNCHANGED.
+      -- eapply tr_expr_invariant; eauto. UNCHANGED.
       -- auto. -- auto. -- auto. -- auto.
   (* for effects *)
   + unpack H0. subst. exploit H; eauto.
     intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
     * rewrite Q. rewrite app_assoc. eauto.
     * red. auto.
-    * intros. rewrite app_assoc. eapply self__SimplExpr.tr_seqor_effects.
+    * intros. rewrite app_assoc. eapply tr_seqor_effects.
       -- apply S; auto.
-      -- eapply self__SimplExpr.tr_expr_invariant; eauto. UNCHANGED.
+      -- eapply tr_expr_invariant; eauto. UNCHANGED.
       -- auto. -- auto. -- auto.
   (* for set *)
   + unpack H0. subst. exploit H; eauto.
     intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
     * rewrite Q. rewrite app_assoc. eauto.
     * red. auto.
-    * intros. rewrite app_assoc. eapply self__SimplExpr.tr_seqor_set.
+    * intros. rewrite app_assoc. eapply tr_seqor_set.
       -- apply S; auto.
-      -- eapply self__SimplExpr.tr_expr_invariant; eauto. UNCHANGED.
+      -- eapply tr_expr_invariant; eauto. UNCHANGED.
       -- auto. -- auto. -- auto. -- auto.
 (* condition *)
-- intros. apply self__SimplExpr.tr_condition_inv in H0. destruct dst.
+- intros. apply tr_condition_inv in H0. destruct dst.
   (* for val *)
   + unpack H0. subst. exploit H; eauto.
     intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
     * rewrite Q. rewrite app_assoc. eauto.
     * red. auto.
-    * intros. rewrite app_assoc. eapply self__SimplExpr.tr_condition_val.
+    * intros. rewrite app_assoc. eapply tr_condition_val.
       -- apply S; auto.
-      -- eapply self__SimplExpr.tr_expr_invariant; eauto. UNCHANGED.
-      -- eapply self__SimplExpr.tr_expr_invariant; eauto. UNCHANGED.
+      -- eapply tr_expr_invariant; eauto. UNCHANGED.
+      -- eapply tr_expr_invariant; eauto. UNCHANGED.
       -- auto. -- auto. -- auto. -- auto. -- auto. -- auto.
   (* for effects *)
   + unpack H0. subst. exploit H; eauto.
     intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
     * rewrite Q. rewrite app_assoc. eauto.
     * red. auto.
-    * intros. rewrite app_assoc. eapply self__SimplExpr.tr_condition_effects.
+    * intros. rewrite app_assoc. eapply tr_condition_effects.
       -- apply S; auto.
-      -- eapply self__SimplExpr.tr_expr_invariant; eauto. UNCHANGED.
-      -- eapply self__SimplExpr.tr_expr_invariant; eauto. UNCHANGED.
+      -- eapply tr_expr_invariant; eauto. UNCHANGED.
+      -- eapply tr_expr_invariant; eauto. UNCHANGED.
       -- auto. -- auto. -- auto. -- auto. -- auto.
   (* for set *)
   + unpack H0. subst. exploit H; eauto.
     intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
     * rewrite Q. rewrite app_assoc. eauto.
     * red. auto.
-    * intros. rewrite app_assoc. eapply self__SimplExpr.tr_condition_set.
+    * intros. rewrite app_assoc. eapply tr_condition_set.
       -- apply S; auto.
-      -- eapply self__SimplExpr.tr_expr_invariant; eauto. UNCHANGED.
-      -- eapply self__SimplExpr.tr_expr_invariant; eauto. UNCHANGED.
+      -- eapply tr_expr_invariant; eauto. UNCHANGED.
+      -- eapply tr_expr_invariant; eauto. UNCHANGED.
       -- auto. -- auto. -- auto. -- auto. -- auto. -- auto.
 (* comma *)
-- intros. apply self__SimplExpr.tr_comma_inv in H0. unpack H0.
+- intros. apply tr_comma_inv in H0. unpack H0.
   exploit H; eauto.
   intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
   + subst sl sl1. rewrite app_assoc. eauto.
   + red. auto.
-  + intros. rewrite app_assoc. eapply self__SimplExpr.tr_comma with (tmp2 := tmp2).
+  + intros. rewrite app_assoc. eapply tr_comma with (tmp2 := tmp2).
     * apply S; auto.
-    * eapply self__SimplExpr.tr_expr_invariant; eauto. UNCHANGED.
+    * eapply tr_expr_invariant; eauto. UNCHANGED.
     * auto. * auto. * auto.
 (* paren *)
-- intros. apply self__SimplExpr.tr_paren_inv in H0. destruct dst.
+- intros. apply tr_paren_inv in H0. destruct dst.
   (* for val *)
   + unpack H0. subst. exploit H; eauto.
   intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
   * rewrite Q. eauto.
   * red. auto.
-  * intros. eapply self__SimplExpr.tr_paren_val; eauto.
+  * intros. eapply tr_paren_val; eauto.
   (* for effects *)
   + unpack H0. subst. exploit H; eauto.
   intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
   * rewrite Q. eauto.
   * red. auto.
-  * intros. eapply self__SimplExpr.tr_paren_effects; eauto.
+  * intros. eapply tr_paren_effects; eauto.
   (* for set *)
   + unpack H0. subst. exploit H; eauto.
   intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
   * rewrite Q. eauto.
   * red. auto.
-  * intros. eapply self__SimplExpr.tr_paren_set; eauto.
+  * intros. eapply tr_paren_set; eauto.
 (* cons left *)
-- intros. apply self__SimplExpr.tr_cons_inv in H0; unpack H0; subst.
+- intros. apply tr_cons_inv in H0; unpack H0; subst.
   exploit H; eauto.
   intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
   + subst sl1. rewrite app_assoc. eauto.
   + red. auto.
   + intros. rewrite app_assoc. fconstructor.
-    eapply self__SimplExpr.tr_exprlist_invariant; eauto. UNCHANGED.
+    eapply tr_exprlist_invariant; eauto. UNCHANGED.
 (* cons right *)
-- intros. apply self__SimplExpr.tr_cons_inv in H0; unpack H0; subst.
-  assert (sl1 = nil) by (eapply self__SimplExpr.tr_simple_expr_nil; eauto). subst sl1; simpl.
+- intros. apply tr_cons_inv in H0; unpack H0; subst.
+  assert (sl1 = nil) by (eapply tr_simple_expr_nil; eauto). subst sl1; simpl.
   exploit H; eauto.
   intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
   + subst sl2. eauto.
   + red. auto.
   + intros. change (sl3 ++ sl2') with (nil ++ sl3 ++ sl2').
-    fconstructor. eapply self__SimplExpr.tr_expr_invariant; eauto. UNCHANGED.
+    fconstructor. eapply tr_expr_invariant; eauto. UNCHANGED.
 Qed. FEnd tr_expr_leftcontext with tr_expr_leftcontextlist.
 
 FLemma tr_top_leftcontext:
@@ -1986,20 +1986,20 @@ FLemma tr_top_leftcontext:
 FProofLemma.
 induction 1; intros.
 (* val to val *)
-- apply (self__SimplExpr.S.leftcontext_val_top r v ty) in H2; auto. subst c r.
-  exists self__SimplExpr.For_val. repeat eexists.
-  + apply self__SimplExpr.tr_top_val_val; eauto.
+- apply (S.leftcontext_val_top r v ty) in H2; auto. subst c r.
+  exists For_val. repeat eexists.
+  + apply tr_top_val_val; eauto.
   + instantiate (1 := nil); auto.
   + apply incl_refl.
   + intros. rewrite app_nil_r. constructor. auto.
 (* base *)
-- subst r. exploit self__SimplExpr.tr_expr_leftcontext; eauto.
+- subst r. exploit tr_expr_leftcontext; eauto.
   intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
   exists dst' sl1 sl2 a' tmp'. repeat split.
-  + apply self__SimplExpr.tr_top_base; auto.
+  + apply tr_top_base; auto.
   + auto.
   + auto.
-  + intros. apply self__SimplExpr.tr_top_base. apply S; auto.
+  + intros. apply tr_top_base. apply S; auto.
 Qed. CloseFLemma.
 
 FLemma sem_cast_deterministic:
@@ -2027,9 +2027,9 @@ FInduction eval_simpl_expr_sound
     match eval_simpl_expr a with Some v' => v' = v | None => True end).
 FProof.
 all: intros; fsimpl; auto.
-- destruct (self__SimplExpr.eval_simpl_expr a); auto. subst.
-  destruct (sem_cast v1 (self__SimplExpr.T.typeof a) ty Mem.empty) as [v'|] eqn:C; auto.
-  eapply self__SimplExpr.sem_cast_deterministic; eauto.
+- destruct (eval_simpl_expr a); auto. subst.
+  destruct (sem_cast v1 (T.typeof a) ty Mem.empty) as [v'|] eqn:C; auto.
+  eapply sem_cast_deterministic; eauto.
 Qed. FEnd eval_simpl_expr_sound.
 
 FLemma static_bool_val_sound:
@@ -2047,15 +2047,15 @@ FLemma step_makeif:
   star T.step tge (T.State f (makeif a s1 s2) k e le m)
              E0 (T.State f (if b then s1 else s2) k e le m).
 FProofLemma.
-  intros. functional induction (self__SimplExpr.makeif a s1 s2).
-- specialize (self__SimplExpr.eval_simpl_expr_sound tge _ _ _ _ _ H). cbv. rewrite e0. intro EQ; subst v.
-  assert (bool_val v1 (self__SimplExpr.T.typeof a) m = Some true) by (apply self__SimplExpr.static_bool_val_sound; auto).
+  intros. functional induction (makeif a s1 s2).
+- specialize (eval_simpl_expr_sound tge _ _ _ _ _ H). cbv. rewrite e0. intro EQ; subst v.
+  assert (bool_val v1 (T.typeof a) m = Some true) by (apply static_bool_val_sound; auto).
   replace b with true by congruence. constructor.
-- specialize (self__SimplExpr.eval_simpl_expr_sound tge _ _ _ _ _ H). cbv. rewrite e0. intro EQ; subst v.
-  assert (bool_val v1 (self__SimplExpr.T.typeof a) m = Some false) by (apply self__SimplExpr.static_bool_val_sound; auto).
+- specialize (eval_simpl_expr_sound tge _ _ _ _ _ H). cbv. rewrite e0. intro EQ; subst v.
+  assert (bool_val v1 (T.typeof a) m = Some false) by (apply static_bool_val_sound; auto).
   replace b with false by congruence. constructor.
-- apply star_one. eapply self__SimplExpr.T.step_ifthenelse; eauto.
-- apply star_one. eapply self__SimplExpr.T.step_ifthenelse; eauto.
+- apply star_one. eapply T.step_ifthenelse; eauto.
+- apply star_one. eapply T.step_ifthenelse; eauto.
 Qed. CloseFLemma.
 
 FInductive match_cont : composite_env -> S.cont -> T.cont -> Prop :=
@@ -2068,17 +2068,17 @@ FInductive match_cont : composite_env -> S.cont -> T.cont -> Prop :=
 with match_cont_exp : composite_env -> destination -> T.expr -> S.cont -> T.cont -> Prop :=
 | match_Kdo: forall ce k a tk,
     match_cont ce k tk ->
-    match_cont_exp ce self__SimplExpr.For_effects a (S.Kdo k) tk
+    match_cont_exp ce For_effects a (S.Kdo k) tk
 | match_Kifthenelse_empty: forall ce a k tk,
     match_cont ce k tk ->
-    match_cont_exp ce self__SimplExpr.For_val a (S.Kifthenelse S.Sskip S.Sskip k) (T.Kseq T.Sskip tk)
+    match_cont_exp ce For_val a (S.Kifthenelse S.Sskip S.Sskip k) (T.Kseq T.Sskip tk)
 | match_Kifthenelse_1: forall ce a s1 s2 k ts1 ts2 tk,
     tr_stmt ce s1 ts1 -> tr_stmt ce s2 ts2 ->
     match_cont ce k tk ->
-    match_cont_exp ce self__SimplExpr.For_val a (S.Kifthenelse s1 s2 k) (T.Kseq (T.Sifthenelse a ts1 ts2) tk)
+    match_cont_exp ce For_val a (S.Kifthenelse s1 s2 k) (T.Kseq (T.Sifthenelse a ts1 ts2) tk)
 | match_Kreturn: forall ce k a tk,
     match_cont ce k tk ->
-    match_cont_exp ce self__SimplExpr.For_val a (S.Kreturn k) (T.Kseq (T.Sreturn (Some a)) tk).
+    match_cont_exp ce For_val a (S.Kreturn k) (T.Kseq (T.Sreturn (Some a)) tk).
 
 FInduction match_cont_is_call_cont
   about match_cont
@@ -2109,35 +2109,35 @@ Closing Fact match_cont_seq_inv :
 
 Closing Fact match_cont_exp_no_set :
   forall ce sd a k tk,
-  ~ match_cont_exp ce (self__SimplExpr.For_set sd) a k tk
+  ~ match_cont_exp ce (For_set sd) a k tk
   by {intros; intro Hc; inversion Hc}.
 
 Closing Fact match_cont_exp_do_inv :
   forall ce dst a k tk,
   match_cont_exp ce dst a (S.Kdo k) tk ->
-  dst = self__SimplExpr.For_effects /\ match_cont ce k tk
+  dst = For_effects /\ match_cont ce k tk
   by plain {intros until tk; intros H; inv H; eauto}.
 
 Closing Fact match_cont_exp_ifthenelse_inv :
   forall ce dst a s1 s2 k tk,
   match_cont_exp ce dst a (S.Kifthenelse s1 s2 k) tk ->
-  (exists tk', dst = self__SimplExpr.For_val /\ s1 = S.Sskip /\ s2 = S.Sskip /\ tk = T.Kseq T.Sskip tk' /\ match_cont ce k tk')
-  \/ (exists ts1 ts2 tk', dst = self__SimplExpr.For_val /\ tk = T.Kseq (T.Sifthenelse a ts1 ts2) tk'
+  (exists tk', dst = For_val /\ s1 = S.Sskip /\ s2 = S.Sskip /\ tk = T.Kseq T.Sskip tk' /\ match_cont ce k tk')
+  \/ (exists ts1 ts2 tk', dst = For_val /\ tk = T.Kseq (T.Sifthenelse a ts1 ts2) tk'
       /\ tr_stmt ce s1 ts1 /\ tr_stmt ce s2 ts2 /\ match_cont ce k tk')
   by plain {intros until tk; intros H; inv H; [ left; eauto 10 | right; eauto 10]}.
 
 Closing Fact match_cont_exp_return_inv :
   forall ce dst a k tk,
   match_cont_exp ce dst a (S.Kreturn k) tk ->
-  exists tk', dst = self__SimplExpr.For_val /\ tk = T.Kseq (T.Sreturn (Some a)) tk'
+  exists tk', dst = For_val /\ tk = T.Kseq (T.Sreturn (Some a)) tk'
     /\ match_cont ce k tk'
   by plain {intros until tk; intros H; inv H; eauto}.
 
 MetaData Kseqlist.
-Fixpoint Kseqlist (sl: list self__SimplExpr.T.stmt) (k: self__SimplExpr.T.cont) :=
+Fixpoint Kseqlist (sl: list T.stmt) (k: T.cont) :=
 match sl with
 | nil => k
-| s :: l => self__SimplExpr.T.Kseq s (Kseqlist l k)
+| s :: l => T.Kseq s (Kseqlist l k)
 end.
 FEnd Kseqlist.
 
@@ -2153,40 +2153,40 @@ FLemma push_seq:
   star T.step tge (T.State f (makeseq sl) k e le m)
               E0 (T.State f T.Sskip (Kseqlist sl k) e le m).
 FProofLemma.
-intros. unfold self__SimplExpr.makeseq. generalize self__SimplExpr.T.Sskip. revert sl k.
+intros. unfold makeseq. generalize T.Sskip. revert sl k.
 induction sl; simpl; intros.
 apply star_refl.
 eapply star_right. apply IHsl. fconstructor. traceEq.
 Qed. CloseFLemma.
 
 MetaData match_states.
-Inductive match_states (tge : self__SimplExpr.T.genv) : self__SimplExpr.S.state -> self__SimplExpr.T.state -> Prop :=
-    | match_exprstates: forall f r k e m tf sl tk le dest a tmps (cu: self__SimplExpr.S.program)
+Inductive match_states (tge : T.genv) : S.state -> T.state -> Prop :=
+    | match_exprstates: forall f r k e m tf sl tk le dest a tmps (cu: S.program)
         (* (LINK: linkorder cu prog)*)
-        (TRF: self__SimplExpr.tr_function cu.(prog_comp_env) f tf)
-        (TR: self__SimplExpr.tr_top cu.(prog_comp_env) tge e le m dest r sl a tmps)
-        (MK: self__SimplExpr.match_cont_exp cu.(prog_comp_env) dest a k tk),
-        match_states tge (self__SimplExpr.S.ExprState f r k e m)
-                      (self__SimplExpr.T.State tf self__SimplExpr.T.Sskip (self__SimplExpr.Kseqlist sl tk) e le m)
-    | match_regularstates: forall f s k e m tf ts tk le (cu: self__SimplExpr.S.program)
+        (TRF: tr_function cu.(prog_comp_env) f tf)
+        (TR: tr_top cu.(prog_comp_env) tge e le m dest r sl a tmps)
+        (MK: match_cont_exp cu.(prog_comp_env) dest a k tk),
+        match_states tge (S.ExprState f r k e m)
+                      (T.State tf T.Sskip (Kseqlist sl tk) e le m)
+    | match_regularstates: forall f s k e m tf ts tk le (cu: S.program)
         (* (LINK: linkorder cu prog) *)
-        (TRF: self__SimplExpr.tr_function cu.(prog_comp_env) f tf)
-        (TR: self__SimplExpr.tr_stmt cu.(prog_comp_env) s ts)
-        (MK: self__SimplExpr.match_cont cu.(prog_comp_env) k tk),
-        match_states tge (self__SimplExpr.S.State f s k e m)
-                      (self__SimplExpr.T.State tf ts tk e le m)
+        (TRF: tr_function cu.(prog_comp_env) f tf)
+        (TR: tr_stmt cu.(prog_comp_env) s ts)
+        (MK: match_cont cu.(prog_comp_env) k tk),
+        match_states tge (S.State f s k e m)
+                      (T.State tf ts tk e le m)
     | match_callstates: forall fd args k m tfd tk cu
         (* (LINK: linkorder cu prog)*)
-        (TR: self__SimplExpr.tr_fundef cu fd tfd)
-        (MK: forall ce, self__SimplExpr.match_cont ce k tk),
-        match_states tge (self__SimplExpr.S.Callstate fd args k m)
-                      (self__SimplExpr.T.Callstate tfd args tk m)
+        (TR: tr_fundef cu fd tfd)
+        (MK: forall ce, match_cont ce k tk),
+        match_states tge (S.Callstate fd args k m)
+                      (T.Callstate tfd args tk m)
     | match_returnstates: forall res k m tk
-        (MK: forall ce, self__SimplExpr.match_cont ce k tk),
-        match_states tge (self__SimplExpr.S.Returnstate res k m)
-                      (self__SimplExpr.T.Returnstate res tk m)
+        (MK: forall ce, match_cont ce k tk),
+        match_states tge (S.Returnstate res k m)
+                      (T.Returnstate res tk m)
     | match_stuckstate: forall S,
-        match_states tge self__SimplExpr.S.Stuckstate S.
+        match_states tge S.Stuckstate S.
 FEnd match_states.
 
 FInduction tr_seq_of_labeled_statement
@@ -2216,16 +2216,16 @@ FLemma makeseq_nolabel:
   forall lbl sl, nolabel_list lbl sl -> nolabel lbl (makeseq sl).
 FProofLemma.
   intros lbl.
-  assert (forall sl s, self__SimplExpr.nolabel lbl s -> self__SimplExpr.nolabel_list lbl sl -> self__SimplExpr.nolabel lbl (self__SimplExpr.makeseq_rec s sl)).
+  assert (forall sl s, nolabel lbl s -> nolabel_list lbl sl -> nolabel lbl (makeseq_rec s sl)).
   { induction sl; intros. auto. destruct H0. apply IHsl; fsimpl; auto.
     red. intros; fsimpl. rewrite H. apply H0. }
-  intros. unfold self__SimplExpr.makeseq. apply H; auto. red. fsimpl. auto.
+  intros. unfold makeseq. apply H; auto. red. fsimpl. auto.
 Qed. CloseFLemma.
 
 FLemma makeif_nolabel:
   forall lbl a s1 s2, nolabel lbl s1 -> nolabel lbl s2 -> nolabel lbl (makeif a s1 s2).
 FProofLemma.
-  intros. functional induction (self__SimplExpr.makeif a s1 s2); auto.
+  intros. functional induction (makeif a s1 s2); auto.
   - red; fsimpl; intros. rewrite H; auto.
   - red; fsimpl; intros. rewrite H; auto.
 Qed. CloseFLemma.
@@ -2239,7 +2239,7 @@ Qed. CloseFLemma.
 FLemma nolabel_final:
   forall lbl dst a, nolabel_list lbl (final dst a).
 FProofLemma.
-  destruct dst; simpl; intros. auto. auto. apply self__SimplExpr.nolabel_do_set.
+  destruct dst; simpl; intros. auto. auto. apply nolabel_do_set.
 Qed. CloseFLemma.
 
 FInduction tr_find_label_expr
@@ -2253,15 +2253,15 @@ with tr_find_label_exprlist
 FProof.
 Ltac NoLabelTac :=
   match goal with
-  | [ |- self__SimplExpr.nolabel_list ?lbl nil ] => exact I
-  | [ |- self__SimplExpr.nolabel_list ?lbl (self__SimplExpr.do_set _ _) ] => apply (self__SimplExpr.nolabel_do_set lbl) (*; NoLabelTac*)
-  | [ |- self__SimplExpr.nolabel_list ?lbl (self__SimplExpr.final _ _) ] => apply (self__SimplExpr.nolabel_final lbl) (*; NoLabelTac*)
-  | [ |- self__SimplExpr.nolabel_list ?lbl (_ :: _) ] => simpl; split; NoLabelTac
-  | [ |- self__SimplExpr.nolabel_list ?lbl (_ ++ _) ] => apply (self__SimplExpr.nolabel_list_app lbl); NoLabelTac
-  | [ H: _ -> self__SimplExpr.nolabel_list ?lbl ?x |- self__SimplExpr.nolabel_list ?lbl ?x ] => apply H; NoLabelTac
-  | [ |- self__SimplExpr.nolabel ?lbl (self__SimplExpr.makeseq _) ] => apply (self__SimplExpr.makeseq_nolabel lbl); NoLabelTac
-  | [ |- self__SimplExpr.nolabel ?lbl (self__SimplExpr.makeif _ _ _) ] => apply (self__SimplExpr.makeif_nolabel lbl); NoLabelTac
-  | [ |- self__SimplExpr.nolabel _ _ ] => red; intros; fsimpl; auto
+  | [ |- nolabel_list ?lbl nil ] => exact I
+  | [ |- nolabel_list ?lbl (do_set _ _) ] => apply (nolabel_do_set lbl) (*; NoLabelTac*)
+  | [ |- nolabel_list ?lbl (final _ _) ] => apply (nolabel_final lbl) (*; NoLabelTac*)
+  | [ |- nolabel_list ?lbl (_ :: _) ] => simpl; split; NoLabelTac
+  | [ |- nolabel_list ?lbl (_ ++ _) ] => apply (nolabel_list_app lbl); NoLabelTac
+  | [ H: _ -> nolabel_list ?lbl ?x |- nolabel_list ?lbl ?x ] => apply H; NoLabelTac
+  | [ |- nolabel ?lbl (makeseq _) ] => apply (makeseq_nolabel lbl); NoLabelTac
+  | [ |- nolabel ?lbl (makeif _ _ _) ] => apply (makeif_nolabel lbl); NoLabelTac
+  | [ |- nolabel _ _ ] => red; intros; fsimpl; auto
   | [ |- _ /\ _ ] => split; NoLabelTac
   | _ => auto
   end.
@@ -2274,7 +2274,7 @@ FLemma tr_find_label_top:
 FProofLemma.
   induction 1.
   - exact I.
-  - eapply self__SimplExpr.tr_find_label_expr. eassumption.
+  - eapply tr_find_label_expr. eassumption.
 Qed. CloseFLemma.
 
 FLemma tr_find_label_expression:
@@ -2282,9 +2282,9 @@ FLemma tr_find_label_expression:
   tr_expression ce r s a -> forall k, T.find_label s lbl k = None.
 FProofLemma.
   intros. inv H.
-  assert (self__SimplExpr.nolabel lbl (self__SimplExpr.makeseq sl)). apply self__SimplExpr.makeseq_nolabel.
-  eapply self__SimplExpr.tr_find_label_top with
-    (e := self__SimplExpr.T.empty_env) (le := PTree.empty val) (m := Mem.empty) (tge := tge).
+  assert (nolabel lbl (makeseq sl)). apply makeseq_nolabel.
+  eapply tr_find_label_top with
+    (e := T.empty_env) (le := PTree.empty val) (m := Mem.empty) (tge := tge).
   eauto. apply H.
 Qed. CloseFLemma.
 
@@ -2293,9 +2293,9 @@ FLemma tr_find_label_expr_stmt:
   tr_expr_stmt ce r s -> forall k, T.find_label s lbl k = None.
 FProofLemma.
   intros. inv H.
-  assert (self__SimplExpr.nolabel lbl (self__SimplExpr.makeseq sl)). apply self__SimplExpr.makeseq_nolabel.
-  eapply self__SimplExpr.tr_find_label_top with
-    (e := self__SimplExpr.T.empty_env) (le := PTree.empty val) (m := Mem.empty) (tge := tge).
+  assert (nolabel lbl (makeseq sl)). apply makeseq_nolabel.
+  eapply tr_find_label_top with
+    (e := T.empty_env) (le := PTree.empty val) (m := Mem.empty) (tge := tge).
   eauto. apply H.
 Qed. CloseFLemma.
 
@@ -2331,55 +2331,55 @@ with tr_find_label_ls
     end).
 FProof.
 (* seq *)
-- intros. apply self__SimplExpr.tr_seq_inv in TR; unpack TR; subst. fsimpl.
-  exploit (H ce tge lbl (self__SimplExpr.S.Kseq __i0 k)); eauto. fconstructor.
-  destruct (self__SimplExpr.S.find_label __i lbl (self__SimplExpr.S.Kseq __i0 k)) as [[s' k'] | ].
+- intros. apply tr_seq_inv in TR; unpack TR; subst. fsimpl.
+  exploit (H ce tge lbl (S.Kseq __i0 k)); eauto. fconstructor.
+  destruct (S.find_label __i lbl (S.Kseq __i0 k)) as [[s' k'] | ].
   + intros [ts1' [tk' [A [B C]]]]. fsimpl. rewrite A. eauto.
   + intro EQ. fsimpl. rewrite EQ. eapply H0; eauto.
 (* skip *)
-- intros. apply self__SimplExpr.tr_skip_inv in TR; subst. fsimpl. fsimpl. auto.
+- intros. apply tr_skip_inv in TR; subst. fsimpl. fsimpl. auto.
 (* do *)
-- intros. apply self__SimplExpr.tr_do_inv in TR. fsimpl.
-  eapply self__SimplExpr.tr_find_label_expr_stmt; eauto.
+- intros. apply tr_do_inv in TR. fsimpl.
+  eapply tr_find_label_expr_stmt; eauto.
 (* ifthenelse *)
-- intros. apply self__SimplExpr.tr_ifthenelse_inv in TR as [He|Hn].
+- intros. apply tr_ifthenelse_inv in TR as [He|Hn].
   (* ifthenelse empty *)
   + unpack He; subst.
-    assert (Hf: self__SimplExpr.S.find_label (self__SimplExpr.S.Sifthenelse e self__SimplExpr.S.Sskip self__SimplExpr.S.Sskip) lbl k = None)
+    assert (Hf: S.find_label (S.Sifthenelse e S.Sskip S.Sskip) lbl k = None)
       by (do 3 fsimpl; auto); rewrite Hf; clear Hf.
-    fsimpl. rewrite (self__SimplExpr.tr_find_label_expression ce tge lbl _ _ _ TEMP3).
+    fsimpl. rewrite (tr_find_label_expression ce tge lbl _ _ _ TEMP3).
     fsimpl. auto.
   (* ifthenelse non empty *)
   + unpack Hn; subst. rename s' into sr.
-    fsimpl. fsimpl. rewrite (self__SimplExpr.tr_find_label_expression ce tge lbl _ _ _ TEMP0).
+    fsimpl. fsimpl. rewrite (tr_find_label_expression ce tge lbl _ _ _ TEMP0).
     exploit (H ce tge lbl k); eauto.
-    destruct (self__SimplExpr.S.find_label __i lbl k) as [[s' k'] | ].
+    destruct (S.find_label __i lbl k) as [[s' k'] | ].
     * intros [ts' [tk' [A [B C]]]]. fsimpl. rewrite A. eauto.
     * intro EQ. fsimpl. rewrite EQ. eapply H0; eauto.
 (* return *)
-- intros. apply self__SimplExpr.tr_return_inv in TR. destruct o; unpack TR; subst.
+- intros. apply tr_return_inv in TR. destruct o; unpack TR; subst.
   (* return some *)
-  + fsimpl. fsimpl. rewrite (self__SimplExpr.tr_find_label_expression ce tge lbl _ _ _ TEMP1).
+  + fsimpl. fsimpl. rewrite (tr_find_label_expression ce tge lbl _ _ _ TEMP1).
     fsimpl. auto.
   (* return none *)
   + fsimpl. fsimpl. auto.
 (* label *)
-- intros. apply self__SimplExpr.tr_label_inv in TR; unpack TR; subst.
+- intros. apply tr_label_inv in TR; unpack TR; subst.
   fsimpl. fsimpl. destruct (ident_eq lbl l).
   + eauto.
   + apply H; eauto.
 (* goto *)
-- intros. apply self__SimplExpr.tr_goto_inv in TR; subst.
+- intros. apply tr_goto_inv in TR; subst.
   fsimpl. fsimpl. auto.
 
 (* nil *)
-- intros. apply self__SimplExpr.tr_ls_nil_inv in TR; subst.
+- intros. apply tr_ls_nil_inv in TR; subst.
   fsimpl. fsimpl. auto.
 (* cons *)
-- intros. apply self__SimplExpr.tr_ls_cons_inv in TR; unpack TR; subst. rename ts' into tsr.
-  fsimpl. fsimpl. exploit (H ce tge lbl (self__SimplExpr.S.Kseq (self__SimplExpr.S.seq_of_labeled_statement __i0) k)); eauto.
-  + fconstructor. apply self__SimplExpr.tr_seq_of_labeled_statement; eauto.
-  + destruct (self__SimplExpr.S.find_label __i lbl (self__SimplExpr.S.Kseq (self__SimplExpr.S.seq_of_labeled_statement __i0) k)) as [[s' k'] | ].
+- intros. apply tr_ls_cons_inv in TR; unpack TR; subst. rename ts' into tsr.
+  fsimpl. fsimpl. exploit (H ce tge lbl (S.Kseq (S.seq_of_labeled_statement __i0) k)); eauto.
+  + fconstructor. apply tr_seq_of_labeled_statement; eauto.
+  + destruct (S.find_label __i lbl (S.Kseq (S.seq_of_labeled_statement __i0) k)) as [[s' k'] | ].
     * intros [ts' [tk' [A [B C]]]]. fsimpl. rewrite A. eauto.
     * intro EQ. fsimpl. rewrite EQ. eapply H0; eauto.
 Qed. FEnd tr_find_label with tr_find_label_ls.
@@ -2448,107 +2448,107 @@ FInduction estep_simulation about S.estep
 FProof.
 all: intros; inv MS.
 (* expr *)
-- assert (self__SimplExpr.tr_expr (prog_comp_env cu) le dest r sl a tmps).
-    { inv TR. exfalso; unfold self__SimplExpr.S.is_val in n; eauto. auto. }
-  exploit self__SimplExpr.tr_simple_rvalue; eauto. destruct dest.
+- assert (tr_expr (prog_comp_env cu) le dest r sl a tmps).
+    { inv TR. exfalso; unfold S.is_val in n; eauto. auto. }
+  exploit tr_simple_rvalue; eauto. destruct dest.
   (* for value *)
   + intros [SL1 [TY1 EV1]]. subst sl.
     econstructor. split.
-    * right; split. apply star_refl. unfold self__SimplExpr.measure. fsimpl.
-      destruct (self__SimplExpr.esize r) eqn:Hs.
-      -- apply self__SimplExpr.esize_zero_val in Hs. contradiction.
+    * right; split. apply star_refl. unfold measure. fsimpl.
+      destruct (esize r) eqn:Hs.
+      -- apply esize_zero_val in Hs. contradiction.
       -- lia. 
-    * eapply self__SimplExpr.match_exprstates with (tmps := tmps); eauto.
-      apply self__SimplExpr.tr_top_val_val; auto using EV1.
+    * eapply match_exprstates with (tmps := tmps); eauto.
+      apply tr_top_val_val; auto using EV1.
   (* for effects *)
   + intros SL1. subst sl.
     econstructor. split.
-    * right; split. apply star_refl. unfold self__SimplExpr.measure. fsimpl.
-      destruct (self__SimplExpr.esize r) eqn:Hs.
-      -- apply self__SimplExpr.esize_zero_val in Hs. contradiction.
+    * right; split. apply star_refl. unfold measure. fsimpl.
+      destruct (esize r) eqn:Hs.
+      -- apply esize_zero_val in Hs. contradiction.
       -- lia.
-    * eapply self__SimplExpr.match_exprstates with (tmps := tmps); eauto.
-      apply self__SimplExpr.tr_top_base. fconstructor.
+    * eapply match_exprstates with (tmps := tmps); eauto.
+      apply tr_top_base. fconstructor.
   (* for set *)
-  + apply self__SimplExpr.match_cont_exp_no_set in MK as [].
+  + apply match_cont_exp_no_set in MK as [].
 (* seqand true *)
-- exploit self__SimplExpr.tr_top_leftcontext; eauto. clear TR.
+- exploit tr_top_leftcontext; eauto. clear TR.
   intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
   inv P.
   + (* fdiscriminate. *) apply cheat.
-  + apply self__SimplExpr.tr_seqand_inv in H0. destruct dst'; unpack H0.
+  + apply tr_seqand_inv in H0. destruct dst'; unpack H0.
     (* for value *)
-    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
-      subst sl0 sl1 a'. simpl self__SimplExpr.Kseqlist.
+    * exploit tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1 a'. simpl Kseqlist.
       eexists. { split.
       - left. eapply plus_left.
         + fconstructor.
         + eapply star_trans.
-          * apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
-          * apply self__SimplExpr.push_seq.
+          * apply step_makeif with (b := true) (v1 := v); auto. congruence.
+          * apply push_seq.
           * reflexivity.
         + reflexivity.
-      - rewrite <- self__SimplExpr.Kseqlist_app.
-        eapply self__SimplExpr.match_exprstates; eauto.
+      - rewrite <- Kseqlist_app.
+        eapply match_exprstates; eauto.
         apply S.
-        + apply self__SimplExpr.tr_paren_val with (a1 := a2); auto.
-          apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+        + apply tr_paren_val with (a1 := a2); auto.
+          apply tr_expr_monotone with tmp2; eauto.
         + auto.
         + do 2 fsimpl. auto. }
     (* for effects *)
-    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
-      subst sl0 sl1. simpl self__SimplExpr.Kseqlist.
+    * exploit tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl Kseqlist.
       eexists. { split.
       - left. eapply plus_left.
         + fconstructor.
         + eapply star_trans.
-          * apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
-          * apply self__SimplExpr.push_seq.
+          * apply step_makeif with (b := true) (v1 := v); auto. congruence.
+          * apply push_seq.
           * reflexivity.
         + reflexivity.
-      - rewrite <- self__SimplExpr.Kseqlist_app.
-        eapply self__SimplExpr.match_exprstates; eauto.
+      - rewrite <- Kseqlist_app.
+        eapply match_exprstates; eauto.
         apply S.
-        + apply self__SimplExpr.tr_paren_effects with (a1 := a2); auto.
-          apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+        + apply tr_paren_effects with (a1 := a2); auto.
+          apply tr_expr_monotone with tmp2; eauto.
         + auto.
         + do 2 fsimpl. auto. }
     (* for set *)
-    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
-      subst sl0 sl1. simpl self__SimplExpr.Kseqlist.
+    * exploit tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl Kseqlist.
       eexists. { split.
       - left. eapply plus_left.
         + fconstructor.
         + eapply star_trans.
-          * apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
-          * apply self__SimplExpr.push_seq.
+          * apply step_makeif with (b := true) (v1 := v); auto. congruence.
+          * apply push_seq.
           * reflexivity.
         + reflexivity.
-      - rewrite <- self__SimplExpr.Kseqlist_app.
-        eapply self__SimplExpr.match_exprstates; eauto.
+      - rewrite <- Kseqlist_app.
+        eapply match_exprstates; eauto.
         apply S.
-        + apply self__SimplExpr.tr_paren_set with (a1 := a2) (t := t); auto.
-          apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+        + apply tr_paren_set with (a1 := a2) (t := t); auto.
+          apply tr_expr_monotone with tmp2; eauto.
         + auto.
         + do 2 fsimpl. auto. }
 (* seqand false *)       
-- exploit self__SimplExpr.tr_top_leftcontext; eauto. clear TR.
+- exploit tr_top_leftcontext; eauto. clear TR.
   intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
   inv P.
   + (* fdiscriminate. *) apply cheat.
-  + apply self__SimplExpr.tr_seqand_inv in H0. destruct dst'; unpack H0.
+  + apply tr_seqand_inv in H0. destruct dst'; unpack H0.
     (* for value *)
-    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
-      subst sl0 sl1 a'. simpl self__SimplExpr.Kseqlist.
+    * exploit tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1 a'. simpl Kseqlist.
       eexists. { split.
       - left. eapply plus_left.
         + fconstructor.
         + eapply star_trans.
-          * apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
+          * apply step_makeif with (b := false) (v1 := v); auto. congruence.
           * apply star_one. fconstructor. fconstructor.
           * reflexivity.
         + reflexivity.
-      - eapply self__SimplExpr.match_exprstates; eauto.
+      - eapply match_exprstates; eauto.
         change sl2 with (nil ++ sl2). apply S.
         + fconstructor.
           * fsimpl. auto.
@@ -2556,31 +2556,31 @@ all: intros; inv MS.
         + intros. apply PTree.gso. congruence.
         + do 2 fsimpl. auto. }
     (* for effects *)
-    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
-      subst sl0 sl1. simpl self__SimplExpr.Kseqlist.
+    * exploit tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl Kseqlist.
       eexists. { split.
       - left. eapply plus_left.
         + fconstructor.
-        + apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
+        + apply step_makeif with (b := false) (v1 := v); auto. congruence.
         + reflexivity.
-      - eapply self__SimplExpr.match_exprstates; eauto.
+      - eapply match_exprstates; eauto.
         change sl2 with (nil ++ sl2). apply S.
         + fconstructor.
         + auto.
         + do 2 fsimpl. auto. }
     (* for set *)
-    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
-      subst sl0 sl1. simpl self__SimplExpr.Kseqlist.
+    * exploit tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl Kseqlist.
       eexists. { split.
       - left. eapply plus_left.
         + fconstructor.
         + eapply star_trans.
-          * apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
-          * apply self__SimplExpr.push_seq.
+          * apply step_makeif with (b := false) (v1 := v); auto. congruence.
+          * apply push_seq.
           * reflexivity.
         + reflexivity.
-      - rewrite <- self__SimplExpr.Kseqlist_app.
-        eapply self__SimplExpr.match_exprstates; eauto.
+      - rewrite <- Kseqlist_app.
+        eapply match_exprstates; eauto.
         apply S.
         + fconstructor.
           * fsimpl. auto.
@@ -2588,23 +2588,23 @@ all: intros; inv MS.
         + auto.
         + do 2 fsimpl. auto. }
 (* seqor true *)
-- exploit self__SimplExpr.tr_top_leftcontext; eauto. clear TR.
+- exploit tr_top_leftcontext; eauto. clear TR.
   intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
   inv P.
   + (* fdiscriminate. *) apply cheat.
-  + apply self__SimplExpr.tr_seqor_inv in H0. destruct dst'; unpack H0.
+  + apply tr_seqor_inv in H0. destruct dst'; unpack H0.
     (* for value *)
-    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
-      subst sl0 sl1 a'. simpl self__SimplExpr.Kseqlist.
+    * exploit tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1 a'. simpl Kseqlist.
       eexists. { split.
       - left. eapply plus_left.
         + fconstructor.
         + eapply star_trans.
-          * apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
+          * apply step_makeif with (b := true) (v1 := v); auto. congruence.
           * apply star_one. fconstructor. fconstructor.
           * reflexivity.
         + reflexivity.
-      - eapply self__SimplExpr.match_exprstates; eauto.
+      - eapply match_exprstates; eauto.
         change sl2 with (nil ++ sl2). apply S.
         + fconstructor.
           * fsimpl. auto.
@@ -2612,31 +2612,31 @@ all: intros; inv MS.
         + intros. apply PTree.gso. congruence.
         + do 2 fsimpl. auto. }
     (* for effects *)
-    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
-      subst sl0 sl1. simpl self__SimplExpr.Kseqlist.
+    * exploit tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl Kseqlist.
       eexists. { split.
       - left. eapply plus_left.
         + fconstructor.
-        + apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
+        + apply step_makeif with (b := true) (v1 := v); auto. congruence.
         + reflexivity.
-      - eapply self__SimplExpr.match_exprstates; eauto.
+      - eapply match_exprstates; eauto.
         change sl2 with (nil ++ sl2). apply S.
         + fconstructor.
         + auto.
         + do 2 fsimpl. auto. }
     (* for set *)
-    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
-      subst sl0 sl1. simpl self__SimplExpr.Kseqlist.
+    * exploit tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl Kseqlist.
       eexists. { split.
       - left. eapply plus_left.
         + fconstructor.
         + eapply star_trans.
-          * apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
-          * apply self__SimplExpr.push_seq.
+          * apply step_makeif with (b := true) (v1 := v); auto. congruence.
+          * apply push_seq.
           * reflexivity.
         + reflexivity.
-      - rewrite <- self__SimplExpr.Kseqlist_app.
-        eapply self__SimplExpr.match_exprstates; eauto.
+      - rewrite <- Kseqlist_app.
+        eapply match_exprstates; eauto.
         apply S.
         + fconstructor.
           * fsimpl. auto.
@@ -2644,205 +2644,205 @@ all: intros; inv MS.
         + auto.
         + do 2 fsimpl. auto. }
 (* seqor false *)
-- exploit self__SimplExpr.tr_top_leftcontext; eauto. clear TR.
+- exploit tr_top_leftcontext; eauto. clear TR.
   intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
   inv P.
   + (* fdiscriminate. *) apply cheat.
-  + apply self__SimplExpr.tr_seqor_inv in H0. destruct dst'; unpack H0.
+  + apply tr_seqor_inv in H0. destruct dst'; unpack H0.
     (* for value *)
-    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
-      subst sl0 sl1 a'. simpl self__SimplExpr.Kseqlist.
+    * exploit tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1 a'. simpl Kseqlist.
       eexists. { split.
       - left. eapply plus_left.
         + fconstructor.
         + eapply star_trans.
-          * apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
-          * apply self__SimplExpr.push_seq.
+          * apply step_makeif with (b := false) (v1 := v); auto. congruence.
+          * apply push_seq.
           * reflexivity.
         + reflexivity.
-      - rewrite <- self__SimplExpr.Kseqlist_app.
-        eapply self__SimplExpr.match_exprstates; eauto.
+      - rewrite <- Kseqlist_app.
+        eapply match_exprstates; eauto.
         apply S.
-        + apply self__SimplExpr.tr_paren_val with (a1 := a2); auto.
-          apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+        + apply tr_paren_val with (a1 := a2); auto.
+          apply tr_expr_monotone with tmp2; eauto.
         + auto.
         + do 2 fsimpl. auto. }
     (* for effects *)
-    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
-      subst sl0 sl1. simpl self__SimplExpr.Kseqlist.
+    * exploit tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl Kseqlist.
       eexists. { split.
       - left. eapply plus_left.
         + fconstructor.
         + eapply star_trans.
-          * apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
-          * apply self__SimplExpr.push_seq.
+          * apply step_makeif with (b := false) (v1 := v); auto. congruence.
+          * apply push_seq.
           * reflexivity.
         + reflexivity.
-      - rewrite <- self__SimplExpr.Kseqlist_app.
-        eapply self__SimplExpr.match_exprstates; eauto.
+      - rewrite <- Kseqlist_app.
+        eapply match_exprstates; eauto.
         apply S.
-        + apply self__SimplExpr.tr_paren_effects with (a1 := a2); auto.
-          apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+        + apply tr_paren_effects with (a1 := a2); auto.
+          apply tr_expr_monotone with tmp2; eauto.
         + auto.
         + do 2 fsimpl. auto. }
     (* for set *)
-    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
-      subst sl0 sl1. simpl self__SimplExpr.Kseqlist.
+    * exploit tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl Kseqlist.
       eexists. { split.
       - left. eapply plus_left.
         + fconstructor.
         + eapply star_trans.
-          * apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
-          * apply self__SimplExpr.push_seq.
+          * apply step_makeif with (b := false) (v1 := v); auto. congruence.
+          * apply push_seq.
           * reflexivity.
         + reflexivity.
-      - rewrite <- self__SimplExpr.Kseqlist_app.
-        eapply self__SimplExpr.match_exprstates; eauto.
+      - rewrite <- Kseqlist_app.
+        eapply match_exprstates; eauto.
         apply S.
-        + apply self__SimplExpr.tr_paren_set with (a1 := a2) (t := t); auto.
-          apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+        + apply tr_paren_set with (a1 := a2) (t := t); auto.
+          apply tr_expr_monotone with tmp2; eauto.
         + auto.
         + do 2 fsimpl. auto. }
 (* condition *)
-- exploit self__SimplExpr.tr_top_leftcontext; eauto. clear TR.
+- exploit tr_top_leftcontext; eauto. clear TR.
   intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
   inv P.
   + (* fdiscriminate. *) apply cheat.
-  + apply self__SimplExpr.tr_condition_inv in H0. destruct dst'; unpack H0.
+  + apply tr_condition_inv in H0. destruct dst'; unpack H0.
     (* for value *)
-    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
-      subst sl0 sl1 a'. simpl self__SimplExpr.Kseqlist. destruct b.
+    * exploit tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1 a'. simpl Kseqlist. destruct b.
       -- eexists. { split.
         - left. eapply plus_left.
           + fconstructor.
           + eapply star_trans.
-            * apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
-            * apply self__SimplExpr.push_seq.
+            * apply step_makeif with (b := true) (v1 := v); auto. congruence.
+            * apply push_seq.
             * reflexivity.
           + reflexivity.
-        - rewrite <- self__SimplExpr.Kseqlist_app.
-          eapply self__SimplExpr.match_exprstates; eauto.
+        - rewrite <- Kseqlist_app.
+          eapply match_exprstates; eauto.
           apply S.
-          + apply self__SimplExpr.tr_paren_val with (a1 := a2); auto.
-            apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+          + apply tr_paren_val with (a1 := a2); auto.
+            apply tr_expr_monotone with tmp2; eauto.
           + auto.
           + do 2 fsimpl. auto. }
       -- eexists. { split.
         - left. eapply plus_left.
           + fconstructor.
           + eapply star_trans.
-            * apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
-            * apply self__SimplExpr.push_seq.
+            * apply step_makeif with (b := false) (v1 := v); auto. congruence.
+            * apply push_seq.
             * reflexivity.
           + reflexivity.
-        - rewrite <- self__SimplExpr.Kseqlist_app.
-          eapply self__SimplExpr.match_exprstates; eauto.
+        - rewrite <- Kseqlist_app.
+          eapply match_exprstates; eauto.
           apply S.
-          + apply self__SimplExpr.tr_paren_val with (a1 := a3); auto.
-            apply self__SimplExpr.tr_expr_monotone with tmp3; eauto.
+          + apply tr_paren_val with (a1 := a3); auto.
+            apply tr_expr_monotone with tmp3; eauto.
           + auto.
           + do 2 fsimpl. auto. }
     (* for effects *)
-    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
-      subst sl0 sl1. simpl self__SimplExpr.Kseqlist. destruct b.
+    * exploit tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl Kseqlist. destruct b.
       -- eexists. { split.
         - left. eapply plus_left.
           + fconstructor.
           + eapply star_trans.
-            * apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
-            * apply self__SimplExpr.push_seq.
+            * apply step_makeif with (b := true) (v1 := v); auto. congruence.
+            * apply push_seq.
             * reflexivity.
           + reflexivity.
-        - rewrite <- self__SimplExpr.Kseqlist_app.
-          eapply self__SimplExpr.match_exprstates; eauto.
+        - rewrite <- Kseqlist_app.
+          eapply match_exprstates; eauto.
           apply S.
-          + apply self__SimplExpr.tr_paren_effects with (a1 := a2); auto.
-            apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+          + apply tr_paren_effects with (a1 := a2); auto.
+            apply tr_expr_monotone with tmp2; eauto.
           + auto.
           + do 2 fsimpl. auto. }
       -- eexists. { split.
         - left. eapply plus_left.
           + fconstructor.
           + eapply star_trans.
-            * apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
-            * apply self__SimplExpr.push_seq.
+            * apply step_makeif with (b := false) (v1 := v); auto. congruence.
+            * apply push_seq.
             * reflexivity.
           + reflexivity.
-        - rewrite <- self__SimplExpr.Kseqlist_app.
-          eapply self__SimplExpr.match_exprstates; eauto.
+        - rewrite <- Kseqlist_app.
+          eapply match_exprstates; eauto.
           apply S.
-          + apply self__SimplExpr.tr_paren_effects with (a1 := a3); auto.
-            apply self__SimplExpr.tr_expr_monotone with tmp3; eauto.
+          + apply tr_paren_effects with (a1 := a3); auto.
+            apply tr_expr_monotone with tmp3; eauto.
           + auto.
           + do 2 fsimpl. auto. }
     (* for set *)
-    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [SL [TY EV]].
-      subst sl0 sl1. simpl self__SimplExpr.Kseqlist. destruct b.
+    * exploit tr_simple_rvalue; eauto. intros [SL [TY EV]].
+      subst sl0 sl1. simpl Kseqlist. destruct b.
       -- eexists. { split.
         - left. eapply plus_left.
           + fconstructor.
           + eapply star_trans.
-            * apply self__SimplExpr.step_makeif with (b := true) (v1 := v); auto. congruence.
-            * apply self__SimplExpr.push_seq.
+            * apply step_makeif with (b := true) (v1 := v); auto. congruence.
+            * apply push_seq.
             * reflexivity.
           + reflexivity.
-        - rewrite <- self__SimplExpr.Kseqlist_app.
-          eapply self__SimplExpr.match_exprstates; eauto.
+        - rewrite <- Kseqlist_app.
+          eapply match_exprstates; eauto.
           apply S.
-          + apply self__SimplExpr.tr_paren_set with (a1 := a2) (t := t); auto.
-            apply self__SimplExpr.tr_expr_monotone with tmp2; eauto.
+          + apply tr_paren_set with (a1 := a2) (t := t); auto.
+            apply tr_expr_monotone with tmp2; eauto.
           + auto.
           + do 2 fsimpl. auto. }
       -- eexists. { split.
         - left. eapply plus_left.
           + fconstructor.
           + eapply star_trans.
-            * apply self__SimplExpr.step_makeif with (b := false) (v1 := v); auto. congruence.
-            * apply self__SimplExpr.push_seq.
+            * apply step_makeif with (b := false) (v1 := v); auto. congruence.
+            * apply push_seq.
             * reflexivity.
           + reflexivity.
-        - rewrite <- self__SimplExpr.Kseqlist_app.
-          eapply self__SimplExpr.match_exprstates; eauto.
+        - rewrite <- Kseqlist_app.
+          eapply match_exprstates; eauto.
           apply S.
-          + apply self__SimplExpr.tr_paren_set with (a1 := a3) (t := t); auto.
-            apply self__SimplExpr.tr_expr_monotone with tmp3; eauto.
+          + apply tr_paren_set with (a1 := a3) (t := t); auto.
+            apply tr_expr_monotone with tmp3; eauto.
           + auto.
           + do 2 fsimpl. auto. }
 (* comma *)
-- exploit self__SimplExpr.tr_top_leftcontext; eauto. clear TR.
+- exploit tr_top_leftcontext; eauto. clear TR.
   intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
   inv P.
   + (* fdiscriminate. *) apply cheat.
-  + apply self__SimplExpr.tr_comma_inv in H0. unpack H0.
-    exploit self__SimplExpr.tr_simple_rvalue; eauto. simpl; intro SL1.
-    subst sl0 sl1; simpl self__SimplExpr.Kseqlist.
+  + apply tr_comma_inv in H0. unpack H0.
+    exploit tr_simple_rvalue; eauto. simpl; intro SL1.
+    subst sl0 sl1; simpl Kseqlist.
     eexists. { split.
     - right. split.
       + apply star_refl.
       + rewrite <- Nat.succ_lt_mono.
-        apply (self__SimplExpr.leftcontext_size _ _ _ l). fsimpl. lia.
-    - eapply self__SimplExpr.match_exprstates; eauto.
+        apply (leftcontext_size _ _ _ l). fsimpl. lia.
+    - eapply match_exprstates; eauto.
       apply S.
-      + eapply self__SimplExpr.tr_expr_monotone; eauto.
+      + eapply tr_expr_monotone; eauto.
       + auto.
       + fsimpl. auto. }
 (* paren *)
-- exploit self__SimplExpr.tr_top_leftcontext; eauto. clear TR.
+- exploit tr_top_leftcontext; eauto. clear TR.
   intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
   inv P.
   + (* fdiscriminate. *) apply cheat.
-  + apply self__SimplExpr.tr_paren_inv in H0. destruct dst'; unpack H0.
+  + apply tr_paren_inv in H0. destruct dst'; unpack H0.
     (* for value *)
-    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [b [SL1 [TY1 EV1]]].
-      subst sl1 a'; simpl self__SimplExpr.Kseqlist.
+    * exploit tr_simple_rvalue; eauto. intros [b [SL1 [TY1 EV1]]].
+      subst sl1 a'; simpl Kseqlist.
       eexists. { split.
         - left. eapply plus_left.
           + fconstructor.
           + apply star_one. fconstructor. fconstructor.
             rewrite <- TY1; eauto.
           + reflexivity.
-        - eapply self__SimplExpr.match_exprstates; eauto.
-          change sl2 with (self__SimplExpr.final self__SimplExpr.For_val (self__SimplExpr.T.Etempvar t (self__SimplExpr.S.typeof r)) ++ sl2).
+        - eapply match_exprstates; eauto.
+          change sl2 with (final For_val (T.Etempvar t (S.typeof r)) ++ sl2).
           apply S.
           + fconstructor.
             * fsimpl. auto.
@@ -2854,24 +2854,24 @@ all: intros; inv MS.
       - right. split.
         + apply star_refl.
         + simpl. rewrite <- Nat.succ_lt_mono.
-          apply (self__SimplExpr.leftcontext_size _ _ _ l). do 2 fsimpl. lia.
-      - eapply self__SimplExpr.match_exprstates; eauto.
-        exploit self__SimplExpr.tr_simple_rvalue; eauto.
+          apply (leftcontext_size _ _ _ l). do 2 fsimpl. lia.
+      - eapply match_exprstates; eauto.
+        exploit tr_simple_rvalue; eauto.
         simpl. intros A. subst sl1.
         apply S.
         + fconstructor.
         + auto.
         + do 2 fsimpl. auto. }
     (* for set *)
-    * exploit self__SimplExpr.tr_simple_rvalue; eauto. intros [b [SL1 [TY1 EV1]]].
-      subst sl1; simpl self__SimplExpr.Kseqlist.
+    * exploit tr_simple_rvalue; eauto. intros [b [SL1 [TY1 EV1]]].
+      subst sl1; simpl Kseqlist.
       eexists. { split.
         - left. eapply plus_left.
           + fconstructor.
           + apply star_one. fconstructor. fconstructor.
             rewrite <- TY1; eauto.
           + reflexivity.
-        - eapply self__SimplExpr.match_exprstates; eauto.
+        - eapply match_exprstates; eauto.
           apply S.
           + fconstructor.
             * fsimpl. auto.
@@ -2882,12 +2882,12 @@ Qed. FEnd estep_simulation.
 
 FLemma tr_top_val_for_val_inv:
   forall tge ce e le m v ty sl a tmps,
-  tr_top ce tge e le m self__SimplExpr.For_val (S.Eval v ty) sl a tmps ->
+  tr_top ce tge e le m For_val (S.Eval v ty) sl a tmps ->
   sl = nil /\ T.typeof a = ty /\ T.eval_expr tge e le m a v.
 FProofLemma.
   intros. inv H.
   - (* finjection H0. *) apply cheat.
-  - apply self__SimplExpr.tr_val_inv in H0. intuition.
+  - apply tr_val_inv in H0. intuition.
 Qed. CloseFLemma.
 
 FLemma alloc_variables_preserved:
@@ -2897,7 +2897,7 @@ FLemma alloc_variables_preserved:
   T.alloc_variables tge e m params e' m'.
 FProofLemma.
   intros. induction H2; econstructor; eauto.
-  rewrite (self__SimplExpr.comp_env_preserved prog tprog ge tge); auto.
+  rewrite (comp_env_preserved prog tprog ge tge); auto.
 Qed. CloseFLemma.
 
 FLemma bind_parameters_preserved:
@@ -2907,19 +2907,19 @@ FLemma bind_parameters_preserved:
   T.bind_parameters tge e m params args m'.
 FProofLemma.
 intros. induction H2; econstructor; eauto. inversion H3. subst v m' v1. clear H3.
-- eapply self__SimplExpr.T.assign_loc_value; eauto.
-- inv H7. eapply self__SimplExpr.T.assign_loc_value; eauto.
-- rewrite <- (self__SimplExpr.comp_env_preserved prog tprog ge tge) in *; try assumption.
-  eapply self__SimplExpr.T.assign_loc_copy; eauto.
+- eapply T.assign_loc_value; eauto.
+- inv H7. eapply T.assign_loc_value; eauto.
+- rewrite <- (comp_env_preserved prog tprog ge tge) in *; try assumption.
+  eapply T.assign_loc_copy; eauto.
 Qed. CloseFLemma.
 
 FLemma blocks_of_env_preserved:
   forall prog tprog ge tge, match_prog prog tprog -> S.globalenv prog = ge -> T.globalenv tprog = tge ->
   forall e, T.blocks_of_env tge e = S.blocks_of_env ge e.
 FProofLemma.
-  intros; unfold self__SimplExpr.T.blocks_of_env, self__SimplExpr.S.blocks_of_env.
-  unfold self__SimplExpr.T.block_of_binding, self__SimplExpr.S.block_of_binding.
-  rewrite (self__SimplExpr.comp_env_preserved prog tprog ge tge); auto.
+  intros; unfold T.blocks_of_env, S.blocks_of_env.
+  unfold T.block_of_binding, S.block_of_binding.
+  rewrite (comp_env_preserved prog tprog ge tge); auto.
 Qed. CloseFLemma.
 
 FInduction sstep_simulation about S.sstep 
@@ -2933,42 +2933,42 @@ FInduction sstep_simulation about S.sstep
 FProof.
 all: intros; inv MS.
 (* do 1 *)
-- apply self__SimplExpr.tr_do_inv in TR. inv TR.
+- apply tr_do_inv in TR. inv TR.
   eexists. split.
-  + right. split. apply self__SimplExpr.push_seq. simpl. fsimpl. lia.
+  + right. split. apply push_seq. simpl. fsimpl. lia.
   + econstructor; eauto. fconstructor.
 (* do 2 *)
-- apply self__SimplExpr.match_cont_exp_do_inv in MK as []; subst. inv TR.
-  apply self__SimplExpr.tr_val_inv in H0; subst.
+- apply match_cont_exp_do_inv in MK as []; subst. inv TR.
+  apply tr_val_inv in H0; subst.
   eexists. split.
   + right. split. apply star_refl. simpl. fsimpl. lia.
   + econstructor; eauto. fconstructor.
 (* seq *)
-- apply self__SimplExpr.tr_seq_inv in TR; unpack TR; subst.
+- apply tr_seq_inv in TR; unpack TR; subst.
   eexists. split.
   + left. apply plus_one. fconstructor.
   + econstructor; eauto. fconstructor.
 (* skip seq *)
-- apply self__SimplExpr.tr_skip_inv in TR; subst.
-  apply self__SimplExpr.match_cont_seq_inv in MK; unpack MK; subst.
+- apply tr_skip_inv in TR; subst.
+  apply match_cont_seq_inv in MK; unpack MK; subst.
   eexists. split.
   + left. apply plus_one. fconstructor.
   + econstructor; eauto.
 (* ifthenelse *)
-- apply self__SimplExpr.tr_ifthenelse_inv in TR as [He|Hn].
+- apply tr_ifthenelse_inv in TR as [He|Hn].
   (* ifthenelse empty *)
   + unpack He. inv TEMP3. eexists. split.
-    * left. eapply plus_left. fconstructor. apply self__SimplExpr.push_seq. auto.
+    * left. eapply plus_left. fconstructor. apply push_seq. auto.
     * econstructor; eauto. fconstructor.
   (* ifthenelse non empty *)
   + unpack Hn. inv TEMP0. eexists. split.
-    * left. eapply plus_left. fconstructor. apply self__SimplExpr.push_seq. auto.
+    * left. eapply plus_left. fconstructor. apply push_seq. auto.
     * econstructor; eauto. fconstructor. 
 (* ifthenelse *)
-- apply self__SimplExpr.match_cont_exp_ifthenelse_inv in MK as [He|Hn].
+- apply match_cont_exp_ifthenelse_inv in MK as [He|Hn].
   (* ifthenelse empty *)
   + unpack He; subst.
-    exploit self__SimplExpr.tr_top_val_for_val_inv; eauto. intros [A [B C]]. subst.
+    exploit tr_top_val_for_val_inv; eauto. intros [A [B C]]. subst.
     eexists. split.
     * right. destruct b; split; do 2 (simpl; fsimpl); auto.
       -- eapply star_left. fconstructor. constructor. auto.
@@ -2976,49 +2976,49 @@ all: intros; inv MS.
     * destruct b; econstructor; eauto; fconstructor.
   (* ifthenelse non empty *)
   + unpack Hn; subst.
-    exploit self__SimplExpr.tr_top_val_for_val_inv; eauto. intros [A [B C]]. subst.
+    exploit tr_top_val_for_val_inv; eauto. intros [A [B C]]. subst.
     eexists. split.
     * left. eapply plus_two. fconstructor. fconstructor. auto.
     * destruct b; econstructor; eauto.
 (* return none *)
-- apply self__SimplExpr.tr_return_inv in TR; subst.
+- apply tr_return_inv in TR; subst.
   eexists. split.
-  + left. apply plus_one. fconstructor. erewrite self__SimplExpr.blocks_of_env_preserved; eauto.
-  + econstructor. intros. eapply self__SimplExpr.match_cont_call_cont; eauto.
+  + left. apply plus_one. fconstructor. erewrite blocks_of_env_preserved; eauto.
+  + econstructor. intros. eapply match_cont_call_cont; eauto.
 (* return some 1 *)
-- apply self__SimplExpr.tr_return_inv in TR; unpack TR; subst. inv TEMP1.
+- apply tr_return_inv in TR; unpack TR; subst. inv TEMP1.
   eexists. split.
-  + left. eapply plus_left. fconstructor. apply self__SimplExpr.push_seq. auto.
+  + left. eapply plus_left. fconstructor. apply push_seq. auto.
   + econstructor; eauto. fconstructor.
 (* return some 2 *)
-- apply self__SimplExpr.match_cont_exp_return_inv in MK; unpack MK; subst.
-  exploit self__SimplExpr.tr_top_val_for_val_inv; eauto. intros [A [B C]]. subst.
+- apply match_cont_exp_return_inv in MK; unpack MK; subst.
+  exploit tr_top_val_for_val_inv; eauto. intros [A [B C]]. subst.
   eexists. split.
   + left. eapply plus_two.
     -- fconstructor.
-    -- fconstructor. erewrite self__SimplExpr.function_return_preserved; eauto.
-      erewrite self__SimplExpr.blocks_of_env_preserved; eauto.
+    -- fconstructor. erewrite function_return_preserved; eauto.
+      erewrite blocks_of_env_preserved; eauto.
     -- auto.
-  + econstructor. intros. eapply self__SimplExpr.match_cont_call_cont; eauto.
+  + econstructor. intros. eapply match_cont_call_cont; eauto.
 (* skip return *)
-- apply self__SimplExpr.tr_skip_inv in TR; subst.
-  assert (self__SimplExpr.T.is_call_cont tk). { eapply self__SimplExpr.is_call_cont_preserved; eauto. }
+- apply tr_skip_inv in TR; subst.
+  assert (T.is_call_cont tk). { eapply is_call_cont_preserved; eauto. }
   eexists. split.
   + left. apply plus_one. fconstructor.
-    erewrite self__SimplExpr.blocks_of_env_preserved; eauto.
-  + econstructor. intros. eapply self__SimplExpr.match_cont_is_call_cont; eauto.
+    erewrite blocks_of_env_preserved; eauto.
+  + econstructor. intros. eapply match_cont_is_call_cont; eauto.
 (* label *)
-- apply self__SimplExpr.tr_label_inv in TR; unpack TR; subst.
+- apply tr_label_inv in TR; unpack TR; subst.
   eexists. split.
   + left. apply plus_one. fconstructor.
   + econstructor; eauto.
 (* goto *)
-- apply self__SimplExpr.tr_goto_inv in TR; unpack TR; subst.
+- apply tr_goto_inv in TR; unpack TR; subst.
   inversion TRF; subst.
-  exploit self__SimplExpr.tr_find_label.
-  + refine (self__SimplExpr.T.globalenv tprog).
+  exploit tr_find_label.
+  + refine (T.globalenv tprog).
   + eauto.
-  + eapply self__SimplExpr.match_cont_call_cont; eauto.
+  + eapply match_cont_call_cont; eauto.
   + rewrite e0. intros [ts' [tk' [A [B C]]]]. eexists. split.
     * left. apply plus_one. fconstructor.
     * econstructor; eauto.
@@ -3028,8 +3028,8 @@ all: intros; inv MS.
   + left. apply plus_one. fconstructor.
     red. econstructor.
     * rewrite H4, H5. auto.
-    * rewrite H4, H5. eapply self__SimplExpr.alloc_variables_preserved; eauto.
-    * rewrite H4. eapply self__SimplExpr.bind_parameters_preserved; eauto.
+    * rewrite H4, H5. eapply alloc_variables_preserved; eauto.
+    * rewrite H4. eapply bind_parameters_preserved; eauto.
     * eauto.
   + econstructor; eauto.
 Qed. FEnd sstep_simulation.
@@ -3044,8 +3044,8 @@ FLemma simulation :
      /\ match_states tge S2 T2).
 FProofLemma.
 intros ge S1 t S2 STEP. destruct STEP.
-- apply self__SimplExpr.estep_simulation; auto.
-- apply self__SimplExpr.sstep_simulation; auto.
+- apply estep_simulation; auto.
+- apply sstep_simulation; auto.
 Qed. CloseFLemma.
 
 FEnd SimplExpr.
@@ -3065,11 +3065,11 @@ FEnd find_label with find_label_ls.
 
 FInductive sstep : genv -> state -> trace -> state -> Prop :=
 | step_continue_seq : forall ge f s k e m,
-    sstep ge (self__C_Sbreak_Scontinue.State f Scontinue (Kseq s k) e m)
-        E0 (self__C_Sbreak_Scontinue.State f Scontinue k e m)
+    sstep ge (State f Scontinue (Kseq s k) e m)
+        E0 (State f Scontinue k e m)
 | step_break_seq : forall ge f s k e m,
-    sstep ge (self__C_Sbreak_Scontinue.State f Sbreak (Kseq s k) e m)
-        E0 (self__C_Sbreak_Scontinue.State f Sbreak k e m).
+    sstep ge (State f Sbreak (Kseq s k) e m)
+        E0 (State f Sbreak k e m).
 FEnd C_Sbreak_Scontinue.
 
 Family C extends C_Sbreak_Scontinue.
@@ -3086,11 +3086,11 @@ FEnd find_label with find_label_ls.
 
 FInductive step : genv -> state -> trace -> state -> Prop :=
 | step_continue_seq: forall ge f s k e le m,
-    step ge (self__Clight_Sbreak_Scontinue.State f Scontinue (Kseq s k) e le m)
-      E0 (self__Clight_Sbreak_Scontinue.State f Scontinue k e le m)
+    step ge (State f Scontinue (Kseq s k) e le m)
+      E0 (State f Scontinue k e le m)
 | step_break_seq: forall ge f s k e le m,
-    step ge (self__Clight_Sbreak_Scontinue.State f Sbreak (Kseq s k) e le m)
-      E0 (self__Clight_Sbreak_Scontinue.State f Sbreak k e le m).
+    step ge (State f Sbreak (Kseq s k) e le m)
+      E0 (State f Sbreak k e le m).
 FEnd Clight_Sbreak_Scontinue.
 
 Family Clight extends Clight_Sbreak_Scontinue.
@@ -3127,25 +3127,25 @@ FLemma tr_find_label_if:
   forall k, T.find_label s lbl k = None.
 FProofLemma.
   intros. inv H.
-  assert (self__SimplExpr_Sbreak_Scontinue.nolabel lbl
-    (self__SimplExpr_Sbreak_Scontinue.makeseq
-      (sl ++ self__SimplExpr_Sbreak_Scontinue.makeif a self__SimplExpr_Sbreak_Scontinue.T.Sskip self__SimplExpr_Sbreak_Scontinue.T.Sbreak :: nil))).
-  apply self__SimplExpr_Sbreak_Scontinue.makeseq_nolabel.
-  apply self__SimplExpr_Sbreak_Scontinue.nolabel_list_app.
-  eapply self__SimplExpr_Sbreak_Scontinue.tr_find_label_top with
-    (e := self__SimplExpr_Sbreak_Scontinue.T.empty_env) (le := PTree.empty val) (m := Mem.empty) (tge := tge).
+  assert (nolabel lbl
+    (makeseq
+      (sl ++ makeif a T.Sskip T.Sbreak :: nil))).
+  apply makeseq_nolabel.
+  apply nolabel_list_app.
+  eapply tr_find_label_top with
+    (e := T.empty_env) (le := PTree.empty val) (m := Mem.empty) (tge := tge).
   eauto.
-  simpl; split; auto. apply self__SimplExpr_Sbreak_Scontinue.makeif_nolabel. red; fsimpl; auto. red; fsimpl; auto.
+  simpl; split; auto. apply makeif_nolabel. red; fsimpl; auto. red; fsimpl; auto.
   apply H.
 Qed. CloseFLemma.
 
 FInduction tr_find_label with tr_find_label_ls.
 FProof.
 (* break *)
-- intros. apply self__SimplExpr_Sbreak_Scontinue.tr_break_inv in TR; subst.
+- intros. apply tr_break_inv in TR; subst.
   fsimpl. fsimpl. auto.
 (* continue *)
-- intros. apply self__SimplExpr_Sbreak_Scontinue.tr_continue_inv in TR; subst.
+- intros. apply tr_continue_inv in TR; subst.
   fsimpl. fsimpl. auto.
 Qed. FEnd tr_find_label with tr_find_label_ls.
 
@@ -3157,14 +3157,14 @@ FInduction sstep_simulation.
 FProof.
 all: intros; inv MS.
 (* continue seq *)
-- apply self__SimplExpr_Sbreak_Scontinue.tr_continue_inv in TR; subst.
-  apply self__SimplExpr_Sbreak_Scontinue.match_cont_seq_inv in MK; unpack MK; subst.
+- apply tr_continue_inv in TR; subst.
+  apply match_cont_seq_inv in MK; unpack MK; subst.
   eexists. split.
   + left. apply plus_one. fconstructor.
   + econstructor; eauto. fconstructor.
 (* break seq *)
-- apply self__SimplExpr_Sbreak_Scontinue.tr_break_inv in TR; subst.
-  apply self__SimplExpr_Sbreak_Scontinue.match_cont_seq_inv in MK; unpack MK; subst.
+- apply tr_break_inv in TR; subst.
+  apply match_cont_seq_inv in MK; unpack MK; subst.
   eexists. split.
   + left. apply plus_one. fconstructor.
   + econstructor; eauto. fconstructor.
@@ -3202,23 +3202,23 @@ FEnd find_label with find_label_ls.
 
 FInductive sstep : genv -> state -> trace -> state -> Prop :=
 | step_while : forall ge f x s k e m,
-    sstep ge (self__C_Swhile.State f (Swhile x s) k e m)
-      E0 (self__C_Swhile.ExprState f x (Kwhile1 x s k) e m)
+    sstep ge (State f (Swhile x s) k e m)
+      E0 (ExprState f x (Kwhile1 x s k) e m)
 | step_while_false : forall ge f v ty x s k e m,
     bool_val v ty m = Some false ->
-    sstep ge (self__C_Swhile.ExprState f (Eval v ty) (Kwhile1 x s k) e m)
-      E0 (self__C_Swhile.State f Sskip k e m)
+    sstep ge (ExprState f (Eval v ty) (Kwhile1 x s k) e m)
+      E0 (State f Sskip k e m)
 | step_while_true : forall ge f v ty x s k e m ,
     bool_val v ty m = Some true ->
-    sstep ge (self__C_Swhile.ExprState f (Eval v ty) (Kwhile1 x s k) e m)
-      E0 (self__C_Swhile.State f s (Kwhile2 x s k) e m)
+    sstep ge (ExprState f (Eval v ty) (Kwhile1 x s k) e m)
+      E0 (State f s (Kwhile2 x s k) e m)
 | step_skip_or_continue_while : forall ge f s0 x s k e m,
     s0 = Sskip \/ s0 = Scontinue ->
-    sstep ge (self__C_Swhile.State f s0 (Kwhile2 x s k) e m)
-      E0 (self__C_Swhile.State f (Swhile x s) k e m)
+    sstep ge (State f s0 (Kwhile2 x s k) e m)
+      E0 (State f (Swhile x s) k e m)
 | step_break_while : forall ge f x s k e m,
-    sstep ge (self__C_Swhile.State f Sbreak (Kwhile2 x s k) e m)
-      E0 (self__C_Swhile.State f Sskip k e m).
+    sstep ge (State f Sbreak (Kwhile2 x s k) e m)
+      E0 (State f Sskip k e m).
 FEnd C_Swhile.
 
 Trait C_Sdowhile extends C.
@@ -3244,23 +3244,23 @@ FEnd find_label with find_label_ls.
 
 FInductive sstep : genv -> state -> trace -> state -> Prop :=
 | step_dowhile : forall ge f a s k e m,
-    sstep ge (self__C_Sdowhile.State f (Sdowhile a s) k e m)
-      E0 (self__C_Sdowhile.State f s (Kdowhile1 a s k) e m)
+    sstep ge (State f (Sdowhile a s) k e m)
+      E0 (State f s (Kdowhile1 a s k) e m)
 | step_skip_or_continue_dowhile : forall ge f s0 x s k e m,
     s0 = Sskip \/ s0 = Scontinue ->
-    sstep ge (self__C_Sdowhile.State f s0 (Kdowhile1 x s k) e m)
-        E0 (self__C_Sdowhile.ExprState f x (Kdowhile2 x s k) e m)
+    sstep ge (State f s0 (Kdowhile1 x s k) e m)
+        E0 (ExprState f x (Kdowhile2 x s k) e m)
 | step_dowhile_false : forall ge f v ty x s k e m,
     bool_val v ty m = Some false ->
-    sstep ge (self__C_Sdowhile.ExprState f (Eval v ty) (Kdowhile2 x s k) e m)
-        E0 (self__C_Sdowhile.State f Sskip k e m)
+    sstep ge (ExprState f (Eval v ty) (Kdowhile2 x s k) e m)
+        E0 (State f Sskip k e m)
 | step_dowhile_true : forall ge f v ty x s k e m,
     bool_val v ty m = Some true ->
-    sstep ge (self__C_Sdowhile.ExprState f (Eval v ty) (Kdowhile2 x s k) e m)
-        E0 (self__C_Sdowhile.State f (Sdowhile x s) k e m)
+    sstep ge (ExprState f (Eval v ty) (Kdowhile2 x s k) e m)
+        E0 (State f (Sdowhile x s) k e m)
 | step_break_dowhile : forall ge f a s k e m,
-    sstep ge (self__C_Sdowhile.State f Sbreak (Kdowhile1 a s k) e m)
-        E0 (self__C_Sdowhile.State f Sskip k e m).
+    sstep ge (State f Sbreak (Kdowhile1 a s k) e m)
+        E0 (State f Sskip k e m).
 FEnd C_Sdowhile.
 
 Trait C_Sfor extends C.
@@ -3298,29 +3298,29 @@ FEnd find_label with find_label_ls.
 FInductive sstep : genv -> state -> trace -> state -> Prop :=
 | step_for_start : forall ge f a1 a2 a3 s k e m,
     a1 <> Sskip ->
-    sstep ge (self__C_Sfor.State f (Sfor a1 a2 a3 s) k e m)
-        E0 (self__C_Sfor.State f a1 (Kseq (Sfor Sskip a2 a3 s) k) e m)
+    sstep ge (State f (Sfor a1 a2 a3 s) k e m)
+        E0 (State f a1 (Kseq (Sfor Sskip a2 a3 s) k) e m)
 | step_for : forall ge f a2 a3 s k e m,
-    sstep ge (self__C_Sfor.State f (Sfor Sskip a2 a3 s) k e m)
-        E0 (self__C_Sfor.ExprState f a2 (Kfor2 a2 a3 s k) e m)
+    sstep ge (State f (Sfor Sskip a2 a3 s) k e m)
+        E0 (ExprState f a2 (Kfor2 a2 a3 s k) e m)
 | step_for_false : forall ge f v ty a2 a3 s k e m,
     bool_val v ty m = Some false ->
-    sstep ge (self__C_Sfor.ExprState f (Eval v ty) (Kfor2 a2 a3 s k) e m)
-        E0 (self__C_Sfor.State f Sskip k e m)
+    sstep ge (ExprState f (Eval v ty) (Kfor2 a2 a3 s k) e m)
+        E0 (State f Sskip k e m)
 | step_for_true : forall ge f v ty a2 a3 s k e m,
     bool_val v ty m = Some true ->
-    sstep ge (self__C_Sfor.ExprState f (Eval v ty) (Kfor2 a2 a3 s k) e m)
-        E0 (self__C_Sfor.State f s (Kfor3 a2 a3 s k) e m)
+    sstep ge (ExprState f (Eval v ty) (Kfor2 a2 a3 s k) e m)
+        E0 (State f s (Kfor3 a2 a3 s k) e m)
 | step_skip_or_continue_for3 : forall ge f x a2 a3 s k e m,
     x = Sskip \/ x = Scontinue ->
-    sstep ge (self__C_Sfor.State f x (Kfor3 a2 a3 s k) e m)
-        E0 (self__C_Sfor.State f a3 (Kfor4 a2 a3 s k) e m)
+    sstep ge (State f x (Kfor3 a2 a3 s k) e m)
+        E0 (State f a3 (Kfor4 a2 a3 s k) e m)
 | step_break_for3 : forall ge f a2 a3 s k e m,
-    sstep ge (self__C_Sfor.State f Sbreak (Kfor3 a2 a3 s k) e m)
-        E0 (self__C_Sfor.State f Sskip k e m)
+    sstep ge (State f Sbreak (Kfor3 a2 a3 s k) e m)
+        E0 (State f Sskip k e m)
 | step_skip_for4 : forall ge f a2 a3 s k e m,
-    sstep ge (self__C_Sfor.State f Sskip (Kfor4 a2 a3 s k) e m)
-        E0 (self__C_Sfor.State f (Sfor Sskip a2 a3 s) k e m).
+    sstep ge (State f Sskip (Kfor4 a2 a3 s k) e m)
+        E0 (State f (Sfor Sskip a2 a3 s) k e m).
 FEnd C_Sfor.
 
 Family C extends C_Swhile, C_Sdowhile, C_Sfor.
@@ -3354,21 +3354,21 @@ FEnd find_label with find_label_ls.
 
 FInductive step : genv -> state -> trace -> state -> Prop :=
 | step_loop : forall ge f s1 s2 k e le m,
-    step ge (self__Clight_Sloop.State f (Sloop s1 s2) k e le m)
-      E0 (self__Clight_Sloop.State f s1 (Kloop1 s1 s2 k) e le m)
+    step ge (State f (Sloop s1 s2) k e le m)
+      E0 (State f s1 (Kloop1 s1 s2 k) e le m)
 | step_skip_or_continue_loop1 : forall ge f s1 s2 k e le m x,
     x = Sskip \/ x = Scontinue ->
-    step ge (self__Clight_Sloop.State f x (Kloop1 s1 s2 k) e le m)
-      E0 (self__Clight_Sloop.State f s2 (Kloop2 s1 s2 k) e le m)
+    step ge (State f x (Kloop1 s1 s2 k) e le m)
+      E0 (State f s2 (Kloop2 s1 s2 k) e le m)
 | step_break_loop1 : forall ge f s1 s2 k e le m,
-    step ge (self__Clight_Sloop.State f Sbreak (Kloop1 s1 s2 k) e le m)
-      E0 (self__Clight_Sloop.State f Sskip k e le m)
+    step ge (State f Sbreak (Kloop1 s1 s2 k) e le m)
+      E0 (State f Sskip k e le m)
 | step_skip_loop2 : forall ge f s1 s2 k e le m,
-    step ge (self__Clight_Sloop.State f Sskip (Kloop2 s1 s2 k) e le m)
-      E0 (self__Clight_Sloop.State f (Sloop s1 s2) k e le m)
+    step ge (State f Sskip (Kloop2 s1 s2 k) e le m)
+      E0 (State f (Sloop s1 s2) k e le m)
 | step_break_loop2 : forall ge f s1 s2 k e le m,
-    step ge (self__Clight_Sloop.State f Sbreak (Kloop2 s1 s2 k) e le m)
-      E0 (self__Clight_Sloop.State f Sskip k e le m).
+    step ge (State f Sbreak (Kloop2 s1 s2 k) e le m)
+      E0 (State f Sskip k e le m).
 FEnd Clight_Sloop.
 
 Family Clight extends Clight_Sloop.
