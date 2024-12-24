@@ -1,28 +1,29 @@
-From NFPOP Require Import Loader.
+(*only  Clight Cshminor*)
+From Rocqet Require Import Loader.
 
-From NFPOP Require Import Coqlib.
-From NFPOP Require Import Errors.
-From NFPOP Require Import Values.
-From NFPOP Require Import AST.
-From NFPOP Require Import Integers. 
-From NFPOP Require Import Floats.
-From NFPOP Require Import Memory.
-From NFPOP Require Import Globalenvs.
-From NFPOP Require Import Smallstep.
-From NFPOP Require Import Events.
-From NFPOP Require Import Maps.
-From NFPOP Require Import Linking.
-Require Import NFPOP.CompCert.lib.Ctypes.
-From NFPOP Require Import Cop.
-From NFPOP Require Import Mon.
+From Rocqet Require Import Coqlib.
+From Rocqet Require Import Errors.
+From Rocqet Require Import Values.
+From Rocqet Require Import AST.
+From Rocqet Require Import Integers. 
+From Rocqet Require Import Floats.
+From Rocqet Require Import Memory.
+From Rocqet Require Import Globalenvs.
+From Rocqet Require Import Smallstep.
+From Rocqet Require Import Events.
+From Rocqet Require Import Maps.
+From Rocqet Require Import Linking.
+Require Import Rocqet.CompCert.lib.Ctypes.
+From Rocqet Require Import Cop.
+From Rocqet Require Import Mon.
 Require Import FSets.
 Require Import FSetAVL.
 Require Import Orders.
 Require Import Mergesort.
 Require Import Ordered.
 Require Import Coq.ZArith.ZArith.
-From NFPOP Require Import Prelude.
-From NFPOP Require Import Op.
+From Rocqet Require Import Prelude.
+From Rocqet Require Import Op.
 
 Local Open Scope string_scope.
 Local Open Scope list_scope.
@@ -93,6 +94,159 @@ FDefinition type_of_fundef : fundef -> type := fun f =>
 
 FDefinition program := Ctypes.program function.
 
+(* Semantics for Clight*)
+
+MetaData genv.
+Record genv := { genv_genv :> Genv.t self__Clight.fundef type; genv_cenv :> composite_env }.
+FEnd genv.
+FDefinition globalenv : program -> genv := fun p => 
+  {| self__Clight.genv_genv := Genv.globalenv p; self__Clight.genv_cenv := p.(prog_comp_env) |}.
+
+
+FDefinition env := PTree.t (block * type).
+FDefinition empty_env: env := (PTree.empty (block * type)).
+FDefinition temp_env := PTree.t val.
+
+FInductive eval_expr : genv -> env -> temp_env -> mem -> expr -> val -> Prop :=
+| eval_Econst_int: forall ge e le m i ty,
+    eval_expr ge e le m (Econst_int i ty) (Vint i)
+| eval_Econst_float: forall ge e le m f ty,
+    eval_expr ge e le m (Econst_float f ty) (Vfloat f)
+| eval_Econst_single: forall ge e le m f ty,
+    eval_expr ge e le m (Econst_single f ty) (Vsingle f)
+| eval_Econst_long: forall ge e le m i ty,
+    eval_expr ge e le m (Econst_long i ty) (Vlong i)
+| eval_Ecast: forall ge e le m a ty v1 v,
+    eval_expr ge e le m a v1 ->
+    Cop.sem_cast v1 (typeof a) ty m = Some v ->
+    eval_expr ge e le m (Ecast a ty) v
+| eval_Etempvar: forall ge e le m id ty v,
+    PTree.get id le = Some v ->
+    eval_expr ge e le m (Etempvar id ty) v.
+
+FInductive cont: Type :=
+| Kstop: cont
+| Kseq: stmt -> cont -> cont. (* Kseq s2 k = after s1 in s1;s2 *)
+
+FRecursion call_cont about cont motive (fun (c : cont) => cont) by _rect.       
+Case Kstop := Kstop.
+Case Kseq s k := (Kseq s k).
+FEnd call_cont.
+            
+FRecursion is_call_cont about cont motive (fun (c : cont) => Prop) by _rect.                   
+Case Kstop := True.
+Case Kseq s k := False.
+FEnd is_call_cont.
+            
+FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect. 
+Case Sskip := (fun lbl k => None). 
+Case Sset id e := (fun lbl k => None).
+Case Sseq s1 s2 := 
+  (fun lbl k => 
+    match find_label s1 lbl (Kseq s2 k) with
+    | Some sk => Some sk
+    | None => find_label s2 lbl k
+    end). 
+Case Sifthenelse a s1 s2 := 
+ (fun lbl k => 
+     match find_label s1 lbl k with
+      | Some sk => Some sk
+      | None => find_label s2 lbl k
+      end).
+Case Sreturn a := (fun lbl k => None).
+Case Slabel lbl' s' :=  
+  (fun lbl k =>  if ident_eq lbl lbl' then Some(s', k) else find_label s' lbl k).
+Case Sgoto lbl' :=  (fun lbl k => None).
+FEnd find_label.
+
+MetaData state.
+Inductive state: Type :=
+  | State
+      (f: self__Clight.function)
+      (s: self__Clight.stmt)
+      (k: self__Clight.cont)
+      (e: self__Clight.env)
+      (le: self__Clight.temp_env)
+      (m: mem) : state
+  | Callstate
+      (fd: self__Clight.fundef)
+      (args: list val)
+      (k: self__Clight.cont)
+      (m: mem) : state
+  | Returnstate
+      (res: val)
+      (k: self__Clight.cont)
+      (m: mem) : state.
+FEnd state.
+
+FDefinition block_of_binding := fun (ge: genv) (id_b_ty: ident * (block * type)) =>
+  match id_b_ty with (id, (b, ty)) => (b, 0, Ctypes.sizeof (self__Clight.genv_cenv ge) ty) end.
+
+FDefinition blocks_of_env : genv -> env -> list (block * Z * Z)  := fun ge e => 
+  List.map (block_of_binding ge) (PTree.elements e).
+
+(* To be overriden in SimplExpr & Cshmgen *)
+FOpaque Definition function_entry : function -> list val -> mem -> env -> temp_env -> mem -> Prop := cheat.
+
+FInductive step : genv -> state -> trace -> state -> Prop :=  
+| step_skip_seq: forall ge f s k e le m,
+  step ge (self__Clight.State f Sskip (Kseq s k) e le m)
+    E0 (self__Clight.State f s k e le m)
+| step_set: forall ge f id a k e le m v,
+  eval_expr ge e le m a v ->
+  step ge (self__Clight.State f (Sset id a) k e le m)
+    E0 (self__Clight.State f Sskip k e (PTree.set id v le) m)
+| step_seq: forall ge f s1 s2 k e le m,
+  step ge (self__Clight.State f (Sseq s1 s2) k e le m)
+    E0 (self__Clight.State f s1 (Kseq s2 k) e le m)
+| step_ifthenelse: forall ge f a s1 s2 k e le m v1 b,
+    eval_expr ge e le m a v1 ->
+    Cop.bool_val v1 (typeof a) m = Some b ->
+    step ge (self__Clight.State f (Sifthenelse a s1 s2) k e le m)
+      E0 (self__Clight.State f (if b then s1 else s2) k e le m)      
+| step_return_0: forall ge f k e le m m',
+    Mem.free_list m (blocks_of_env ge e) = Some m' ->
+    step ge (self__Clight.State f (Sreturn None) k e le m)
+      E0 (self__Clight.Returnstate Vundef (call_cont k) m')
+| step_return_1: forall ge f a k e le m v v' m',
+    eval_expr ge e le m a v ->
+    Cop.sem_cast v (typeof a) f.(self__Clight.fn_return) m = Some v' ->
+    Mem.free_list m (blocks_of_env ge e) = Some m' ->
+    step ge (self__Clight.State f (Sreturn (Some a)) k e le m)
+      E0 (self__Clight.Returnstate v' (call_cont k) m')      
+| step_skip_call: forall ge f k e le m m',
+    is_call_cont k ->
+    Mem.free_list m (blocks_of_env ge e) = Some m' ->
+    step ge (self__Clight.State f Sskip k e le m)
+      E0 (self__Clight.Returnstate Vundef k m')
+| step_label: forall ge f lbl s k e le m,
+  step ge (self__Clight.State f (Slabel lbl s) k e le m)
+    E0 (self__Clight.State f s k e le m)
+| step_goto: forall ge f lbl k e le m s' k',
+  find_label  f.(self__Clight.fn_body) lbl (call_cont k) = Some (s', k') ->
+  step ge (self__Clight.State f (Sgoto lbl) k e le m)
+    E0 (self__Clight.State f s' k' e le m)    
+| step_internal_function: forall ge f vargs k m e le m1,
+      function_entry f vargs m e le m1 ->
+      step ge (self__Clight.Callstate (Internal f) vargs k m)
+        E0 (self__Clight.State f f.(self__Clight.fn_body) k e le m1).
+
+MetaData initial_state.
+Inductive initial_state (p: self__Clight.program): self__Clight.state -> Prop :=
+  | initial_state_intro: forall b f m0,
+      let ge := Genv.globalenv p in
+      Genv.init_mem p = Some m0 ->
+      Genv.find_symbol ge p.(prog_main) = Some b ->
+      Genv.find_funct_ptr ge b = Some f ->
+      self__Clight.type_of_fundef f = Tfunction nil type_int32s cc_default ->
+      initial_state p (self__Clight.Callstate f nil self__Clight.Kstop m0).
+FEnd initial_state.
+
+MetaData final_state.
+Inductive final_state: self__Clight.state -> int -> Prop :=
+  | final_state_intro: forall r m,
+      final_state (self__Clight.Returnstate (Vint r) self__Clight.Kstop m) r.
+FEnd final_state.
 FEnd Clight.
 
 
@@ -125,6 +279,150 @@ FDefinition funsig := fun (fd: fundef) =>
   | AST.Internal f => function_sig f
   | AST.External ef => ef_sig ef
   end.
+
+(* Semantics for Cfam *)
+FDefinition genv := Genv.t fundef unit.
+       
+(* Function env/stack space *)
+FOpaque Definition fenv : Type := cheat.
+FOpaque Definition empty_fenv : fenv := cheat.
+       
+FDefinition env := PTree.t val.            
+FDefinition empty_env : env := PTree.empty val.
+       
+MetaData set_params.
+Fixpoint set_params (vl: list val) (il: list ident) {struct il} : self__Cfam.env :=
+ match il, vl with
+ | i1 :: is, v1 :: vs => PTree.set i1 v1 (set_params vs is)
+ | i1 :: is, nil => PTree.set i1 Vundef (set_params nil is)
+ | _, _ => PTree.empty val
+ end.
+FEnd set_params.
+
+MetaData set_locals.
+Fixpoint set_locals (il: list ident) (e: self__Cfam.env) {struct il} : self__Cfam.env :=
+  match il with
+  | nil => e
+  | i1 :: is => PTree.set i1 Vundef (set_locals is e)
+  end.
+FEnd set_locals.
+       
+FDefinition init_env : function -> list val -> env := fun f vargs => 
+  set_locals (function_locals f) (set_params vargs (function_params f)).            
+
+(* Semantics for allocation of variables and binding of parameters at function entry. *)
+FOpaque Definition free_fenv : mem -> fenv -> function -> option mem := cheat.            
+FOpaque Definition alloc_fenv : fenv -> mem -> function -> fenv -> mem -> Prop := cheat.
+       
+MetaData create_undef_temps.
+Fixpoint create_undef_temps (temps: list ident) : self__Cfam.env :=
+ match temps with
+ | nil => PTree.empty val
+ | id :: temps' => PTree.set id Vundef (create_undef_temps temps')
+end.
+FEnd create_undef_temps.
+
+MetaData bind_parameters.
+Fixpoint bind_parameters (formals: list ident) (args: list val)
+             (le: self__Cfam.env) : option self__Cfam.env :=
+ match formals, args with
+ | nil, nil => Some le
+ | id :: xl, v :: vl => bind_parameters xl vl (PTree.set id v le)
+ | _, _ => None
+ end.
+FEnd bind_parameters.
+            
+FInductive cont: Type :=
+| Kstop: cont
+| Kseq: stmt -> cont -> cont.
+                   
+MetaData state.
+Inductive state: Type :=
+  | State:(* Execution within a function *)
+      forall (f: self__Cfam.function)(* currently executing function *)
+             (s: self__Cfam.stmt)(* statement under consideration *)
+             (k: self__Cfam.cont)(* its continuation -- what to do next *)
+             (sp: self__Cfam.fenv) (* current "function" environment: i.e stackspace, ... *)
+             (e: self__Cfam.env)(* current local environment *)
+             (m: mem),(* current memory state *)
+      state
+  | Callstate:(* Invocation of a function *)
+      forall (f: self__Cfam.fundef)(* function to invoke *)
+             (args: list val)(* arguments provided by caller *)
+             (k: self__Cfam.cont)(* what to do next *)
+             (m: mem),(* memory state *)
+      state
+  | Returnstate:(* Return from a function *)
+      forall (v: val)(* Return value *)
+             (k: self__Cfam.cont)(* what to do next *)
+             (m: mem),(* memory state *)
+      state.
+FEnd state.
+            
+FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
+Case Kstop := Kstop.
+Case Kseq := (fun s c call_cont_c => call_cont_c).             
+FEnd call_cont.
+               
+FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
+Case Kstop := True.                   
+Case Kseq := (fun s c call_cont_c => False).
+FEnd is_call_cont.              
+
+FDefinition letenv := list val.
+               
+FInductive eval_expr :  genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
+| eval_Evar: forall ge lenv e le m id v,
+    PTree.get id le = Some v ->
+    eval_expr ge e le m lenv (Evar id) v.
+
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_skip_seq: forall ge f s k e le m,
+    step ge (self__Cfam.State f Sskip (Kseq s k) e le m)
+      E0 (self__Cfam.State f s k e le m)              
+| step_skip_call: forall ge f k e le m m',
+    is_call_cont k ->                       
+    free_fenv m e f = Some m' ->
+    step ge (self__Cfam.State f Sskip k e le m)
+      E0 (self__Cfam.Returnstate Vundef k m')
+| step_assign: forall lenv ge f id a k e le m v,
+    eval_expr ge e le m lenv a v ->
+    step ge (self__Cfam.State f (Sassign id a) k e le m)
+      E0 (self__Cfam.State f Sskip k e (PTree.set id v le) m)
+| step_seq: forall ge f s1 s2 k e le m,
+    step ge (self__Cfam.State f (Sseq s1 s2) k e le m)
+      E0 (self__Cfam.State f s1 (Kseq s2 k) e le m)              
+| step_return_0: forall ge f k e le m m',                       
+    free_fenv m e f = Some m' ->
+    step ge (self__Cfam.State f (Sreturn None) k e le m)
+      E0 (self__Cfam.Returnstate Vundef (call_cont k) m')    
+| step_return_1: forall lenv ge f a k e le m v m',
+    eval_expr ge e le m lenv a v ->
+    free_fenv m e f = Some m' ->
+    step ge (self__Cfam.State f (Sreturn (Some a)) k e le m)
+      E0 (self__Cfam.Returnstate v (call_cont k) m')
+| step_internal_function: forall ge f vargs k m m1 e le,                                          
+    alloc_fenv empty_fenv m f e m1 ->
+    init_env f vargs = le ->                        
+     step ge (self__Cfam.Callstate (AST.Internal f) vargs k m)
+       E0 (self__Cfam.State f (function_body f) k e le m1).
+            
+MetaData initial_state.
+Inductive initial_state (p: self__Cfam.program): self__Cfam.state -> Prop :=
+| initial_state_intro: forall b f m0,
+    let ge := Genv.globalenv p in
+    Genv.init_mem p = Some m0 ->
+    Genv.find_symbol ge p.(AST.prog_main) = Some b ->
+    Genv.find_funct_ptr ge b = Some f ->
+    self__Cfam.funsig f = signature_main ->               
+    initial_state p (self__Cfam.Callstate f nil self__Cfam.Kstop m0).
+FEnd initial_state.
+            
+MetaData final_state.
+Inductive final_state: self__Cfam.state -> int -> Prop :=
+| final_state_intro: forall r m,
+   final_state (self__Cfam.Returnstate (Vint r) self__Cfam.Kstop m) r.
+FEnd final_state.
 
 FEnd Cfam.
 
@@ -240,6 +538,57 @@ FOverride Definition function_locals := self__Csharpminor.fn_temps.
 FOverride Definition function_params := self__Csharpminor.fn_params.
 FOverride Definition function_sig := self__Csharpminor.fn_sig.
 
+(* Semantics for Csharpminor*)
+(* function stack environment *)       
+FOverride Definition fenv := PTree.t (block * Z).
+FOverride Definition empty_fenv := PTree.empty (block * Z).
+
+FDefinition block_of_binding := fun (id_b_sz: ident * (block * Z)) => 
+ match id_b_sz with (id, (b, sz)) => (b, 0, sz) end.
+
+FDefinition blocks_of_env : fenv -> list (block * Z * Z) := fun e => 
+  List.map block_of_binding (PTree.elements e).
+
+FOverride Definition free_fenv := fun m e f => Mem.free_list m (blocks_of_env e).
+   
+MetaData alloc_variables.
+Inductive alloc_variables: self__Csharpminor.fenv -> mem ->
+               list (ident * Z) ->
+               self__Csharpminor.fenv -> mem -> Prop :=
+| alloc_variables_nil:
+  forall e m,
+    alloc_variables e m nil e m
+| alloc_variables_cons:
+  forall e m id sz vars m1 b1 m2 e2,
+    Mem.alloc m 0 sz = (m1, b1) ->
+    alloc_variables (PTree.set id (b1, sz) e) m1 vars e2 m2 ->
+    alloc_variables e m ((id, sz) :: vars) e2 m2.
+FEnd alloc_variables.
+         
+FOverride Definition alloc_fenv := fun e m f e' m' => 
+  list_norepet (map fst f.(self__Csharpminor.fn_vars)) /\
+  list_norepet f.(self__Csharpminor.fn_params) /\
+  list_disjoint f.(self__Csharpminor.fn_params) f.(self__Csharpminor.fn_temps) /\
+  alloc_variables self__Csharpminor.empty_fenv m (self__Csharpminor.fn_vars f) e m'.
+
+FRecursion eval_constant about constant motive (fun (_ : constant) => option val) by _rect.
+Case Ointconst := (fun n => Some (Vint n)). 
+Case Ofloatconst := (fun n => Some (Vfloat n)).
+Case Osingleconst := (fun n => Some (Vsingle n)).
+Case Olongconst := (fun n => Some (Vlong n)).
+FEnd eval_constant.
+
+FInductive eval_expr :  genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
+| eval_Econst: forall ge lenv e le m cst v,
+    eval_constant cst = Some v ->
+    eval_expr ge e le m lenv (Econst cst) v.
+                           
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_ifthenelse: forall lenv ge f a s1 s2 k sp e m v b,
+    eval_expr ge sp e m lenv a v ->
+    Val.bool_of_val v b ->
+    step ge (self__Csharpminor.State f (Sifthenelse a s1 s2) k sp e m)
+      E0 (self__Csharpminor.State f (if b then s1 else s2) k sp e m).
 FEnd Csharpminor.
 
 
@@ -699,6 +1048,196 @@ FDefinition transl_globvar := fun (id: ident) (ty: type) => OK tt.
 FDefinition transl_program : S.program -> res T.program := fun p => 
   transform_partial_program2 (transl_fundef p.(prog_comp_env)) transl_globvar p.
 
+(* Cshmgen specifications *)
+(* correctness of translation *)
+
+MetaData match_fundef.
+Inductive match_fundef (p: self__Cshmgen.S.program) : self__Cshmgen.S.fundef -> self__Cshmgen.T.fundef -> Prop :=
+  | match_fundef_internal: forall f tf,
+      self__Cshmgen.transl_function p.(prog_comp_env) f = OK tf ->
+      match_fundef p (Ctypes.Internal f) (AST.Internal tf)
+  | match_fundef_external: forall ef args res cc,
+      ef_sig ef = signature_of_type args res cc ->
+      match_fundef p (Ctypes.External ef args res cc) (AST.External ef).
+FEnd match_fundef.
+
+FDefinition match_varinfo : type -> unit -> Prop := fun v tv => True.
+
+FDefinition match_prog : S.program -> T.program -> Prop := fun p tp =>
+  match_program_gen match_fundef match_varinfo p p tp.
+
+FInductive match_transl
+  : self__Cshmgen.T.stmt -> self__Cshmgen.T.cont ->
+    self__Cshmgen.T.stmt -> self__Cshmgen.T.cont -> Prop :=
+| match_transl_0: forall ts tk,
+    match_transl ts tk ts tk.
+
+(* | match_transl_1: forall ts tk,
+    match_transl (self__Cshmgen.T.Sblock ts) tk ts
+      (self__Cshmgen.T.Kblock tk).*)
+
+FInductive match_cont : composite_env -> type -> nat -> nat -> S.cont -> T.cont -> Prop :=
+| match_Kstop: forall ce tyret nbrk ncnt,
+    match_cont ce tyret nbrk ncnt S.Kstop T.Kstop      
+| match_Kseq: forall ce tyret nbrk ncnt s k ts tk,
+    transl_stmt s ce tyret nbrk ncnt = OK ts ->
+    match_cont ce tyret nbrk ncnt k tk ->
+    match_cont ce tyret nbrk ncnt (S.Kseq s k) (T.Kseq ts tk).
+               
+(*| match_Kloop1: forall tyret s1 s2 k ts1 ts2 nbrk ncnt tk,
+    transl_stmt s1 tyret 1%nat 0%nat = OK ts1 ->
+    transl_stmt s2 tyret 0%nat (S ncnt) = OK ts2 ->
+    match_cont tyret nbrk ncnt k tk ->
+    match_cont tyret 1%nat 0%nat
+               (Clight.Sem.Kloop1 s1 s2 k)
+               (Csharpminor.Sem.Kblock
+                  (Csharpminor.Sem.Kseq ts2
+                     (Csharpminor.Sem.Kseq
+                        (Csharpminor.Sloop
+                           (Csharpminor.Sseq
+                              (Csharpminor.Sblock ts1) ts2))
+                        (Csharpminor.Sem.Kblock tk))))
+| match_Kloop2: forall tyret s1 s2 k ts1 ts2 nbrk ncnt tk,
+    transl_stmt s1 tyret 1%nat 0%nat = OK ts1 ->
+    transl_stmt s2 tyret 0%nat (S ncnt) = OK ts2 ->
+    match_cont tyret nbrk ncnt k tk ->
+    match_cont tyret 0%nat (S ncnt)
+               (Clight.Sem.Kloop2 s1 s2 k)
+               (Csharpminor.Sem.Kseq
+                  (Csharpminor.Sloop
+                     (Csharpminor.Sseq
+                        (Csharpminor.Sblock ts1) ts2))
+                  (Csharpminor.Sem.Kblock tk)).*)
+
+(*
+Variable prog: Clight.program.
+Variable tprog: Csharpminor.program.
+Hypothesis TRANSL: match_prog prog tprog.
+
+Let ge := globalenv prog.
+Let tge := Genv.globalenv tprog.
+*)
+
+MetaData match_env.
+Record match_env
+  (prog: self__Cshmgen.S.program)
+  (e: self__Cshmgen.S.env) (te: self__Cshmgen.T.fenv) : Prop :=
+ mk_match_env {
+   me_local:
+     forall id b ty,
+       e!id = Some (b, ty) ->
+       let ge := self__Cshmgen.S.globalenv prog in 
+       te!id = Some(b, sizeof (self__Cshmgen.S.genv_cenv ge) ty);
+   me_local_inv:
+     forall id b sz,
+     te!id = Some (b, sz) -> exists ty, e!id = Some(b, ty)
+}.
+FEnd match_env.
+
+MetaData match_states.
+Inductive match_states : self__Cshmgen.S.state -> self__Cshmgen.T.state -> Prop :=
+| match_state:
+    forall f nbrk ncnt s k e le m tf ts tk te ts' tk' (cu : self__Cshmgen.S.program)
+        (* (LINK: linkorder cu prog)*)
+        (TRF: self__Cshmgen.transl_function cu.(prog_comp_env) f = OK tf)
+        (TR: self__Cshmgen.transl_stmt s cu.(prog_comp_env) (self__Cshmgen.S.fn_return f) nbrk ncnt = OK ts)
+        (MTR: self__Cshmgen.match_transl ts tk ts' tk')
+        (MENV: self__Cshmgen.match_env cu e te)
+        (MK: self__Cshmgen.match_cont cu.(prog_comp_env) (self__Cshmgen.S.fn_return f) nbrk ncnt k tk),
+    match_states (self__Cshmgen.S.State f s k e le m)
+      (self__Cshmgen.T.State tf ts' tk' te le m)      
+| match_callstate:
+    forall fd args k m tfd tk targs tres cconv cu ce
+        (* (LINK: linkorder cu prog)*)
+        (TR: self__Cshmgen.match_fundef cu fd tfd)
+        (MK: self__Cshmgen.match_cont ce tres 0%nat 0%nat k tk)
+        (ISCC: self__Cshmgen.S.is_call_cont k)
+        (TY: self__Cshmgen.S.type_of_fundef fd = Tfunction targs tres cconv),
+    match_states (self__Cshmgen.S.Callstate fd args k m)
+      (self__Cshmgen.T.Callstate tfd args tk m)      
+| match_returnstate:
+    forall res tres k m tk ce
+        (MK: self__Cshmgen.match_cont ce tres 0%nat 0%nat k tk),
+        (* (WT: wt_val res tres),*) (* Need Ctyping.v? *)
+    match_states (self__Cshmgen.S.Returnstate res k m)
+      (self__Cshmgen.T.Returnstate res tk m).
+FEnd match_states.
+
+(* Work Here *)
+(* use closing fact for inversion, ask on slack
+exploit should work normally*)
+Closing Fact match_transl_0_inv :
+  forall ts tk ts' tk',
+    match_transl ts tk ts' tk' ->
+    ts' = ts /\ tk' = tk
+    by plain {intros until tmp; intros H; inv H; eauto}.
+
+FInduction transl_step about S.step
+  motive (fun ge S1 t S2 (_ : S.step ge S1 t S2) => 
+            forall prog tprog tge, match_prog prog tprog ->
+            S.globalenv prog = ge -> Genv.globalenv tprog = tge ->
+  forall T1, match_states S1 T1 -> 
+  exists T2, plus T.step tge T1 t T2 /\ match_states S2 T2).
+FProof.
+
+(* skip *)
+- intros. revert H2. intro MST.
+  inv MST. fsimpl in TR. monadInv TR.
+  (* inv MTR. *)
+
+            
+  assert (ts' = self__Cshmgen.T.Sskip /\ tk' = tk).
+  { apply cheat. } destruct H0. subst.
+  (* inv MK. *)
+  
+  apply self__Cshmgen.match_Kseq in MK.
+  (* apply self__Cshmgen.match_transl_0 in MTR. inv MTR.
+  apply cheat.*)
+  (*inv MTR. inv MK.*)
+  econstructor; split.
+  apply plus_one. fconstructor;eauto.
+  + econstructor.
+  econstructor; eauto. constructor.
+
+(* set *)
+- intros. revert H2. intro MST.
+  inv MST. apply cheat.
+(* seq *)
+- intros. revert H2. intro MST.
+  inv MST. apply cheat.
+(* if then else *)
+- intros. revert H2. intro MST.
+  inv MST. apply cheat.
+(* return None *)
+- intros. revert H2. intro MST.
+  inv MST. apply cheat.
+(* return Some *)
+- intros. revert H2. intro MST.
+  inv MST. apply cheat.
+(* a second skip? *)
+- intros. revert H2. intro MST.
+  inv MST. apply cheat.
+(* label *)
+- intros. revert H2. intro MST.
+  inv MST. apply cheat.
+(* goto *)
+- intros. revert H2. intro MST.
+  inv MST. apply cheat.
+(* internal function *)
+- intros. revert H2. intro MST.
+  inv MST. apply cheat.  
+Qed. FEnd transl_step.
+                
+FLemma transl_initial_states:
+  forall S' prog tprog, S.initial_state prog S' -> transl_program prog = OK tprog ->
+  exists R, T.initial_state tprog R /\ match_states S' R.
+FProofLemma. apply cheat. Qed. CloseFLemma.          
+          
+FLemma transl_final_states:
+  forall S' R r,
+  match_states S' R -> S.final_state S' r -> T.final_state R r.
+FProofLemma. apply cheat. Qed. CloseFLemma.
+
 FEnd Cshmgen.
 
 FEnd Base.
@@ -736,7 +1275,7 @@ Family Csharpminor extends
   Csharpminor_Sblock.
 FEnd Csharpminor.
 
-From NFPOP Require Import Errors.
+From Rocqet Require Import Errors.
 Local Open Scope error_monad_scope.
 
 Trait Cshmgen_Sloop extends Cshmgen.
@@ -772,7 +1311,7 @@ FInductive stmt : Type :=
 | Sbuiltin : option ident -> external_function -> list expr -> stmt.
 FEnd Csharpminor.
 
-From NFPOP Require Import Errors.
+From Rocqet Require Import Errors.
 Local Open Scope error_monad_scope.
 
 Family Cshmgen.
@@ -875,7 +1414,7 @@ Trait Cshmgen_Sassign extends Cshmgen.
 Family S extends Clight_Sassign. FEnd S.
 
 Inherit alignof.
-From NFPOP Require Import Errors.
+From Rocqet Require Import Errors.
 Local Open Scope error_monad_scope.
 
 FDefinition make_store_bitfield : intsize -> signedness -> Z -> Z -> T.expr -> T.expr -> res T.stmt := 
@@ -1023,7 +1562,7 @@ FEnd Clight.
 Family Cshmgen.
 Family S extends Clight. FEnd S.
 Family T extends Csharpminor. FEnd T.
-From NFPOP Require Import Errors.
+From Rocqet Require Import Errors.
 Local Open Scope error_monad_scope.
 
 (*Inherit alignof.
@@ -1105,7 +1644,7 @@ FDefinition make_normalization := fun (t: type) (a: T.expr) =>
   | _ => a
   end.
 
-From NFPOP Require Import Conventions1.
+From Rocqet Require Import Conventions1.
 FDefinition return_value_needs_normalization := fun (_: rettype) => false.
 
 FDefinition make_funcall :=
@@ -1131,7 +1670,7 @@ Fixpoint typlist_of_arglist (al: list self__Cshmgen.S.expr) (tyl: list type)
   end.
 FEnd typlist_of_arglist.
 
-From NFPOP Require Import Errors.
+From Rocqet Require Import Errors.
 Local Open Scope error_monad_scope.
 FRecursion transl_stmt with transl_lbl_stmt.
 Case Scall x b cl := 
@@ -1174,7 +1713,7 @@ FEnd Csharpminor.
 Trait Cshmgen_Switch extends Cshmgen.
 Family S extends Clight_Switch. FEnd S.
 
-From NFPOP Require Import Errors.
+From Rocqet Require Import Errors.
 Local Open Scope error_monad_scope.
 FRecursion transl_stmt with transl_lbl_stmt.
 Case Sswitch a sl := 
