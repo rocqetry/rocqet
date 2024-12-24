@@ -219,7 +219,7 @@ FEnd call_cont.
 FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
 Case Kstop := True.                   
 Case Kseq := (fun s c call_cont_c => False).
-FEnd is_call_cont.              
+FEnd is_call_cont.
 
 FDefinition letenv := list val.
                
@@ -411,7 +411,7 @@ FDefinition fundef := AST.fundef function.
 
 FDefinition program := AST.program fundef unit.
 
-FDefinition funsig := fun (fd: fundef) => 
+FDefinition funsig := fun (fd: fundef) =>
   match fd with
   | AST.Internal f => fn_sig f
   | AST.External ef => ef_sig ef
