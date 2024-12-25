@@ -1499,42 +1499,45 @@ Inductive bitfield : Type :=
 
       FDefinition env_lessdef := fun (e1 e2: Source.env) =>
   forall id v1, e1!id = Some v1 -> exists v2, e2!id = Some v2 /\ Val.lessdef v1 v2.
-      
+
+
+      FOverride Definition match_callstack := fun _ _ _ _ _ _ => True.
+                                                             
       FOverride Definition match_mem := fun _ m1 m2 => Mem.extends m1 m2.
       
-        Inherit match_cont.
+      Inherit match_cont.
         
         (* Inherit match_states. *)
 
-        MetaData match_states.
-        Inductive match_states: self__Selection.Source.state -> self__Selection.Target.state -> Prop :=
-  | match_state: forall cunit prog f f' s k s' k' sp e m e' m'
-        (LINK: linkorder cunit prog)
-        (* (HF: helper_functions_declared cunit hf) *)
-        (TF: self__Selection.transl_function f = OK f')
-        (TS: self__Selection.transl_stmt s = OK s')
-        (MC: self__Selection.match_cont k k')
-        (LD: self__Selection.env_lessdef e e')
-        (ME: Mem.extends m m'),
-      match_states
-        (self__Selection.Source.State f s k sp e m)
-        (self__Selection.Target.State f' s' k' sp e' m')
-  | match_callstate: forall prog cunit f f' args args' k k' m m'
-        (LINK: linkorder cunit prog)
-        (TF: self__Selection.match_fundef f f')
-        (MC: self__Selection.match_cont k k')
-        (LD: Val.lessdef_list args args')
-        (ME: Mem.extends m m'),
-      match_states
-        (self__Selection.Source.Callstate f args k m)
-        (self__Selection.Target.Callstate f' args' k' m')
-  | match_returnstate: forall v v' k k' m m'
-        (MC: self__Selection.match_cont k k')
-        (LD: Val.lessdef v v')
-        (ME: Mem.extends m m'),
-      match_states
-        (self__Selection.Source.Returnstate v k m)
-        (self__Selection.Target.Returnstate v' k' m').
+  (*       MetaData match_states. *)
+  (*       Inductive match_states: self__Selection.Source.state -> self__Selection.Target.state -> Prop := *)
+  (* | match_state: forall cunit prog f f' s k s' k' sp e m e' m' *)
+  (*       (LINK: linkorder cunit prog) *)
+  (*       (* (HF: helper_functions_declared cunit hf) *) *)
+  (*       (TF: self__Selection.transl_function f = OK f') *)
+  (*       (TS: self__Selection.transl_stmt s = OK s') *)
+  (*       (MC: self__Selection.match_cont k k') *)
+  (*       (LD: self__Selection.env_lessdef e e') *)
+  (*       (ME: Mem.extends m m'), *)
+  (*     match_states *)
+  (*       (self__Selection.Source.State f s k sp e m) *)
+  (*       (self__Selection.Target.State f' s' k' sp e' m') *)
+  (* | match_callstate: forall prog cunit f f' args args' k k' m m' *)
+  (*       (LINK: linkorder cunit prog) *)
+  (*       (TF: self__Selection.match_fundef f f') *)
+  (*       (MC: self__Selection.match_cont k k') *)
+  (*       (LD: Val.lessdef_list args args') *)
+  (*       (ME: Mem.extends m m'), *)
+  (*     match_states *)
+  (*       (self__Selection.Source.Callstate f args k m) *)
+  (*       (self__Selection.Target.Callstate f' args' k' m') *)
+  (* | match_returnstate: forall v v' k k' m m' *)
+  (*       (MC: self__Selection.match_cont k k') *)
+  (*       (LD: Val.lessdef v v') *)
+  (*       (ME: Mem.extends m m'), *)
+  (*     match_states *)
+  (*       (self__Selection.Source.Returnstate v k m) *)
+  (*       (self__Selection.Target.Returnstate v' k' m'). *)
   (* | match_builtin_1: forall prog cunit hf ef args optid f sp e k m al f' e' k' m' env *)
   (*       (LINK: linkorder cunit prog) *)
   (*       (HF: helper_functions_declared cunit hf) *)
@@ -1558,7 +1561,7 @@ Inductive bitfield : Type :=
   (*     match_states *)
   (*       (Cminor.Returnstate v (Cminor.Kcall optid f sp e k) m) *)
   (*       (State f' Sskip k' sp e' m'). *)
-        FEnd match_states.
+        (* FEnd match_states. *)
         
         FOverride Definition measure := fun st =>
             match st with
@@ -1588,15 +1591,20 @@ Inductive bitfield : Type :=
           eexact A.
           rewrite <- H2. 
           eapply (self__Selection.sig_function_translated f f'). eauto.
-          econstructor; eauto.
+          econstructor. Unshelve. auto.
           apply Mem.extends_refl.
+          unfold self__Selection.match_callstack; auto.
+          apply self__Selection.match_Kstop.
+          fsimpl; auto.
+          apply self__Selection.match_values_nil.
           constructor.
+          exact (b, 0). exact nil.
           Qed.
         CloseFLemma.
 
           FLemma sel_final_states:
             forall S R r,
-            match_states S R -> Cminor.final_state S r -> final_state R r.
+            match_states S R -> self__Selection.Source.final_state S r -> self__Selection.Target.final_state R r.
         FProofLemma.
           apply cheat.
           Qed.
