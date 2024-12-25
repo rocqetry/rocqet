@@ -2242,15 +2242,7 @@ FProofLemma.
   destruct dst; simpl; intros. auto. auto. apply nolabel_do_set.
 Qed. CloseFLemma.
 
-FInduction tr_find_label_expr
-  about tr_expr
-  motive (fun ce le dst r sl a tmps (_ : tr_expr ce le dst r sl a tmps) =>
-    forall lbl, nolabel_list lbl sl)
-with tr_find_label_exprlist
-  about tr_exprlist
-  motive (fun ce le rl sl al tmps (_ : tr_exprlist ce le rl sl al tmps) =>
-    forall lbl, nolabel_list lbl sl).
-FProof.
+MetaData NoLabelTac.
 Ltac NoLabelTac :=
   match goal with
   | [ |- nolabel_list ?lbl nil ] => exact I
@@ -2265,6 +2257,17 @@ Ltac NoLabelTac :=
   | [ |- _ /\ _ ] => split; NoLabelTac
   | _ => auto
   end.
+FEnd NoLabelTac.
+
+FInduction tr_find_label_expr
+  about tr_expr
+  motive (fun ce le dst r sl a tmps (_ : tr_expr ce le dst r sl a tmps) =>
+    forall lbl, nolabel_list lbl sl)
+with tr_find_label_exprlist
+  about tr_exprlist
+  motive (fun ce le rl sl al tmps (_ : tr_exprlist ce le rl sl al tmps) =>
+    forall lbl, nolabel_list lbl sl).
+FProof.
 all: intros; simpl; NoLabelTac.
 Qed. FEnd tr_find_label_expr with tr_find_label_exprlist.
 
@@ -2436,6 +2439,17 @@ with leftcontextlist_size
 FProof.
 all: intros; do 2 fsimpl; auto with arith.
 Qed. FEnd leftcontext_size with leftcontextlist_size.
+
+FLemma tr_val_gen:
+  forall ce le dst v ty a tmp,
+  T.typeof a = ty ->
+  (forall tge e le' m,
+      (forall id, In id tmp -> le'!id = le!id) ->
+      T.eval_expr tge e le' m a v) ->
+  tr_expr ce le dst (S.Eval v ty) (final dst a) a tmp.
+FProofLemma.
+  intros. destruct dst; simpl; fconstructor.
+Qed. CloseFLemma.
 
 FInduction estep_simulation about S.estep 
   motive (fun ge S1 t S2 (_ : S.estep ge S1 t S2) => 
@@ -3387,7 +3401,7 @@ Closing Fact tr_while_inv :
   forall ce r s1 ts,
   tr_stmt ce (S.Swhile r s1) ts ->
   exists s' ts1, ts = (T.Sloop (T.Sseq s' ts1) T.Sskip) /\ tr_if ce r T.Sskip T.Sbreak s' /\ tr_stmt ce s1 ts1
-  by plain {intros until ts; intros H; inv H; eauto}.
+  by plain {intros until ts; intros H; inv H; repeat eexists; eauto}.
 
 FInductive match_cont : composite_env -> S.cont -> T.cont -> Prop :=
 | match_Kwhile2 : forall ce r s k s' ts tk,
@@ -3420,14 +3434,14 @@ Closing Fact match_cont_while2_inv :
   forall ce r s k tk,
   match_cont ce (S.Kwhile2 r s k) tk ->
   exists s' ts tk', tk = T.Kloop1 (T.Sseq s' ts) T.Sskip tk' /\ tr_if ce r T.Sskip T.Sbreak s' /\ tr_stmt ce s ts /\ match_cont ce k tk'
-  by plain {intros until tk; intros H; inv H; eauto}.
+  by plain {intros until tk; intros H; inv H; repeat eexists; eauto}.
 
 Closing Fact match_cont_exp_while1_inv :
   forall ce dst a r s k tk,
   match_cont_exp ce dst a (S.Kwhile1 r s k) tk ->
   exists s' ts tk', dst = For_val /\ tk = T.Kseq (makeif a T.Sskip T.Sbreak) (T.Kseq ts (T.Kloop1 (T.Sseq s' ts) T.Sskip tk'))
     /\ tr_if ce r T.Sskip T.Sbreak s' /\ tr_stmt ce s ts /\ match_cont ce k tk'
-  by plain {intros until tk; intros H; inv H; eauto}.
+  by plain {intros until tk; intros H; inv H; repeat eexists; eauto}.
 
 FInduction tr_find_label with tr_find_label_ls.
 FProof.
@@ -3544,14 +3558,14 @@ Closing Fact match_cont_dowhile1_inv :
   forall ce r s k tk,
   match_cont ce (S.Kdowhile1 r s k) tk ->
   exists s' ts tk', tk = T.Kloop1 ts s' tk' /\ tr_if ce r T.Sskip T.Sbreak s' /\ tr_stmt ce s ts /\ match_cont ce k tk'
-  by plain {intros until tk; intros H; inv H; eauto}.
+  by plain {intros until tk; intros H; inv H; repeat eexists; eauto}.
 
 Closing Fact match_cont_exp_dowhile2_inv :
   forall ce dst a r s k tk,
   match_cont_exp ce dst a (S.Kdowhile2 r s k) tk ->
   exists s' ts tk', dst = For_val /\ tk = T.Kseq (makeif a T.Sskip T.Sbreak) (T.Kloop2 ts s' tk')
     /\ tr_if ce r T.Sskip T.Sbreak s' /\ tr_stmt ce s ts /\ match_cont ce k tk'
-  by plain {intros until tk; intros H; inv H; eauto}.
+  by plain {intros until tk; intros H; inv H; repeat eexists; eauto}.
 
 FInduction tr_find_label with tr_find_label_ls.
 FProof.
@@ -3650,7 +3664,7 @@ Closing Fact tr_for_inv :
     /\ tr_if ce r T.Sskip T.Sbreak s' /\ tr_stmt ce s3 ts3 /\ tr_stmt ce s4 ts4)
   \/ (exists s' ts1 ts3 ts4, s1 <> S.Sskip /\ ts = (T.Sseq ts1 (T.Sloop (T.Sseq s' ts4) ts3))
     /\ tr_if ce r T.Sskip T.Sbreak s' /\ tr_stmt ce s1 ts1 /\ tr_stmt ce s3 ts3 /\ tr_stmt ce s4 ts4)
-  by plain {intros until ts; intros H; inv H; eauto}.
+  by plain {intros until ts; intros H; inv H; repeat eexists; eauto}.
 
 FInductive match_cont : composite_env -> S.cont -> T.cont -> Prop :=
 | match_Kfor3: forall ce r s3 s k ts3 s' ts tk,
@@ -3693,21 +3707,21 @@ Closing Fact match_cont_for3_inv :
   match_cont ce (S.Kfor3 r s3 s k) tk ->
   exists ts3 s' ts tk', tk = T.Kloop1 (T.Sseq s' ts) ts3 tk' /\ tr_if ce r T.Sskip T.Sbreak s'
     /\ tr_stmt ce s3 ts3 /\ tr_stmt ce s ts /\ match_cont ce k tk'
-  by plain {intros until tk; intros H; inv H; eauto}.
+  by plain {intros until tk; intros H; inv H; repeat eexists; eauto}.
 
 Closing Fact match_cont_for4_inv :
   forall ce r s3 s k tk,
   match_cont ce (S.Kfor4 r s3 s k) tk ->
   exists ts3 s' ts tk', tk = T.Kloop2 (T.Sseq s' ts) ts3 tk' /\ tr_if ce r T.Sskip T.Sbreak s'
     /\ tr_stmt ce s3 ts3 /\ tr_stmt ce s ts /\ match_cont ce k tk'
-  by plain {intros until tk; intros H; inv H; eauto}.
+  by plain {intros until tk; intros H; inv H; repeat eexists; eauto}.
 
 Closing Fact match_cont_exp_for2_inv :
   forall ce dst a r s3 s k tk,
   match_cont_exp ce dst a (S.Kfor2 r s3 s k) tk ->
   exists ts3 s' ts tk', dst = For_val /\ tk = T.Kseq (makeif a T.Sskip T.Sbreak) (T.Kseq ts (T.Kloop1 (T.Sseq s' ts) ts3 tk'))
     /\ tr_if ce r T.Sskip T.Sbreak s' /\ tr_stmt ce s3 ts3 /\ tr_stmt ce s ts /\ match_cont ce k tk'
-  by plain {intros until tk; intros H; inv H; eauto}.
+  by plain {intros until tk; intros H; inv H; repeat eexists; eauto}.
 
 FInduction tr_find_label with tr_find_label_ls.
 FProof.
@@ -3816,11 +3830,78 @@ FInductive expr : Type :=
 FRecursion typeof.
 Case Ebuiltin ef ts es ty := ty.
 FEnd typeof.
+
+FRecursion simple.
+Case _ := false.
+FEnd simple.
+
+Inherit eval_simple_rvalue.
+
+MetaData eval_simple_list.
+Inductive eval_simple_list: genv -> env -> mem -> exprlist -> list type -> list val -> Prop :=
+  | esrl_nil: forall ge e m,
+      eval_simple_list ge e m Enil nil nil
+  | esrl_cons: forall ge e m r rl ty tyl v vl v',
+      eval_simple_rvalue ge e m r v' -> sem_cast v' (typeof r) ty m = Some v ->
+      eval_simple_list ge e m rl tyl vl ->
+      eval_simple_list ge e m (Econs r rl) (ty :: tyl) (v :: vl).
+FEnd eval_simple_list.
+
+FInductive leftcontext: kind -> kind -> (expr -> expr) -> Prop :=
+| lctx_builtin: forall k C ef tyargs ty,
+    leftcontextlist k C ->
+    leftcontext k RV (fun x => Ebuiltin ef tyargs (C x) ty).
+
+FInductive estep: genv -> state -> trace -> state -> Prop :=
+| step_builtin: forall ge f C ef tyargs rargs ty k e m vargs t vres m',
+    leftcontext RV RV C ->
+    eval_simple_list ge e m rargs tyargs vargs ->
+    external_call ef (Genv.to_senv (genv_genv ge)) vargs m t vres m' ->
+    estep ge (ExprState f (C (Ebuiltin ef tyargs rargs ty)) k e m)
+        t (ExprState f (C (Eval vres ty)) k e m').
+
+(* FInductive sstep: genv -> state -> trace -> state -> Prop :=
+| step_external_function: forall ge ef targs tres cc vargs k m vres t m',
+    external_call ef (Genv.to_senv (genv_genv ge)) vargs m t vres m' ->
+    sstep ge (Callstate (External ef targs tres cc) vargs k m)
+        t (Returnstate vres k m'). *)
 FEnd C.
 
 Family Clight.
 FInductive stmt : Type :=
 | Sbuiltin: option ident -> external_function -> list type -> list expr -> stmt. (* builtin invocation *)
+
+Inherit bind_parameters.
+
+FDefinition set_opttemp := fun (optid: option ident) (v: val) (le: temp_env) =>
+  match optid with
+  | None => le
+  | Some id => PTree.set id v le
+  end.
+
+Inherit eval_expr.
+
+MetaData eval_exprlist.
+Inductive eval_exprlist : genv -> env -> temp_env -> mem -> list expr -> list type -> list val -> Prop :=
+  | eval_Enil: forall ge e le m,
+      eval_exprlist ge e le m nil nil nil
+  | eval_Econs: forall ge e le m a bl ty tyl v1 v2 vl,
+      eval_expr ge e le m a v1 ->
+      sem_cast v1 (typeof a) ty m = Some v2 ->
+      eval_exprlist ge e le m bl tyl vl ->
+      eval_exprlist ge e le m (a :: bl) (ty :: tyl) (v2 :: vl).
+FEnd eval_exprlist.
+
+FRecursion find_label with find_label_ls.
+Case _ := (fun lbl k => None).
+FEnd find_label with find_label_ls.
+
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_builtin: forall ge f optid ef tyargs al k e le m vargs t vres m',
+    eval_exprlist ge e le m al tyargs vargs ->
+    external_call ef (Genv.to_senv (genv_genv ge)) vargs m t vres m' ->
+    step ge (State f (Sbuiltin optid ef tyargs al) k e le m)
+        t (State f Sskip k e (set_opttemp optid vres le) m').
 FEnd Clight.
 
 From Rocqet Require Import Mon.
@@ -3842,6 +3923,138 @@ Case Ebuiltin ef tyargs rl ty :=
       end).
 FEnd transl_expr with transl_exprlist.
 
+FInductive tr_expr : composite_env -> T.temp_env -> destination -> S.expr -> list T.stmt -> T.expr -> list ident -> Prop :=
+| tr_builtin_effects: forall ce le ef tyargs el ty sl al tmp1 any tmp,
+    tr_exprlist ce le el sl al tmp1 ->
+    incl tmp1 tmp ->
+    tr_expr ce le For_effects (S.Ebuiltin ef tyargs el ty)
+                (sl ++ T.Sbuiltin None ef tyargs al :: nil)
+                any tmp
+| tr_builtin_val: forall ce le dst ef tyargs el ty sl al tmp1 t tmp,
+    dst <> For_effects ->
+    tr_exprlist ce le el sl al tmp1 ->
+    In t tmp -> incl tmp1 tmp ->
+    tr_expr ce le dst (S.Ebuiltin ef tyargs el ty)
+                (sl ++ T.Sbuiltin (Some t) ef tyargs al :: final dst (T.Etempvar t ty))
+                (T.Etempvar t ty) tmp.
+
+Closing Fact tr_builtin_inv :
+  forall ce le dst ef tyargs el ty sl a tmp,
+  tr_expr ce le dst (S.Ebuiltin ef tyargs el ty) sl a tmp ->
+  (exists sl' al tmp1, dst = For_effects /\ sl = sl' ++ T.Sbuiltin None ef tyargs al :: nil
+    /\ tr_exprlist ce le el sl' al tmp1 /\ incl tmp1 tmp)
+  \/ (exists sl' al tmp1 t, dst <> For_effects /\ sl = sl' ++ T.Sbuiltin (Some t) ef tyargs al :: final dst (T.Etempvar t ty)
+    /\ a = T.Etempvar t ty /\ tr_exprlist ce le el sl' al tmp1 /\ In t tmp /\ incl tmp1 tmp)
+  by plain {intros until tmp; intros H; inv H;
+            [ left; repeat eexists; eauto | right; repeat eexists; eauto ]}.
+
+FInduction tr_expr_invariant with tr_exprlist_invariant.
+FProof.
+all: intros; fconstructor.
+Qed. FEnd tr_expr_invariant with tr_exprlist_invariant.
+
+FInduction tr_expr_monotone with tr_exprlist_monotone.
+FProof.
+all: intros; fconstructor; unfold incl in *; eauto.
+Qed. FEnd tr_expr_monotone with tr_exprlist_monotone.
+
+FInduction tr_simple_expr_nil with tr_simple_exprlist_nil.
+FProof.
+all: intros; fsimpl in *; discriminate.
+Qed. FEnd tr_simple_expr_nil with tr_simple_exprlist_nil.
+
+Inherit tr_simple_rvalue.
+
+FInduction tr_simple_exprlist
+  about tr_exprlist
+  motive (fun ce le rl sl al tmps (_ : tr_exprlist ce le rl sl al tmps) =>
+    forall ge prog tprog tge, match_prog prog tprog ->
+    S.globalenv prog = ge -> T.globalenv tprog = tge ->
+    forall e m tyl vl,
+    S.eval_simple_list ge e m rl tyl vl ->
+    sl = nil /\ T.eval_exprlist tge e le m al tyl vl).
+FProof.
+- intros. split. auto. inv H2.
+  + constructor.
+  + (* fdiscriminate. *) apply cheat.
+- intros. inv H3.
+  + (* fdiscriminate. *) apply cheat.
+  + (* finjection H4. *) assert (r = e1 /\ rl = el2) as [] by apply cheat; clear H4; subst.
+    exploit tr_simple_rvalue; eauto. intros [A [B C]].
+    exploit H; eauto. intros [D E].
+    split. subst; auto. econstructor; eauto. congruence.
+Qed. FEnd tr_simple_exprlist.
+
+FInduction tr_expr_leftcontext with tr_expr_leftcontextlist.
+FProof.
+Ltac TR :=
+  econstructor; econstructor; econstructor; econstructor; econstructor;
+  split; [eauto | split; [idtac | split]].
+(* builtin *)
+intros. apply tr_builtin_inv in H0 as [H0|H0]; unpack H0; subst.
+(* for effects *)
+- exploit H; eauto. intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
+  + rewrite Q, app_assoc. eauto.
+  + red. auto.
+  + intros. rewrite app_assoc. change (sl3 ++ sl2') with (nil ++ sl3 ++ sl2').
+    rewrite app_assoc. fconstructor.
+(* for val *)
+- exploit H; eauto. intros [dst' [sl1' [sl2' [a' [tmp' [P [Q [R S]]]]]]]]. TR.
+  + rewrite Q, app_assoc. eauto.
+  + red. auto.
+  + intros. rewrite app_assoc. change (sl3 ++ sl2') with (nil ++ sl3 ++ sl2').
+    rewrite app_assoc. fconstructor.
+Qed. FEnd tr_expr_leftcontext with tr_expr_leftcontextlist.
+
+FInduction tr_find_label_expr with tr_find_label_exprlist.
+FProof.
+all: intros; simpl; NoLabelTac.
+Qed. FEnd tr_find_label_expr with tr_find_label_exprlist.
+
+FRecursion esize with esizelist.
+Case Ebuiltin ef ts rl ty := (Datatypes.S(esizelist rl)).
+FEnd esize with esizelist.
+
+FInduction leftcontext_size with leftcontextlist_size.
+FProof.
+intros; do 2 fsimpl; auto with arith.
+Qed. FEnd leftcontext_size with leftcontextlist_size.
+
+FInduction estep_simulation.
+FProof.
+(* builtin *)
+intros; inv MS.
+exploit tr_top_leftcontext; eauto. clear TR.
+intros [dst' [sl1 [sl2 [a' [tmp' [P [Q [R S]]]]]]]].
+inv P.
+- (* fdiscriminate. *) apply cheat.
+- apply tr_builtin_inv in H0 as [H0|H0]; unpack H0; subst.
+  (* for effects *)
+  + exploit tr_simple_exprlist; eauto. intros [SL EV].
+    subst. simpl Kseqlist.
+    eexists. split.
+    * left. eapply plus_left. fconstructor.
+      apply star_one. fconstructor.
+      eapply external_call_symbols_preserved; eauto. apply (Genv.senv_match (proj1 H)).
+      reflexivity.
+    * econstructor; eauto.
+      change sl2 with (nil ++ sl2). apply S. fconstructor. simpl; auto. do 2 fsimpl; auto.
+  (* for val *)
+  + exploit tr_simple_exprlist; eauto. intros [SL EV].
+    subst. simpl Kseqlist.
+    eexists. split.
+    * left. eapply plus_left. fconstructor.
+      apply star_one. fconstructor.
+      eapply external_call_symbols_preserved; eauto. apply (Genv.senv_match (proj1 H)).
+      reflexivity.
+    * econstructor; eauto.
+      change sl2 with (nil ++ sl2). apply S.
+      apply tr_val_gen.
+      -- fsimpl. auto.
+      -- intros. fconstructor. rewrite H0 by auto. simpl. apply PTree.gss.
+      -- intros. simpl. apply PTree.gso. congruence.
+      -- do 2 fsimpl; auto. 
+Qed. FEnd estep_simulation.
 FEnd SimplExpr.
 
 FEnd Comp_Builtin.
