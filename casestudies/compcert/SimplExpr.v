@@ -3054,7 +3054,7 @@ FEnd Base.
 
 Trait Comp_break_continue extends Base.
 
-Trait C_Sbreak_Scontinue extends C.
+Family C.
 FInductive stmt : Type :=
   | Sbreak : stmt
   | Scontinue : stmt.
@@ -3070,12 +3070,9 @@ FInductive sstep : genv -> state -> trace -> state -> Prop :=
 | step_break_seq : forall ge f s k e m,
     sstep ge (State f Sbreak (Kseq s k) e m)
         E0 (State f Sbreak k e m).
-FEnd C_Sbreak_Scontinue.
-
-Family C extends C_Sbreak_Scontinue.
 FEnd C.
 
-Trait Clight_Sbreak_Scontinue extends Clight.
+Family Clight.
 FInductive stmt : Type :=
 | Sbreak : stmt
 | Scontinue : stmt.
@@ -3091,15 +3088,12 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
 | step_break_seq: forall ge f s k e le m,
     step ge (State f Sbreak (Kseq s k) e le m)
       E0 (State f Sbreak k e le m).
-FEnd Clight_Sbreak_Scontinue.
-
-Family Clight extends Clight_Sbreak_Scontinue.
 FEnd Clight.
 
 From Rocqet Require Import Mon.
 Local Open Scope gensym_monad_scope.
 
-Trait SimplExpr_Sbreak_Scontinue extends SimplExpr.
+Family SimplExpr.
 FRecursion transl_stmt with transl_lblstmt.
 Case Sbreak := (fun ce => ret T.Sbreak).
 Case Scontinue := (fun ce => ret T.Scontinue).
@@ -3169,15 +3163,12 @@ all: intros; inv MS.
   + left. apply plus_one. fconstructor.
   + econstructor; eauto. fconstructor.
 Qed. FEnd sstep_simulation.
-FEnd SimplExpr_Sbreak_Scontinue.
-
-Family SimplExpr extends SimplExpr_Sbreak_Scontinue.
 FEnd SimplExpr.
 
 FEnd Comp_break_continue.
 
 
-Trait Comp_Loops extends Comp_break_continue.
+Trait Comp_Loops extends Base, Comp_break_continue.
 
 Trait C_Swhile extends C.
 FInductive stmt : Type :=
@@ -3326,7 +3317,7 @@ FEnd C_Sfor.
 Family C extends C_Swhile, C_Sdowhile, C_Sfor.
 FEnd C.
 
-Trait Clight_Sloop extends Clight.
+Family Clight.
 FInductive stmt : Type :=
 | Sloop: stmt -> stmt -> stmt. (* infinite loop *)
 
@@ -3369,9 +3360,6 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
 | step_break_loop2 : forall ge f s1 s2 k e le m,
     step ge (State f Sbreak (Kloop2 s1 s2 k) e le m)
       E0 (State f Sskip k e le m).
-FEnd Clight_Sloop.
-
-Family Clight extends Clight_Sloop.
 FEnd Clight.
 
 From Rocqet Require Import Mon.
