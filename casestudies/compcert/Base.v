@@ -1573,10 +1573,23 @@ Inductive bitfield : Type :=
         FInduction transl_step_correct.
         FProof.
         Qed. FEnd transl_step_correct.
-        
+
+        FLemma transf_program_match:
+          forall p tp, transl_program p = OK tp -> match_prog p tp.
+        FProofLemma.
+          intros.
+          monadInv H.
+          eapply match_transform_partial_program_contextual. eexact EQ0.
+          intros. exists x; split; auto. apply get_helpers_correct; auto.
+          Qed.
+        Close FLemma.
+
+
+
         FLemma transl_initial_states:
             forall S prog tprog, Source.initial_state prog S ->
-            match_prog prog tprog ->
+            (* match_prog prog tprog -> *)
+            transl_program prog = OK tprog ->                      
             exists R, Target.initial_state tprog R /\ match_states S R.
         FProofLemma.
           destruct 1.
@@ -1589,7 +1602,7 @@ Inductive bitfield : Type :=
           rewrite (match_program_main Hm).
           rewrite (self__Selection.symbols_preserved prog tprog _). eauto. exact Hm.
           eexact A.
-          rewrite <- H2. 
+          rewrite <- H2.
           eapply (self__Selection.sig_function_translated f f'). eauto.
           econstructor. Unshelve. auto.
           apply Mem.extends_refl.
@@ -1602,13 +1615,14 @@ Inductive bitfield : Type :=
           Qed.
         CloseFLemma.
 
-          FLemma sel_final_states:
-            forall S R r,
-            match_states S R -> self__Selection.Source.final_state S r -> self__Selection.Target.final_state R r.
+        FLemma transl_final_states:
+          forall S R r,
+          match_states S R -> Source.final_state S r -> Target.final_state R r.
         FProofLemma.
           apply cheat.
           Qed.
         CloseFLemma.
+
 
   FEnd Selection.
          
