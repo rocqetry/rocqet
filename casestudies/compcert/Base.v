@@ -1578,6 +1578,7 @@ Inductive bitfield : Type :=
           forall p tp, transl_program p = OK tp -> match_prog p tp.
         FProofLemma.
           intros.
+          fsimpl in *.
           monadInv H.
           eapply match_transform_partial_program_contextual. eexact EQ0.
           intros. exists x; split; auto. apply get_helpers_correct; auto.
