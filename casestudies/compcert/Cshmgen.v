@@ -1119,6 +1119,19 @@ Let tge := Genv.globalenv tprog.
 *)
 
 MetaData match_env.
+Compute (_!_).
+Check (_!_).
+Compute self__Cshmgen.S.env.
+Compute self__Cshmgen.T.fenv.
+Compute Z.
+Compute res.
+(*res
+defined in: lib/Errors.v
+
+_!_
+te is PTree.t (block * Z)
+ *)
+
 Record match_env
   (prog: self__Cshmgen.S.program)
   (e: self__Cshmgen.S.env) (te: self__Cshmgen.T.fenv) : Prop :=
@@ -1127,12 +1140,13 @@ Record match_env
      forall id b ty,
        e!id = Some (b, ty) ->
        let ge := self__Cshmgen.S.globalenv prog in 
-       te!id = Some(b, sizeof (self__Cshmgen.S.genv_cenv ge) ty);
+       te!id = Some (b, sizeof (self__Cshmgen.S.genv_cenv ge) ty);
    me_local_inv:
      forall id b sz,
      te!id = Some (b, sz) -> exists ty, e!id = Some(b, ty)
 }.
 FEnd match_env.
+
 
 MetaData match_states.
 Inductive match_states : self__Cshmgen.S.state -> self__Cshmgen.T.state -> Prop :=
@@ -1164,8 +1178,7 @@ Inductive match_states : self__Cshmgen.S.state -> self__Cshmgen.T.state -> Prop 
 FEnd match_states.
 
 (* Work Here *)
-(* use closing fact for inversion, ask on slack
-exploit should work normally*)
+(* use closing fact for inversion*)
 Closing Fact match_transl_0_inv :
   forall ts tk ts' tk',
     match_transl ts tk ts' tk' ->
