@@ -1028,6 +1028,14 @@ with match_stacks: S.cont -> list T.stackframe -> Prop :=
   | match_stacks_stop:
     match_stacks S.Kstop nil.
 
+Closing Fact tr_cont_tr_kseq_inv :
+  forall c map s k nd nexits ngoto nret rret cs,
+    tr_cont c map (S.Kseq s k) nd nexits ngoto nret rret cs ->
+    exists n,
+      tr_stmt c map s nd n nexits ngoto nret rret /\
+      tr_cont c map k n nexits ngoto nret rret cs
+    by plain { intros until cs; intros H; inv H; eauto }.          
+
 MetaData map_wf.
 Record map_wf (m: mapping) : Prop :=
   mk_map_wf {
@@ -1398,13 +1406,14 @@ FProof.
 all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
 
 (* skip seq *)
-+ apply tr_stmt_skip_inv in TS. subst ns. inv TK.
++ apply tr_stmt_skip_inv in TS. subst ns.
+  apply tr_cont_tr_kseq_inv in TK; unpack TK; subst. 
   econstructor; split.
   right; split. apply star_refl.
-  apply Kseq_inv in H. destruct H; subst s0 k0.
+  (*apply Kseq_inv in H. destruct H; subst s0 k0.*)
   Lt_state.
-  apply Kseq_inv in H. destruct H; subst s0 k0.
-  econstructor; eauto. apply stop_kseq_discriminate in H. exfalso; apply H.
+  (*apply Kseq_inv in H. destruct H; subst s0 k0.*)
+  econstructor; eauto. (*apply stop_kseq_discriminate in H. exfalso; apply H.*)
 
 (* skip call *)  
 + apply tr_stmt_skip_inv in TS; subst ns. 
