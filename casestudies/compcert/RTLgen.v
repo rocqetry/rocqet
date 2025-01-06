@@ -1055,7 +1055,23 @@ Closing Fact tr_cont_tr_kseq_inv :
     exists n,
       tr_stmt c map s nd n nexits ngoto nret rret /\
       tr_cont c map k n nexits ngoto nret rret cs
-    by plain { intros until cs; intros H; inv H; eauto }.          
+      by plain { intros until cs; intros H; inv H; eauto }.
+
+
+FLemma tr_move_correct:
+  forall tge r1 ns r2 nd cs f sp rs m,
+  tr_move (T.fn_code f) ns r1 nd r2 ->
+  exists rs',
+  star T.step tge (T.State cs f sp ns rs m) E0 (T.State cs f sp nd rs' m) /\
+  rs'#r2 = rs#r1 /\
+  (forall r, r <> r2 -> rs'#r = rs#r).
+FProofLemma.
+  intros. inv H.
+  exists rs; split. constructor. auto.
+  exists (rs#r2 <- (rs#r1)); split.
+  apply star_one. eapply T.exec_Iop. eauto. auto.
+  split. apply Regmap.gss. intros; apply Regmap.gso; auto.
+Qed. CloseFLemma.
 
 MetaData map_wf.
 Record map_wf (m: mapping) : Prop :=
@@ -1102,6 +1118,75 @@ Record match_env
   }.
 FEnd match_env.
 
+FLemma match_env_find_var:
+  forall map e le rs id v r,
+  match_env map e le rs ->
+  e!id = Some v ->
+  map.(map_vars)!id = Some r ->
+  Val.lessdef v rs#r.
+FProofLemma.
+  intros. exploit me_vars; eauto. intros [r' [EQ' RS]].
+  replace r with r'. auto. congruence.
+Qed. CloseFLemma.
+
+FLemma match_env_invariant:
+  forall map e le rs rs',
+  match_env map e le rs ->
+  (forall r, (reg_in_map map r) -> rs'#r = rs#r) ->
+  match_env map e le rs'.
+FProofLemma.
+  intros. inversion H. apply mk_match_env.
+  intros. exploit me_vars0; eauto. intros [r [A B]].
+  exists r; split. auto. rewrite H0; auto. left; exists id; auto.
+  replace (rs'##(map_letvars map)) with (rs ## (map_letvars map)). auto.
+  apply list_map_exten. intros. apply H0. right; auto.
+Qed. CloseFLemma.
+
+FLemma match_env_update_temp:
+  forall map e le rs r v,
+  match_env map e le rs ->
+  ~(reg_in_map map r) ->
+  match_env map e le (rs#r <- v).
+FProofLemma.
+  intros. apply match_env_invariant with rs; auto.
+  intros. case (Reg.eq r r0); intro.
+  subst r0; contradiction.
+  apply Regmap.gso; auto.
+Qed. CloseFLemma.
+(*Global Hint Resolve match_env_update_temp: rtlg.*)
+
+FLemma match_env_update_var:
+  forall map e le rs id r v tv,
+  Val.lessdef v tv ->
+  map_wf map ->
+  map.(map_vars)!id = Some r ->
+  match_env map e le rs ->
+  match_env map (PTree.set id v e) le (rs#r <- tv).
+FProofLemma.
+  intros. inversion H0. inversion H2. apply mk_match_env.
+  intros id' v'. rewrite PTree.gsspec. destruct (peq id' id); intros.
+  subst id'. inv H3. exists r; split. auto. rewrite PMap.gss. auto.
+  exploit me_vars0; eauto. intros [r' [A B]].
+  exists r'; split. auto. rewrite PMap.gso; auto.
+  red; intros. subst r'. elim n. eauto.
+  erewrite list_map_exten. eauto.
+  intros. symmetry. apply PMap.gso. red; intros. subst x. eauto.
+Qed. CloseFLemma.
+
+FLemma match_env_update_dest:
+  forall map e le rs dst r v tv,
+  Val.lessdef v tv ->
+  map_wf map ->
+  reg_map_ok map r dst ->
+  match_env map e le rs ->
+  match_env map (S.set_optvar dst v e) le (rs#r <- tv).
+FProofLemma.
+  intros. inv H1; simpl.
+  eapply match_env_update_temp; eauto.
+  eapply match_env_update_var; eauto.
+Qed. CloseFLemma.
+(* Global Hint Resolve match_env_update_dest: rtlg.*)
+
 FLemma match_set_params_init_regs:
   forall il rl s1 map2 s2 vl tvl i,
   add_vars init_mapping il s1 = OK (rl, map2) s2 i ->
@@ -1141,6 +1226,14 @@ Qed. CloseFLemma.
 
 FDefinition match_prog := fun (p: S.program) (tp: T.program) =>
   match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
+
+Closing Fact tr_expr_tr_evar_inv : forall c map pr id ns nd rd dst,
+   tr_expr c map pr (S.Evar id) ns nd rd dst ->
+   exists r, 
+   map.(map_vars)!id = Some r /\
+   (((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr))) /\
+   tr_move c ns r nd rd
+   by plain { intros until dst; intros H; inv H; eauto }.    
 
 FInduction transl_expr_correct about S.eval_expr motive
    (fun ge sp e m le a v
@@ -1194,11 +1287,29 @@ with transl_condexpr_correct about S.eval_condexpr motive
     /\ match_env map e le rs'
     /\ (forall r, In r pr -> rs'#r = rs#r)
     /\ Mem.extends m tm').     
-
 FProof.
 
 (* Evar *)
-+ intros. apply cheat.
++ intros; (*red*) intros. apply tr_expr_tr_evar_inv in TE; unpack TE.
+  exploit match_env_find_var; eauto. intro EQ.
+  exploit tr_move_correct; eauto. intros [rs' [A [B C]]].
+  exists rs'; exists tm; split. eauto.
+  destruct TEMP as [[D E] | [D E]].
+  (* optimized case *)
+  subst r dst. simpl.
+  assert (forall r, rs'#r = rs#r).
+    intros. destruct (Reg.eq r rd). subst r. auto. auto.
+  split. eapply match_env_invariant; eauto.
+  split. congruence.
+  split; auto.
+  (* general case *)
+  split.
+  apply match_env_invariant with (rs#rd <- (rs#r)).
+  apply match_env_update_dest; auto.
+  intros. rewrite Regmap.gsspec. destruct (peq r0 rd). congruence. auto.
+  split. congruence.
+  split. intros. apply C. intuition congruence.
+  auto.
 
 (* Eop *)  
 + apply cheat.
