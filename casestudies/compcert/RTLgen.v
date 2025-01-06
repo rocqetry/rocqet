@@ -1028,6 +1028,27 @@ with match_stacks: S.cont -> list T.stackframe -> Prop :=
   | match_stacks_stop:
     match_stacks S.Kstop nil.
 
+Closing Fact match_stacks_inv : forall k l,
+    match_stacks k l ->
+    k = S.Kstop /\
+    l = nil
+    by { apply cheat }.      
+
+(* We can prove this easily with FInduction *)
+Closing Fact tr_cont_inversion : forall c map k nd nexits ngoto nret rret cs,
+  tr_cont c map k nd nexits ngoto nret rret cs -> 
+  (exists n s k0,
+      k = (S.Kseq s k0) /\
+      tr_stmt c map s nd n nexits ngoto nret rret /\
+        tr_cont c map k n nexits ngoto nret rret cs)
+  \/
+    (nd = nret /\
+     k = S.Kstop /\
+     nexits = nil /\
+     c!nret = Some(T.Ireturn rret) /\
+       match_stacks S.Kstop cs)
+  by { apply cheat }.
+  
 Closing Fact tr_cont_tr_kseq_inv :
   forall c map s k nd nexits ngoto nret rret cs,
     tr_cont c map (S.Kseq s k) nd nexits ngoto nret rret cs ->
@@ -1409,17 +1430,15 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
 + apply tr_stmt_skip_inv in TS. subst ns.
   apply tr_cont_tr_kseq_inv in TK; unpack TK; subst. 
   econstructor; split.
-  right; split. apply star_refl.
-  (*apply Kseq_inv in H. destruct H; subst s0 k0.*)
-  Lt_state.
-  (*apply Kseq_inv in H. destruct H; subst s0 k0.*)
-  econstructor; eauto. (*apply stop_kseq_discriminate in H. exfalso; apply H.*)
+  right; split. apply star_refl.  
+  Lt_state. econstructor; eauto.
 
 (* skip call *)  
 + apply tr_stmt_skip_inv in TS; subst ns. 
   assert ((T.fn_code tf)!ncont = Some(T.Ireturn rret)
           /\ match_stacks k cs).
-    inv TK; fsimpl in i; try contradiction; auto. 
+  apply tr_cont_inversion in TK. destruct TK; unpack H; subst; fsimpl in i;
+  try contradiction; auto.                                                             
   destruct H.
   assert (T.fn_stacksize tf = S.fn_stackspace f).
     inv TF. auto.
@@ -1441,11 +1460,13 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
 + apply tr_stmt_sseq_inv in TS; unpack TS.
   econstructor; split.
   right; split. apply star_refl. Lt_state.
-  econstructor; eauto. econstructor; eauto.
+  econstructor; eauto. fconstructor; eauto.
 
 (* return none *)
-+ apply tr_stmt_sreturn_none_inv in TS; subst ns.
-  exploit match_stacks_call_cont; eauto. intros [U V].
++ apply tr_stmt_sreturn_none_inv in TS; subst. (*ns.*)
+  exploit match_stacks_call_cont.  
+  instantiate (1 := TK).   
+  intros [U V].  
   inversion TF.
   edestruct Mem.free_parallel_extends as [tm'' []]; eauto.
   econstructor; split.
@@ -1454,10 +1475,12 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   constructor; auto.
     
 (* return some *)  
-+ apply tr_stmt_sreturn_some_inv in TS; unpack TS; subst rret.
++ apply tr_stmt_sreturn_some_inv in TS; unpack TS; subst. (*rret.*)
   exploit transl_expr_correct; eauto.
   intros [rs' [tm' [A [B [C [D E]]]]]].
-  exploit match_stacks_call_cont; eauto. intros [U V].
+  exploit match_stacks_call_cont; eauto.
+  instantiate (1 := TK).
+  intros [U V].
   inversion TF.
   edestruct Mem.free_parallel_extends as [tm'' []]; eauto.
   econstructor; split.
@@ -1489,7 +1512,8 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   left; apply plus_one. eapply T.exec_function_internal; fsimpl; simpl; eauto.
   fsimpl; simpl. econstructor; eauto.
   econstructor; eauto.
-  inversion MS; subst; econstructor; eauto.  
+  apply match_stacks_inv in MS; unpack MS; subst.
+  (*inversion MS; subst;*) fconstructor; auto. apply cheat.
 
 (* ifthenelse *)  
 + apply tr_stmt_sifthenelse_inv in TS; unpack TS.
