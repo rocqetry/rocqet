@@ -1488,9 +1488,11 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   rewrite H1; eauto. traceEq.
   simpl. constructor; auto.
 
+  (* tr_cont (T.fn_code tf) map k ncont nexits ngoto nret (ret_reg (S.fn_sig f) r) cs *)
 (* goto *)  
 + apply tr_stmt_sgoto_inv in TS.  inversion TF; subst.
-  exploit tr_find_label; eauto. eapply tr_cont_call_cont; eauto.
+  exploit tr_find_label; eauto.
+  apply (tr_cont_call_cont _ _ _ _ _ _ _ _ _ TK); eauto.
   intros [ns2 [nd2 [nexits2 [A [B C]]]]].
   econstructor; split.
   left; apply plus_one. eapply T.exec_Inop; eauto.
@@ -1513,7 +1515,7 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   fsimpl; simpl. econstructor; eauto.
   econstructor; eauto.
   apply match_stacks_inv in MS; unpack MS; subst.
-  (*inversion MS; subst;*) fconstructor; auto. apply cheat.
+  (*inversion MS; subst;*) fconstructor; auto. fconstructor.
 
 (* ifthenelse *)  
 + apply tr_stmt_sifthenelse_inv in TS; unpack TS.
