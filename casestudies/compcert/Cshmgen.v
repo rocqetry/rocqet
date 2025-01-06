@@ -1133,14 +1133,14 @@ te is PTree.t (block * Z)
  *)
 
 Record match_env
-  (prog: self__Cshmgen.S.program)
-  (e: self__Cshmgen.S.env) (te: self__Cshmgen.T.fenv) : Prop :=
+  (prog: S.program)
+  (e: S.env) (te: T.fenv) : Prop :=
  mk_match_env {
    me_local:
      forall id b ty,
        e!id = Some (b, ty) ->
-       let ge := self__Cshmgen.S.globalenv prog in 
-       te!id = Some (b, sizeof (self__Cshmgen.S.genv_cenv ge) ty);
+       let ge := S.globalenv prog in 
+       te!id = Some (b, Ctypes.sizeof (S.genv_cenv ge) ty);
    me_local_inv:
      forall id b sz,
      te!id = Some (b, sz) -> exists ty, e!id = Some(b, ty)
