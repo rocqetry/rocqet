@@ -1187,6 +1187,24 @@ FProofLemma.
 Qed. CloseFLemma.
 (* Global Hint Resolve match_env_update_dest: rtlg.*)
 
+FLemma match_env_bind_letvar:
+  forall map e le rs r v,
+  match_env map e le rs ->
+  Val.lessdef v rs#r ->
+  match_env (add_letvar map r) e (v :: le) rs.
+FProofLemma.
+  intros. inv H. unfold add_letvar. apply mk_match_env; simpl; auto.
+Qed. CloseFLemma.
+
+FLemma match_env_unbind_letvar:
+  forall map e le rs r v,
+  match_env (add_letvar map r) e (v :: le) rs ->
+  match_env map e le rs.
+FProofLemma.
+  unfold add_letvar; intros. inv H. simpl in *.
+  constructor. auto. inversion me_letvars0. auto.
+Qed. CloseFLemma.
+
 FLemma match_set_params_init_regs:
   forall il rl s1 map2 s2 vl tvl i,
   add_vars init_mapping il s1 = OK (rl, map2) s2 i ->
@@ -1252,6 +1270,13 @@ Closing Fact tr_expr_tr_econdition_inv : forall c map pr a ifso ifnot ns nd rd d
       tr_expr c map pr ifnot nfalse nd rd dst
       by plain { intros until dst; intros H; inv H; eauto }.      
 
+Closing Fact tr_expr_tr_elet_inv : forall c map pr b1 b2 ns nd rd dst,
+    tr_expr c map pr (S.Elet b1 b2) ns nd rd dst ->
+    exists r n1,
+      ~reg_in_map map r /\
+      tr_expr c map pr b1 ns n1 r None /\
+      tr_expr c (add_letvar map r) pr b2 n1 nd rd dst
+      by plain { intros until dst; intros H; inv H; eauto }.
 
 FLemma function_ptr_translated:
   forall prog tprog ge tge, match_prog prog tprog ->
@@ -1405,7 +1430,23 @@ FProof.
   auto.
 
 (* Elet *)  
-+ apply cheat.
++ intros; (*red;*) intros; apply tr_expr_tr_elet_inv in TE; unpack TE; subst.
+  exploit H; eauto. intros [rs1 [tm1 [EX1 [ME1 [RES1 [OTHER1 EXT1]]]]]].
+  assert (map_wf (add_letvar map r)).
+    eapply add_letvar_wf; eauto.
+  exploit H0; eauto. eapply match_env_bind_letvar; eauto.
+  intros [rs2 [tm2 [EX2 [ME3 [RES2 [OTHER2 EXT2]]]]]].
+  exists rs2; exists tm2.
+(* Exec *)
+  split. eapply star_trans. eexact EX1. eexact EX2. auto.
+(* Match-env *)
+  split. eapply match_env_unbind_letvar; eauto.
+(* Result *)
+  split. assumption.
+(* Other regs *)
+  split. intros. transitivity (rs1#r0); auto.
+(* Mem *)
+  auto.  
 
 (* Eletvar *)  
 + apply cheat.
