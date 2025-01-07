@@ -1233,7 +1233,53 @@ Closing Fact tr_expr_tr_evar_inv : forall c map pr id ns nd rd dst,
    map.(map_vars)!id = Some r /\
    (((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr))) /\
    tr_move c ns r nd rd
-   by plain { intros until dst; intros H; inv H; eauto }.    
+   by plain { intros until dst; intros H; inv H; eauto }.   
+
+Closing Fact tr_expr_tr_eop_inv : forall c map pr op al ns nd rd dst,
+   tr_expr c map pr (S.Eop op al) ns nd rd dst ->
+   exists n1 rl, 
+   tr_exprlist c map pr al ns n1 rl /\
+   (c!n1 = Some (T.Iop op rl rd nd)) /\
+    reg_map_ok map rd dst /\
+    ~In rd pr
+     by plain { intros until dst; intros H; inv H; eauto }.
+
+FLemma function_ptr_translated:
+  forall prog tprog ge tge, match_prog prog tprog ->
+  ge = Genv.globalenv prog ->
+  tge = Genv.globalenv tprog ->
+  forall (b: block) (f: S.fundef),
+  Genv.find_funct_ptr ge b = Some f ->
+  exists tf,
+  Genv.find_funct_ptr tge b = Some tf /\ transl_fundef f = Errors.OK tf.
+FProofLemma.
+intros until tge; intros TRANSL A B. rewrite A. rewrite B.
+apply Genv.find_funct_ptr_transf_partial; eauto.
+Qed. CloseFLemma.
+
+FLemma symbols_preserved:
+  forall prog tprog ge tge, match_prog prog tprog ->
+  ge = Genv.globalenv prog ->
+  tge = Genv.globalenv tprog ->
+  forall (s: ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
+FProofLemma.
+intros until tge; intros TRANSL A B. rewrite A. rewrite B.
+apply (Genv.find_symbol_transf_partial TRANSL).
+Qed. CloseFLemma.
+
+FLemma sig_transl_function:
+  forall (f: S.fundef) (tf: T.fundef),
+  transl_fundef f = Errors.OK tf ->
+  T.funsig tf = S.funsig f.
+FProofLemma.
+  intros until tf. unfold transl_fundef, transf_partial_fundef.
+  case f; intro.
+  unfold transl_function.
+  case (transl_fun f0 (init_state)); simpl; intros.
+  discriminate.
+  destruct p. simpl in H. inversion H. reflexivity.
+  intro. inversion H. reflexivity.
+Qed. CloseFLemma.
 
 FInduction transl_expr_correct about S.eval_expr motive
    (fun ge sp e m le a v
@@ -1312,7 +1358,24 @@ FProof.
   auto.
 
 (* Eop *)  
-+ apply cheat.
++  intros; (* red; *) intros. apply tr_expr_tr_eop_inv in TE; unpack TE; subst.
+(* normal case *)
+  exploit H; eauto. intros [rs1 [tm1 [EX1 [ME1 [RR1 [RO1 EXT1]]]]]].
+  edestruct eval_operation_lessdef as [v' []]; eauto.
+  exists (rs1#rd <- v'); exists tm1.
+(* Exec *)
+  split. eapply star_right. eexact EX1.
+  eapply T.exec_Iop; eauto.
+  rewrite (@eval_operation_preserved S.fundef _ _ _ (Genv.globalenv prog) (Genv.globalenv tprog)). eauto.
+  exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) H0 eq_refl eq_refl). traceEq.
+(* Match-env *)
+  split. eauto using match_env_update_temp, match_env_update_dest.
+(* Result reg *)
+  split. rewrite Regmap.gss. auto.
+(* Other regs *)
+  split. intros. rewrite Regmap.gso. auto. intuition congruence.
+(* Mem *)
+  auto.
 
 (* Econdition *)  
 + apply cheat.
@@ -1644,43 +1707,6 @@ Hypothesis TRANSL: match_prog prog tprog.
 Let ge : CminorSel.genv := Genv.globalenv prog.
 Let tge : RTL.genv := Genv.globalenv tprog.
  *)
-
-FLemma function_ptr_translated:
-  forall prog tprog ge tge, match_prog prog tprog ->
-  ge = Genv.globalenv prog ->
-  tge = Genv.globalenv tprog ->
-  forall (b: block) (f: S.fundef),
-  Genv.find_funct_ptr ge b = Some f ->
-  exists tf,
-  Genv.find_funct_ptr tge b = Some tf /\ transl_fundef f = Errors.OK tf.
-FProofLemma.
-intros until tge; intros TRANSL A B. rewrite A. rewrite B.
-apply Genv.find_funct_ptr_transf_partial; eauto.
-Qed. CloseFLemma.
-
-FLemma symbols_preserved:
-  forall prog tprog ge tge, match_prog prog tprog ->
-  ge = Genv.globalenv prog ->
-  tge = Genv.globalenv tprog ->
-  forall (s: ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
-FProofLemma.
-intros until tge; intros TRANSL A B. rewrite A. rewrite B.
-apply (Genv.find_symbol_transf_partial TRANSL).
-Qed. CloseFLemma.
-
-FLemma sig_transl_function:
-  forall (f: S.fundef) (tf: T.fundef),
-  transl_fundef f = Errors.OK tf ->
-  T.funsig tf = S.funsig f.
-FProofLemma.
-  intros until tf. unfold transl_fundef, transf_partial_fundef.
-  case f; intro.
-  unfold transl_function.
-  case (transl_fun f0 (init_state)); simpl; intros.
-  discriminate.
-  destruct p. simpl in H. inversion H. reflexivity.
-  intro. inversion H. reflexivity.
-Qed. CloseFLemma.
 
 FLemma transl_initial_states: 
   forall prog tprog, match_prog prog tprog -> 
