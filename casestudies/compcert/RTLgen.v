@@ -1129,6 +1129,24 @@ FProofLemma.
   replace r with r'. auto. congruence.
 Qed. CloseFLemma.
 
+FLemma match_env_find_letvar:
+  forall map e le rs idx v r,
+  match_env map e le rs ->
+  List.nth_error le idx = Some v ->
+  List.nth_error map.(map_letvars) idx = Some r ->
+  Val.lessdef v rs#r.
+FProofLemma.
+  intros. exploit me_letvars; eauto.
+  clear H. revert le H0 H1. generalize (map_letvars map). clear map.
+  induction idx; simpl; intros.
+  inversion H; subst le; inversion H0. subst v1.
+  destruct l; inversion H1. subst r0.
+  inversion H2. subst v2. auto.
+  destruct l; destruct le; try discriminate.
+  eapply IHidx; eauto.
+  inversion H. auto.
+Qed. CloseFLemma.
+
 FLemma match_env_invariant:
   forall map e le rs rs',
   match_env map e le rs ->
@@ -1277,6 +1295,14 @@ Closing Fact tr_expr_tr_elet_inv : forall c map pr b1 b2 ns nd rd dst,
       tr_expr c map pr b1 ns n1 r None /\
       tr_expr c (add_letvar map r) pr b2 n1 nd rd dst
       by plain { intros until dst; intros H; inv H; eauto }.
+
+Closing Fact tr_expr_tr_eletvar_inv : forall c map pr n ns nd rd dst,
+    tr_expr c map pr (S.Eletvar n) ns nd rd dst ->
+    exists r, 
+    List.nth_error map.(map_letvars) n = Some r /\
+    (((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr))) /\
+    tr_move c ns r nd rd
+    by plain { intros until dst; intros H; inv H; eauto }.           
 
 FLemma function_ptr_translated:
   forall prog tprog ge tge, match_prog prog tprog ->
@@ -1449,7 +1475,31 @@ FProof.
   auto.  
 
 (* Eletvar *)  
-+ apply cheat.
++ intros; (*red;*) intros; apply tr_expr_tr_eletvar_inv in TE; unpack TE; subst. 
+  exploit tr_move_correct; eauto. intros [rs1 [EX1 [RES1 OTHER1]]].
+  exists rs1; exists tm.
+(* Exec *)
+  split. eexact EX1.
+(* Match-env *)
+  split.
+  destruct TEMP as [[A B] | [A B]].
+  subst r dst; simpl.
+  apply match_env_invariant with rs. auto.
+  intros. destruct (Reg.eq r rd). subst r. auto. auto.
+  apply match_env_invariant with (rs#rd <- (rs#r)).
+  apply match_env_update_dest; auto.
+  eapply match_env_find_letvar; eauto.
+  intros. rewrite Regmap.gsspec. destruct (peq r0 rd); auto.
+  congruence.
+(* Result *)
+  split. rewrite RES1. eapply match_env_find_letvar; eauto.
+(* Other regs *)
+  split. intros.
+  destruct TEMP as [[A B] | [A B]].
+  destruct (Reg.eq r0 rd); subst; auto.
+  apply OTHER1. intuition congruence.
+(* Mem *)
+  auto.  
 
 (* Enil *)  
 + apply cheat.
