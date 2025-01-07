@@ -1302,7 +1302,12 @@ Closing Fact tr_expr_tr_eletvar_inv : forall c map pr n ns nd rd dst,
     List.nth_error map.(map_letvars) n = Some r /\
     (((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr))) /\
     tr_move c ns r nd rd
-    by plain { intros until dst; intros H; inv H; eauto }.           
+      by plain { intros until dst; intros H; inv H; eauto }.
+
+Closing Fact tr_exprlist_tr_enil : forall c map pr ns nd rl,
+    tr_exprlist c map pr S.Enil ns nd rl ->
+    ns = nd /\ rl = nil          
+    by plain { intros until b; intros H; inv H; eauto }.
 
 FLemma function_ptr_translated:
   forall prog tprog ge tge, match_prog prog tprog ->
@@ -1502,7 +1507,12 @@ FProof.
   auto.  
 
 (* Enil *)  
-+ apply cheat.
++ intros; (*red;*) intros; apply tr_exprlist_tr_enil in TE; unpack TE; subst; 
+  exists rs; exists tm.
+  split. apply star_refl.
+  split. assumption.
+  split. constructor.
+  auto. 
 
 (* Econs *)  
 + apply cheat.
