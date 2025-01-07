@@ -1244,6 +1244,15 @@ Closing Fact tr_expr_tr_eop_inv : forall c map pr op al ns nd rd dst,
     ~In rd pr
      by plain { intros until dst; intros H; inv H; eauto }.
 
+Closing Fact tr_expr_tr_econdition_inv : forall c map pr a ifso ifnot ns nd rd dst,
+    tr_expr c map pr (S.Econdition a ifso ifnot) ns nd rd dst ->
+    exists ntrue nfalse,
+      tr_condition c map pr a ns ntrue nfalse /\
+      tr_expr c map pr ifso ntrue nd rd dst /\
+      tr_expr c map pr ifnot nfalse nd rd dst
+      by plain { intros until dst; intros H; inv H; eauto }.      
+
+
 FLemma function_ptr_translated:
   forall prog tprog ge tge, match_prog prog tprog ->
   ge = Genv.globalenv prog ->
@@ -1358,7 +1367,7 @@ FProof.
   auto.
 
 (* Eop *)  
-+  intros; (* red; *) intros. apply tr_expr_tr_eop_inv in TE; unpack TE; subst.
++ intros; (* red; *) intros. apply tr_expr_tr_eop_inv in TE; unpack TE; subst.
 (* normal case *)
   exploit H; eauto. intros [rs1 [tm1 [EX1 [ME1 [RR1 [RO1 EXT1]]]]]].
   edestruct eval_operation_lessdef as [v' []]; eauto.
@@ -1378,7 +1387,22 @@ FProof.
   auto.
 
 (* Econdition *)  
-+ apply cheat.
++  intros; (*red;*) intros. apply tr_expr_tr_econdition_inv in TE; unpack TE. 
+  exploit H; eauto. intros [rs1 [tm1 [EX1 [ME1 [OTHER1 EXT1]]]]].
+  assert (tr_expr (T.fn_code f) map pr (if va then b else c) (if va then ntrue else nfalse) nd rd dst).
+    destruct va; auto.
+  exploit H0; eauto. intros [rs2 [tm2 [EX2 [ME2 [RES2 [OTHER2 EXT2]]]]]].
+  exists rs2; exists tm2.
+(* Exec *)
+  split. eapply star_trans. apply plus_star. eexact EX1. eexact EX2. traceEq.
+(* Match-env *)
+  split. assumption.
+(* Result value *)
+  split. assumption.
+(* Other regs *)
+  split. intros. transitivity (rs1#r); auto.
+(* Mem *)
+  auto.
 
 (* Elet *)  
 + apply cheat.
