@@ -485,7 +485,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
 | exec_Ireturn:
     forall ge s f stk pc rs m or m',
     (self__RTL.fn_code f)!pc = Some(Ireturn or) ->
-    Mem.free m stk 0 f.(self__RTL.fn_stacksize) = Some m' ->
+    Mem.free m stk 0 (fn_stacksize f) = Some m' ->
     step ge (State s f (Vptr stk Ptrofs.zero) pc rs m)
       E0 (Returnstate s (regmap_optget or Vundef rs) m')
 | exec_function_internal:
@@ -1959,11 +1959,54 @@ FInductive stmt : Type :=
 | Sblock: stmt -> stmt
 | Sexit: nat -> stmt
 | Sloop: stmt -> stmt.
+
+FInductive cont: Type :=
+| Kblock: cont -> cont.  
+
+FRecursion call_cont.
+Case Kblock k := (call_cont k).
+FEnd call_cont.
+
+FRecursion is_call_cont.
+Case Kblock k := False.
+FEnd is_call_cont.
+  
+FRecursion find_label.
+Case _ := (fun lbl k => None).
+FEnd find_label.
+
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_loop: forall ge f s k sp e m,
+   step ge (State f (Sloop s) k sp e m)
+     E0 (State f s (Kseq (Sloop s) k) sp e m)
+| step_block: forall ge f s k sp e m,
+    step ge (State f (Sblock s) k sp e m)
+      E0 (State f s (Kblock k) sp e m)
+| step_exit_seq: forall ge f n s k sp e m,
+   step ge (State f (Sexit n) (Kseq s k) sp e m)
+     E0 (State f (Sexit n) k sp e m)
+| step_exit_block_0: forall ge f k sp e m,
+   step ge (State f (Sexit O) (Kblock k) sp e m)
+     E0 (State f Sskip k sp e m)
+| step_exit_block_S: forall ge f n k sp e m,
+   step ge (State f (Sexit (S n)) (Kblock k) sp e m)
+     E0 (State f (Sexit n) k sp e m).
+  
 FEnd CminorSel.
 
 Trait RTL_jumptable extends RTL.
 FInductive instruction: Type :=
 | Ijumptable: reg -> list node -> instruction.  
+
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_Ijumptable:
+   forall ge s f sp pc rs m arg tbl n pc',
+   (fn_code f)!pc = Some(Ijumptable arg tbl) ->
+   rs#arg = Vint n ->
+   list_nth_z tbl (Int.unsigned n) = Some pc' ->
+   step ge (State s f sp pc rs m)
+     E0 (State s f sp pc' rs m).
+
 FEnd RTL_jumptable.
 
 Family RTL extends RTL_jumptable.
@@ -1971,7 +2014,7 @@ FEnd RTL.
 
 From Rocqet Require Import RTLmonad.
 
-Trait RTLgen_Sloop extends RTLgen.
+Family RTLgen.
 
 Inherit labelmap.
 
@@ -2000,9 +2043,41 @@ Case Sblock s1 := (fun lm => reserve_labels s1 lm).
 Case Sexit n := (fun lm => ret lm).
 FEnd reserve_labels.
 
-FEnd RTLgen_Sloop.
+FInductive tr_stmt : T.code -> mapping -> S.stmt -> T.node -> T.node -> list T.node -> labelmap -> T.node -> option reg -> Prop :=
+| tr_Sloop: forall c map sbody ns nd nexits ngoto nret rret nloop nend,
+     tr_stmt c map sbody nloop nend nexits ngoto nret rret ->
+     c!ns = Some(T.Inop nloop) ->
+     c!nend = Some(T.Inop nloop) ->
+     tr_stmt c map (S.Sloop sbody) ns nd nexits ngoto nret rret
+| tr_Sblock: forall c map sbody ns nd nexits ngoto nret rret,
+     tr_stmt c map sbody ns nd (nd :: nexits) ngoto nret rret ->
+     tr_stmt c map (S.Sblock sbody) ns nd nexits ngoto nret rret
+  | tr_Sexit: forall c map n ns nd nexits ngoto nret rret,
+     nth_error nexits n = Some ns ->
+     tr_stmt c map (S.Sexit n) ns nd nexits ngoto nret rret.
 
-Family RTLgen extends RTLgen_Sloop.
+FRecursion size_stmt.
+Local Open Scope nat_scope.
+Case Sloop s1 := (size_stmt s1 + 1).
+Case Sblock s1 := (size_stmt s1 + 1).
+Case Sexit n := 0.
+FEnd size_stmt.
+
+FRecursion size_cont.
+Case Kblock k1 := (size_cont k1 + 1).
+FEnd size_cont.
+
+FInduction tr_find_label.
+FProof.
+all: intros until nexits1; fsimpl; try congruence.
+Qed. FEnd tr_find_label.
+
+FInduction transl_step_correct.
+FProof.
+all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
+
+Qed. FEnd transl_step_correct.
+
 FEnd RTLgen.
 
 FEnd Comp_Loops.
