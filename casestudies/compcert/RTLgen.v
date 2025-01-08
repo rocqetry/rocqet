@@ -1972,7 +1972,9 @@ Case Kblock k := False.
 FEnd is_call_cont.
   
 FRecursion find_label.
-Case _ := (fun lbl k => None).
+Case Sloop s1 := (fun lbl k => find_label s1 lbl (Kseq (Sloop s1) k)).
+Case Sblock s1 := (fun lbl k => find_label s1 lbl (Kblock k)).
+Case Sexit n := (fun lbl k => None).
 FEnd find_label.
 
 FInductive step : genv -> state -> trace -> state -> Prop :=
@@ -2070,6 +2072,9 @@ FEnd size_cont.
 FInduction tr_find_label.
 FProof.
 all: intros until nexits1; fsimpl; try congruence.
+
++ apply cheat.
++ apply cheat.
 Qed. FEnd tr_find_label.
 
 FInduction transl_step_correct.
@@ -2106,19 +2111,92 @@ FInductive expr : Type :=
 
 FInductive stmt : Type :=
 | Sbuiltin : builtin_res ident -> external_function -> list (builtin_arg expr) -> stmt.
+
+FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
+| eval_Ebuiltin: forall ge sp e m le ef al vl v,
+   eval_exprlist ge sp e m le al vl ->
+   external_call ef ge vl m E0 v m ->
+   eval_expr ge sp e m le (Ebuiltin ef al) v             
+| eval_Eexternal: forall ge sp e m le id sg al b ef vl v,
+   Genv.find_symbol ge id = Some b ->
+   Genv.find_funct_ptr ge b = Some (AST.External ef) ->
+   ef_sig ef = sg ->
+   eval_exprlist ge sp e m le al vl ->
+   external_call ef ge vl m E0 v m ->
+   eval_expr ge sp e m le (Eexternal id sg al) v.
+
+MetaData eval_builtin_arg.
+Inductive eval_builtin_arg: genv -> fenv -> env -> mem -> builtin_arg expr -> val -> Prop :=
+  | eval_BA: forall ge sp e m a v,
+      eval_expr ge sp e m nil a v ->
+      eval_builtin_arg ge sp e m (BA a) v
+  | eval_BA_int: forall ge sp e m n,
+      eval_builtin_arg ge sp e m (BA_int n) (Vint n)
+  | eval_BA_long: forall ge sp e m n,
+      eval_builtin_arg ge sp e m (BA_long n) (Vlong n)
+  | eval_BA_float: forall ge sp e m n,
+      eval_builtin_arg ge sp e m (BA_float n) (Vfloat n)
+  | eval_BA_single: forall ge sp e m n,
+      eval_builtin_arg ge sp e m (BA_single n) (Vsingle n)
+  | eval_BA_loadstack: forall ge sp e m chunk ofs v,
+      Mem.loadv chunk m (Val.offset_ptr (Vptr sp Ptrofs.zero) ofs) = Some v ->
+      eval_builtin_arg ge sp e m (BA_loadstack chunk ofs) v
+  | eval_BA_addrstack: forall ge sp e m ofs,
+      eval_builtin_arg ge sp e m (BA_addrstack ofs) (Val.offset_ptr (Vptr sp Ptrofs.zero) ofs)
+  | eval_BA_loadglobal: forall ge sp e m chunk id ofs v,
+      Mem.loadv chunk m (Genv.symbol_address ge id ofs) = Some v ->
+      eval_builtin_arg ge sp e m (BA_loadglobal chunk id ofs) v
+  | eval_BA_addrglobal: forall ge sp e m id ofs,
+      eval_builtin_arg ge sp e m (BA_addrglobal id ofs) (Genv.symbol_address ge id ofs)
+  | eval_BA_splitlong: forall ge sp e m a1 a2 v1 v2,
+      eval_expr ge sp e m nil a1 v1 -> eval_expr ge sp e m nil a2 v2 ->
+      eval_builtin_arg ge sp e m (BA_splitlong (BA a1) (BA a2)) (Val.longofwords v1 v2)
+  | eval_BA_addptr: forall ge sp e m a1 v1 a2 v2,
+      eval_builtin_arg ge sp e m a1 v1 -> eval_builtin_arg ge sp e m a2 v2 ->
+      eval_builtin_arg ge sp e m (BA_addptr a1 a2)
+                       (if Archi.ptr64 then Val.addl v1 v2 else Val.add v1 v2).
+FEnd eval_builtin_arg.
+
+FRecursion find_label.
+Case _ := (fun lbl k => None).
+FEnd find_label.
+
+FDefinition set_builtin_res := fun (res: builtin_res ident) (v: val) (e: env) =>
+  match res with
+  | BR id => PTree.set id v e
+  | _ => e
+  end.
+
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_builtin: forall ge f res ef al k sp e m vl t v m',
+      list_forall2 (eval_builtin_arg ge sp e m) al vl ->
+      external_call ef ge vl m t v m' ->
+      step ge (State f (Sbuiltin res ef al) k sp e m)
+         t (State f Sskip k sp (set_builtin_res res v e) m').
+  
 FEnd CminorSel.
 
 Family RTL.
 FInductive instruction: Type :=
 | Ibuiltin: external_function -> list (builtin_arg reg) -> builtin_res reg -> node -> instruction.
+
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_Ibuiltin:
+      forall ge s f sp pc rs m ef args res pc' vargs t vres m',
+      (fn_code f)!pc = Some(Ibuiltin ef args res pc') ->
+      eval_builtin_args (Genv.to_senv ge) (fun r => rs#r) sp m args vargs ->
+      external_call ef (Genv.to_senv ge) vargs m t vres m' ->
+      step ge (State s f sp pc rs m)
+         t (State s f sp pc' (regmap_setres res vres rs) m').
+  
 FEnd RTL.
 
 Family RTLgen.
-Family S extends CminorSel. FEnd S.
+Family So extends CminorSel. FEnd So.
 Family T extends RTL. FEnd T.
 
-FDefinition exprlist_of_expr_list : list S.expr -> S.exprlist := fun l =>
-  List.fold_right S.Econs S.Enil l.
+FDefinition exprlist_of_expr_list : list So.expr -> So.exprlist := fun l =>
+  List.fold_right So.Econs So.Enil l.
 
 MetaData params_of_builtin_arg.
 Fixpoint params_of_builtin_arg (A: Type) (a: builtin_arg A) : list A :=
@@ -2134,7 +2212,7 @@ FDefinition params_of_builtin_args := fun (A: Type) (al: list (builtin_arg A)) =
   List.fold_right (fun a l => params_of_builtin_arg A a ++ l) nil al.
 
 MetaData convert_builtin_arg.
-Fixpoint convert_builtin_arg {A: Type} (a: builtin_arg self__RTLgen.S.expr) (rl: list A) : builtin_arg A * list A :=
+Fixpoint convert_builtin_arg {A: Type} (a: builtin_arg So.expr) (rl: list A) : builtin_arg A * list A :=
   match a with
   | BA a =>
       match rl with
@@ -2161,7 +2239,7 @@ Fixpoint convert_builtin_arg {A: Type} (a: builtin_arg self__RTLgen.S.expr) (rl:
 FEnd convert_builtin_arg.
 
 MetaData convert_builtin_args.
-Fixpoint convert_builtin_args {A: Type} (al: list (builtin_arg self__RTLgen.S.expr)) (rl: list A) : list (builtin_arg A) :=
+Fixpoint convert_builtin_args {A: Type} (al: list (builtin_arg So.expr)) (rl: list A) : list (builtin_arg A) :=
   match al with
   | nil => nil
   | a1 :: al =>
@@ -2176,6 +2254,7 @@ FRecursion alloc_reg.
 Case _ := (fun map => new_reg).
 FEnd alloc_reg.
 
+(* Builtin needs call? *)
 FRecursion transl_expr with transl_exprlist with transl_condexpr.
 Case Ebuiltin ef al :=
   (fun map rd nd =>
@@ -2202,7 +2281,7 @@ FDefinition convert_builtin_res : mapping -> rettype -> builtin_res ident -> sel
 FRecursion transl_stmt.
 Case Sbuiltin r ef args :=
 (fun map nd nexits ngoto nret rret =>  
-   let al := exprlist_of_expr_list (params_of_builtin_args S.expr args) in
+   let al := exprlist_of_expr_list (params_of_builtin_args So.expr args) in
    do rargs <- alloc_regs al map;
    let args' := convert_builtin_args args rargs in
    do res' <- convert_builtin_res map (sig_res (ef_sig ef)) r;
@@ -2213,6 +2292,59 @@ FEnd transl_stmt.
 FRecursion reserve_labels.
 Case _ := (fun lm => ret lm).
 FEnd reserve_labels.
+
+FInductive tr_expr : T.code -> mapping -> list reg -> So.expr -> T.node -> T.node -> reg -> option AST.ident -> Prop :=
+| tr_Ebuiltin: forall c map pr ef al ns nd rd dst n1 rl,
+      tr_exprlist c map pr al ns n1 rl ->
+      c!n1 = Some (T.Ibuiltin ef (List.map (@BA reg) rl) (BR rd) nd) ->
+      reg_map_ok map rd dst -> ~In rd pr ->
+      tr_expr c map pr (So.Ebuiltin ef al) ns nd rd dst.
+(*TODO: T.Icall *)              
+(* | tr_Eexternal: forall c map pr id sg al ns nd rd dst n1 rl,
+      tr_exprlist c map pr al ns n1 rl ->
+      c!n1 = Some (T.Icall sg (inr _ id) rl rd nd) ->
+      reg_map_ok map rd dst -> ~In rd pr ->
+      tr_expr c map pr (Eexternal id sg al) ns nd rd dst. *)
+
+MetaData tr_builtin_res.
+Inductive tr_builtin_res: mapping -> builtin_res ident -> builtin_res reg -> Prop :=
+  | tr_builtin_res_var: forall map id r,
+      map.(map_vars)!id = Some r ->
+      tr_builtin_res map (BR id) (BR r)
+  | tr_builtin_res_none: forall map,
+      tr_builtin_res map BR_none BR_none
+  | tr_builtin_res_fresh: forall map r,
+      ~reg_in_map map r ->
+      tr_builtin_res map BR_none (BR r).
+FEnd tr_builtin_res.
+
+FInductive tr_stmt : T.code -> mapping -> So.stmt -> T.node -> T.node -> list T.node -> labelmap -> T.node -> option reg -> Prop :=
+| tr_Sbuiltin: forall c map res ef args ns nd nexits ngoto nret rret res' n1 rargs,
+   tr_exprlist c map nil (exprlist_of_expr_list (params_of_builtin_args So.expr args)) ns n1 rargs ->
+   c!n1 = Some (T.Ibuiltin ef (convert_builtin_args args rargs) res' nd) ->
+   tr_builtin_res map res res' ->
+   tr_stmt c map (So.Sbuiltin res ef args) ns nd nexits ngoto nret rret.
+
+FInduction transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
+FProof.
++ apply cheat.
++ apply cheat.
+Qed. FEnd transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
+
+FRecursion size_stmt.
+Case _ := 1.
+FEnd size_stmt.
+
+FInduction tr_find_label.
+FProof.
+all: intros until nexits1; fsimpl; try congruence.
+Qed. FEnd tr_find_label.
+
+FInduction transl_step_correct.
+FProof.
+all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
++ apply cheat.
+Qed. FEnd transl_step_correct.
 
 FEnd RTLgen.
 
@@ -2228,16 +2360,53 @@ FInductive expr : Type :=
 FInductive stmt : Type :=                                                        
 | Sstore : memory_chunk -> addressing -> exprlist -> expr -> stmt.
 
+FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
+| eval_Eload: forall ge sp e m le chunk addr al vl vaddr v,
+   eval_exprlist ge sp e m le al vl ->
+   eval_addressing ge (Vptr sp Ptrofs.zero) addr vl = Some vaddr ->
+   Mem.loadv chunk m vaddr = Some v ->
+   eval_expr ge sp e m le (Eload chunk addr al) v.
+           
+FRecursion find_label.  
+Case Sstore chunk addr al a := (fun lbl k => None).
+FEnd find_label.
+
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_store: forall ge f chunk addr al b k sp e m vl v vaddr m',
+   eval_exprlist ge sp e m nil al vl ->
+   eval_expr ge sp e m nil b v ->
+   eval_addressing ge (Vptr sp Ptrofs.zero) addr vl = Some vaddr ->
+   Mem.storev chunk m vaddr v = Some m' ->
+   step ge (State f (Sstore chunk addr al b) k sp e m)
+     E0 (State f Sskip k sp e m').
+  
 FEnd CminorSel.
 
 Family RTL.
 FInductive instruction: Type :=
 | Iload: memory_chunk -> addressing -> list reg -> reg -> node -> instruction
 | Istore: memory_chunk -> addressing -> list reg -> reg -> node -> instruction.
+
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_Iload:
+      forall ge s f sp pc rs m chunk addr args dst pc' a v,
+      (fn_code f)!pc = Some(Iload chunk addr args dst pc') ->
+      eval_addressing ge sp addr rs##args = Some a ->
+      Mem.loadv chunk m a = Some v ->
+      step ge (State s f sp pc rs m)
+        E0 (State s f sp pc' (rs#dst <- v) m)
+  | exec_Istore:
+      forall ge s f sp pc rs m chunk addr args src pc' a m',
+      (fn_code f)!pc = Some(Istore chunk addr args src pc') ->
+      eval_addressing ge sp addr rs##args = Some a ->
+      Mem.storev chunk m a rs#src = Some m' ->
+      step ge (State s f sp pc rs m)
+        E0 (State s f sp pc' rs m').
+  
 FEnd RTL.
 
 Family RTLgen.
-Family S extends CminorSel. FEnd S.
+Family So extends CminorSel. FEnd So.
 Family T extends RTL. FEnd T.
 
 FRecursion alloc_reg.
@@ -2268,6 +2437,41 @@ FEnd transl_stmt.
 FRecursion reserve_labels.
 Case _ := (fun lm => ret lm).
 FEnd reserve_labels.
+
+FInductive tr_expr : T.code -> mapping -> list reg -> So.expr -> T.node -> T.node -> reg -> option AST.ident -> Prop :=
+| tr_Eload: forall c map pr chunk addr al ns nd rd n1 rl dst,
+      tr_exprlist c map pr al ns n1 rl ->
+      c!n1 = Some (T.Iload chunk addr rl rd nd) ->
+      reg_map_ok map rd dst -> ~In rd pr ->
+      tr_expr c map pr (So.Eload chunk addr al) ns nd rd dst.
+
+FInductive tr_stmt : T.code -> mapping -> So.stmt -> T.node -> T.node -> list T.node -> labelmap -> T.node -> option reg -> Prop :=              
+| tr_Sstore: forall c map chunk addr al b ns nd nexits ngoto nret rret rd n1 rl n2,
+     tr_exprlist c map nil al ns n1 rl ->
+     tr_expr c map rl b n1 n2 rd None ->
+     c!n2 = Some (T.Istore chunk addr rl rd nd) ->
+     tr_stmt c map (So.Sstore chunk addr al b) ns nd nexits ngoto nret rret.
+
+
+FInduction transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
+FProof.
++ apply cheat.
+Qed. FEnd transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
+
+FRecursion size_stmt.
+Case _ := 1.
+FEnd size_stmt.
+
+FInduction tr_find_label.
+FProof.
+all: intros until nexits1; fsimpl; try congruence.
+Qed. FEnd tr_find_label.
+
+FInduction transl_step_correct.
+FProof.
+all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
++ apply cheat.
+Qed. FEnd transl_step_correct.
 
 FEnd RTLgen.
 
