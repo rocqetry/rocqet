@@ -1309,6 +1309,14 @@ Closing Fact tr_exprlist_tr_enil : forall c map pr ns nd rl,
     ns = nd /\ rl = nil          
     by plain { intros until b; intros H; inv H; eauto }.
 
+Closing Fact tr_exprlist_tr_econs : forall c map pr a1 al ns nd rl,
+    tr_exprlist c map pr (S.Econs a1 al) ns nd rl ->
+    exists r1 rl' n1,
+      rl = r1 :: rl' /\
+      tr_expr c map pr a1 ns n1 r1 None /\
+      tr_exprlist c map (r1 :: pr) al n1 nd rl'
+    by plain { intros until b; intros H; inv H; eauto }.                 
+
 FLemma function_ptr_translated:
   forall prog tprog ge tge, match_prog prog tprog ->
   ge = Genv.globalenv prog ->
@@ -1507,7 +1515,7 @@ FProof.
   auto.  
 
 (* Enil *)  
-+ intros; (*red;*) intros; apply tr_exprlist_tr_enil in TE; unpack TE; subst; 
++ intros; (*red;*) intros; apply tr_exprlist_tr_enil in TE; unpack TE; subst.
   exists rs; exists tm.
   split. apply star_refl.
   split. assumption.
@@ -1515,7 +1523,24 @@ FProof.
   auto. 
 
 (* Econs *)  
-+ apply cheat.
++ intros; (*red;*) intros; apply tr_exprlist_tr_econs in TE; unpack TE; subst.
+  exploit H; eauto. intros [rs1 [tm1 [EX1 [ME1 [RES1 [OTHER1 EXT1]]]]]].
+  exploit H0; eauto. intros [rs2 [tm2 [EX2 [ME2 [RES2 [OTHER2 EXT2]]]]]].
+  exists rs2; exists tm2.
+(* Exec *)
+  split. eapply star_trans. eexact EX1. eexact EX2. auto.
+(* Match-env *)
+  split. assumption.
+(* Results *)
+  split. simpl. constructor. rewrite OTHER2. auto.
+  simpl; tauto.
+  auto.
+(* Other regs *)
+  split. intros. transitivity (rs1#r).
+  apply OTHER2; auto. simpl; tauto.
+  apply OTHER1; auto.
+(* Mem *)
+  auto.
 
 (* CEcond *)  
 + apply cheat.
