@@ -1048,6 +1048,174 @@ FDefinition transl_globvar := fun (id: ident) (ty: type) => OK tt.
 FDefinition transl_program : S.program -> res T.program := fun p => 
   transform_partial_program2 (transl_fundef p.(prog_comp_env)) transl_globvar p.
 
+(* Lemmas on expression translation/compilation *)
+(*MetaData EXPR_Lemmas.
+(*
+Section EXPR.
+
+Variable cunit: S.program.
+Hypothesis LINK: linkorder cunit prog.
+Variable e: Clight.env.
+Variable le: temp_env.
+Variable m: mem.
+Variable te: Csharpminor.env.
+Hypothesis MENV: match_env e te.*)
+
+Lemma transl_expr_lvalue:
+  forall a loc ofs bf ta,
+  S.eval_lvalue ge e le m a loc ofs bf ->
+  transl_expr cunit.(prog_comp_env) a = OK ta ->
+  exists tb, transl_lvalue cunit.(prog_comp_env) a = OK (tb, bf)
+          /\ make_load tb (typeof a) bf = OK ta.
+Proof.
+  intros until ta; intros EVAL TR. inv EVAL; simpl in TR.
+- (* var local *)
+  exists (Eaddrof id); auto.
+- (* var global *)
+  exists (Eaddrof id); auto.
+- (* deref *)
+  monadInv TR. cbn; rewrite EQ. exists x; auto.
+- (* field struct *)
+  monadInv TR.
+  assert (x1 = bf).
+  { rewrite H0 in EQ1. unfold make_field_access in EQ1.
+    destruct ((prog_comp_env cunit)!id) as [co'|] eqn:E; try discriminate.
+    monadInv EQ1.
+    exploit field_offset_stable. eexact LINK. eauto. instantiate (1 := i). intros [A B].
+    simpl in H1, H2. congruence. }
+  subst x1.
+  exists x0; split; auto. simpl; rewrite EQ; auto.
+- (* field union *)
+  monadInv TR.
+  assert (x1 = bf).
+  { rewrite H0 in EQ1. unfold make_field_access in EQ1.
+    destruct ((prog_comp_env cunit)!id) as [co'|] eqn:E; try discriminate.
+    monadInv EQ1.
+    exploit union_field_offset_stable. eexact LINK. eauto. instantiate (1 := i). intros [A B].
+    simpl in H1, H2. congruence. }
+  subst x1.
+  exists x0; split; auto. simpl; rewrite EQ; auto.
+Qed.
+
+Lemma transl_expr_lvalue_correct:
+  (forall a v,
+   Clight.eval_expr ge e le m a v ->
+   forall ta (TR: transl_expr cunit.(prog_comp_env) a = OK ta) ,
+   Csharpminor.eval_expr tge te le m ta v)
+/\(forall a b ofs bf,
+   Clight.eval_lvalue ge e le m a b ofs bf ->
+   forall ta bf' (TR: transl_lvalue cunit.(prog_comp_env) a = OK (ta, bf')),
+   bf = bf' /\ Csharpminor.eval_expr tge te le m ta (Vptr b ofs)).
+Proof.
+  apply eval_expr_lvalue_ind; intros; try (monadInv TR).
+- (* const int *)
+  apply make_intconst_correct.
+- (* const float *)
+  apply make_floatconst_correct.
+- (* const single *)
+  apply make_singleconst_correct.
+- (* const long *)
+  apply make_longconst_correct.
+- (* temp var *)
+  constructor; auto.
+- (* addrof *)
+  destruct x0; inv EQ0. apply H0 in EQ. destruct EQ. auto.
+- (* unop *)
+  eapply transl_unop_correct; eauto.
+- (* binop *)
+  eapply transl_binop_correct; eauto.
+- (* cast *)
+  eapply make_cast_correct; eauto.
+- (* sizeof *)
+  rewrite (transl_sizeof _ _ _ _ LINK EQ). apply make_ptrofsconst_correct.
+- (* alignof *)
+  rewrite (transl_alignof _ _ _ _ LINK EQ). apply make_ptrofsconst_correct.
+- (* rvalue out of lvalue *)
+  exploit transl_expr_lvalue; eauto. intros [tb [TRLVAL MKLOAD]].
+  apply H0 in TRLVAL; destruct TRLVAL. 
+  eapply make_load_correct; eauto.
+- (* var local *)
+  exploit (me_local _ _ MENV); eauto. intros EQ.
+  split; auto. econstructor. eapply eval_var_addr_local. eauto.
+- (* var global *)
+  split; auto. econstructor. eapply eval_var_addr_global.
+  eapply match_env_globals; eauto.
+  rewrite symbols_preserved. auto.
+- (* deref *)
+  eauto.
+- (* field struct *)
+  unfold make_field_access in EQ0. rewrite H1 in EQ0.
+  destruct (prog_comp_env cunit)!id as [co'|] eqn:CO; try discriminate; monadInv EQ0.
+  exploit field_offset_stable. eexact LINK. eauto. instantiate (1 := i). intros [A B].
+  rewrite <- B in EQ1. 
+  assert (x0 = delta) by (unfold ge in *; simpl in *; congruence).
+  assert (bf' = bf) by (unfold ge in *; simpl in *; congruence).
+  subst x0 bf'. split; auto.
+  destruct Archi.ptr64 eqn:SF.
++ eapply eval_Ebinop; eauto using make_longconst_correct.
+  simpl. rewrite SF. apply f_equal. apply f_equal. apply f_equal. auto with ptrofs.
++ eapply eval_Ebinop; eauto using make_intconst_correct.
+  simpl. rewrite SF. apply f_equal. apply f_equal. apply f_equal. auto with ptrofs.
+- (* field union *)
+  unfold make_field_access in EQ0. rewrite H1 in EQ0.
+  destruct (prog_comp_env cunit)!id as [co'|] eqn:CO; try discriminate; monadInv EQ0.
+  exploit union_field_offset_stable. eexact LINK. eauto. instantiate (1 := i). intros [A B].
+  rewrite <- B in EQ1. 
+  assert (x0 = delta) by (unfold ge in *; simpl in *; congruence).
+  assert (bf' = bf) by (unfold ge in *; simpl in *; congruence).
+  subst x0 bf'. split; auto.
+  destruct Archi.ptr64 eqn:SF.
++ eapply eval_Ebinop; eauto using make_longconst_correct.
+  simpl. rewrite SF. apply f_equal. apply f_equal. apply f_equal. auto with ptrofs.
++ eapply eval_Ebinop; eauto using make_intconst_correct.
+  simpl. rewrite SF. apply f_equal. apply f_equal. apply f_equal. auto with ptrofs.
+Qed.
+
+Lemma transl_expr_correct:
+   forall a v,
+   Clight.eval_expr ge e le m a v ->
+   forall ta, transl_expr cunit.(prog_comp_env) a = OK ta ->
+   Csharpminor.eval_expr tge te le m ta v.
+Proof (proj1 transl_expr_lvalue_correct).
+
+Lemma transl_lvalue_correct:
+   forall a b ofs bf,
+   Clight.eval_lvalue ge e le m a b ofs bf ->
+   forall ta bf', transl_lvalue cunit.(prog_comp_env) a = OK (ta, bf') ->
+   bf = bf' /\ Csharpminor.eval_expr tge te le m ta (Vptr b ofs).
+Proof (proj2 transl_expr_lvalue_correct).
+
+Lemma transl_arglist_correct:
+  forall al tyl vl,
+  Clight.eval_exprlist ge e le m al tyl vl ->
+  forall tal, transl_arglist cunit.(prog_comp_env) al tyl = OK tal ->
+  Csharpminor.eval_exprlist tge te le m tal vl.
+Proof.
+  induction 1; intros.
+  monadInv H. constructor.
+  monadInv H2. constructor.
+  eapply make_cast_correct; eauto. eapply transl_expr_correct; eauto. auto.
+Qed.
+
+Lemma transl_arglist_typed:
+  forall al tyl vl,
+  Clight.eval_exprlist ge e le m al tyl vl ->
+  Val.has_argtype_list vl (List.map argtype_of_type tyl).
+Proof.
+  induction 1; intros; simpl; constructor; eauto using val_casted_has_argtype, cast_val_is_casted.
+Qed.
+
+Lemma typlist_of_arglist_eq:
+  forall al tyl vl,
+  Clight.eval_exprlist ge e le m al tyl vl ->
+  typlist_of_arglist al tyl = List.map argtype_of_type tyl.
+Proof.
+  induction 1; simpl.
+  auto.
+  f_equal; auto.
+Qed.
+
+End EXPR.*)
 (* Cshmgen specifications *)
 (* correctness of translation *)
 
@@ -1119,12 +1287,6 @@ Let tge := Genv.globalenv tprog.
 *)
 
 MetaData match_env.
-Compute (_!_).
-Check (_!_).
-Compute self__Cshmgen.S.env.
-Compute self__Cshmgen.T.fenv.
-Compute Z.
-Compute res.
 (*res
 defined in: lib/Errors.v
 
@@ -1184,6 +1346,13 @@ Closing Fact match_transl_0_inv :
     match_transl ts tk ts' tk' ->
     ts' = ts /\ tk' = tk
     by plain {intros until tmp; intros H; inv H; eauto}.
+Closing Fact match_Kseq_inv :
+  forall ce tyret nbrk ncnt s k ts tk the_tk,
+    match_cont ce tyret nbrk ncnt (S.Kseq s k) the_tk ->
+    the_tk = T.Kseq ts tk /\
+      transl_stmt s ce tyret nbrk ncnt = OK ts /\
+      match_cont ce tyret nbrk ncnt k tk
+    by plain {intros until tmp; intros H; inv H; eauto}.
 
 FInduction transl_step about S.step
   motive (fun ge S1 t S2 (_ : S.step ge S1 t S2) => 
@@ -1192,32 +1361,35 @@ FInduction transl_step about S.step
   forall T1, match_states S1 T1 -> 
   exists T2, plus T.step tge T1 t T2 /\ match_states S2 T2).
 FProof.
-
 (* skip *)
 - intros. revert H2. intro MST.
   inv MST. fsimpl in TR. monadInv TR.
-  (* inv MTR. *)
-
-            
-  assert (ts' = self__Cshmgen.T.Sskip /\ tk' = tk).
-  { apply cheat. } destruct H0. subst.
-  (* inv MK. *)
-  
-  apply self__Cshmgen.match_Kseq in MK.
-  (* apply self__Cshmgen.match_transl_0 in MTR. inv MTR.
-  apply cheat.*)
-  (*inv MTR. inv MK.*)
-  econstructor; split.
-  apply plus_one. fconstructor;eauto.
-  + econstructor.
-  econstructor; eauto. constructor.
-
+  apply match_transl_0_inv in MTR.
+  destruct MTR. subst.
+  eapply match_Kseq_inv in MK.
+  destruct MK as [hyp1 [hyp2 hyp3]].
+  econstructor. split.
+  + apply plus_one. rewrite hyp1. fconstructor.
+  + econstructor;eauto. fconstructor.
 (* set *)
 - intros. revert H2. intro MST.
-  inv MST. apply cheat.
+  inv MST. fsimpl in TR. monadInv TR.
+  apply match_transl_0_inv in MTR.
+  destruct MTR. subst.
+  econstructor. split.
+  + apply plus_one. fconstructor. apply cheat.
+  + econstructor;eauto.
+    * apply cheat.
+    * fconstructor.
 (* seq *)
 - intros. revert H2. intro MST.
-  inv MST. apply cheat.
+  inv MST. fsimpl in TR. monadInv TR.
+  apply match_transl_0_inv in MTR.
+  destruct MTR. subst.
+  econstructor; split.
+  + apply plus_one. fconstructor.
+  + econstructor; eauto. fconstructor.
+  fconstructor; eauto.
 (* if then else *)
 - intros. revert H2. intro MST.
   inv MST. apply cheat.
@@ -1227,12 +1399,22 @@ FProof.
 (* return Some *)
 - intros. revert H2. intro MST.
   inv MST. apply cheat.
-(* a second skip? *)
+(* skip call *)
 - intros. revert H2. intro MST.
-  inv MST. apply cheat.
+  inv MST. fsimpl in TR. monadInv TR.
+  apply match_transl_0_inv in MTR.
+  destruct MTR. subst.
+  
+  apply cheat.
 (* label *)
 - intros. revert H2. intro MST.
-  inv MST. apply cheat.
+  inv MST.  fsimpl in TR. monadInv TR.
+  apply match_transl_0_inv in MTR.
+  destruct MTR. subst.
+  econstructor. split.
+  + apply plus_one. (* apply T.step_label.*)
+    apply cheat.
+  + econstructor;eauto. fconstructor.
 (* goto *)
 - intros. revert H2. intro MST.
   inv MST. apply cheat.
