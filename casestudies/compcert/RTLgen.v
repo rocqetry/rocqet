@@ -1304,18 +1304,41 @@ Closing Fact tr_expr_tr_eletvar_inv : forall c map pr n ns nd rd dst,
     tr_move c ns r nd rd
       by plain { intros until dst; intros H; inv H; eauto }.
 
-Closing Fact tr_exprlist_tr_enil : forall c map pr ns nd rl,
+Closing Fact tr_exprlist_tr_enil_inv : forall c map pr ns nd rl,
     tr_exprlist c map pr S.Enil ns nd rl ->
     ns = nd /\ rl = nil          
-    by plain { intros until b; intros H; inv H; eauto }.
+    by plain { intros until rl; intros H; inv H; eauto }.
 
-Closing Fact tr_exprlist_tr_econs : forall c map pr a1 al ns nd rl,
+Closing Fact tr_exprlist_tr_econs_inv : forall c map pr a1 al ns nd rl,
     tr_exprlist c map pr (S.Econs a1 al) ns nd rl ->
     exists r1 rl' n1,
       rl = r1 :: rl' /\
       tr_expr c map pr a1 ns n1 r1 None /\
       tr_exprlist c map (r1 :: pr) al n1 nd rl'
-    by plain { intros until b; intros H; inv H; eauto }.                 
+    by plain { intros until rl; intros H; inv H; eauto }.                 
+
+Closing Fact tr_cond_tr_cecond_inv : forall c map pr cond bl ns ntrue nfalse,
+    tr_condition c map pr (S.CEcond cond bl) ns ntrue nfalse ->
+    exists n1 rl,
+    tr_exprlist c map pr bl ns n1 rl /\
+    c!n1 = Some (T.Icond cond rl ntrue nfalse)
+    by plain { intros until nfalse; intros H; inv H; eauto }.                  
+
+Closing Fact tr_cond_tr_cecondition_inv : forall c map pr a1 a2 a3 ns ntrue nfalse,
+    tr_condition c map pr (S.CEcondition a1 a2 a3) ns ntrue nfalse ->
+    exists n2 n3, 
+      tr_condition c map pr a1 ns n2 n3 /\
+      tr_condition c map pr a2 n2 ntrue nfalse /\
+      tr_condition c map pr a3 n3 ntrue nfalse 
+    by plain { intros until nfalse; intros H; inv H; eauto }.                   
+
+Closing Fact tr_cond_tr_celet_inv : forall c map pr a b ns ntrue nfalse,
+    tr_condition c map pr (S.CElet a b) ns ntrue nfalse ->
+    exists r n1,
+      ~reg_in_map map r /\
+      tr_expr c map pr a ns n1 r None /\
+      tr_condition c (add_letvar map r) pr b n1 ntrue nfalse
+    by plain { intros until nfalse; intros H; inv H; eauto }.       
 
 FLemma function_ptr_translated:
   forall prog tprog ge tge, match_prog prog tprog ->
@@ -1515,7 +1538,7 @@ FProof.
   auto.  
 
 (* Enil *)  
-+ intros; (*red;*) intros; apply tr_exprlist_tr_enil in TE; unpack TE; subst.
++ intros; (*red;*) intros; apply tr_exprlist_tr_enil_inv in TE; unpack TE; subst.
   exists rs; exists tm.
   split. apply star_refl.
   split. assumption.
@@ -1523,7 +1546,7 @@ FProof.
   auto. 
 
 (* Econs *)  
-+ intros; (*red;*) intros; apply tr_exprlist_tr_econs in TE; unpack TE; subst.
++ intros; (*red;*) intros; apply tr_exprlist_tr_econs_inv in TE; unpack TE; subst.
   exploit H; eauto. intros [rs1 [tm1 [EX1 [ME1 [RES1 [OTHER1 EXT1]]]]]].
   exploit H0; eauto. intros [rs2 [tm2 [EX2 [ME2 [RES2 [OTHER2 EXT2]]]]]].
   exists rs2; exists tm2.
@@ -1543,7 +1566,18 @@ FProof.
   auto.
 
 (* CEcond *)  
-+ apply cheat.
++ intros; (*red;*) intros. apply tr_cond_tr_cecond_inv in TE; unpack TE; subst.
+  exploit H; eauto. intros [rs1 [tm1 [EX1 [ME1 [RES1 [OTHER1 EXT1]]]]]].
+  exists rs1; exists tm1.
+(* Exec *)
+  split. eapply plus_right. eexact EX1. eapply T.exec_Icond. eauto.
+  eapply eval_condition_lessdef; eauto. auto. traceEq.
+(* Match-env *)
+  split. assumption.
+(* Other regs *)
+  split. assumption.
+(* Mem *)
+  auto.
 
 (* CEcondition *)  
 + apply cheat.
