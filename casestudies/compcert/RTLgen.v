@@ -1580,7 +1580,20 @@ FProof.
   auto.
 
 (* CEcondition *)  
-+ apply cheat.
++ intros; (*red;*) intros. apply tr_cond_tr_cecondition_inv in TE; unpack TE; subst. 
+  exploit H; eauto. intros [rs1 [tm1 [EX1 [ME1 [OTHER1 EXT1]]]]].
+  assert (tr_condition (T.fn_code f) map pr (if va then b else c) (if va then n2 else n3) ntrue nfalse).
+    destruct va; auto.
+  exploit H0; eauto. intros [rs2 [tm2 [EX2 [ME2 [OTHER2 EXT2]]]]].
+  exists rs2; exists tm2.
+(* Exec *)
+  split. eapply plus_trans. eexact EX1. eexact EX2. traceEq.
+(* Match-env *)
+  split. assumption.
+(* Other regs *)
+  split. intros. rewrite OTHER2; auto.
+(* Mem *)
+  auto.
 
 (* CElet *)  
 + apply cheat.  
