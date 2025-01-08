@@ -1596,7 +1596,21 @@ FProof.
   auto.
 
 (* CElet *)  
-+ apply cheat.  
++ intros; (*red;*) intros. apply tr_cond_tr_celet_inv in TE; unpack TE; subst.
+  exploit H; eauto. intros [rs1 [tm1 [EX1 [ME1 [RES1 [OTHER1 EXT1]]]]]].
+  assert (map_wf (add_letvar map r)).
+    eapply add_letvar_wf; eauto.
+  exploit H0; eauto. eapply match_env_bind_letvar; eauto.
+  intros [rs2 [tm2 [EX2 [ME3 [OTHER2 EXT2]]]]].
+  exists rs2; exists tm2.
+(* Exec *)
+  split. eapply star_plus_trans. eexact EX1. eexact EX2. traceEq.
+(* Match-env *)
+  split. eapply match_env_unbind_letvar; eauto.
+(* Other regs *)
+  split. intros. rewrite OTHER2; auto.
+(* Mem *)
+  auto.
 Qed. FEnd transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
 
 MetaData match_states.
