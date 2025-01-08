@@ -1028,11 +1028,18 @@ with match_stacks: S.cont -> list T.stackframe -> Prop :=
   | match_stacks_stop:
     match_stacks S.Kstop nil.
 
+
+(* TODO: This is not really true *)
 Closing Fact match_stacks_inv : forall k l,
     match_stacks k l ->
     k = S.Kstop /\
     l = nil
-    by { apply cheat }.      
+    by { apply cheat }.
+
+Closing Fact match_stacks_stop_inv : forall l,
+    match_stacks S.Kstop l ->    
+    l = nil
+    by { intros l H; inv H; eauto }.      
 
 (* We can prove this easily with FInduction *)
 Closing Fact tr_cont_inversion : forall c map k nd nexits ngoto nret rret cs,
@@ -1873,7 +1880,6 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   rewrite H1; eauto. traceEq.
   simpl. constructor; auto.
 
-  (* tr_cont (T.fn_code tf) map k ncont nexits ngoto nret (ret_reg (S.fn_sig f) r) cs *)
 (* goto *)  
 + apply tr_stmt_sgoto_inv in TS.  inversion TF; subst.
   exploit tr_find_label; eauto.
@@ -1932,14 +1938,15 @@ FProofLemma.
   symmetry; eapply match_program_main; eauto.
   eexact A.
   rewrite <- H3. apply sig_transl_function; auto.
-  constructor. auto. constructor.
+  constructor. auto. fconstructor.
   constructor. apply Mem.extends_refl.
 Qed. CloseFLemma.
 
 FLemma transl_final_states:
   forall S' R r,
   match_states S' R -> S.final_state S' r -> T.final_state R r.
-FProofLemma. intros. inv H0. inv H. inv MS. inv LD. constructor. Qed. CloseFLemma.
+FProofLemma. intros. inv H0. inv H.
+apply match_stacks_stop_inv in MS; subst. inv LD. constructor. Qed. CloseFLemma.
 
 FEnd RTLgen.
 
