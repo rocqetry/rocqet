@@ -2462,7 +2462,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       Mem.loadv chunk m a = Some v ->
       step ge (State s f sp pc rs m)
         E0 (State s f sp pc' (rs#dst <- v) m)
-  | exec_Istore:
+| exec_Istore:
       forall ge s f sp pc rs m chunk addr args src pc' a m',
       (fn_code f)!pc = Some(Istore chunk addr args src pc') ->
       eval_addressing ge sp addr rs##args = Some a ->
@@ -2520,9 +2520,34 @@ FInductive tr_stmt : T.code -> mapping -> So.stmt -> T.node -> T.node -> list T.
      tr_stmt c map (So.Sstore chunk addr al b) ns nd nexits ngoto nret rret.
 
 
+Closing Fact tr_expr_tr_eload : forall c map pr chunk addr al ns nd rd dst,
+  tr_expr c map pr (So.Eload chunk addr al) ns nd rd dst ->
+    exists n1 rl,
+      tr_exprlist c map pr al ns n1 rl /\
+      c!n1 = Some (T.Iload chunk addr rl rd nd) /\
+      reg_map_ok map rd dst /\ ~In rd pr
+      by plain { intros until dst; intros H; inv H; eauto }.
+
 FInduction transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
 FProof.
-+ apply cheat.
++ intros; (*red;*) intros. apply tr_expr_tr_eload in TE; unpack TE; subst. 
+  exploit H; eauto. intros [rs1 [tm1 [EX1 [ME1 [RES1 [OTHER1 EXT1]]]]]].
+  edestruct eval_addressing_lessdef as [vaddr' []]; eauto.
+  edestruct Mem.loadv_extends as [v' []]; eauto.
+  exists (rs1#rd <- v'); exists tm1.
+(* Exec *)
+  split. eapply star_right. eexact EX1. eapply T.exec_Iload. eauto.
+  instantiate (1 := vaddr'). rewrite <- H1.
+  apply eval_addressing_preserved. exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) H0 eq_refl eq_refl).
+  auto. traceEq.
+(* Match-env *)
+  split. eauto using match_env_update_temp, match_env_update_dest.
+(* Result *)
+  split. rewrite Regmap.gss. auto.
+(* Other regs *)
+  split. intros. rewrite Regmap.gso. auto. intuition congruence.
+(* Mem *)
+  auto. 
 Qed. FEnd transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
 
 FRecursion size_stmt.
