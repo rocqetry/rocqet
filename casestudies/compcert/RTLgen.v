@@ -2156,7 +2156,12 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   econstructor; eauto. fconstructor. 
 
 (* exit block n+1 *)  
-+ apply cheat.
++  apply tr_stmt_tr_sexit in TS; unpack TS; subst.
+   apply tr_cont_tr_kblock in TK; unpack TK; subst.
+   simpl in TS.
+  econstructor; split.
+  right; split. apply star_refl. Lt_state.
+  econstructor; eauto. fconstructor.
   
 Qed. FEnd transl_step_correct.
 
