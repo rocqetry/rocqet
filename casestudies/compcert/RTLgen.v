@@ -2478,7 +2478,6 @@ FEnd RTLgen.
 FEnd Comp_Heap.
 
 Trait Comp_Field extends Base, Comp_Heap.
-
 FEnd Comp_Field.
 
 Trait Comp_Call extends Base, Comp_Builtin.
@@ -2486,7 +2485,52 @@ Trait Comp_Call extends Base, Comp_Builtin.
 Family CminorSel.
 FInductive stmt : Type :=
 | Scall : option ident -> signature -> expr + ident -> exprlist -> stmt
-| Stailcall: signature -> expr + ident -> exprlist -> stmt.                                                           
+| Stailcall: signature -> expr + ident -> exprlist -> stmt.
+
+FInductive cont: Type :=
+| Kcall: option ident -> function -> val -> env -> cont -> cont.
+
+FRecursion call_cont.
+Case Kcall i f v e k := (Kcall i f v e k).
+FEnd call_cont.
+
+FRecursion is_call_cont.
+Case Kcall i f v e k := True.
+FEnd is_call_cont.
+
+FRecursion find_label.
+Case _ := (fun lbl k => None).
+FEnd find_label.
+
+Inherit eval_expr.
+
+MetaData eval_expr_or_symbol.
+Inductive eval_expr_or_symbol: genv -> fenv -> env -> mem -> letenv -> expr + ident -> val -> Prop :=
+  | eval_eos_e: forall ge sp e m le a v,
+      eval_expr ge sp e m le a v ->
+      eval_expr_or_symbol ge sp e m le (inl _ a) v
+  | eval_eos_s: forall ge sp e m le id b,
+      Genv.find_symbol ge id = Some b ->
+      eval_expr_or_symbol ge sp e m le (inr _ id) (Vptr b Ptrofs.zero).
+FEnd eval_expr_or_symbol.
+
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_call: forall ge f optid sig a bl k sp e m vf vargs fd,
+   eval_expr_or_symbol ge sp e m nil a vf ->
+   eval_exprlist ge sp e m nil bl vargs ->
+   Genv.find_funct ge vf = Some fd ->
+   funsig fd = sig ->
+   step ge (State f (Scall optid sig a bl) k sp e m)
+     E0 (Callstate fd vargs (Kcall optid f (Vptr sp Ptrofs.zero) e k) m)    
+| step_tailcall: forall ge f sig a bl k sp e m vf vargs fd m',
+   eval_expr_or_symbol ge sp e m nil a vf ->
+   eval_exprlist ge sp e m nil bl vargs ->
+   Genv.find_funct ge vf = Some fd ->
+   funsig fd = sig ->
+   Mem.free m sp 0 (fn_stackspace f) = Some m' ->
+   step ge (State f (Stailcall sig a bl) k sp e m)
+     E0 (Callstate fd vargs (call_cont k) m').
+  
 FEnd CminorSel.
 
 Family RTL.
@@ -2494,10 +2538,41 @@ FInductive instruction: Type :=
 | Icall: signature -> reg + ident -> list reg -> reg -> node -> instruction
 | Itailcall: signature -> reg + ident -> list reg -> instruction.
 
+Inherit genv.
+Inherit regset.
+
+FDefinition find_function :
+       genv -> reg + ident -> regset -> option fundef := fun ge ros rs =>
+  match ros with
+  | inl r => Genv.find_funct ge rs#r
+  | inr symb =>
+      match Genv.find_symbol ge symb with
+      | None => None
+      | Some b => Genv.find_funct_ptr ge b
+      end
+  end.
+
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_Icall:
+   forall ge s f sp pc rs m sig ros args res pc' fd,
+   (fn_code f)!pc = Some(Icall sig ros args res pc') ->
+   find_function ge ros rs = Some fd ->
+   funsig fd = sig ->
+   step ge (State s f sp pc rs m)
+     E0 (Callstate (Stackframe res f sp pc' rs :: s) fd rs##args m)
+| exec_Itailcall:
+   forall ge s f stk pc rs m sig ros args fd m',
+   (fn_code f)!pc = Some(Itailcall sig ros args) ->
+   find_function ge ros rs = Some fd ->
+   funsig fd = sig ->
+   Mem.free m stk 0 (fn_stacksize f) = Some m' ->
+   step ge (State s f (Vptr stk Ptrofs.zero) pc rs m)
+     E0 (Callstate s fd rs##args m').
+
 FEnd RTL.
 
 Family RTLgen.
-Family S extends CminorSel. FEnd S.
+Family So extends CminorSel. FEnd So.
 Family T extends RTL. FEnd T.
 
 Inherit alloc_regs.
@@ -2546,6 +2621,48 @@ FRecursion reserve_labels.
 Case _ := (fun lm => ret lm).
 FEnd reserve_labels.
 
+FInductive tr_stmt : T.code -> mapping -> So.stmt -> T.node -> T.node -> list T.node -> labelmap -> T.node -> option reg -> Prop :=
+| tr_Scall: forall c map optid sig b cl ns nd nexits ngoto nret rret rd n1 rf n2 rargs,
+     tr_expr c map nil b ns n1 rf None ->
+     tr_exprlist c map (rf :: nil) cl n1 n2 rargs ->
+     c!n2 = Some (T.Icall sig (inl _ rf) rargs rd nd) ->
+     reg_map_ok map rd optid ->
+     tr_stmt c map (So.Scall optid sig (inl _ b) cl) ns nd nexits ngoto nret rret
+| tr_Scall_imm: forall c map optid sig id cl ns nd nexits ngoto nret rret rd n2 rargs,
+     tr_exprlist c map nil cl ns n2 rargs ->
+     c!n2 = Some (T.Icall sig (inr _ id) rargs rd nd) ->
+     reg_map_ok map rd optid ->
+     tr_stmt c map (So.Scall optid sig (inr _ id) cl) ns nd nexits ngoto nret rret
+| tr_Stailcall: forall c map sig b cl ns nd nexits ngoto nret rret n1 rf n2 rargs,
+     tr_expr c map nil b ns n1 rf None ->
+     tr_exprlist c map (rf :: nil) cl n1 n2 rargs ->
+     c!n2 = Some (T.Itailcall sig (inl _ rf) rargs) ->
+     tr_stmt c map (So.Stailcall sig (inl _ b) cl) ns nd nexits ngoto nret rret
+| tr_Stailcall_imm: forall c map sig id cl ns nd nexits ngoto nret rret n2 rargs,
+     tr_exprlist c map nil cl ns n2 rargs ->
+     c!n2 = Some (T.Itailcall sig (inr _ id) rargs) ->
+     tr_stmt c map (So.Stailcall sig (inr _ id) cl) ns nd nexits ngoto nret rret.
+
+FRecursion size_stmt.
+Case _ := 1.
+FEnd size_stmt.
+
+FRecursion size_cont.
+Case _ := 0.
+FEnd size_cont.
+
+FInduction tr_find_label.
+FProof.
+all: intros until nexits1; fsimpl; try congruence.
+Qed. FEnd tr_find_label.
+
+FInduction transl_step_correct.
+FProof.
+all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
++ apply cheat.
++ apply cheat.  
+Qed. FEnd transl_step_correct.
+
 FEnd RTLgen.
 
 FEnd Comp_Call.
@@ -2560,13 +2677,44 @@ Inherit expr.
 MetaData exitexpr.
 Inductive exitexpr : Type :=
   | XEexit: nat -> exitexpr
-  | XEjumptable: self__CminorSel_Switch.expr -> list nat -> exitexpr
-  | XEcondition: self__CminorSel_Switch.condexpr -> exitexpr -> exitexpr -> exitexpr
-  | XElet: self__CminorSel_Switch.expr -> exitexpr -> exitexpr.
+  | XEjumptable: expr -> list nat -> exitexpr
+  | XEcondition: condexpr -> exitexpr -> exitexpr -> exitexpr
+  | XElet: expr -> exitexpr -> exitexpr.
 FEnd exitexpr.
 
 FInductive stmt : Type := 
-| Sswitch: exitexpr -> stmt.
+  | Sswitch: exitexpr -> stmt.
+
+Inherit eval_expr.
+
+MetaData eval_exitexpr.
+Inductive eval_exitexpr: genv -> fenv -> env -> mem -> letenv -> exitexpr -> nat -> Prop :=
+  | eval_XEexit: forall ge sp e m le x,
+      eval_exitexpr ge sp e m le (XEexit x) x
+  | eval_XEjumptable: forall ge sp e m le a tbl n x,
+      eval_expr ge sp e m le a (Vint n) ->
+      list_nth_z tbl (Int.unsigned n) = Some x ->
+      eval_exitexpr ge sp e m le (XEjumptable a tbl) x
+  | eval_XEcondition: forall ge sp e m le a b c va x,
+      eval_condexpr ge sp e m le a va ->
+      eval_exitexpr ge sp e m le (if va then b else c) x ->
+      eval_exitexpr ge sp e m le (XEcondition a b c) x
+  | eval_XElet: forall ge sp e m le a b v x,
+      eval_expr ge sp e m le a v ->
+      eval_exitexpr ge sp e m (v :: le) b x ->
+      eval_exitexpr ge sp e m le (XElet a b) x.
+FEnd eval_exitexpr.
+
+FRecursion find_label.
+Case _ := (fun lbl k => None).
+FEnd find_label.
+
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_switch: forall ge f a k sp e m n,
+   eval_exitexpr ge sp e m nil a n ->
+   step ge (State f (Sswitch a) k sp e m)
+     E0 (State f (Sexit n) k sp e m).
+  
 FEnd CminorSel_Switch.
 
 Family CminorSel extends CminorSel_Switch.
@@ -2592,24 +2740,24 @@ Fixpoint transl_jumptable (nexits: list self__RTLgen_Switch.T.node) (tbl: list n
 FEnd transl_jumptable.
 
 MetaData transl_exitexpr.
-Fixpoint transl_exitexpr (map: mapping) (a: self__RTLgen_Switch.S.exitexpr) (nexits: list self__RTLgen_Switch.T.node)
-                         {struct a} : self__RTLgen_Switch.mon self__RTLgen_Switch.T.node :=
+Fixpoint transl_exitexpr (map: mapping) (a: So.exitexpr) (nexits: list T.node)
+                         {struct a} : mon T.node :=
   match a with
-  | self__RTLgen_Switch.S.XEexit n =>
-      self__RTLgen_Switch.transl_exit nexits n
-  | self__RTLgen_Switch.S.XEjumptable a tbl =>
-      do r <- self__RTLgen_Switch.alloc_reg a map;
-      do tbl' <- self__RTLgen_Switch.transl_jumptable nexits tbl;
-      do n1 <- self__RTLgen_Switch.add_instr (self__RTLgen_Switch.T.Ijumptable r tbl');
-         self__RTLgen_Switch.transl_expr a map r n1
-  | self__RTLgen_Switch.S.XEcondition a b c =>
+  | So.XEexit n =>
+      transl_exit nexits n
+  | So.XEjumptable a tbl =>
+      do r <- alloc_reg a map;
+      do tbl' <- transl_jumptable nexits tbl;
+      do n1 <- add_instr (T.Ijumptable r tbl');
+         transl_expr a map r n1
+  | So.XEcondition a b c =>
       do nc <- transl_exitexpr map c nexits;
       do nb <- transl_exitexpr map b nexits;
-         self__RTLgen_Switch.transl_condexpr a map nb nc
-  | self__RTLgen_Switch.S.XElet a b =>
-      do r <- self__RTLgen_Switch.new_reg;
-      do n1 <- transl_exitexpr (self__RTLgen_Switch.add_letvar map r) b nexits;
-         self__RTLgen_Switch.transl_expr a map r n1
+         transl_condexpr a map nb nc
+  | So.XElet a b =>
+      do r <- new_reg;
+      do n1 <- transl_exitexpr (add_letvar map r) b nexits;
+         transl_expr a map r n1
   end.
 FEnd transl_exitexpr.
 
@@ -2620,6 +2768,57 @@ FEnd transl_stmt.
 FRecursion reserve_labels.
 Case Sswitch a := (fun lm => ret lm).
 FEnd reserve_labels.
+
+Inherit tr_expr.
+
+FDefinition tr_jumptable := fun (nexits: list T.node) (tbl: list nat) (ttbl: list T.node) =>
+  forall v act,
+  list_nth_z tbl v = Some act ->
+  exists n, list_nth_z ttbl v = Some n /\ nth_error nexits act = Some n.
+
+MetaData tr_exitexpr.
+Inductive tr_exitexpr (c: T.code):
+       mapping -> So.exitexpr -> T.node -> list T.node -> Prop :=
+  | tr_XEcond: forall map x n nexits,
+      nth_error nexits x = Some n ->
+      tr_exitexpr c map (So.XEexit x) n nexits
+  | tr_XEjumptable: forall map a tbl ns nexits n1 r tbl',
+      tr_jumptable nexits tbl tbl' ->
+      tr_expr c map nil a ns n1 r None ->
+      c!n1 = Some (T.Ijumptable r tbl') ->
+      tr_exitexpr c map (So.XEjumptable a tbl) ns nexits
+  | tr_XEcondition: forall map a1 a2 a3 ns nexits n2 n3,
+      tr_condition c map nil a1 ns n2 n3 ->
+      tr_exitexpr c map a2 n2 nexits ->
+      tr_exitexpr c map a3 n3 nexits ->
+      tr_exitexpr c map (So.XEcondition a1 a2 a3) ns nexits
+  | tr_XElet: forall map a b ns nexits r n1,
+      ~reg_in_map map r ->
+      tr_expr c map nil a ns n1 r None ->
+      tr_exitexpr c (add_letvar map r) b n1 nexits ->
+      tr_exitexpr c map (So.XElet a b) ns nexits.
+FEnd tr_exitexpr.
+       
+FInductive tr_stmt : T.code -> mapping -> So.stmt -> T.node -> T.node -> list T.node -> labelmap -> T.node -> option reg -> Prop :=
+| tr_Sswitch: forall c map a ns nd nexits ngoto nret rret,
+     tr_exitexpr c map a ns nexits ->
+     tr_stmt c map (So.Sswitch a) ns nd nexits ngoto nret rret.
+
+FRecursion size_stmt.
+Case _ := 1.
+FEnd size_stmt.
+
+FInduction tr_find_label.
+FProof.
+all: intros until nexits1; fsimpl; try congruence.
+Qed. FEnd tr_find_label.
+
+FInduction transl_step_correct.
+FProof.
+all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
++ apply cheat.
+Qed. FEnd transl_step_correct.
+
 FEnd RTLgen_Switch.
 
 Family RTLgen extends RTLgen_Switch.
