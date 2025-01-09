@@ -2092,7 +2092,14 @@ Closing Fact tr_stmt_tr_sloop : forall c map sbody ns nd nexits ngoto nret rret,
 Closing Fact tr_stmt_tr_sexit : forall c map n ns nd nexits ngoto nret rret,
     tr_stmt c map (So.Sexit n) ns nd nexits ngoto nret rret ->
     nth_error nexits n = Some ns
-    by plain { intros until rret; intros H; inv H; eauto }.  
+    by plain { intros until rret; intros H; inv H; eauto }.
+
+Closing Fact tr_cont_tr_kblock : forall c map k nd nd' ngoto nret rret cs,
+    tr_cont c map (So.Kblock k) nd nd' ngoto nret rret cs ->
+    exists nexits,
+      nd' = (nd :: nexits) /\
+      tr_cont c map k nd nexits ngoto nret rret cs
+    by plain { intros until cs; intros H; inv H; eauto }.             
 
 FInduction match_stacks_call_cont.
 FProof.
@@ -2141,7 +2148,12 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   econstructor; eauto. fconstructor.
 
 (* exit block 0 *)
-+ apply cheat.
++ apply tr_stmt_tr_sexit in TS; unpack TS; subst.
+  apply tr_cont_tr_kblock in TK; unpack TK; subst.
+  simpl in TS. inv TS.
+  econstructor; split.
+  right; split. apply star_refl. Lt_state.
+  econstructor; eauto. fconstructor. 
 
 (* exit block n+1 *)  
 + apply cheat.
