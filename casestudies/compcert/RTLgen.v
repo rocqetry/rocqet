@@ -2058,6 +2058,13 @@ FInductive tr_stmt : T.code -> mapping -> So.stmt -> T.node -> T.node -> list T.
      nth_error nexits n = Some ns ->
      tr_stmt c map (So.Sexit n) ns nd nexits ngoto nret rret.
 
+FInductive tr_cont: T.code -> mapping ->
+                   So.cont -> T.node -> list T.node -> labelmap -> T.node -> option reg ->
+                   list T.stackframe -> Prop :=
+| tr_Kblock: forall c map k nd nexits ngoto nret rret cs,
+      tr_cont c map k nd nexits ngoto nret rret cs ->
+      tr_cont c map (So.Kblock k) nd (nd :: nexits) ngoto nret rret cs.
+  
 FRecursion size_stmt.
 Local Open Scope nat_scope.
 Case Sloop s1 := (size_stmt s1 + 1).
@@ -2069,12 +2076,38 @@ FRecursion size_cont.
 Case Kblock k1 := (size_cont k1 + 1).
 FEnd size_cont.
 
+Closing Fact tr_stmt_tr_sblock : forall c map sbody ns nd nexits ngoto nret rret,
+    tr_stmt c map (So.Sblock sbody) ns nd nexits ngoto nret rret -> 
+    tr_stmt c map sbody ns nd (nd :: nexits) ngoto nret rret
+    by plain { intros until rret; intros H; inv H; eauto }.
+
+Closing Fact tr_stmt_tr_sloop : forall c map sbody ns nd nexits ngoto nret rret,
+    tr_stmt c map (So.Sloop sbody) ns nd nexits ngoto nret rret ->
+    exists nloop nend, 
+      tr_stmt c map sbody nloop nend nexits ngoto nret rret /\
+      c!ns = Some(T.Inop nloop) /\
+      c!nend = Some(T.Inop nloop) 
+    by plain { intros until rret; intros H; inv H; eauto }.                   
+             
+FInduction match_stacks_call_cont.
+FProof.
+all: intros; fsimpl; auto.
+Qed. FEnd match_stacks_call_cont.
+
+FInduction tr_cont_call_cont.
+FProof.
+all: intros; fsimpl; auto; fconstructor; eauto.
+Qed. FEnd tr_cont_call_cont.
+
 FInduction tr_find_label.
 FProof.
 all: intros until nexits1; fsimpl; try congruence.
-
-+ apply cheat.
-+ apply cheat.
+(* block *)
++ intros.  apply tr_stmt_tr_sblock in H2.
+  eapply H; eauto. fconstructor.
+(* loop *)  
++ intros. apply tr_stmt_tr_sloop in H2; unpack H2; subst.
+  eapply H; eauto. fconstructor. fconstructor.
 Qed. FEnd tr_find_label.
 
 FInduction transl_step_correct.
@@ -2082,7 +2115,12 @@ FProof.
 all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
 
 (* loop *)
-+ apply cheat.
++ apply tr_stmt_tr_sloop in TS; unpack TS; subst.
+  econstructor; split.
+  left. apply plus_one. eapply T.exec_Inop; eauto.
+  econstructor; eauto.
+  fconstructor.
+  fconstructor.
 
 (* block *)  
 + apply cheat.
