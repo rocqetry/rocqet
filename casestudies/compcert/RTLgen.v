@@ -2559,10 +2559,34 @@ FProof.
 all: intros until nexits1; fsimpl; try congruence.
 Qed. FEnd tr_find_label.
 
+Closing Fact tr_expr_tr_sstore : forall c map chunk addr al b ns nd nexits ngoto nret rret,
+    tr_stmt c map (So.Sstore chunk addr al b) ns nd nexits ngoto nret rret ->
+    exists n1 rl n2 rd,
+      tr_exprlist c map nil al ns n1 rl /\
+      tr_expr c map rl b n1 n2 rd None /\
+      c!n2 = Some (T.Istore chunk addr rl rd nd)
+    by plain { intros until rret; intros H; inv H; eauto }.    
+
 FInduction transl_step_correct.
 FProof.
 all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
-+ apply cheat.
+(* store *)
++  apply tr_expr_tr_sstore in TS; unpack TS; subst. 
+  exploit transl_exprlist_correct; eauto.
+  intros [rs' [tm' [A [B [C [D E]]]]]].
+  exploit transl_expr_correct; eauto.
+  intros [rs'' [tm'' [F [G [J [K L]]]]]].
+  assert (Val.lessdef_list vl rs''##rl).
+    replace (rs'' ## rl) with (rs' ## rl). auto.
+    apply list_map_exten. intros. apply K. auto.
+  edestruct eval_addressing_lessdef as [vaddr' []]; eauto.
+  edestruct Mem.storev_extends as [tm''' []]; eauto.
+  econstructor; split.
+  left; eapply plus_right. eapply star_trans. eexact A. eexact F. reflexivity.
+  eapply T.exec_Istore with (a := vaddr'). eauto.
+  rewrite <- H0. apply eval_addressing_preserved. exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSL eq_refl eq_refl). 
+  eauto. traceEq.
+  econstructor; eauto. fconstructor.
 Qed. FEnd transl_step_correct.
 
 FEnd RTLgen.
