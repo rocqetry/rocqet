@@ -2088,7 +2088,12 @@ Closing Fact tr_stmt_tr_sloop : forall c map sbody ns nd nexits ngoto nret rret,
       c!ns = Some(T.Inop nloop) /\
       c!nend = Some(T.Inop nloop) 
     by plain { intros until rret; intros H; inv H; eauto }.                   
-             
+
+Closing Fact tr_stmt_tr_sexit : forall c map n ns nd nexits ngoto nret rret,
+    tr_stmt c map (So.Sexit n) ns nd nexits ngoto nret rret ->
+    nth_error nexits n = Some ns
+    by plain { intros until rret; intros H; inv H; eauto }.  
+
 FInduction match_stacks_call_cont.
 FProof.
 all: intros; fsimpl; auto.
@@ -2123,10 +2128,16 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   fconstructor.
 
 (* block *)  
-+ apply cheat.
++ apply tr_stmt_tr_sblock in TS; unpack TS; subst. 
+  econstructor; split.
+  right; split. apply star_refl. Lt_state.
+  econstructor; eauto. fconstructor. 
 
 (* exit seq *)
-+ apply cheat.
++ inv TS. inv TK.
+  econstructor; split.
+  right; split. apply star_refl. Lt_state.
+  econstructor; eauto. econstructor; eauto.
 
 (* exit block 0 *)
 + apply cheat.
