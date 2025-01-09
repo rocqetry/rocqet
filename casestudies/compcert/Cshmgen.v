@@ -29,6 +29,18 @@ Local Open Scope string_scope.
 Local Open Scope list_scope.
 Open Scope asm.
 
+(* ------------------------------------------------ *)
+(* ------------ Structure of the File ------------- *)
+(* ------------------------------------------------ *)
+(* -------------- Family Clight ------------------- *)
+(* ------------------------------------------------ *)
+(* --- Family CFam (Base family for Csharpminor) -- *)
+(* ------------------------------------------------ *)
+(* ------------ Family Csharpminor ---------------- *)
+(* ------------------------------------------------ *)
+(* ---- Family Cshmgen (Clight -> Csharpminor) ---- *)
+(* ------------------------------------------------ *)
+
 Trait Base. 
 
 Family Clight.
@@ -93,9 +105,9 @@ FDefinition type_of_fundef : fundef -> type := fun f =>
   end.
 
 FDefinition program := Ctypes.program function.
-
-(* Semantics for Clight*)
-
+(* ------------------------------------------------ *)
+(*                 Semantics for Clight             *)
+(* ------------------------------------------------ *)
 MetaData genv.
 Record genv := { genv_genv :> Genv.t self__Clight.fundef type; genv_cenv :> composite_env }.
 FEnd genv.
@@ -249,8 +261,9 @@ Inductive final_state: self__Clight.state -> int -> Prop :=
 FEnd final_state.
 FEnd Clight.
 
-
+(* ------------------------------------------------ *)
 (* C family languages: Csharpminor, Cminor, CminorSel *)
+(* ------------------------------------------------ *)
 Family Cfam.
 
 FInductive expr : Type :=
@@ -279,8 +292,9 @@ FDefinition funsig := fun (fd: fundef) =>
   | AST.Internal f => function_sig f
   | AST.External ef => ef_sig ef
   end.
-
-(* Semantics for Cfam *)
+(* ------------------------------------------------ *)
+(*              Semantics for Cfam                  *)
+(* ------------------------------------------------ *)
 FDefinition genv := Genv.t fundef unit.
        
 (* Function env/stack space *)
@@ -425,8 +439,9 @@ Inductive final_state: self__Cfam.state -> int -> Prop :=
 FEnd final_state.
 
 FEnd Cfam.
-
-(* constants *)
+(* ------------------------------------------------ *)
+(*                 constants                        *)
+(* ------------------------------------------------ *)
 Inductive unary_operation : Type :=
   | Ocast8unsigned: unary_operation(* 8-bit zero extension *)
   | Ocast8signed: unary_operation(* 8-bit sign extension *)
@@ -504,6 +519,10 @@ Inductive binary_operation : Type :=
   | Ocmpl: comparison -> binary_operation(* long signed comparison *)
   | Ocmplu: comparison -> binary_operation. (* long unsigned comparison *)
 
+(* ------------------------------------------------ *)
+(*                      Csharpminor                 *)
+(* ------------------------------------------------ *)
+
 Family Csharpminor extends Cfam.
 FInductive constant : Type :=
 | Ointconst: int -> constant (* integer constant *)
@@ -537,8 +556,9 @@ FOverride Definition function_body := self__Csharpminor.fn_body.
 FOverride Definition function_locals := self__Csharpminor.fn_temps.
 FOverride Definition function_params := self__Csharpminor.fn_params.
 FOverride Definition function_sig := self__Csharpminor.fn_sig.
-
-(* Semantics for Csharpminor*)
+(* ------------------------------------------------ *)
+(*             Semantics for Csharpminor            *)
+(* ------------------------------------------------ *)
 (* function stack environment *)       
 FOverride Definition fenv := PTree.t (block * Z).
 FOverride Definition empty_fenv := PTree.empty (block * Z).
@@ -591,8 +611,9 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
       E0 (self__Csharpminor.State f (if b then s1 else s2) k sp e m).
 FEnd Csharpminor.
 
-
-(* Clight -> Csharpminor *)
+(* ------------------------------------------------ *)
+(*             Cshmgen (Clight -> Csharpminor)      *)
+(* ------------------------------------------------ *)
 Family Cshmgen.
 Family S extends Clight. FEnd S.
 Family T extends Csharpminor. FEnd T.
@@ -1353,7 +1374,11 @@ Closing Fact match_Kseq_inv :
       transl_stmt s ce tyret nbrk ncnt = OK ts /\
       match_cont ce tyret nbrk ncnt k tk
     by plain {intros until tmp; intros H; inv H; eauto}.
-
+Closing Fact match_Kstop_inv :
+  forall ce tyret nbrk ncnt tk,
+    match_cont ce tyret nbrk ncnt S.Kstop tk ->
+    tk = T.Kstop
+    by plain {intros until tmp; intros H; inv H; eauto}.
 FInduction transl_step about S.step
   motive (fun ge S1 t S2 (_ : S.step ge S1 t S2) => 
             forall prog tprog tge, match_prog prog tprog ->
@@ -1361,7 +1386,7 @@ FInduction transl_step about S.step
   forall T1, match_states S1 T1 -> 
   exists T2, plus T.step tge T1 t T2 /\ match_states S2 T2).
 FProof.
-(* skip *)
+(* skip - done *)
 - intros. revert H2. intro MST.
   inv MST. fsimpl in TR. monadInv TR.
   apply match_transl_0_inv in MTR.
@@ -1381,7 +1406,7 @@ FProof.
   + econstructor;eauto.
     * apply cheat.
     * fconstructor.
-(* seq *)
+(* seq - done*)
 - intros. revert H2. intro MST.
   inv MST. fsimpl in TR. monadInv TR.
   apply match_transl_0_inv in MTR.
@@ -1395,10 +1420,25 @@ FProof.
   inv MST. apply cheat.
 (* return None *)
 - intros. revert H2. intro MST.
-  inv MST. apply cheat.
+  inv MST. fsimpl in TR. monadInv TR.
+  apply match_transl_0_inv in MTR.
+  destruct MTR. subst.
+  econstructor; split.
+  + apply plus_one. fconstructor.
+    apply cheat.
+  + eapply match_returnstate with (ce := prog_comp_env cu); eauto.
+    apply cheat.
 (* return Some *)
 - intros. revert H2. intro MST.
-  inv MST. apply cheat.
+  inv MST. fsimpl in TR. monadInv TR.
+  apply match_transl_0_inv in MTR.
+  destruct MTR. subst.
+  econstructor; split.
+  + apply plus_one. fconstructor.
+    * apply cheat.
+    * apply cheat.
+  + eapply match_returnstate with (ce := prog_comp_env cu); eauto.
+    apply cheat.
 (* skip call *)
 - intros. revert H2. intro MST.
   inv MST. fsimpl in TR. monadInv TR.
@@ -1408,7 +1448,7 @@ FProof.
   apply cheat.
 (* label *)
 - intros. revert H2. intro MST.
-  inv MST.  fsimpl in TR. monadInv TR.
+  inv MST. fsimpl in TR. monadInv TR.
   apply match_transl_0_inv in MTR.
   destruct MTR. subst.
   econstructor. split.
@@ -1417,21 +1457,32 @@ FProof.
   + econstructor;eauto. fconstructor.
 (* goto *)
 - intros. revert H2. intro MST.
-  inv MST. apply cheat.
+  inv MST. fsimpl in TR. monadInv TR.
+  apply match_transl_0_inv in MTR.
+  destruct MTR. subst.
+  generalize TRF. unfold transl_function. intro TRF'. monadInv TRF'.
+  
+  apply cheat.
 (* internal function *)
 - intros. revert H2. intro MST.
-  inv MST. apply cheat.  
-Qed. FEnd transl_step.
+  inv MST. apply cheat.
+  Admitted.
+ FEnd transl_step.
                 
 FLemma transl_initial_states:
   forall S' prog tprog, S.initial_state prog S' -> transl_program prog = OK tprog ->
   exists R, T.initial_state tprog R /\ match_states S' R.
-FProofLemma. apply cheat. Qed. CloseFLemma.          
+FProofLemma.
+intros. inv H. apply cheat.
+Qed. CloseFLemma.          
           
 FLemma transl_final_states:
   forall S' R r,
   match_states S' R -> S.final_state S' r -> T.final_state R r.
-FProofLemma. apply cheat. Qed. CloseFLemma.
+FProofLemma.
+intros. inv H0. inv H. apply match_Kstop_inv in MK.
+subst. constructor.
+Qed. CloseFLemma.
 
 FEnd Cshmgen.
 
