@@ -2924,6 +2924,66 @@ FRecursion size_stmt.
 Case _ := 1.
 FEnd size_stmt.
 
+MetaData transl_exitexpr_prop.
+Definition transl_exitexpr_prop
+     ge sp e m (le: So.letenv) (a: So.exitexpr) (x: nat) : Prop :=
+  forall tm cs f map ns nexits rs prog tprog tge
+    (MWF: map_wf map)
+    (_ : ge = Genv.globalenv prog)
+    (_ : tge = Genv.globalenv tprog)     
+    (_ : match_prog prog tprog)
+    (TE: tr_exitexpr (T.fn_code f) map a ns nexits)
+    (ME: match_env map e le rs)
+    (EXT: Mem.extends m tm),
+  exists nd, exists rs', exists tm',
+     star T.step tge (T.State cs f (Vptr sp Ptrofs.zero) ns rs tm) E0 (T.State cs f (Vptr sp Ptrofs.zero) nd rs' tm')
+  /\ nth_error nexits x = Some nd
+  /\ match_env map e le rs'
+  /\ Mem.extends m tm'.
+
+Theorem transl_exitexpr_correct:
+  forall ge sp e m le a x,
+  So.eval_exitexpr ge sp e m le a x ->
+  transl_exitexpr_prop ge sp e m le a x.
+Proof.
+  induction 1; red; intros; inv TE.
+- (* XEexit *)
+  exists ns, rs, tm.
+  split. apply star_refl.
+  auto.
+- (* XEjumptable *)
+  exploit H6; eauto. intros (nd & A & B).
+  exploit transl_expr_correct; eauto. intros (rs1 & tm1 & EXEC1 & ME1 & RES1 & PRES1 & EXT1).
+  exists nd, rs1, tm1.
+  split. eapply star_right. eexact EXEC1. eapply T.exec_Ijumptable; eauto. inv RES1; auto. traceEq.
+  auto.
+- (* XEcondition *)
+  exploit transl_condexpr_correct; eauto. intros (rs1 & tm1 & EXEC1 & ME1 & RES1 & EXT1).
+  exploit IHeval_exitexpr; eauto.
+  instantiate (2 := if va then n2 else n3). destruct va; eauto.
+  intros (nd & rs2 & tm2 & EXEC2 & EXIT2 & ME2 & EXT2).
+  exists nd, rs2, tm2.
+  split. eapply star_trans. apply plus_star. eexact EXEC1. eexact EXEC2. traceEq.
+  auto.
+- (* XElet *)
+  exploit transl_expr_correct; eauto. intros (rs1 & tm1 & EXEC1 & ME1 & RES1 & PRES1 & EXT1).
+  assert (map_wf (add_letvar map r)).
+    eapply add_letvar_wf; eauto.
+  exploit IHeval_exitexpr; eauto. eapply match_env_bind_letvar; eauto.
+  intros (nd & rs2 & tm2 & EXEC2 & EXIT2 & ME2 & EXT2).
+  exists nd, rs2, tm2.
+  split. eapply star_trans. eexact EXEC1. eexact EXEC2. traceEq.
+  split. auto.
+  split. eapply match_env_unbind_letvar; eauto.
+  auto.
+Qed.
+FEnd transl_exitexpr_prop.
+
+Closing Fact tr_expr_tr_sswitch : forall c map a ns nd nexits ngoto nret rret,
+    tr_stmt c map (So.Sswitch a) ns nd nexits ngoto nret rret -> 
+    tr_exitexpr c map a ns nexits
+    by plain { intros until rret; intros H; inv H; eauto }.                
+
 FInduction tr_find_label.
 FProof.
 all: intros until nexits1; fsimpl; try congruence.
@@ -2932,7 +2992,12 @@ Qed. FEnd tr_find_label.
 FInduction transl_step_correct.
 FProof.
 all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
-+ apply cheat.
++ apply tr_expr_tr_sswitch in TS; unpack TS; subst. 
+  exploit transl_exitexpr_correct; eauto.
+  intros (nd & rs' & tm' & A & B & C & D).
+  econstructor; split.
+  right; split. eexact A. Lt_state.
+  econstructor; eauto. fconstructor.
 Qed. FEnd transl_step_correct.
 
 FEnd RTLgen_Switch.
