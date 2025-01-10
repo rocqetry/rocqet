@@ -2173,7 +2173,7 @@ Trait Comp_Builtin extends Base.
 
 Family CminorSel.
 FInductive expr : Type :=
-| Ebuiltin : external_function -> exprlist -> expr
+| Ebuiltin : external_function -> exprlist -> expr.
 
 FInductive stmt : Type :=
 | Sbuiltin : builtin_res ident -> external_function -> list (builtin_arg expr) -> stmt.
@@ -2372,9 +2372,56 @@ FInductive tr_stmt : T.code -> mapping -> So.stmt -> T.node -> T.node -> list T.
    tr_builtin_res map res res' ->
    tr_stmt c map (So.Sbuiltin res ef args) ns nd nexits ngoto nret rret.
 
+Closing Fact tr_ebuiltin_inv : forall c map pr ef al ns nd rd dst,
+    tr_expr c map pr (So.Ebuiltin ef al) ns nd rd dst -> 
+    exists n1 rl,
+      tr_exprlist c map pr al ns n1 rl /\
+      c!n1 = Some (T.Ibuiltin ef (List.map (@BA reg) rl) (BR rd) nd) /\
+      reg_map_ok map rd dst /\ ~In rd pr 
+    by plain { intros until dst; intros H; inv H; eauto }.                               
+
+FLemma eval_builtin_args_trivial:
+  forall (ge: T.genv) (rs: T.regset) sp m rl,
+  eval_builtin_args ge (fun r => rs#r) sp m (List.map (@BA reg) rl) rs##rl.
+FProofLemma.
+  induction rl; simpl.
+- constructor.
+- constructor; auto. constructor.
+Qed. CloseFLemma.
+
+Inherit match_prog.
+
+FLemma senv_preserved: forall prog tprog ge tge, match_prog prog tprog ->
+  ge = Genv.globalenv prog ->
+  tge = Genv.globalenv tprog ->
+  Senv.equiv (Genv.to_senv ge) (Genv.to_senv tge).
+FProofLemma.
+intros until tge; intros TRANSL A B. rewrite A. rewrite B.
+apply (Genv.senv_transf_partial TRANSL).
+Qed. CloseFLemma.
+  
 FInduction transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
 FProof.
-+ apply cheat.
++ intros; (*red;*) intros. apply tr_ebuiltin_inv in TE; unpack TE; subst.
+  exploit H; eauto. intros [rs1 [tm1 [EX1 [ME1 [RR1 [RO1 EXT1]]]]]].
+  exploit external_call_mem_extends; eauto.
+  intros [v' [tm2 [A [B [C D]]]]].
+  exists (rs1#rd <- v'); exists tm2.
+(* Exec *)
+  split. eapply star_right. eexact EX1.
+  change (rs1#rd <- v') with (regmap_setres (BR rd) v' rs1).
+  eapply T.exec_Ibuiltin; eauto.
+  eapply eval_builtin_args_trivial.
+  eapply external_call_symbols_preserved; eauto. apply (senv_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) H0 eq_refl eq_refl).
+  reflexivity.
+(* Match-env *)
+  split. eauto using match_env_update_temp, match_env_update_dest. 
+(* Result reg *)
+  split. rewrite Regmap.gss. auto.
+(* Other regs *)
+  split. intros. rewrite Regmap.gso. auto. intuition congruence.
+(* Mem *)
+  auto.
 Qed. FEnd transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
 
 FRecursion size_stmt.
@@ -2679,7 +2726,16 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
    funsig fd = sig ->
    Mem.free m stk 0 (fn_stacksize f) = Some m' ->
    step ge (State s f (Vptr stk Ptrofs.zero) pc rs m)
-     E0 (Callstate s fd rs##args m').
+     E0 (Callstate s fd rs##args m')
+| exec_function_external:
+      forall ge s ef args res t m m',
+      external_call ef ge args m t res m' ->
+      step ge (Callstate s (AST.External ef) args m)
+         t (Returnstate s res m')
+| exec_return:
+      forall ge res f sp pc rs s vres m,
+      step ge (Returnstate (Stackframe res f sp pc rs :: s) vres m)
+        E0 (State s f sp pc (rs#res <- vres) m).
 
 FEnd RTL.
 
