@@ -1013,6 +1013,30 @@ Inductive tr_fun (tf: self__RTLgen.T.function) (map: mapping)
       tr_fun tf map f ngoto nret rret.
 FEnd tr_fun.
 
+MetaData map_wf.
+Record map_wf (m: mapping) : Prop :=
+  mk_map_wf {
+    map_wf_inj:
+      (forall id1 id2 r,
+         m.(map_vars)!id1 = Some r -> m.(map_vars)!id2 = Some r -> id1 = id2);
+     map_wf_disj:
+      (forall id r,
+         m.(map_vars)!id = Some r -> In r m.(map_letvars) -> False)
+    }.
+FEnd map_wf.
+
+MetaData match_env.
+Record match_env
+      (map: mapping) (e: So.env) (le: So.letenv) (rs: T.regset) : Prop :=
+  mk_match_env {
+    me_vars:
+      (forall id v,
+         e!id = Some v -> exists r, map.(map_vars)!id = Some r /\ Val.lessdef v rs#r);
+    me_letvars:
+      Val.lessdef_list le rs##(map.(map_letvars))
+  }.
+FEnd match_env.
+
 FInductive tr_cont: T.code -> mapping ->
                    So.cont -> T.node -> list T.node -> labelmap -> T.node -> option reg ->
                    list T.stackframe -> Prop :=
@@ -1080,18 +1104,6 @@ FProofLemma.
   split. apply Regmap.gss. intros; apply Regmap.gso; auto.
 Qed. CloseFLemma.
 
-MetaData map_wf.
-Record map_wf (m: mapping) : Prop :=
-  mk_map_wf {
-    map_wf_inj:
-      (forall id1 id2 r,
-         m.(map_vars)!id1 = Some r -> m.(map_vars)!id2 = Some r -> id1 = id2);
-     map_wf_disj:
-      (forall id r,
-         m.(map_vars)!id = Some r -> In r m.(map_letvars) -> False)
-    }.
-FEnd map_wf.
-
 FLemma init_mapping_wf:
   map_wf init_mapping.
 FProofLemma. apply cheat. Qed. CloseFLemma.
@@ -1112,18 +1124,6 @@ FLemma add_letvar_wf:
   forall map r,
   map_wf map -> ~reg_in_map map r -> map_wf (add_letvar map r).
 FProofLemma. apply cheat. Qed. CloseFLemma.
-
-MetaData match_env.
-Record match_env
-      (map: mapping) (e: So.env) (le: So.letenv) (rs: T.regset) : Prop :=
-  mk_match_env {
-    me_vars:
-      (forall id v,
-         e!id = Some v -> exists r, map.(map_vars)!id = Some r /\ Val.lessdef v rs#r);
-    me_letvars:
-      Val.lessdef_list le rs##(map.(map_letvars))
-  }.
-FEnd match_env.
 
 FLemma match_env_find_var:
   forall map e le rs id v r,
@@ -2645,8 +2645,11 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
    funsig fd = sig ->
    Mem.free m sp 0 (fn_stackspace f) = Some m' ->
    step ge (State f (Stailcall sig a bl) k sp e m)
-     E0 (Callstate fd vargs (call_cont k) m').
-  
+     E0 (Callstate fd vargs (call_cont k) m')
+| step_return: forall ge v optid f sp e k m,
+      step ge (Returnstate v (Kcall optid f (Vptr sp Ptrofs.zero) e k) m)
+        E0 (State f Sskip k sp (set_optvar optid v e) m).
+     
 FEnd CminorSel.
 
 Family RTL.
@@ -2759,6 +2762,24 @@ FInductive tr_stmt : T.code -> mapping -> So.stmt -> T.node -> T.node -> list T.
      c!n2 = Some (T.Itailcall sig (inr _ id) rargs) ->
      tr_stmt c map (So.Stailcall sig (inr _ id) cl) ns nd nexits ngoto nret rret.
 
+Inherit map_wf.
+
+FInductive tr_cont: T.code -> mapping ->
+                   So.cont -> T.node -> list T.node -> labelmap -> T.node -> option reg ->
+                   list T.stackframe -> Prop :=
+| tr_Kcall: forall c map optid f sp e k ngoto nret rret cs,
+      c!nret = Some(T.Ireturn rret) ->
+      match_stacks (So.Kcall optid f sp e k) cs ->
+      tr_cont c map (So.Kcall optid f sp e k) nret nil ngoto nret rret cs
+with match_stacks: So.cont -> list T.stackframe -> Prop :=
+| match_stacks_call: forall optid f sp e k r tf n rs cs map nexits ngoto nret rret,
+      map_wf map ->
+      tr_fun tf map f ngoto nret rret ->
+      match_env map e nil rs ->
+      reg_map_ok map r optid ->
+      tr_cont (T.fn_code tf) map k n nexits ngoto nret rret cs ->
+      match_stacks (So.Kcall optid f sp e k) (T.Stackframe r tf sp n rs :: cs).
+    
 FRecursion size_stmt.
 Case _ := 1.
 FEnd size_stmt.
@@ -2767,16 +2788,123 @@ FRecursion size_cont.
 Case _ := 0.
 FEnd size_cont.
 
+FInduction match_stacks_call_cont.
+FProof.
+all: intros; fsimpl; auto.
+Qed. FEnd match_stacks_call_cont.
+
+FInduction tr_cont_call_cont.
+FProof.
+all: intros; fsimpl; auto; fconstructor; eauto.
+Qed. FEnd tr_cont_call_cont.
+
 FInduction tr_find_label.
 FProof.
 all: intros until nexits1; fsimpl; try congruence.
 Qed. FEnd tr_find_label.
 
+Closing Fact tr_stmt_tr_scall : forall c map optid sig b cl ns nd nexits ngoto nret rret,
+    tr_stmt c map (So.Scall optid sig (inl _ b) cl) ns nd nexits ngoto nret rret -> 
+    exists rd n1 rf n2 rargs,
+      tr_expr c map nil b ns n1 rf None /\
+      tr_exprlist c map (rf :: nil) cl n1 n2 rargs /\
+      c!n2 = Some (T.Icall sig (inl _ rf) rargs rd nd) /\
+      reg_map_ok map rd optid
+    by plain { intros until rret; intros H; inv H; eauto }.
+
+Closing Fact tr_stmt_tr_scall_imm : forall c map optid sig id cl ns nd nexits ngoto nret rret,
+    tr_stmt c map (So.Scall optid sig (inr _ id) cl) ns nd nexits ngoto nret rret ->
+    exists rd n2 rargs,
+      tr_exprlist c map nil cl ns n2 rargs /\
+      c!n2 = Some (T.Icall sig (inr _ id) rargs rd nd) /\
+      reg_map_ok map rd optid
+    by plain { intros until rret; intros H; inv H; eauto }.
+
+FLemma functions_translated:
+  forall prog tprog ge tge, match_prog prog tprog ->
+  ge = Genv.globalenv prog ->
+  tge = Genv.globalenv tprog ->
+  forall (v: val) (f: So.fundef),
+  Genv.find_funct ge v = Some f ->
+  exists tf,
+  Genv.find_funct tge v = Some tf /\ transl_fundef f = Errors.OK tf.
+FProofLemma.
+intros until tge; intros TRANSL A B. rewrite A. rewrite B.
+apply (Genv.find_funct_transf_partial TRANSL).
+Qed. CloseFLemma.
+
 FInduction transl_step_correct.
 FProof.
 all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
-+ apply cheat.
-+ apply cheat.  
+
+(* call *)
++ destruct a. apply tr_stmt_tr_scall in TS; unpack TS; subst; inv e0.   
+  (* indirect *)
+  exploit transl_expr_correct; eauto.
+  intros [rs' [tm' [A [B [C [D X]]]]]].
+  exploit transl_exprlist_correct; eauto.
+  intros [rs'' [tm'' [E [F [G [J Y]]]]]].
+  exploit functions_translated; eauto. intros [tf' [P Q]].
+  econstructor; split.
+  left; eapply plus_right. eapply star_trans. eexact A. eexact E. reflexivity.
+  eapply T.exec_Icall; eauto. simpl. rewrite J. destruct C. eauto. discriminate P. simpl; auto.
+  apply sig_transl_function; auto.
+  traceEq.
+  constructor; auto. fconstructor. 
+  (* direct *)
+  apply tr_stmt_tr_scall_imm in TS; unpack TS; subst; inv e0.   
+  exploit transl_exprlist_correct; eauto.
+  intros [rs'' [tm'' [E [F [G [J Y]]]]]].
+  exploit functions_translated; eauto. intros [tf' [P Q]].
+  econstructor; split.
+  left; eapply plus_right. eexact E.
+  eapply T.exec_Icall; eauto. simpl.
+  rewrite (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSL eq_refl eq_refl). rewrite H5.
+    rewrite Genv.find_funct_find_funct_ptr in P. eauto.
+  apply sig_transl_function; auto.
+  traceEq.
+  constructor; auto. fconstructor. 
+
+  (* tailcall *)
++  inv TS; inv H.
+  (* indirect *)
+  exploit transl_expr_correct; eauto.
+  intros [rs' [tm' [A [B [C [D X]]]]]].
+  exploit transl_exprlist_correct; eauto.
+  intros [rs'' [tm'' [E [F [G [J Y]]]]]].
+  exploit functions_translated; eauto. intros [tf' [P Q]].
+  exploit match_stacks_call_cont; eauto. intros [U V].
+  assert (fn_stacksize tf = fn_stackspace f). inv TF; auto.
+  edestruct Mem.free_parallel_extends as [tm''' []]; eauto.
+  econstructor; split.
+  left; eapply plus_right. eapply star_trans. eexact A. eexact E. reflexivity.
+  eapply exec_Itailcall; eauto. simpl. rewrite J. destruct C. eauto. discriminate P. simpl; auto.
+  apply sig_transl_function; auto.
+  rewrite H; eauto.
+  traceEq.
+  constructor; auto.
+  (* direct *)
+  exploit transl_exprlist_correct; eauto.
+  intros [rs'' [tm'' [E [F [G [J Y]]]]]].
+  exploit functions_translated; eauto. intros [tf' [P Q]].
+  exploit match_stacks_call_cont; eauto. intros [U V].
+  assert (fn_stacksize tf = fn_stackspace f). inv TF; auto.
+  edestruct Mem.free_parallel_extends as [tm''' []]; eauto.
+  econstructor; split.
+  left; eapply plus_right. eexact E.
+  eapply exec_Itailcall; eauto. simpl. rewrite symbols_preserved. rewrite H5.
+  rewrite Genv.find_funct_find_funct_ptr in P. eauto.
+  apply sig_transl_function; auto.
+  rewrite H; eauto.
+  traceEq.
+  constructor; auto.
+
+ (* return *)
+  inv MS.
+  econstructor; split.
+  left; apply plus_one; constructor.
+  econstructor; eauto. constructor.
+  eapply match_env_update_dest; eauto.  
 Qed. FEnd transl_step_correct.
 
 FEnd RTLgen.
