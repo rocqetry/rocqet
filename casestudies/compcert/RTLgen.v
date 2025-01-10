@@ -2174,7 +2174,6 @@ Trait Comp_Builtin extends Base.
 Family CminorSel.
 FInductive expr : Type :=
 | Ebuiltin : external_function -> exprlist -> expr
-| Eexternal : ident -> signature -> exprlist -> expr.
 
 FInductive stmt : Type :=
 | Sbuiltin : builtin_res ident -> external_function -> list (builtin_arg expr) -> stmt.
@@ -2183,14 +2182,7 @@ FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Pro
 | eval_Ebuiltin: forall ge sp e m le ef al vl v,
    eval_exprlist ge sp e m le al vl ->
    external_call ef ge vl m E0 v m ->
-   eval_expr ge sp e m le (Ebuiltin ef al) v             
-| eval_Eexternal: forall ge sp e m le id sg al b ef vl v,
-   Genv.find_symbol ge id = Some b ->
-   Genv.find_funct_ptr ge b = Some (AST.External ef) ->
-   ef_sig ef = sg ->
-   eval_exprlist ge sp e m le al vl ->
-   external_call ef ge vl m E0 v m ->
-   eval_expr ge sp e m le (Eexternal id sg al) v.
+   eval_expr ge sp e m le (Ebuiltin ef al) v.
 
 MetaData eval_builtin_arg.
 Inductive eval_builtin_arg: genv -> fenv -> env -> mem -> builtin_arg expr -> val -> Prop :=
@@ -2321,18 +2313,12 @@ FRecursion alloc_reg.
 Case _ := (fun map => new_reg).
 FEnd alloc_reg.
 
-(* Builtin needs call? *)
 FRecursion transl_expr with transl_exprlist with transl_condexpr.
 Case Ebuiltin ef al :=
   (fun map rd nd =>
      do rl <- alloc_regs al map;
      do no <- add_instr (T.Ibuiltin ef (List.map (@BA reg) rl) (BR rd) nd);
      transl_exprlist al map rl no).
-Case Eexternal id sg al :=
-  (fun map rd nd =>
-    do rl <- alloc_regs al map;
-    do no <- add_instr cheat (* (T.Icall sg (inr id) rl rd nd)*);
-    transl_exprlist al map rl no).
 FEnd transl_expr with transl_exprlist with transl_condexpr.
 
 Inherit labelmap.
@@ -2366,12 +2352,6 @@ FInductive tr_expr : T.code -> mapping -> list reg -> So.expr -> T.node -> T.nod
       c!n1 = Some (T.Ibuiltin ef (List.map (@BA reg) rl) (BR rd) nd) ->
       reg_map_ok map rd dst -> ~In rd pr ->
       tr_expr c map pr (So.Ebuiltin ef al) ns nd rd dst.
-(*TODO: T.Icall *)              
-(* | tr_Eexternal: forall c map pr id sg al ns nd rd dst n1 rl,
-      tr_exprlist c map pr al ns n1 rl ->
-      c!n1 = Some (T.Icall sg (inr _ id) rl rd nd) ->
-      reg_map_ok map rd dst -> ~In rd pr ->
-      tr_expr c map pr (Eexternal id sg al) ns nd rd dst. *)
 
 MetaData tr_builtin_res.
 Inductive tr_builtin_res: mapping -> builtin_res ident -> builtin_res reg -> Prop :=
@@ -2394,7 +2374,6 @@ FInductive tr_stmt : T.code -> mapping -> So.stmt -> T.node -> T.node -> list T.
 
 FInduction transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
 FProof.
-+ apply cheat.
 + apply cheat.
 Qed. FEnd transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
 
@@ -2599,6 +2578,9 @@ FEnd Comp_Field.
 Trait Comp_Call extends Base, Comp_Builtin.
 
 Family CminorSel.
+FInductive expr : Type :=
+| Eexternal : ident -> signature -> exprlist -> expr.
+
 FInductive stmt : Type :=
 | Scall : option ident -> signature -> expr + ident -> exprlist -> stmt
 | Stailcall: signature -> expr + ident -> exprlist -> stmt.
@@ -2618,8 +2600,15 @@ FRecursion find_label.
 Case _ := (fun lbl k => None).
 FEnd find_label.
 
-Inherit eval_expr.
-
+FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
+| eval_Eexternal: forall ge sp e m le id sg al b ef vl v,
+   Genv.find_symbol ge id = Some b ->
+   Genv.find_funct_ptr ge b = Some (AST.External ef) ->
+   ef_sig ef = sg ->
+   eval_exprlist ge sp e m le al vl ->
+   external_call ef ge vl m E0 v m ->
+   eval_expr ge sp e m le (Eexternal id sg al) v.
+  
 MetaData eval_expr_or_symbol.
 Inductive eval_expr_or_symbol: genv -> fenv -> env -> mem -> letenv -> expr + ident -> val -> Prop :=
   | eval_eos_e: forall ge sp e m le a v,
@@ -2648,8 +2637,12 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
      E0 (Callstate fd vargs (call_cont k) m')
 | step_return: forall ge v optid f sp e k m,
       step ge (Returnstate v (Kcall optid f (Vptr sp Ptrofs.zero) e k) m)
-        E0 (State f Sskip k sp (set_optvar optid v e) m).
-     
+        E0 (State f Sskip k sp (set_optvar optid v e) m)
+| step_external_function: forall ge ef vargs k m t vres m',
+      external_call ef ge vargs m t vres m' ->
+      step ge (Callstate (AST.External ef) vargs k m)
+         t (Returnstate vres k m').
+        
 FEnd CminorSel.
 
 Family RTL.
@@ -2703,6 +2696,14 @@ FDefinition alloc_optreg : mapping -> option ident -> mon reg := fun map dest =>
   | None => new_reg
   end.
 
+FRecursion transl_expr with transl_exprlist with transl_condexpr.
+Case Eexternal id sg al :=
+  (fun map rd nd =>
+    do rl <- alloc_regs al map;
+    do no <- add_instr (T.Icall sg (inr id) rl rd nd);
+    transl_exprlist al map rl no).
+FEnd transl_expr with transl_exprlist with transl_condexpr.
+
 FRecursion transl_stmt.
 Case Scall optid sig expr_ident cl :=
  (fun map nd nexits ngoto nret rret =>
@@ -2740,6 +2741,13 @@ FRecursion reserve_labels.
 Case _ := (fun lm => ret lm).
 FEnd reserve_labels.
 
+FInductive tr_expr : T.code -> mapping -> list reg -> So.expr -> T.node -> T.node -> reg -> option AST.ident -> Prop :=
+| tr_Eexternal: forall c map pr id sg al ns nd rd dst n1 rl,
+      tr_exprlist c map pr al ns n1 rl ->
+      c!n1 = Some (T.Icall sg (inr _ id) rl rd nd) ->
+      reg_map_ok map rd dst -> ~In rd pr ->
+      tr_expr c map pr (Eexternal id sg al) ns nd rd dst.
+  
 FInductive tr_stmt : T.code -> mapping -> So.stmt -> T.node -> T.node -> list T.node -> labelmap -> T.node -> option reg -> Prop :=
 | tr_Scall: forall c map optid sig b cl ns nd nexits ngoto nret rret rd n1 rf n2 rargs,
      tr_expr c map nil b ns n1 rf None ->
@@ -2779,7 +2787,13 @@ with match_stacks: So.cont -> list T.stackframe -> Prop :=
       reg_map_ok map r optid ->
       tr_cont (T.fn_code tf) map k n nexits ngoto nret rret cs ->
       match_stacks (So.Kcall optid f sp e k) (T.Stackframe r tf sp n rs :: cs).
-    
+
+
+FInduction transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
+FProof.
++ apply cheat.
+Qed. FEnd transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
+
 FRecursion size_stmt.
 Case _ := 1.
 FEnd size_stmt.
@@ -2934,7 +2948,10 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   econstructor; split.
   left; apply plus_one; fconstructor.
   econstructor; eauto. fconstructor.
-  eapply match_env_update_dest; eauto.  
+  eapply match_env_update_dest; eauto.
+
+(* external call *)
++ apply cheat.  
 Qed. FEnd transl_step_correct.
 
 FEnd RTLgen.
