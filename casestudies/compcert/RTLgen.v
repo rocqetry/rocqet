@@ -2433,10 +2433,130 @@ FProof.
 all: intros until nexits1; fsimpl; try congruence.
 Qed. FEnd tr_find_label.
 
+Closing Fact tr_sbuiltin_inv : forall c map res ef args ns nd nexits ngoto nret rret,
+    tr_stmt c map (So.Sbuiltin res ef args) ns nd nexits ngoto nret rret -> 
+    exists res' n1 rargs,
+      tr_exprlist c map nil (exprlist_of_expr_list (params_of_builtin_args So.expr args)) ns n1 rargs /\
+      c!n1 = Some (T.Ibuiltin ef (convert_builtin_args args rargs) res' nd) /\
+      tr_builtin_res map res res'
+    by plain { intros until rret; intros H; inv H; eauto }.       
+
+FLemma invert_eval_builtin_arg:
+  forall (ge: So.genv) e m sp a v,
+  eval_builtin_arg ge sp e m a v ->
+  exists vl,
+     So.eval_exprlist ge sp e m nil (exprlist_of_expr_list (params_of_builtin_arg a)) vl
+  /\ Events.eval_builtin_arg (Genv.to_senv ge) (fun v => v) sp m (fst (convert_builtin_arg a vl)) v
+  /\ (forall vl', convert_builtin_arg a (vl ++ vl') = (fst (convert_builtin_arg a vl), vl')).
+Proof.
+  induction 1; simpl. 2-8: try (econstructor; intuition eauto with evalexpr barg; fail).
+- econstructor; split; eauto with evalexpr. split. constructor. auto.
+- econstructor; split; eauto with evalexpr. split. constructor. auto.
+- econstructor; split; eauto with evalexpr. split. repeat constructor. auto.
+- destruct IHeval_builtin_arg1 as (vl1 & A1 & B1 & C1).
+  destruct IHeval_builtin_arg2 as (vl2 & A2 & B2 & C2).
+  destruct (convert_builtin_arg a1 vl1) as [a1' rl1] eqn:E1; simpl in *.
+  destruct (convert_builtin_arg a2 vl2) as [a2' rl2] eqn:E2; simpl in *.
+  exists (vl1 ++ vl2); split.
+  apply eval_exprlist_append; auto.
+  split. rewrite C1, E2. constructor; auto.
+  intros. rewrite app_ass, !C1, C2, E2. auto.
+Qed.
+
+Lemma invert_eval_builtin_args:
+  forall al vl,
+  list_forall2 (eval_builtin_arg ge sp e m) al vl ->
+  exists vl',
+     eval_exprlist ge sp e m nil (exprlist_of_expr_list (params_of_builtin_args al)) vl'
+  /\ Events.eval_builtin_args ge (fun v => v) sp m (convert_builtin_args al vl') vl.
+Proof.
+  induction 1; simpl.
+- exists (@nil val); split; constructor.
+- exploit invert_eval_builtin_arg; eauto. intros (vl1 & A & B & C).
+  destruct IHlist_forall2 as (vl2 & D & E).
+  exists (vl1 ++ vl2); split.
+  apply eval_exprlist_append; auto.
+  rewrite C; simpl. constructor; auto.
+Qed.
+
+FLemma transl_eval_builtin_arg:
+  forall (ge: So.genv) sp m rs a vl rl v,
+  Val.lessdef_list vl rs##rl ->
+  Events.eval_builtin_arg ge (fun v => v) sp m (fst (convert_builtin_arg a vl)) v ->
+  exists v',
+     Events.eval_builtin_arg ge (fun r => rs#r) sp m (fst (convert_builtin_arg a rl)) v'
+  /\ Val.lessdef v v'
+  /\ Val.lessdef_list (snd (convert_builtin_arg a vl)) rs##(snd (convert_builtin_arg a rl)).
+FProofLemma.
+  induction a; simpl; intros until v; intros LD EV;
+  try (now (inv EV; econstructor; eauto with barg)).
+- destruct rl; simpl in LD; inv LD; inv EV; simpl.
+  econstructor; eauto with barg.
+  exists (rs#p); intuition auto. constructor.
+- destruct (convert_builtin_arg a1 vl) as [a1' vl1] eqn:CV1; simpl in *.
+  destruct (convert_builtin_arg a2 vl1) as [a2' vl2] eqn:CV2; simpl in *.
+  destruct (convert_builtin_arg a1 rl) as [a1'' rl1] eqn:CV3; simpl in *.
+  destruct (convert_builtin_arg a2 rl1) as [a2'' rl2] eqn:CV4; simpl in *.
+  inv EV.
+  exploit IHa1; eauto. rewrite CV1; simpl; eauto.
+  rewrite CV1, CV3; simpl. intros (v1' & A1 & B1 & C1).
+  exploit IHa2. eexact C1. rewrite CV2; simpl; eauto.
+  rewrite CV2, CV4; simpl. intros (v2' & A2 & B2 & C2).
+  exists (Val.longofwords v1' v2'); split. constructor; auto.
+  split; auto. apply Val.longofwords_lessdef; auto.
+- destruct (convert_builtin_arg a1 vl) as [a1' vl1] eqn:CV1; simpl in *.
+  destruct (convert_builtin_arg a2 vl1) as [a2' vl2] eqn:CV2; simpl in *.
+  destruct (convert_builtin_arg a1 rl) as [a1'' rl1] eqn:CV3; simpl in *.
+  destruct (convert_builtin_arg a2 rl1) as [a2'' rl2] eqn:CV4; simpl in *.
+  inv EV.
+  exploit IHa1; eauto. rewrite CV1; simpl; eauto.
+  rewrite CV1, CV3; simpl. intros (v1' & A1 & B1 & C1).
+  exploit IHa2. eexact C1. rewrite CV2; simpl; eauto.
+  rewrite CV2, CV4; simpl. intros (v2' & A2 & B2 & C2).
+  econstructor; split. constructor; eauto.
+  split; auto. destruct Archi.ptr64; auto using Val.add_lessdef, Val.addl_lessdef.
+Qed. CloseFLemma.
+
+FLemma transl_eval_builtin_args:
+  forall (ge: So.genv) sp m rs al vl1 rl vl,
+  Val.lessdef_list vl1 rs##rl ->
+  Events.eval_builtin_args (Genv.to_senv ge) (fun v => v) sp m (convert_builtin_args al vl1) vl ->
+  exists vl',
+     Events.eval_builtin_args ge (fun r => rs#r) sp m (convert_builtin_args al rl) vl'
+  /\ Val.lessdef_list vl vl'.
+FProofLemma.
+  induction al; simpl; intros until vl; intros LD EV.
+- inv EV. exists (@nil val); split; constructor.
+- destruct (convert_builtin_arg a vl1) as [a1' vl2] eqn:CV1; simpl in *.
+  inv EV.
+  exploit transl_eval_builtin_arg. eauto. instantiate (2 := a). rewrite CV1; simpl; eauto.
+  rewrite CV1; simpl. intros (v1' & A1 & B1 & C1).
+  exploit IHal. eexact C1. eauto. intros (vl' & A2 & B2).
+  destruct (convert_builtin_arg a rl) as [a1'' rl2]; simpl in *.
+  exists (v1' :: vl'); split; constructor; auto.
+Qed. CloseFLemma.
+
 FInduction transl_step_correct.
 FProof.
 all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
-+ apply cheat.
++ apply tr_sbuiltin_inv in TS; unpack TS; subst. 
+  exploit invert_eval_builtin_args; eauto. intros (vparams & P & Q).
+  exploit transl_exprlist_correct; eauto.
+  intros [rs' [tm' [E [F [G [J K]]]]]].
+  exploit transl_eval_builtin_args; eauto.
+  intros (vargs' & U & V).
+  exploit (@eval_builtin_args_lessdef _ ge (fun r => rs'#r) (fun r => rs'#r)); eauto.
+  intros (vargs'' & X & Y).
+  assert (Z: Val.lessdef_list vl vargs'') by (eapply Val.lessdef_list_trans; eauto).
+  edestruct external_call_mem_extends as [tv [tm'' [A [B [C D]]]]]; eauto.
+  econstructor; split.
+  left. eapply plus_right. eexact E.
+  eapply exec_Ibuiltin. eauto.
+  eapply eval_builtin_args_preserved with (ge1 := ge); eauto. exact symbols_preserved.
+  eapply external_call_symbols_preserved. apply senv_preserved. eauto.
+  traceEq.
+  econstructor; eauto. constructor.
+  eapply match_env_update_res; eauto.
 Qed. FEnd transl_step_correct.
 
 FEnd RTLgen.
