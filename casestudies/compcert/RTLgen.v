@@ -2849,6 +2849,17 @@ intros until tge; intros TRANSL A B. rewrite A. rewrite B.
 apply (Genv.find_funct_transf_partial TRANSL).
 Qed. CloseFLemma.
 
+Closing Fact match_stacks_call_inv : forall optid f sp e cs k,
+    match_stacks (So.Kcall optid f sp e k) cs ->
+    exists r tf n rs cs' map nexits ngoto nret rret,
+      cs = (T.Stackframe r tf sp n rs :: cs') /\
+      map_wf map /\
+      tr_fun tf map f ngoto nret rret /\
+      match_env map e nil rs /\
+      reg_map_ok map r optid /\
+      tr_cont (T.fn_code tf) map k n nexits ngoto nret rret cs' 
+    by plain { intros until k; intros H; inv H; eauto }.             
+
 FInduction transl_step_correct.
 FProof.
 all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
@@ -2918,11 +2929,11 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   traceEq.
   constructor; auto.
 
- (* return *)
-  inv MS.
++ (* return *)
+  apply match_stacks_call_inv in MS; unpack MS; subst. 
   econstructor; split.
-  left; apply plus_one; constructor.
-  econstructor; eauto. constructor.
+  left; apply plus_one; fconstructor.
+  econstructor; eauto. fconstructor.
   eapply match_env_update_dest; eauto.  
 Qed. FEnd transl_step_correct.
 
