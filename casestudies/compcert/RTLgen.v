@@ -2820,6 +2820,22 @@ Closing Fact tr_stmt_tr_scall_imm : forall c map optid sig id cl ns nd nexits ng
       reg_map_ok map rd optid
     by plain { intros until rret; intros H; inv H; eauto }.
 
+Closing Fact tr_stmt_tr_stailcall : forall c map sig b cl ns nd nexits ngoto nret rret,
+    tr_stmt c map (So.Stailcall sig (inl _ b) cl) ns nd nexits ngoto nret rret -> 
+    exists n1 rf n2 rargs,
+     tr_expr c map nil b ns n1 rf None /\
+     tr_exprlist c map (rf :: nil) cl n1 n2 rargs /\
+     c!n2 = Some (T.Itailcall sig (inl _ rf) rargs) 
+    by plain { intros until rret; intros H; inv H; eauto }.
+
+
+Closing Fact tr_stmt_tr_stailcall_imm : forall c map sig id cl ns nd nexits ngoto nret rret,
+    tr_stmt c map (So.Stailcall sig (inr _ id) cl) ns nd nexits ngoto nret rret ->
+    exists n2 rargs,
+      tr_exprlist c map nil cl ns n2 rargs /\
+      c!n2 = Some (T.Itailcall sig (inr _ id) rargs) 
+    by plain { intros until rret; intros H; inv H; eauto }.                
+
 FLemma functions_translated:
   forall prog tprog ge tge, match_prog prog tprog ->
   ge = Genv.globalenv prog ->
@@ -2865,34 +2881,37 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   traceEq.
   constructor; auto. fconstructor. 
 
-  (* tailcall *)
-+  inv TS; inv H.
+(* tailcall *)
++  destruct a. apply tr_stmt_tr_stailcall in TS; unpack TS; subst; inv e0.   
   (* indirect *)
   exploit transl_expr_correct; eauto.
   intros [rs' [tm' [A [B [C [D X]]]]]].
   exploit transl_exprlist_correct; eauto.
   intros [rs'' [tm'' [E [F [G [J Y]]]]]].
   exploit functions_translated; eauto. intros [tf' [P Q]].
-  exploit match_stacks_call_cont; eauto. intros [U V].
-  assert (fn_stacksize tf = fn_stackspace f). inv TF; auto.
+  exploit match_stacks_call_cont. instantiate (1 := TK). intros [U V].
+  assert (T.fn_stacksize tf = So.fn_stackspace f). inv TF; auto.
   edestruct Mem.free_parallel_extends as [tm''' []]; eauto.
   econstructor; split.
   left; eapply plus_right. eapply star_trans. eexact A. eexact E. reflexivity.
-  eapply exec_Itailcall; eauto. simpl. rewrite J. destruct C. eauto. discriminate P. simpl; auto.
+  eapply T.exec_Itailcall; eauto. simpl. rewrite J. destruct C. eauto. discriminate P. simpl; auto.
   apply sig_transl_function; auto.
   rewrite H; eauto.
   traceEq.
-  constructor; auto.
+  constructor; auto. 
   (* direct *)
+  apply tr_stmt_tr_stailcall_imm in TS; unpack TS; subst; inv e0.   
   exploit transl_exprlist_correct; eauto.
   intros [rs'' [tm'' [E [F [G [J Y]]]]]].
   exploit functions_translated; eauto. intros [tf' [P Q]].
-  exploit match_stacks_call_cont; eauto. intros [U V].
-  assert (fn_stacksize tf = fn_stackspace f). inv TF; auto.
+  exploit match_stacks_call_cont. instantiate (1 := TK). intros [U V].
+  assert (T.fn_stacksize tf = So.fn_stackspace f). inv TF; auto.
   edestruct Mem.free_parallel_extends as [tm''' []]; eauto.
   econstructor; split.
   left; eapply plus_right. eexact E.
-  eapply exec_Itailcall; eauto. simpl. rewrite symbols_preserved. rewrite H5.
+  eapply T.exec_Itailcall; eauto. simpl.
+  rewrite (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSL eq_refl eq_refl).
+  rewrite H5.
   rewrite Genv.find_funct_find_funct_ptr in P. eauto.
   apply sig_transl_function; auto.
   rewrite H; eauto.
