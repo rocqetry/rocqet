@@ -2441,18 +2441,36 @@ Closing Fact tr_sbuiltin_inv : forall c map res ef args ns nd nexits ngoto nret 
       tr_builtin_res map res res'
     by plain { intros until rret; intros H; inv H; eauto }.       
 
+FLemma eval_exprlist_append:
+  forall ge sp e m le al1 vl1 al2 vl2,
+  So.eval_exprlist ge sp e m le (exprlist_of_expr_list al1) vl1 ->
+  So.eval_exprlist ge sp e m le (exprlist_of_expr_list al2) vl2 ->
+  So.eval_exprlist ge sp e m le (exprlist_of_expr_list (al1 ++ al2)) (vl1 ++ vl2).
+FProofLemma.
+  induction al1; simpl; intros vl1 al2 vl2 E1 E2. inv E1.
+- auto.
+- simpl. constructor; eauto.
+Qed.
+
 FLemma invert_eval_builtin_arg:
-  forall (ge: So.genv) e m sp a v,
-  eval_builtin_arg ge sp e m a v ->
+  forall ge sp e m a v,
+  So.eval_builtin_arg ge sp e m a v ->
   exists vl,
-     So.eval_exprlist ge sp e m nil (exprlist_of_expr_list (params_of_builtin_arg a)) vl
-  /\ Events.eval_builtin_arg (Genv.to_senv ge) (fun v => v) sp m (fst (convert_builtin_arg a vl)) v
+     So.eval_exprlist ge sp e m nil (exprlist_of_expr_list (AST.params_of_builtin_arg a)) vl
+  /\ Events.eval_builtin_arg (Genv.to_senv ge) (fun v => v) (Vptr sp Ptrofs.zero) m (fst (convert_builtin_arg a vl)) v
   /\ (forall vl', convert_builtin_arg a (vl ++ vl') = (fst (convert_builtin_arg a vl), vl')).
-Proof.
-  induction 1; simpl. 2-8: try (econstructor; intuition eauto with evalexpr barg; fail).
-- econstructor; split; eauto with evalexpr. split. constructor. auto.
-- econstructor; split; eauto with evalexpr. split. constructor. auto.
-- econstructor; split; eauto with evalexpr. split. repeat constructor. auto.
+FProofLemma.
+  induction 1; simpl. (* 2-8: try (econstructor; do 4 fconstructor; intuition eauto with evalexpr barg; fail).*)
+- econstructor; split. do 2 fconstructor. eauto. (*with evalexpr.*) split. constructor. auto.
+- econstructor; split. do 2 fconstructor. eauto. (*with evalexpr.*) split. constructor. auto.
+- econstructor; split. do 2 fconstructor. eauto. (*with evalexpr.*) split. repeat constructor. auto.
+- econstructor; split. do 2 fconstructor. split. constructor. auto.
+- econstructor; split. do 2 fconstructor. split. constructor. auto.
+- econstructor; split. do 2 fconstructor. split. repeat constructor. auto. auto.
+- econstructor; split. do 2 fconstructor. split. constructor. auto.
+- econstructor; split. do 2 fconstructor. split. constructor. auto. auto.
+- econstructor; split. do 2 fconstructor. split. constructor. auto.
+- econstructor; split. do 3 fconstructor. split. repeat constructor. auto. 
 - destruct IHeval_builtin_arg1 as (vl1 & A1 & B1 & C1).
   destruct IHeval_builtin_arg2 as (vl2 & A2 & B2 & C2).
   destruct (convert_builtin_arg a1 vl1) as [a1' rl1] eqn:E1; simpl in *.
