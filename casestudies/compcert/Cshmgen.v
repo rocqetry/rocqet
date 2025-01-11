@@ -1070,8 +1070,8 @@ FDefinition transl_program : S.program -> res T.program := fun p =>
   transform_partial_program2 (transl_fundef p.(prog_comp_env)) transl_globvar p.
 
 (* Lemmas on expression translation/compilation *)
-(*MetaData EXPR_Lemmas.
-(*
+(* MetaData EXPR_Lemmas.
+
 Section EXPR.
 
 Variable cunit: S.program.
@@ -1080,7 +1080,7 @@ Variable e: Clight.env.
 Variable le: temp_env.
 Variable m: mem.
 Variable te: Csharpminor.env.
-Hypothesis MENV: match_env e te.*)
+Hypothesis MENV: match_env e te.
 
 Lemma transl_expr_lvalue:
   forall a loc ofs bf ta,
@@ -1361,6 +1361,35 @@ Inductive match_states : self__Cshmgen.S.state -> self__Cshmgen.T.state -> Prop 
 FEnd match_states.
 
 (* Work Here *)
+(* 
+extra lemmas needed from cshmgenproof's sections:
+set
+- transl_expr_correct
+- match_states_skip
+ifthenelse
+- make_boolean_correct
+return none
+- match_env_free_blocks
+- match_returnstate
+- match_cont_call_cont
+return some
+- make_cast_correct
+- wt_val_casted
+- cast_val_is_casted
+skip call
+- match_cont_is_call_cont
+- step_skip_call
+goto
+- transl_find_label 
+internal functions
+- match_env_alloc_variables
+- match_env_empty
+- transl_vars_names
+- create_undef_temps_match
+- bind_parameter_temps_match
+
+
+fconstructor doesn't work for label *)
 (* use closing fact for inversion*)
 Closing Fact match_transl_0_inv :
   forall ts tk ts' tk',
@@ -1452,7 +1481,7 @@ FProof.
   apply match_transl_0_inv in MTR.
   destruct MTR. subst.
   econstructor. split.
-  + apply plus_one. (* apply T.step_label.*)
+  + apply plus_one. (* apply T.step_label. *)
     apply cheat.
   + econstructor;eauto. fconstructor.
 (* goto *)
