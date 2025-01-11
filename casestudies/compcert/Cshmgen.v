@@ -142,7 +142,7 @@ FInductive cont: Type :=
 
 FRecursion call_cont about cont motive (fun (c : cont) => cont) by _rect.       
 Case Kstop := Kstop.
-Case Kseq s k := (Kseq s k).
+Case Kseq s k := (call_cont k).
 FEnd call_cont.
             
 FRecursion is_call_cont about cont motive (fun (c : cont) => Prop) by _rect.                   
@@ -1186,6 +1186,59 @@ Inductive match_states : self__Cshmgen.S.state -> self__Cshmgen.T.state -> Prop 
       (self__Cshmgen.T.Returnstate res tk m).
 FEnd match_states.
 
+FInduction transl_expr_correct about S.eval_expr 
+  motive (fun ge (e: S.env) le m a v (_ : S.eval_expr ge e le m a v) =>
+      forall prog tprog tge, match_prog prog tprog ->
+      S.globalenv prog = ge -> Genv.globalenv tprog = tge ->
+      forall (cunit: S.program) te ta (MENV: match_env prog e te) lenv,
+      transl_expr a cunit.(prog_comp_env) = OK ta ->
+      T.eval_expr tge te le m lenv ta v).                               
+FProof.
+(* const int *)
++ apply cheat.
+(* const float *)  
++ apply cheat.
+(* const single *)  
++ apply cheat.
+(* const long *)  
++ apply cheat.
+(* cast *)  
++ apply cheat.
+(* temp var *)  
++ apply cheat.
+Qed. FEnd transl_expr_correct.
+
+(* This should probably take tprog and match_prog as Hypothesis *)
+FLemma match_states_skip:
+  forall f e le te nbrk ncnt k tf tk m (cu: S.program) (prog: S.program),
+  (*linkorder cu prog ->*)
+  transl_function cu.(prog_comp_env) f = OK tf ->
+  match_env cu e te ->
+  match_cont cu.(prog_comp_env) (S.fn_return f) nbrk ncnt k tk ->
+  match_states (S.State f S.Sskip k e le m) (T.State tf T.Sskip tk te le m).
+FProofLemma.
+  intros. econstructor; eauto. fsimpl; reflexivity. fconstructor.
+Qed. CloseFLemma.
+
+FInduction match_cont_call_cont about match_cont 
+  motive (fun ce tyret nbrk ncnt k tk (_ : match_cont ce tyret nbrk ncnt k tk) =>
+  forall ce' nbrk' ncnt',
+  match_cont ce' tyret nbrk' ncnt' (S.call_cont k) (T.call_cont tk)).
+FProof.
++ intros. do 2 fsimpl. fconstructor.
++ intros until tk; intros A B H. do 2 fsimpl. apply H.
+Qed. FEnd match_cont_call_cont. 
+
+FInduction match_cont_is_call_cont about match_cont
+  motive (fun ce tyret nbrk ncnt k tk (_ : match_cont ce tyret nbrk ncnt k tk) =>
+  forall ce' nbrk' ncnt',
+  S.is_call_cont k ->
+  match_cont ce' tyret nbrk' ncnt' k tk /\ T.is_call_cont tk).
+FProof.
++ intros. fsimpl in *. fsimpl in H. split. fconstructor. auto.
++ intros. fsimpl in *. fsimpl in H0. contradiction.
+Qed. FEnd match_cont_is_call_cont. 
+  
 (* Work Here *)
 (* 
 extra lemmas needed from cshmgenproof's sections:
