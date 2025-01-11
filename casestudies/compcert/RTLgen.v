@@ -2441,16 +2441,28 @@ Closing Fact tr_sbuiltin_inv : forall c map res ef args ns nd nexits ngoto nret 
       tr_builtin_res map res res'
     by plain { intros until rret; intros H; inv H; eauto }.       
 
+Closing Fact tr_eval_enil : forall ge sp e m le vl,
+    So.eval_exprlist ge sp e m le So.Enil vl ->
+    vl = nil
+    by plain { intros until vl; intros H; inv H; eauto }.
+
+Closing Fact tr_eval_econs : forall ge sp e m le a1 al vl,
+    So.eval_exprlist ge sp e m le (So.Econs a1 al) vl -> 
+    exists v1 vl', 
+      vl = (v1 :: vl') /\
+      So.eval_expr ge sp e m le a1 v1 /\ So.eval_exprlist ge sp e m le al vl'
+      by plain { intros until vl; intros H; inv H; eauto }.                                                    
+                                                    
 FLemma eval_exprlist_append:
   forall ge sp e m le al1 vl1 al2 vl2,
   So.eval_exprlist ge sp e m le (exprlist_of_expr_list al1) vl1 ->
   So.eval_exprlist ge sp e m le (exprlist_of_expr_list al2) vl2 ->
   So.eval_exprlist ge sp e m le (exprlist_of_expr_list (al1 ++ al2)) (vl1 ++ vl2).
 FProofLemma.
-  induction al1; simpl; intros vl1 al2 vl2 E1 E2. inv E1.
-- auto.
-- simpl. constructor; eauto.
-Qed.
+  induction al1; simpl; intros vl1 al2 vl2 E1 E2.
+- apply tr_eval_enil in E1; unpack E1; subst. auto.
+- apply tr_eval_econs in E1; unpack E1; subst. simpl. fconstructor.
+Qed. CloseFLemma.
 
 FLemma invert_eval_builtin_arg:
   forall ge sp e m a v,
@@ -2479,23 +2491,23 @@ FProofLemma.
   apply eval_exprlist_append; auto.
   split. rewrite C1, E2. constructor; auto.
   intros. rewrite app_ass, !C1, C2, E2. auto.
-Qed.
+Qed. CloseFLemma.
 
-Lemma invert_eval_builtin_args:
-  forall al vl,
-  list_forall2 (eval_builtin_arg ge sp e m) al vl ->
+FLemma invert_eval_builtin_args:
+  forall ge sp e m al vl,
+  list_forall2 (So.eval_builtin_arg ge sp e m) al vl ->
   exists vl',
-     eval_exprlist ge sp e m nil (exprlist_of_expr_list (params_of_builtin_args al)) vl'
-  /\ Events.eval_builtin_args ge (fun v => v) sp m (convert_builtin_args al vl') vl.
-Proof.
+     So.eval_exprlist ge sp e m nil (exprlist_of_expr_list (AST.params_of_builtin_args al)) vl'
+  /\ Events.eval_builtin_args ge (fun v => v) (Vptr sp Ptrofs.zero) m (convert_builtin_args al vl') vl.
+FProofLemma.
   induction 1; simpl.
-- exists (@nil val); split; constructor.
+- exists (@nil val); split. fconstructor. constructor.
 - exploit invert_eval_builtin_arg; eauto. intros (vl1 & A & B & C).
   destruct IHlist_forall2 as (vl2 & D & E).
   exists (vl1 ++ vl2); split.
   apply eval_exprlist_append; auto.
   rewrite C; simpl. constructor; auto.
-Qed.
+Qed. CloseFLemma.
 
 FLemma transl_eval_builtin_arg:
   forall (ge: So.genv) sp m rs a vl rl v,
@@ -2554,6 +2566,20 @@ FProofLemma.
   exists (v1' :: vl'); split; constructor; auto.
 Qed. CloseFLemma.
 
+FLemma match_env_update_res:
+  forall map res v e le tres tv rs,
+  Val.lessdef v tv ->
+  map_wf map ->
+  tr_builtin_res map res tres ->
+  match_env map e le rs ->
+  match_env map (So.set_builtin_res res v e) le (regmap_setres tres tv rs).
+FProofLemma.
+  intros. inv H1; simpl.
+- eapply match_env_update_var; eauto.
+- auto.
+- eapply match_env_update_temp; eauto.
+Qed. CloseFLemma.
+
 FInduction transl_step_correct.
 FProof.
 all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
@@ -2563,17 +2589,17 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   intros [rs' [tm' [E [F [G [J K]]]]]].
   exploit transl_eval_builtin_args; eauto.
   intros (vargs' & U & V).
-  exploit (@eval_builtin_args_lessdef _ ge (fun r => rs'#r) (fun r => rs'#r)); eauto.
+  exploit (@eval_builtin_args_lessdef _ (Genv.to_senv (Genv.globalenv prog)) (fun r => rs'#r) (fun r => rs'#r)); eauto.
   intros (vargs'' & X & Y).
   assert (Z: Val.lessdef_list vl vargs'') by (eapply Val.lessdef_list_trans; eauto).
   edestruct external_call_mem_extends as [tv [tm'' [A [B [C D]]]]]; eauto.
   econstructor; split.
   left. eapply plus_right. eexact E.
-  eapply exec_Ibuiltin. eauto.
-  eapply eval_builtin_args_preserved with (ge1 := ge); eauto. exact symbols_preserved.
-  eapply external_call_symbols_preserved. apply senv_preserved. eauto.
+  eapply T.exec_Ibuiltin. eauto.
+  eapply eval_builtin_args_preserved with (ge1 := (Genv.globalenv prog)); eauto. exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSL eq_refl eq_refl). 
+  eapply external_call_symbols_preserved. apply (senv_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSL eq_refl eq_refl). eauto.
   traceEq.
-  econstructor; eauto. constructor.
+  econstructor; eauto. fconstructor.
   eapply match_env_update_res; eauto.
 Qed. FEnd transl_step_correct.
 
