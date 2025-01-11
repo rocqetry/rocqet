@@ -1140,12 +1140,6 @@ Let tge := Genv.globalenv tprog.
 *)
 
 MetaData match_env.
-(*res
-defined in: lib/Errors.v
-
-_!_
-te is PTree.t (block * Z)
- *)
 
 Record match_env
   (prog: S.program)
