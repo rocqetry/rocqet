@@ -3208,7 +3208,12 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   eapply match_env_update_dest; eauto.
 
 (* external call *)
-+ apply cheat.  
++  monadInv TF.
+  edestruct external_call_mem_extends as [tvres [tm' [A [B [C D]]]]]; eauto.
+  econstructor; split.
+  left; apply plus_one. eapply T.exec_function_external; eauto.
+  eapply external_call_symbols_preserved; eauto. apply (senv_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSL eq_refl eq_refl). 
+  constructor; auto. 
 Qed. FEnd transl_step_correct.
 
 FEnd RTLgen.
