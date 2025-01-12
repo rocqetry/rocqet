@@ -2807,10 +2807,6 @@ FRecursion is_call_cont.
 Case Kcall i f v e k := True.
 FEnd is_call_cont.
 
-FRecursion find_label.
-Case _ := (fun lbl k => None).
-FEnd find_label.
-
 FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
 | eval_Eexternal: forall ge sp e m le id sg al b ef vl v,
    Genv.find_symbol ge id = Some b ->
@@ -2819,6 +2815,10 @@ FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Pro
    eval_exprlist ge sp e m le al vl ->
    external_call ef ge vl m E0 v m ->
    eval_expr ge sp e m le (Eexternal id sg al) v.
+
+FRecursion find_label.
+Case _ := (fun lbl k => None).
+FEnd find_label.
   
 MetaData eval_expr_or_symbol.
 Inductive eval_expr_or_symbol: genv -> fenv -> env -> mem -> letenv -> expr + ident -> val -> Prop :=
@@ -2850,7 +2850,7 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
       step ge (Returnstate v (Kcall optid f (Vptr sp Ptrofs.zero) e k) m)
         E0 (State f Sskip k sp (set_optvar optid v e) m)
 | step_external_function: forall ge ef vargs k m t vres m',
-      external_call ef ge vargs m t vres m' ->
+      external_call ef (Genv.to_senv ge) vargs m t vres m' ->
       step ge (Callstate (AST.External ef) vargs k m)
          t (Returnstate vres k m').
         
@@ -2893,7 +2893,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
      E0 (Callstate s fd rs##args m')
 | exec_function_external:
       forall ge s ef args res t m m',
-      external_call ef ge args m t res m' ->
+        external_call ef (Genv.to_senv ge) args m t res m' ->
       step ge (Callstate s (AST.External ef) args m)
          t (Returnstate s res m')
 | exec_return:
@@ -2906,6 +2906,10 @@ FEnd RTL.
 Family RTLgen.
 Family So extends CminorSel. FEnd So.
 Family T extends RTL. FEnd T.
+
+FRecursion alloc_reg.
+Case _ := (fun map => new_reg).
+FEnd alloc_reg.
 
 Inherit alloc_regs.
 From Rocqet Require Import RTLmonad.
@@ -2954,7 +2958,7 @@ Case Stailcall sig expr_ident cl :=
          do rargs <- alloc_regs cl map;
          do n1 <- add_instr (T.Itailcall sig (inr _ id) rargs);
          transl_exprlist cl map rargs n1
-     end).         
+     end).
 FEnd transl_stmt.
 
 FRecursion reserve_labels.
@@ -2966,7 +2970,7 @@ FInductive tr_expr : T.code -> mapping -> list reg -> So.expr -> T.node -> T.nod
       tr_exprlist c map pr al ns n1 rl ->
       c!n1 = Some (T.Icall sg (inr _ id) rl rd nd) ->
       reg_map_ok map rd dst -> ~In rd pr ->
-      tr_expr c map pr (Eexternal id sg al) ns nd rd dst.
+      tr_expr c map pr (So.Eexternal id sg al) ns nd rd dst.
   
 FInductive tr_stmt : T.code -> mapping -> So.stmt -> T.node -> T.node -> list T.node -> labelmap -> T.node -> option reg -> Prop :=
 | tr_Scall: forall c map optid sig b cl ns nd nexits ngoto nret rret rd n1 rf n2 rargs,
@@ -3008,10 +3012,43 @@ with match_stacks: So.cont -> list T.stackframe -> Prop :=
       tr_cont (T.fn_code tf) map k n nexits ngoto nret rret cs ->
       match_stacks (So.Kcall optid f sp e k) (T.Stackframe r tf sp n rs :: cs).
 
+Closing Fact tr_external_inv : forall c map pr id sg al ns nd rd dst,
+    tr_expr c map pr (So.Eexternal id sg al) ns nd rd dst ->
+    exists n1 rl,
+      tr_exprlist c map pr al ns n1 rl /\
+      c!n1 = Some (T.Icall sg (inr _ id) rl rd nd) /\
+      reg_map_ok map rd dst /\
+      ~In rd pr
+    by plain { intros dst; intros H; inv H; eauto }.      
 
 FInduction transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
 FProof.
-+ apply cheat.
++ intros; (*red;*) intros. apply tr_external_inv in TE; unpack TE; subst. 
+  exploit H; eauto. intros [rs1 [tm1 [EX1 [ME1 [RR1 [RO1 EXT1]]]]]].
+  exploit external_call_mem_extends; eauto.
+  intros [v' [tm2 [A [B [C D]]]]].
+  exploit function_ptr_translated; eauto. simpl. intros [tf [P Q]]. inv Q.
+  exists (rs1#rd <- v'); exists tm2.
+(* Exec *)
+  split. eapply star_trans. eexact EX1.
+  eapply star_left. eapply T.exec_Icall; eauto.
+  simpl. rewrite symbols_preserved with (prog:=prog) (tprog:=tprog) (ge:=(Genv.globalenv prog)).
+  (* Genv.find_symbol (Genv.globalenv prog) id = Some b*)
+  assert (Genv.find_symbol (Genv.globalenv prog) id = Some b).
+    assumption.  
+  rewrite H1. eauto. auto. auto. auto. auto.
+  eapply star_left. eapply T.exec_function_external.
+  eapply external_call_symbols_preserved; eauto. apply (senv_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) H0 eq_refl eq_refl). 
+  apply star_one. apply T.exec_return.
+  reflexivity. reflexivity. reflexivity.
+(* Match-env *)
+  split. eauto using match_env_update_temp, match_env_update_dest. 
+(* Result reg *)
+  split. rewrite Regmap.gss. auto.
+(* Other regs *)
+  split. intros. rewrite Regmap.gso. auto. intuition congruence.
+(* Mem *)
+  auto.
 Qed. FEnd transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
 
 FRecursion size_stmt.
