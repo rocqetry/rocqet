@@ -720,6 +720,12 @@ Case Econs a bl :=
   ret (r :: rl)).
 FEnd alloc_regs.
 
+FDefinition alloc_optreg := fun (map: mapping) (dest: option ident) =>
+  match dest with
+  | Some id => find_var map id
+  | None => new_reg
+  end.
+
 FRecursion transl_expr about So.expr motive (fun (_ : So.expr) => mapping -> reg -> T.node -> mon T.node)
   with transl_exprlist about So.exprlist motive (fun (_ : So.exprlist) => mapping -> list reg -> T.node -> mon T.node)
   with transl_condexpr about So.condexpr motive (fun (_ : So.condexpr) => mapping  -> T.node -> T.node -> mon T.node) by _rect.
@@ -878,11 +884,71 @@ FEnd _instr_at_incr.
 FDefinition reg_valid : reg -> state -> Prop := fun r s =>
   Plt r s.(st_nextreg T.instruction).
 
+FDefinition reg_fresh : reg -> state -> Prop := fun r s =>
+  ~(Plt r s.(st_nextreg T.instruction)).
+
+FLemma valid_fresh_absurd:
+  forall r s, reg_valid r s -> reg_fresh r s -> False.
+FProofLemma. intros r s. unfold reg_valid, reg_fresh; case r; tauto. Qed. CloseFLemma.
+MetaData _valid_fresh_absurd.
+Global Hint Resolve valid_fresh_absurd: rtlg.
+FEnd _valid_fresh_absurd.
+
+FLemma valid_fresh_different:
+  forall r1 r2 s, reg_valid r1 s -> reg_fresh r2 s -> r1 <> r2.
+FProofLemma. unfold not; intros. subst r2. eauto with rtlg. Qed. CloseFLemma.
+MetaData _valid_fresh_different.
+Global Hint Resolve valid_fresh_different: rtlg.
+FEnd _valid_fresh_different.
+
+FLemma reg_valid_incr:
+  forall r s1 s2, state_incr s1 s2 -> reg_valid r s1 -> reg_valid r s2.
+FProofLemma.
+intros r s1 s2 INCR.
+  inversion INCR.
+  unfold reg_valid. intros; apply Plt_Ple_trans with (st_nextreg T.instruction s1); auto.
+Qed. CloseFLemma.
+MetaData _reg_valid_incr.
+Global Hint Resolve reg_valid_incr: rtlg.
+FEnd _reg_valid_incr.
+
+FLemma reg_fresh_decr:
+  forall r s1 s2, state_incr s1 s2 -> reg_fresh r s2 -> reg_fresh r s1.
+FProofLemma.
+intros r s1 s2 INCR. inversion INCR.
+  unfold reg_fresh; unfold not; intros.
+  apply H4. apply Plt_Ple_trans with (st_nextreg T.instruction s1); auto.
+Qed. CloseFLemma.
+MetaData _reg_fresh_decr.
+Global Hint Resolve reg_fresh_decr: rtlg.
+FEnd _reg_fresh_decr.
+
 FDefinition regs_valid : list reg -> state -> Prop := fun rl s =>
   forall r, In r rl -> reg_valid r s.
 
-FDefinition reg_fresh : reg -> state -> Prop := fun r s =>
-  ~(Plt r s.(st_nextreg T.instruction)).
+FLemma regs_valid_nil:
+  forall s, regs_valid nil s.
+FProofLemma. intros; red; intros. elim H. Qed. CloseFLemma.
+MetaData _regs_valid_nil.
+Global Hint Resolve regs_valid_nil: rtlg.
+FEnd _regs_valid_nil.
+
+FLemma regs_valid_cons:
+  forall r1 rl s,
+  reg_valid r1 s -> regs_valid rl s -> regs_valid (r1 :: rl) s.
+FProofLemma. intros; red; intros. elim H1; intro. subst r1; auto. auto. Qed. CloseFLemma.
+
+FLemma regs_valid_app:
+  forall rl1 rl2 s,
+  regs_valid rl1 s -> regs_valid rl2 s -> regs_valid (rl1 ++ rl2) s.
+FProofLemma. intros; red; intros. apply in_app_iff in H1. destruct H1; auto. Qed. CloseFLemma.
+
+FLemma regs_valid_incr:
+  forall s1 s2 rl, state_incr s1 s2 -> regs_valid rl s1 -> regs_valid rl s2.
+FProofLemma. unfold regs_valid; intros; eauto with rtlg. Qed. CloseFLemma.
+MetaData _regs_valid_incr.
+Global Hint Resolve regs_valid_incr: rtlg.
+FEnd _regs_valid_incr.
 
 FDefinition reg_in_map : mapping -> reg -> Prop := fun (m: mapping) (r: reg) =>
   (exists id, m.(map_vars)!id = Some r) \/ In r m.(map_letvars).
@@ -890,12 +956,13 @@ FDefinition reg_in_map : mapping -> reg -> Prop := fun (m: mapping) (r: reg) =>
 FDefinition map_valid : mapping -> state -> Prop := fun m s =>
   forall r, reg_in_map m r -> reg_valid r s.
 
-FLemma add_vars_valid:
-  forall namel s1 s2 map1 map2 rl i,
-  add_vars map1 namel s1 = OK (rl, map2) s2 i ->
-  map_valid map1 s1 ->
-  regs_valid rl s2 /\ map_valid map2 s2.
-FProofLemma. apply cheat. Qed. CloseFLemma.
+FLemma map_valid_incr:
+  forall s1 s2 m,
+  state_incr s1 s2 -> map_valid m s1 -> map_valid m s2.
+FProofLemma. unfold map_valid; intros; eauto with rtlg. Qed. CloseFLemma.
+MetaData _map_valid_incr.
+Global Hint Resolve map_valid_incr: rtlg.
+FEnd _map_valid_incr.
 
 (* Properties of basic operations over the state *)
 FLemma add_instr_at:
@@ -907,6 +974,309 @@ Qed. CloseFLemma.
 MetaData _add_instr_at.
 Global Hint Resolve add_instr_at: rtlg.
 FEnd _add_instr_at.
+
+FLemma update_instr_at:
+  forall n i s1 s2 incr u,
+  update_instr n i s1 = OK u s2 incr -> s2.(st_code T.instruction)!n = Some i.
+FProofLemma.
+intros. unfold update_instr in H.
+  destruct (plt n (st_nextnode T.instruction s1)); try discriminate.
+  destruct (check_empty_node s1 n); try discriminate.
+  inv H. simpl. apply PTree.gss.
+Qed. CloseFLemma.
+MetaData _update_instr_at.
+Global Hint Resolve update_instr_at: rtlg.
+FEnd _update_instr_at.
+
+FLemma new_reg_valid:
+  forall s1 s2 r i,
+  new_reg s1 = OK r s2 i -> reg_valid r s2.
+FProofLemma.
+intros. monadInv H.
+unfold reg_valid; simpl. apply Plt_succ.
+Qed. CloseFLemma.
+MetaData _new_reg_valid.
+Global Hint Resolve new_reg_valid: rtlg.
+FEnd _new_reg_valid.
+
+FLemma new_reg_fresh:
+  forall s1 s2 r i,
+  new_reg s1 = OK r s2 i -> reg_fresh r s1.
+FProofLemma.
+intros. monadInv H.
+  unfold reg_fresh; simpl.
+  exact (Plt_strict _).
+Qed. CloseFLemma.
+MetaData _new_reg_fresh.
+Global Hint Resolve new_reg_fresh: rtlg.
+FEnd _new_reg_fresh.
+
+FLemma new_reg_not_in_map:
+  forall s1 s2 m r i,
+  new_reg s1 = OK r s2 i -> map_valid m s1 -> ~(reg_in_map m r).
+FProofLemma.  unfold not; intros; eauto with rtlg. Qed. CloseFLemma.
+MetaData _new_reg_not_in_map.
+Global Hint Resolve new_reg_not_in_map: rtlg.
+FEnd _new_reg_not_in_map.
+
+(* Properties of operations over compilation environments *)
+
+FLemma init_mapping_valid:
+  forall s, map_valid init_mapping s.
+FProofLemma.
+  unfold map_valid, init_mapping.
+  intros s r [[id A] | B].
+  simpl in A. rewrite PTree.gempty in A; discriminate.
+  simpl in B. tauto.
+Qed. CloseFLemma.
+
+FLemma find_var_in_map:
+  forall s1 s2 map name r i,
+  find_var map name s1 = OK r s2 i -> reg_in_map map r.
+FProofLemma.
+intros until r. unfold find_var; caseEq (map.(map_vars)!name).
+  intros. inv H0. left; exists name; auto.
+  intros. inv H0.
+Qed. CloseFLemma.
+MetaData _find_var_in_map.
+Global Hint Resolve find_var_in_map: rtlg.
+FEnd _find_var_in_map.
+
+FLemma find_var_valid:
+  forall s1 s2 map name r i,
+  find_var map name s1 = OK r s2 i -> map_valid map s1 -> reg_valid r s1.
+FProofLemma. eauto with rtlg. Qed. CloseFLemma.
+MetaData _find_var_valid.
+Global Hint Resolve find_var_valid: rtlg.
+FEnd _find_var_valid.
+
+FLemma find_letvar_in_map:
+  forall s1 s2 map idx r i,
+  find_letvar map idx s1 = OK r s2 i -> reg_in_map map r.
+FProofLemma.
+intros until r. unfold find_letvar.
+  caseEq (nth_error (map_letvars map) idx); intros; monadInv H0.
+  right; apply nth_error_in with idx; auto.
+Qed. CloseFLemma.
+MetaData _find_letvar_in_map.
+Global Hint Resolve find_letvar_in_map: rtlg.
+FEnd _find_letvar_in_map.
+
+FLemma find_letvar_valid:
+  forall s1 s2 map idx r i,
+  find_letvar map idx s1 = OK r s2 i -> map_valid map s1 -> reg_valid r s1.
+FProofLemma. eauto with rtlg. Qed. CloseFLemma.
+MetaData _find_letvar_valid.
+Global Hint Resolve find_letvar_valid: rtlg.
+FEnd _find_letvar_valid.
+
+FLemma add_var_valid:
+  forall s1 s2 map1 map2 name r i,
+  add_var map1 name s1 = OK (r, map2) s2 i ->
+  map_valid map1 s1 ->
+  reg_valid r s2 /\ map_valid map2 s2.
+FProofLemma.
+  intros. monadInv H.
+  split. eauto with rtlg.
+  inversion EQ. subst. red. intros r' [[id A] | B].
+  simpl in A. rewrite PTree.gsspec in A. destruct (peq id name).
+  inv A. eauto with rtlg.
+  apply reg_valid_incr with s1. eauto with rtlg.
+  apply H0. left; exists id; auto.
+  simpl in B. apply reg_valid_incr with s1. eauto with rtlg.
+  apply H0. right; auto.
+Qed. CloseFLemma.
+
+FLemma add_vars_valid:
+  forall namel s1 s2 map1 map2 rl i,
+  add_vars map1 namel s1 = OK (rl, map2) s2 i ->
+  map_valid map1 s1 ->
+  regs_valid rl s2 /\ map_valid map2 s2.
+FProofLemma.
+induction namel; simpl; intros; monadInv H.
+  split. red; simpl; intros; tauto. auto.
+  exploit IHnamel; eauto. intros [A B].
+  exploit add_var_valid; eauto. intros [C D].
+  split. apply regs_valid_cons; eauto with rtlg.
+  auto.
+Qed. CloseFLemma.
+
+(* Properties of alloc_reg and alloc_regs *)
+
+FInduction alloc_reg_valid about So.expr
+  motive (fun (a : So.expr) =>
+    forall s1 s2 map r i,
+    map_valid map s1 ->
+    alloc_reg a map s1 = OK r s2 i -> reg_valid r s2).
+FProof.
+all: intros until r; fsimpl; eauto with rtlg.
+Qed. FEnd alloc_reg_valid.
+MetaData _alloc_reg_valid.
+Global Hint Resolve alloc_reg_valid: rtlg.
+FEnd _alloc_reg_valid.
+
+FInduction alloc_reg_fresh_or_in_map about So.expr 
+  motive (fun (a : So.expr) =>
+    forall map s r s' i,
+  map_valid map s ->
+  alloc_reg a map s = OK r s' i ->
+  reg_in_map map r \/ reg_fresh r s).
+FProof.
+all: intros until s'; fsimpl; intros; try (right; eauto with rtlg; fail).
++ left; eauto with rtlg.
++ left; eauto with rtlg.
+Qed. FEnd alloc_reg_fresh_or_in_map. 
+
+FInduction alloc_regs_valid about So.exprlist
+  motive (fun (al: So.exprlist) =>
+    forall s1 s2 map rl i,
+    map_valid map s1 ->
+    alloc_regs al map s1 = OK rl s2 i ->
+    regs_valid rl s2).
+FProof.
++ fsimpl. intros. monadInv H0. apply regs_valid_nil.
++ simpl. intros. fsimpl in H1. monadInv H1. apply regs_valid_cons. apply cheat. apply cheat. (* TODO *)
+Qed. FEnd alloc_regs_valid.
+MetaData _alloc_regs_valid.
+Global Hint Resolve alloc_regs_valid: rtlg.
+FEnd _alloc_regs_valid.
+
+FInduction alloc_regs_fresh_or_in_map about So.exprlist
+  motive (fun (al : So.exprlist) =>
+    forall map al s rl s' i,
+    map_valid map s ->
+    alloc_regs al map s = OK rl s' i ->
+    forall r, In r rl -> reg_in_map map r \/ reg_fresh r s).
+FProof.
+apply cheat.
+Qed. FEnd alloc_regs_fresh_or_in_map.
+
+FLemma alloc_optreg_valid:
+  forall dest s1 s2 map r i,
+  map_valid map s1 ->
+  alloc_optreg map dest s1 = OK r s2 i -> reg_valid r s2.
+FProofLemma.
+intros until r. fsimpl.
+  case dest; eauto with rtlg.
+Qed. CloseFLemma.
+MetaData _alloc_optreg_valid.
+Global Hint Resolve alloc_optreg_valid: rtlg.
+FEnd _alloc_optreg_valid.
+
+FLemma alloc_optreg_fresh_or_in_map:
+  forall map dest s r s' i,
+  map_valid map s ->
+  alloc_optreg map dest s = OK r s' i ->
+  reg_in_map map r \/ reg_fresh r s.
+FProofLemma.
+intros until s'. unfold alloc_optreg. destruct dest; intros.
+  left; eauto with rtlg.
+  right; eauto with rtlg.
+Qed. CloseFLemma.
+
+MetaData target_reg_ok.
+Inductive target_reg_ok (map: mapping) (pr: list reg): So.expr -> reg -> Prop :=
+  | target_reg_var:
+      forall id r,
+      map.(map_vars)!id = Some r ->
+      target_reg_ok map pr (So.Evar id) r
+  | target_reg_letvar:
+      forall idx r,
+      nth_error map.(map_letvars) idx = Some r ->
+      target_reg_ok map pr (So.Eletvar idx) r
+  | target_reg_other:
+      forall a r,
+      ~(reg_in_map map r) -> ~In r pr ->
+      target_reg_ok map pr a r.
+FEnd target_reg_ok.
+
+MetaData target_regs_ok.
+Inductive target_regs_ok (map: mapping) (pr: list reg): So.exprlist -> list reg -> Prop :=
+  | target_regs_nil:
+      target_regs_ok map pr So.Enil nil
+  | target_regs_cons: forall a1 al r1 rl,
+      target_reg_ok map pr a1 r1 ->
+      target_regs_ok map (r1 :: pr) al rl ->
+      target_regs_ok map pr (So.Econs a1 al) (r1 :: rl).
+FEnd target_regs_ok.
+
+FLemma target_reg_ok_append:
+  forall map pr a r,
+  target_reg_ok map pr a r ->
+  forall pr',
+  (forall r', In r' pr' -> reg_in_map map r' \/ r' <> r) ->
+  target_reg_ok map (pr' ++ pr) a r.
+FProofLemma.
+  induction 1; intros.
+  constructor; auto.
+  constructor; auto.
+  constructor; auto. red; intros.
+  elim (in_app_or _ _ _ H2); intro.
+  generalize (H1 _ H3). tauto. tauto.
+Qed. CloseFLemma.
+
+FLemma target_reg_ok_cons:
+  forall map pr a r,
+  target_reg_ok map pr a r ->
+  forall r',
+  reg_in_map map r' \/ r' <> r ->
+  target_reg_ok map (r' :: pr) a r.
+FProofLemma.
+  intros. change (r' :: pr) with ((r' :: nil) ++ pr).
+  apply target_reg_ok_append; auto.
+  intros r'' [A|B]. subst r''; auto. contradiction.
+Qed. CloseFLemma.
+
+FLemma new_reg_target_ok:
+  forall map pr s1 a r s2 i,
+  map_valid map s1 ->
+  regs_valid pr s1 ->
+  new_reg s1 = OK r s2 i ->
+  target_reg_ok map pr a r.
+FProofLemma.
+  intros. constructor.
+  red; intro. apply valid_fresh_absurd with r s1.
+  eauto with rtlg. eauto with rtlg.
+  red; intro. apply valid_fresh_absurd with r s1.
+  auto. eauto with rtlg.
+Qed. CloseFLemma.
+
+FInduction alloc_reg_target_ok about So.expr
+  motive (fun (a : So.expr) =>
+    forall map pr s1 r s2 i,
+     map_valid map s1 ->
+     regs_valid pr s1 ->
+     alloc_reg a map s1 = OK r s2 i ->
+     target_reg_ok map pr a r).
+FProof.
+all: intros; fsimpl in *;  try (eapply new_reg_target_ok; eauto; fail).
+(* Evar *)
++  generalize H1; unfold find_var. caseEq (map_vars map)!i; intros.
+   inv H3. constructor. auto. inv H3.
+(* Elet *)   
++  generalize H1; unfold find_letvar. caseEq (nth_error (map_letvars map) n); intros.
+  inv H3. constructor. auto. inv H3.
+Qed. FEnd alloc_reg_target_ok. 
+
+FInduction alloc_regs_target_ok about So.exprlist
+  motive (fun (al : So.exprlist) =>
+    forall map pr s1 rl s2 i,
+    map_valid map s1 ->
+    regs_valid pr s1 ->
+    alloc_regs al map s1 = OK rl s2 i ->
+    target_regs_ok map pr al rl).
+FProof.
++ intros. fsimpl in *. monadInv H1. constructor.
++ intros. fsimpl in *. monadInv H2.  constructor. eapply alloc_reg_target_ok; eauto.
+  apply H with s s2 INCR1; eauto with rtlg.
+  apply regs_valid_cons; eauto with rtlg.
+  apply cheat. (* TODO: seems like i'm missing something from the rtlg hint *)
+Qed. FEnd alloc_regs_target_ok.
+
+MetaData _target_ok_hints.
+Global Hint Resolve new_reg_target_ok alloc_reg_target_ok
+  alloc_regs_target_ok: rtlg.
+FEnd _target_ok_hints.
 
 MetaData tr_move.
 Inductive tr_move (c: self__RTLgen.T.code): self__RTLgen.T.node -> reg -> self__RTLgen.T.node -> reg -> Prop :=
@@ -1030,14 +1400,6 @@ Inductive tr_function: self__RTLgen.So.function -> self__RTLgen.T.function -> Pr
 FEnd tr_function.
 
 (* translation meets spec *)
-FLemma init_mapping_valid:
-  forall s, map_valid init_mapping s.
-FProofLemma.
-unfold map_valid, init_mapping.
-  intros s r [[id A] | B].
-  simpl in A. rewrite PTree.gempty in A; discriminate.
-  simpl in B. tauto.
-Qed. CloseFLemma.
 
 MetaData return_reg_ok.
 Inductive return_reg_ok: state -> mapping -> option reg -> Prop :=
@@ -1049,6 +1411,16 @@ Inductive return_reg_ok: state -> mapping -> option reg -> Prop :=
       ~(reg_in_map map r) -> reg_valid r s ->
       return_reg_ok s map (Some r).
 FEnd return_reg_ok.
+
+FLemma return_reg_ok_incr:
+  forall s map rret, return_reg_ok s map rret ->
+  forall s', state_incr s s' -> return_reg_ok s' map rret.
+FProofLemma.
+  induction 1; intros; econstructor; eauto with rtlg.
+Qed. CloseFLemma.
+MetaData _return_reg_ok_incr.
+Global Hint Resolve return_reg_ok_incr: rtlg.
+FEnd _return_reg_ok_incr.
 
 FInduction transl_stmt_charact about So.stmt
   motive (fun (stmt : So.stmt) =>
