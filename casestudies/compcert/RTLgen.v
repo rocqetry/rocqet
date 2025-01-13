@@ -1135,7 +1135,15 @@ FInduction alloc_regs_valid about So.exprlist
     regs_valid rl s2).
 FProof.
 + fsimpl. intros. monadInv H0. apply regs_valid_nil.
-+ simpl. intros. fsimpl in H1. monadInv H1. apply regs_valid_cons. apply cheat. apply cheat. (* TODO *)
++ simpl. intros. fsimpl in *. monadInv H1.
+  apply regs_valid_cons. eauto with rtlg. eauto with rtlg.
+  simple eapply reg_valid_incr.   
+   exact INCR1. simple eapply alloc_reg_valid. exact H0.
+   exact EQ.
+   simple eapply H. simple eapply map_valid_incr.
+   exact INCR. exact H0.
+    exact EQ1.
+   (* eauto with rtlg. eauto with rtlg. *)  
 Qed. FEnd alloc_regs_valid.
 MetaData _alloc_regs_valid.
 Global Hint Resolve alloc_regs_valid: rtlg.
@@ -1269,8 +1277,10 @@ FProof.
 + intros. fsimpl in *. monadInv H1. constructor.
 + intros. fsimpl in *. monadInv H2.  constructor. eapply alloc_reg_target_ok; eauto.
   apply H with s s2 INCR1; eauto with rtlg.
-  apply regs_valid_cons; eauto with rtlg.
-  apply cheat. (* TODO: seems like i'm missing something from the rtlg hint *)
+  apply regs_valid_cons; eauto with rtlg.  
+   simple eapply alloc_reg_valid.
+    exact H0.
+    exact EQ.
 Qed. FEnd alloc_regs_target_ok.
 
 MetaData _target_ok_hints.
