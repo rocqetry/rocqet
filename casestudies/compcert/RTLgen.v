@@ -1422,6 +1422,57 @@ MetaData _return_reg_ok_incr.
 Global Hint Resolve return_reg_ok_incr: rtlg.
 FEnd _return_reg_ok_incr.
 
+FInduction transl_expr_charact about So.expr
+  motive (fun (a : So.expr) =>
+     forall map rd nd s ns s' pr INCR
+     (TR: transl_expr a map rd nd s = OK ns s' INCR)
+     (WF: map_valid map s)
+     (OK: target_reg_ok map pr a rd)
+     (VALID: regs_valid pr s)
+     (VALID2: reg_valid rd s),
+   tr_expr s'.(st_code T.instruction) map pr a ns nd rd None)
+
+with transl_exprlist_charact about So.exprlist
+  motive (fun (al : So.exprlist) =>
+     forall map rl nd s ns s' pr INCR
+     (TR: transl_exprlist al map rl nd s = OK ns s' INCR)
+     (WF: map_valid map s)
+     (OK: target_regs_ok map pr al rl)
+     (VALID1: regs_valid pr s)
+     (VALID2: regs_valid rl s),
+   tr_exprlist s'.(st_code T.instruction) map pr al ns nd rl)
+     
+with transl_condexpr_charact about So.condexpr
+   motive (fun (a : So.condexpr) =>
+     forall map ntrue nfalse s ns s' pr INCR
+     (TR: transl_condexpr a map ntrue nfalse s = OK ns s' INCR)
+     (WF: map_valid map s)
+     (VALID: regs_valid pr s),
+   tr_condition s'.(st_code T.instruction) map pr a ns ntrue nfalse).
+FProof.
+(* Evar *)
++ apply cheat.
+(* Econdition *)  
++ apply cheat.
+(* Eop *)  
++  apply cheat.
+(* Elet *)   
++ apply cheat.
+(* Eletvar *)  
++ apply cheat.
+(* Enil *)  
++ apply cheat.
+(* Econs *)  
++ apply cheat.
+(* CEcond *)  
++ apply cheat.
+(* CEcondition *)  
++ apply cheat.
+(* CElet *)  
++ apply cheat.
+
+Qed. FEnd transl_expr_charact with transl_exprlist_charact with transl_condexpr_charact.
+
 FInduction transl_stmt_charact about So.stmt
   motive (fun (stmt : So.stmt) =>
    forall map nd nexits ngoto nret rret s ns s' INCR
