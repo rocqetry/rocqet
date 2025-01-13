@@ -1473,6 +1473,27 @@ FProof.
 
 Qed. FEnd transl_expr_charact with transl_exprlist_charact with transl_condexpr_charact.
 
+(* A variant of transl_expr_charact, for use when the destination register is the one associated with a variable. *)
+FInduction transl_expr_assign_charact about So.expr
+  motive (fun (a : So.expr) =>
+     forall id map rd nd s ns s' INCR
+     (TR: transl_expr a map rd nd s = OK ns s' INCR)
+     (WF: map_valid map s)
+     (OK: reg_map_ok map rd (Some id)),
+   tr_expr s'.(st_code T.instruction) map nil a ns nd rd (Some id)).
+FProof. 
+(* Evar *)
++ apply cheat.
+(* Econdition *)  
++ apply cheat.
+(* Eop *)  
++  apply cheat.
+(* Elet *)   
++ apply cheat.
+(* Eletvar *)  
++ apply cheat.
+Qed. FEnd transl_expr_assign_charact.
+
 FInduction transl_stmt_charact about So.stmt
   motive (fun (stmt : So.stmt) =>
    forall map nd nexits ngoto nret rret s ns s' INCR
