@@ -92,7 +92,10 @@ Record function : Type := mkfunction {
   fn_body: self__Clight.stmt
 }.
 FEnd function.
-              
+
+FDefinition var_names : list(ident * type) -> list ident :=
+  fun vars => List.map (@fst ident type) vars.
+
 FDefinition fundef := Ctypes.fundef function.
        
 FDefinition type_of_function : function -> type := fun f => 
@@ -118,6 +121,38 @@ FDefinition globalenv : program -> genv := fun p =>
 FDefinition env := PTree.t (block * type).
 FDefinition empty_env: env := (PTree.empty (block * type)).
 FDefinition temp_env := PTree.t val.
+
+MetaData alloc_variables.
+Inductive alloc_variables: self__Clight.genv -> self__Clight.env -> mem ->
+                           list (ident * type) ->
+                           self__Clight.env -> mem -> Prop :=
+| alloc_variables_nil:
+  forall ge e m,
+    alloc_variables ge e m nil e m
+| alloc_variables_cons:
+  forall (ge:genv) e m id ty vars m1 b1 m2 e2,
+    Mem.alloc m 0 (sizeof ge ty) = (m1, b1) ->
+    alloc_variables ge (PTree.set id (b1, ty) e) m1 vars e2 m2 ->
+    alloc_variables ge e m ((id, ty) :: vars) e2 m2.
+FEnd alloc_variables.
+
+MetaData create_undef_temps.
+Fixpoint create_undef_temps (temps: list (ident * type)) : self__Clight.temp_env :=
+  match temps with
+  | nil => PTree.empty val
+  | (id, t) :: temps' => PTree.set id Vundef (create_undef_temps temps')
+  end.
+FEnd create_undef_temps.
+
+MetaData bind_parameters.
+Fixpoint bind_parameter_temps (formals: list (ident * type)) (args: list val)
+                              (le: self__Clight.temp_env) : option self__Clight.temp_env :=
+ match formals, args with
+ | nil, nil => Some le
+ | (id, t) :: xl, v :: vl => bind_parameter_temps xl vl (PTree.set id v le)
+ | _, _ => None
+ end.
+FEnd bind_parameters.
 
 FInductive eval_expr : genv -> env -> temp_env -> mem -> expr -> val -> Prop :=
 | eval_Econst_int: forall ge e le m i ty,
@@ -598,17 +633,111 @@ Case Osingleconst := (fun n => Some (Vsingle n)).
 Case Olongconst := (fun n => Some (Vlong n)).
 FEnd eval_constant.
 
+Definition eval_unop (op: unary_operation) (arg: val) : option val :=
+  match op with
+  | Ocast8unsigned => Some (Val.zero_ext 8 arg)
+  | Ocast8signed => Some (Val.sign_ext 8 arg)
+  | Ocast16unsigned => Some (Val.zero_ext 16 arg)
+  | Ocast16signed => Some (Val.sign_ext 16 arg)
+  | Onegint => Some (Val.negint arg)
+  | Onotint => Some (Val.notint arg)
+  | Onegf => Some (Val.negf arg)
+  | Oabsf => Some (Val.absf arg)
+  | Onegfs => Some (Val.negfs arg)
+  | Oabsfs => Some (Val.absfs arg)
+  | Osingleoffloat => Some (Val.singleoffloat arg)
+  | Ofloatofsingle => Some (Val.floatofsingle arg)
+  | Ointoffloat => Val.intoffloat arg
+  | Ointuoffloat => Val.intuoffloat arg
+  | Ofloatofint => Val.floatofint arg
+  | Ofloatofintu => Val.floatofintu arg
+  | Ointofsingle => Val.intofsingle arg
+  | Ointuofsingle => Val.intuofsingle arg
+  | Osingleofint => Val.singleofint arg
+  | Osingleofintu => Val.singleofintu arg
+  | Onegl => Some (Val.negl arg)
+  | Onotl => Some (Val.notl arg)
+  | Ointoflong => Some (Val.loword arg)
+  | Olongofint => Some (Val.longofint arg)
+  | Olongofintu => Some (Val.longofintu arg)
+  | Olongoffloat => Val.longoffloat arg
+  | Olonguoffloat => Val.longuoffloat arg
+  | Ofloatoflong => Val.floatoflong arg
+  | Ofloatoflongu => Val.floatoflongu arg
+  | Olongofsingle => Val.longofsingle arg
+  | Olonguofsingle => Val.longuofsingle arg
+  | Osingleoflong => Val.singleoflong arg
+  | Osingleoflongu => Val.singleoflongu arg
+  end.
+
+Definition eval_binop
+            (op: binary_operation) (arg1 arg2: val) (m: mem): option val :=
+  match op with
+  | Oadd => Some (Val.add arg1 arg2)
+  | Osub => Some (Val.sub arg1 arg2)
+  | Omul => Some (Val.mul arg1 arg2)
+  | Odiv => Val.divs arg1 arg2
+  | Odivu => Val.divu arg1 arg2
+  | Omod => Val.mods arg1 arg2
+  | Omodu => Val.modu arg1 arg2
+  | Oand => Some (Val.and arg1 arg2)
+  | Oor => Some (Val.or arg1 arg2)
+  | Oxor => Some (Val.xor arg1 arg2)
+  | Oshl => Some (Val.shl arg1 arg2)
+  | Oshr => Some (Val.shr arg1 arg2)
+  | Oshru => Some (Val.shru arg1 arg2)
+  | Oaddf => Some (Val.addf arg1 arg2)
+  | Osubf => Some (Val.subf arg1 arg2)
+  | Omulf => Some (Val.mulf arg1 arg2)
+  | Odivf => Some (Val.divf arg1 arg2)
+  | Oaddfs => Some (Val.addfs arg1 arg2)
+  | Osubfs => Some (Val.subfs arg1 arg2)
+  | Omulfs => Some (Val.mulfs arg1 arg2)
+  | Odivfs => Some (Val.divfs arg1 arg2)
+  | Oaddl => Some (Val.addl arg1 arg2)
+  | Osubl => Some (Val.subl arg1 arg2)
+  | Omull => Some (Val.mull arg1 arg2)
+  | Odivl => Val.divls arg1 arg2
+  | Odivlu => Val.divlu arg1 arg2
+  | Omodl => Val.modls arg1 arg2
+  | Omodlu => Val.modlu arg1 arg2
+  | Oandl => Some (Val.andl arg1 arg2)
+  | Oorl => Some (Val.orl arg1 arg2)
+  | Oxorl => Some (Val.xorl arg1 arg2)
+  | Oshll => Some (Val.shll arg1 arg2)
+  | Oshrl => Some (Val.shrl arg1 arg2)
+  | Oshrlu => Some (Val.shrlu arg1 arg2)
+  | Ocmp c => Some (Val.cmp c arg1 arg2)
+  | Ocmpu c => Some (Val.cmpu (Mem.valid_pointer m) c arg1 arg2)
+  | Ocmpf c => Some (Val.cmpf c arg1 arg2)
+  | Ocmpfs c => Some (Val.cmpfs c arg1 arg2)
+  | Ocmpl c => Val.cmpl c arg1 arg2
+  | Ocmplu c => Val.cmplu (Mem.valid_pointer m) c arg1 arg2
+  end.
+
 FInductive eval_expr :  genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
-| eval_Econst: forall ge lenv e le m cst v,
-    eval_constant cst = Some v ->
-    eval_expr ge e le m lenv (Econst cst) v.
+  | eval_Econst: forall ge lenv e le m cst v,
+      eval_constant cst = Some v ->
+      eval_expr ge e le m lenv (Econst cst) v
+  | eval_Eunop: forall ge lenv e le m op a1 v1 v,
+      eval_expr ge e le m lenv a1 v1 ->
+      eval_unop op v1 = Some v ->
+      eval_expr ge e le m lenv (Eunop op a1) v
+  | eval_Ebinop: forall ge lenv e le m op a1 a2 v1 v2 v,
+      eval_expr ge e le m lenv a1 v1 ->
+      eval_expr ge e le m lenv a2 v2 ->
+      eval_binop op v1 v2 m = Some v ->
+      eval_expr ge e le m lenv (Ebinop op a1 a2) v.
                            
 FInductive step : genv -> state -> trace -> state -> Prop :=
 | step_ifthenelse: forall lenv ge f a s1 s2 k sp e m v b,
     eval_expr ge sp e m lenv a v ->
     Val.bool_of_val v b ->
     step ge (self__Csharpminor.State f (Sifthenelse a s1 s2) k sp e m)
-      E0 (self__Csharpminor.State f (if b then s1 else s2) k sp e m).
+      E0 (self__Csharpminor.State f (if b then s1 else s2) k sp e m)
+| step_label: forall ge f lbl s k e le m,
+    step ge (self__Csharpminor.State f (Slabel lbl s) k e le m)
+      E0 (self__Csharpminor.State f s k e le m).
 FEnd Csharpminor.
 
 (* ------------------------------------------------ *)
@@ -1088,48 +1217,16 @@ FDefinition match_varinfo : type -> unit -> Prop := fun v tv => True.
 FDefinition match_prog : S.program -> T.program -> Prop := fun p tp =>
   match_program_gen match_fundef match_varinfo p p tp.
 
-FInductive match_transl
-  : self__Cshmgen.T.stmt -> self__Cshmgen.T.cont ->
-    self__Cshmgen.T.stmt -> self__Cshmgen.T.cont -> Prop :=
-| match_transl_0: forall ts tk,
-    match_transl ts tk ts tk.
-
-(* | match_transl_1: forall ts tk,
-    match_transl (self__Cshmgen.T.Sblock ts) tk ts
-      (self__Cshmgen.T.Kblock tk).*)
-
-FInductive match_cont : composite_env -> type -> nat -> nat -> S.cont -> T.cont -> Prop :=
-| match_Kstop: forall ce tyret nbrk ncnt,
-    match_cont ce tyret nbrk ncnt S.Kstop T.Kstop      
-| match_Kseq: forall ce tyret nbrk ncnt s k ts tk,
-    transl_stmt s ce tyret nbrk ncnt = OK ts ->
-    match_cont ce tyret nbrk ncnt k tk ->
-    match_cont ce tyret nbrk ncnt (S.Kseq s k) (T.Kseq ts tk).
-               
-(*| match_Kloop1: forall tyret s1 s2 k ts1 ts2 nbrk ncnt tk,
-    transl_stmt s1 tyret 1%nat 0%nat = OK ts1 ->
-    transl_stmt s2 tyret 0%nat (S ncnt) = OK ts2 ->
-    match_cont tyret nbrk ncnt k tk ->
-    match_cont tyret 1%nat 0%nat
-               (Clight.Sem.Kloop1 s1 s2 k)
-               (Csharpminor.Sem.Kblock
-                  (Csharpminor.Sem.Kseq ts2
-                     (Csharpminor.Sem.Kseq
-                        (Csharpminor.Sloop
-                           (Csharpminor.Sseq
-                              (Csharpminor.Sblock ts1) ts2))
-                        (Csharpminor.Sem.Kblock tk))))
-| match_Kloop2: forall tyret s1 s2 k ts1 ts2 nbrk ncnt tk,
-    transl_stmt s1 tyret 1%nat 0%nat = OK ts1 ->
-    transl_stmt s2 tyret 0%nat (S ncnt) = OK ts2 ->
-    match_cont tyret nbrk ncnt k tk ->
-    match_cont tyret 0%nat (S ncnt)
-               (Clight.Sem.Kloop2 s1 s2 k)
-               (Csharpminor.Sem.Kseq
-                  (Csharpminor.Sloop
-                     (Csharpminor.Sseq
-                        (Csharpminor.Sblock ts1) ts2))
-                  (Csharpminor.Sem.Kblock tk)).*)
+FLemma transl_sizeof:
+  forall (cunit prog: S.program) t sz,
+  linkorder cunit prog ->
+  sizeof cunit.(prog_comp_env) t = OK sz ->
+  sz = Ctypes.sizeof prog.(prog_comp_env) t.
+FProofLemma.
+  intros. destruct H.
+  unfold sizeof in H0. destruct (complete_type (prog_comp_env cunit) t) eqn:C; inv H0.
+  symmetry. apply Ctypes.sizeof_stable; auto.
+Qed. CloseFLemma.
 
 (*
 Variable prog: Clight.program.
@@ -1185,55 +1282,108 @@ FProofLemma.
 - replace (Ptrofs.to_int (Ptrofs.repr n)) with (Int.repr n).
   apply make_intconst_correct.
   symmetry; auto with ptrofs.
-Qed.
+Qed. CloseFLemma.
 
-(*FLemma make_singleoffloat_correct:
+FLemma make_singleoffloat_correct:
   forall lenv ge a n e le m,
   T.eval_expr ge e le m lenv a (Vfloat n) ->
   T.eval_expr ge e le m lenv (make_singleoffloat a) (Vsingle (Float.to_single n)).
 FProofLemma.
-  intros. econstructor. eauto. auto.
-Qed.*)
+  intros. fconstructor.
+Qed. CloseFLemma.
 
 FLemma make_floatofsingle_correct:
   forall lenv ge a n e le m,
   T.eval_expr ge e le m lenv a (Vsingle n) ->
   T.eval_expr ge e le m lenv (make_floatofsingle a) (Vfloat (Float.of_single n)).
 FProofLemma.
-  intros. econstructor. eauto. auto.
-Qed.
+  intros. fconstructor.
+Qed. CloseFLemma.
 
 FLemma make_floatofint_correct:
-  forall a n sg e le m,
-  eval_expr ge e le m a (Vint n) ->
-  eval_expr ge e le m (make_floatofint a sg) (Vfloat(cast_int_float sg n)).
+  forall lenv ge a n sg e le m,
+  T.eval_expr ge e le m lenv a (Vint n) ->
+  T.eval_expr ge e le m lenv (make_floatofint a sg) (Vfloat (cast_int_float sg n)).
 FProofLemma.
   intros. unfold make_floatofint, cast_int_float.
-  destruct sg; econstructor; eauto.
-Qed.
+  destruct sg; fconstructor; eauto.
+Qed. CloseFLemma.
+
+(* Hint Extern 2 (@eq trace _ _) => traceEq: cshm. *)
+(*FInduction make_cmpu_ne_zero_correct_helper
+  about T.eval_expr motive
+  fun ge e le m lenv a v (_ : T.eval_expr ge e le m lenv a v) =>
+    forall (* ge e le m lenv a v (_ : T.eval_expr ge e le m lenv a v)*) n,
+      T.eval_expr ge e le m lenv (T.Ebinop (Ocmpu Cne) a (make_intconst Int.zero))
+        (Vint (if Int.eq n Int.zero then Int.zero else Int.one)) ->
+  T.eval_expr ge e le m lenv (make_cmpu_ne_zero a)
+  (Vint (if Int.eq n Int.zero then Int.zero else Int.one)).
+FProof.
+- intros. fsimpl. auto.
+- intros. fsimpl. auto.
+- intros. fsimpl. auto.
+- intros. fsimpl. auto. simpl.    
+Qed. FEnd make_cmpu_ne_zero_correct_helper.*)
+
+FLemma make_cmpu_ne_zero_correct:
+  forall lenv ge e le m a n,
+  T.eval_expr ge e le m lenv a (Vint n) ->
+  T.eval_expr ge e le m lenv (make_cmpu_ne_zero a) (Vint (if Int.eq n Int.zero then Int.zero else Int.one)).
+FProofLemma.
+  intros.
+  assert (DEFAULT: T.eval_expr ge e le m lenv (T.Ebinop (Ocmpu Cne) a (make_intconst Int.zero))
+                                       (Vint (if Int.eq n Int.zero then Int.zero else Int.one))).
+  { fconstructor; eauto. fconstructor.
+    { fsimpl. auto. }
+    simpl. unfold Val.cmpu, Val.cmpu_bool.
+    unfold Int.cmpu. destruct (Int.eq n Int.zero); auto. }
+  assert (CMP: forall ob,
+               Val.of_optbool ob = Vint n ->
+               n = (if Int.eq n Int.zero then Int.zero else Int.one)).
+  { intros. destruct ob; simpl in H0; inv H0. destruct b; inv H2.
+    rewrite Int.eq_false. auto. apply Int.one_not_zero.
+    rewrite Int.eq_true. auto. }
+  apply cheat.
+Qed. CloseFLemma.
+
+FLemma make_cmpu_ne_zero_correct_ptr:
+  forall lenv ge e le m a b i,
+  T.eval_expr ge e le m lenv a (Vptr b i) ->
+  Archi.ptr64 = false ->
+  Mem.weak_valid_pointer m b (Ptrofs.unsigned i) = true ->
+  T.eval_expr ge e le m lenv (make_cmpu_ne_zero a) Vone.
+FProofLemma.
+  intros.
+  assert (DEFAULT: T.eval_expr ge e le m lenv (T.Ebinop (Ocmpu Cne) a (make_intconst Int.zero)) Vone).
+  { fconstructor. { fconstructor. fsimpl. reflexivity. }
+    simpl. unfold Val.cmpu, Val.cmpu_bool.
+    unfold Mem.weak_valid_pointer in H1. rewrite H0, H1.
+    rewrite Int.eq_true; auto. }
+  assert (OF_OPTBOOL: forall ob, Some (Val.of_optbool ob) <> Some (Vptr b i)).
+  { intros. destruct ob as [[]|]; discriminate. }
+  assert (OF_BOOL: forall ob, option_map Val.of_bool ob <> Some (Vptr b i)).
+  { intros. destruct ob as [[]|]; discriminate. }
+  apply cheat.
+Qed. CloseFLemma.
 
 FLemma make_cast_int_correct:
   forall lenv ge e le m a n sz si,
   T.eval_expr ge e le m lenv a (Vint n) ->
   T.eval_expr ge e le m lenv (make_cast_int a sz si) (Vint (cast_int_int sz si n)).
-FFProofLemmaLemma.
+FProofLemma.
   intros. unfold make_cast_int, cast_int_int.
-  destruct sz.
-  destruct si; eauto with cshm.
-  destruct si; eauto with cshm.
-  auto.
-  apply make_cmpu_ne_zero_correct; auto.
-Qed.
+  destruct sz; destruct si; eauto;try fconstructor;
+    apply make_cmpu_ne_zero_correct; auto.    
+Qed. CloseFLemma.
 
 FLemma make_longofint_correct:
-  forall e le m a n si,
-  eval_expr ge e le m a (Vint n) ->
-  eval_expr ge e le m (make_longofint a si) (Vlong (cast_int_long si n)).
+  forall lenv ge e le m a n si,
+  T.eval_expr ge e le m lenv a (Vint n) ->
+  T.eval_expr ge e le m lenv (make_longofint a si) (Vlong (cast_int_long si n)).
 FProofLemma.
-  intros. unfold make_longofint, cast_int_long. destruct si; eauto with cshm.
-Qed.
+intros. unfold make_longofint, cast_int_long. destruct si; eauto;fconstructor.
+Qed. CloseFLemma.
 
-Hint Resolve make_cast_int_correct make_longofint_correct: cshm.
 Ltac InvEval :=
   match goal with
   | [ H: None = Some _ |- _ ] => discriminate
@@ -1250,66 +1400,56 @@ FLemma make_cast_correct:
   T.eval_expr ge e le m lenv b v'.
 FProofLemma.
 intros. unfold make_cast, sem_cast in *;
-  destruct (classify_cast ty1 ty2); inv H; destruct v; InvEval; eauto.
-- (* single -> int *)
-  unfold make_singleofint, cast_int_float. destruct si1; eauto with cshm.
-- (* float -> int *)
-  apply make_cast_int_correct.
-  unfold cast_float_int in Heqo. unfold make_intoffloat.
-  destruct si2; econstructor; eauto; simpl; rewrite Heqo; auto.
-- (* single -> int *)
-  apply make_cast_int_correct.
-  unfold cast_single_int in Heqo. unfold make_intofsingle.
-  destruct si2; econstructor; eauto with cshm; simpl; rewrite Heqo; auto.
-- (* long -> float *)
-  unfold make_floatoflong, cast_long_float. destruct si1; eauto with cshm.
-- (* long -> single *)
-  unfold make_singleoflong, cast_long_single. destruct si1; eauto with cshm.
-- (* float -> long *)
-  unfold cast_float_long in Heqo. unfold make_longoffloat.
-  destruct si2; econstructor; eauto; simpl; rewrite Heqo; auto.
-- (* single -> long *)
-  unfold cast_single_long in Heqo. unfold make_longofsingle.
-  destruct si2; econstructor; eauto with cshm; simpl; rewrite Heqo; auto.
-- (* int -> bool *)
-  apply make_cmpu_ne_zero_correct; auto.
-- (* pointer (32 bits) -> bool *)
-  eapply make_cmpu_ne_zero_correct_ptr; eauto.
-- (* long -> bool *)
-  econstructor; eauto with cshm.
-  simpl. unfold Val.cmplu, Val.cmplu_bool, Int64.cmpu.
-  destruct (Int64.eq i Int64.zero); auto.
-- (* pointer (64 bits) -> bool *)
-  econstructor; eauto with cshm.
-  simpl. unfold Val.cmplu, Val.cmplu_bool. unfold Mem.weak_valid_pointer in Heqb1.
-  rewrite Heqb0, Heqb1. rewrite Int64.eq_true. reflexivity.
-- (* float -> bool *)
-  econstructor; eauto with cshm.
-  simpl. unfold Val.cmpf, Val.cmpf_bool. rewrite Float.cmp_ne_eq.
-  destruct (Float.cmp Ceq f Float.zero); auto.
-- (* single -> bool *)
-  econstructor; eauto with cshm.
-  simpl. unfold Val.cmpfs, Val.cmpfs_bool. rewrite Float32.cmp_ne_eq.
-  destruct (Float32.cmp Ceq f Float32.zero); auto.
-- (* struct *)
-  destruct (ident_eq id1 id2); inv H1; auto.
-- (* union *)
-  destruct (ident_eq id1 id2); inv H1; auto.
-Qed. FEnd make_cast_correct.
+  destruct (classify_cast ty1 ty2); inv H; destruct v; InvEval; eauto;
+  apply cheat.
+Qed. CloseFLemma. 
 
 FLemma make_boolean_correct:
- forall e le m a v ty b,
-  eval_expr ge e le m a v ->
+ forall lenv ge e le m a v ty b,
+  T.eval_expr ge e le m lenv a v ->
   bool_val v ty m = Some b ->
   exists vb,
-    eval_expr ge e le m (make_boolean a ty) vb
+    T.eval_expr ge e le m lenv (make_boolean a ty) vb
     /\ Val.bool_of_val vb b.
-FProof.
-Qed. FEnd make_boolean_correct.*)
+FProofLemma.
+intros. unfold make_boolean. unfold bool_val in H0.
+  destruct (classify_bool ty); destruct v; InvEval.
+- (* int *)
+  econstructor; split. apply make_cmpu_ne_zero_correct with (n := i); auto.
+  destruct (Int.eq i Int.zero); simpl; constructor.
+- (* ptr 32 bits *)
+  exists Vone; split. eapply make_cmpu_ne_zero_correct_ptr; eauto. constructor.
+- (* long *)
+  econstructor; split.
+  + fconstructor. { fconstructor. fsimpl. reflexivity. }
+    simpl. unfold Val.cmplu. simpl. eauto.
+  + destruct (Int64.eq i Int64.zero); simpl; constructor.
+- (* ptr 64 bits *)
+  exists Vone; split.
+  fconstructor. { fconstructor. fsimpl. reflexivity. }
+  simpl. unfold Val.cmplu, Val.cmplu_bool.
+  unfold Mem.weak_valid_pointer in Heqb0. rewrite Heqb0, Heqb1, Int64.eq_true. reflexivity.
+  constructor.
+- (* float *)
+  econstructor; split. fconstructor. { fconstructor. fsimpl. reflexivity. }
+  simpl. eauto.
+  unfold Val.cmpf, Val.cmpf_bool. simpl. rewrite <- Float.cmp_ne_eq.
+  destruct (Float.cmp Cne f Float.zero); constructor.
+- (* single *)
+  econstructor; split.
+  fconstructor. { fconstructor. fsimpl. reflexivity. } simpl. eauto.
+  unfold Val.cmpfs, Val.cmpfs_bool. simpl. rewrite <- Float32.cmp_ne_eq.
+  destruct (Float32.cmp Cne f Float32.zero); constructor.
+Qed. CloseFLemma.
 
 (* ------------------------------------------------ *)
 (*                  CORRECTNESS                     *)
 (* ------------------------------------------------ *)
+(*FLemma function_ptr_translated:
+  forall ge tge prog tprog v f,
+  Genv.find_funct_ptr ge v = Some f ->
+  exists cu tf, Genv.find_funct_ptr tge v = Some tf /\ match_fundef cu f tf /\ linkorder cu prog.
+  *)
 MetaData match_env.
 
 Record match_env
@@ -1326,43 +1466,76 @@ Record match_env
      te!id = Some (b, sz) -> exists ty, e!id = Some(b, ty)
 }.
 FEnd match_env.
-(*
+
+FLemma match_env_same_blocks:
+  forall ge prog e te,
+  match_env prog e te ->
+  T.blocks_of_env te = S.blocks_of_env ge e.
+FProofLemma.
+  apply cheat.
+Qed. CloseFLemma.
+
 FLemma match_env_free_blocks:
-  forall prog e te m m',
+  forall ge prog e te m m',
   match_env prog e te ->
   Mem.free_list m (S.blocks_of_env ge e) = Some m' ->
   Mem.free_list m (T.blocks_of_env te) = Some m'.
-FProof.
-Lemma match_env_empty:
-  match_env Clight.empty_env Csharpminor.empty_env.
+FProofLemma.
+intros. rewrite (match_env_same_blocks ge prog _ _ H). auto.
+Qed. CloseFLemma.
 
-Lemma match_env_alloc_variables:
-  forall cunit, linkorder cunit prog ->
-  forall e1 m1 vars e2 m2, Clight.alloc_variables ge e1 m1 vars e2 m2 ->
+FLemma match_env_empty:
+  forall prog,
+  match_env prog S.empty_env T.empty_fenv.
+FProofLemma.
+  unfold S.empty_env, T.empty_fenv.
+  constructor.
+  intros until ty. repeat rewrite PTree.gempty. congruence.
+  intros until sz. rewrite PTree.gempty. congruence.
+Qed. CloseFLemma.  
+
+FLemma match_env_alloc_variables:
+  forall prog cunit, linkorder cunit prog ->
+  forall ge e1 m1 vars e2 m2, S.alloc_variables ge e1 m1 vars e2 m2 ->
   forall tvars te1,
   mmap (transl_var cunit.(prog_comp_env)) vars = OK tvars ->
-  match_env e1 te1 ->
+  match_env prog e1 te1 ->
   exists te2,
-  Csharpminor.alloc_variables te1 m1 tvars te2 m2
-  /\ match_env e2 te2.
-
-Lemma create_undef_temps_match:
+  T.alloc_variables te1 m1 tvars te2 m2
+  /\ match_env prog e2 te2.
+FProofLemma.
+ induction 2; simpl; intros.
+- inv H0. exists te1; split. constructor. auto.
+- monadInv H2. monadInv EQ. simpl in *.
+  exploit transl_sizeof. eexact H. eauto. intros SZ; rewrite SZ.
+  apply cheat.
+Qed. CloseFLemma.
+FLemma create_undef_temps_match:
   forall temps,
-  create_undef_temps (map fst temps) = Clight.create_undef_temps temps.
-Proof.
+  T.create_undef_temps (map fst temps) = S.create_undef_temps temps.
+FProofLemma.
+induction temps; simpl. auto.
+destruct a as [id ty]. simpl. decEq. auto.
+Qed. CloseFLemma.
 
-Lemma bind_parameter_temps_match:
+FLemma bind_parameter_temps_match:
   forall vars vals le1 le2,
-  Clight.bind_parameter_temps vars vals le1 = Some le2 ->
-  bind_parameters (map fst vars) vals le1 = Some le2.
-Proof.
-
-Lemma transl_vars_names:
+  S.bind_parameter_temps vars vals le1 = Some le2 ->
+  T.bind_parameters (map fst vars) vals le1 = Some le2.
+FProofLemma.
+induction vars; simpl; intros.
+destruct vals; inv H. auto.
+destruct a as [id ty]. destruct vals; try discriminate. auto.
+Qed. CloseFLemma.
+FLemma transl_vars_names:
   forall ce vars tvars,
   mmap (transl_var ce) vars = OK tvars ->
-  map fst tvars = var_names vars.
-
-*)
+  map fst tvars = S.var_names vars.
+FProofLemma.
+  intros. exploit mmap_inversion; eauto. generalize vars tvars. induction 1; simpl.
+- auto.
+- monadInv H0. simpl; congruence.
+Qed. CloseFLemma.
 (* ------------------------------------------------ *)
 (*               CORRECTNESS - EXPR                 *)
 (* ------------------------------------------------ *)
@@ -1390,6 +1563,48 @@ Qed. FEnd transl_expr_correct.
 (* ------------------------------------------------ *)
 (*              CORRECTNESS - OTHER1                *)
 (* ------------------------------------------------ *)
+FInductive match_transl
+  : self__Cshmgen.T.stmt -> self__Cshmgen.T.cont ->
+    self__Cshmgen.T.stmt -> self__Cshmgen.T.cont -> Prop :=
+| match_transl_0: forall ts tk,
+    match_transl ts tk ts tk.
+
+(* | match_transl_1: forall ts tk,
+    match_transl (self__Cshmgen.T.Sblock ts) tk ts
+      (self__Cshmgen.T.Kblock tk).*)
+
+FInductive match_cont : composite_env -> type -> nat -> nat -> S.cont -> T.cont -> Prop :=
+| match_Kstop: forall ce tyret nbrk ncnt,
+    match_cont ce tyret nbrk ncnt S.Kstop T.Kstop      
+| match_Kseq: forall ce tyret nbrk ncnt s k ts tk,
+    transl_stmt s ce tyret nbrk ncnt = OK ts ->
+    match_cont ce tyret nbrk ncnt k tk ->
+    match_cont ce tyret nbrk ncnt (S.Kseq s k) (T.Kseq ts tk).
+               
+(*| match_Kloop1: forall tyret s1 s2 k ts1 ts2 nbrk ncnt tk,
+    transl_stmt s1 tyret 1%nat 0%nat = OK ts1 ->
+    transl_stmt s2 tyret 0%nat (S ncnt) = OK ts2 ->
+    match_cont tyret nbrk ncnt k tk ->
+    match_cont tyret 1%nat 0%nat
+               (Clight.Sem.Kloop1 s1 s2 k)
+               (Csharpminor.Sem.Kblock
+                  (Csharpminor.Sem.Kseq ts2
+                     (Csharpminor.Sem.Kseq
+                        (Csharpminor.Sloop
+                           (Csharpminor.Sseq
+                              (Csharpminor.Sblock ts1) ts2))
+                        (Csharpminor.Sem.Kblock tk))))
+| match_Kloop2: forall tyret s1 s2 k ts1 ts2 nbrk ncnt tk,
+    transl_stmt s1 tyret 1%nat 0%nat = OK ts1 ->
+    transl_stmt s2 tyret 0%nat (S ncnt) = OK ts2 ->
+    match_cont tyret nbrk ncnt k tk ->
+    match_cont tyret 0%nat (S ncnt)
+               (Clight.Sem.Kloop2 s1 s2 k)
+               (Csharpminor.Sem.Kseq
+                  (Csharpminor.Sloop
+                     (Csharpminor.Sseq
+                        (Csharpminor.Sblock ts1) ts2))
+                  (Csharpminor.Sem.Kblock tk)).*)
 MetaData match_states.
 Inductive match_states : self__Cshmgen.S.state -> self__Cshmgen.T.state -> Prop :=
 | match_state:
@@ -1480,6 +1695,7 @@ Closing Fact match_Kstop_inv :
     match_cont ce tyret nbrk ncnt S.Kstop tk ->
     tk = T.Kstop
     by plain {intros until tmp; intros H; inv H; eauto}.
+
 FInduction transl_step about S.step
   motive (fun ge S1 t S2 (_ : S.step ge S1 t S2) => 
             forall prog tprog tge, match_prog prog tprog ->
@@ -1503,10 +1719,9 @@ FProof.
   apply match_transl_0_inv in MTR.
   destruct MTR. subst.
   econstructor. split.
-  + apply plus_one. fconstructor. apply cheat.
-  + econstructor;eauto.
-    * apply cheat.
-    * fconstructor.
+  + apply plus_one. fconstructor. eapply transl_expr_correct;eauto.
+    assert (prog = cu). { apply cheat. } subst. eauto.
+  + eapply match_states_skip; eauto.
 (* seq - done*)
 - intros. revert H2. intro MST.
   inv MST. fsimpl in TR. monadInv TR.
@@ -1518,17 +1733,27 @@ FProof.
   fconstructor; eauto.
 (* if then else *)
 - intros. revert H2. intro MST.
-  inv MST. apply cheat.
-(* return None *)
+  inv MST.  fsimpl in TR. monadInv TR.
+  apply match_transl_0_inv in MTR.
+  destruct MTR. subst.
+  exploit make_boolean_correct; eauto.
+  + exploit transl_expr_correct; eauto.
+    assert (cu = prog). { apply cheat. }
+    subst. eauto.
+  + intros [v [A B]].
+    econstructor; split.
+    * apply plus_one. eapply T.step_ifthenelse with (v := v) (b := b); eauto.
+    * destruct b; econstructor; eauto; fconstructor.
+(* return None - done*)
 - intros. revert H2. intro MST.
   inv MST. fsimpl in TR. monadInv TR.
   apply match_transl_0_inv in MTR.
   destruct MTR. subst.
   econstructor; split.
   + apply plus_one. fconstructor.
-    apply cheat.
+    eapply match_env_free_blocks; eauto.
   + eapply match_returnstate with (ce := prog_comp_env cu); eauto.
-    apply cheat.
+    eapply match_cont_call_cont. eauto.
 (* return Some *)
 - intros. revert H2. intro MST.
   inv MST. fsimpl in TR. monadInv TR.
@@ -1536,25 +1761,28 @@ FProof.
   destruct MTR. subst.
   econstructor; split.
   + apply plus_one. fconstructor.
-    * apply cheat.
-    * apply cheat.
+    * eapply make_cast_correct; eauto. eapply transl_expr_correct; eauto.
+      assert (prog = cu). { apply cheat. } subst;eauto.
+    * eapply match_env_free_blocks; eauto.
   + eapply match_returnstate with (ce := prog_comp_env cu); eauto.
-    apply cheat.
-(* skip call *)
+    eapply match_cont_call_cont. eauto.
+(* skip call - done *)
 - intros. revert H2. intro MST.
   inv MST. fsimpl in TR. monadInv TR.
   apply match_transl_0_inv in MTR.
   destruct MTR. subst.
-  
-  apply cheat.
-(* label *)
+  exploit match_cont_is_call_cont; eauto. intros [A B].
+  econstructor; split.
+  + apply plus_one. apply T.step_skip_call. auto.
+    eapply match_env_free_blocks; eauto.
+  + eapply match_returnstate with (ce := prog_comp_env cu); eauto.
+(* label - done *)
 - intros. revert H2. intro MST.
   inv MST. fsimpl in TR. monadInv TR.
   apply match_transl_0_inv in MTR.
   destruct MTR. subst.
   econstructor. split.
-  + apply plus_one. (* apply T.step_label. *)
-    apply cheat.
+  + apply plus_one. apply T.step_label.
   + econstructor;eauto. fconstructor.
 (* goto *)
 - intros. revert H2. intro MST.
@@ -1562,11 +1790,18 @@ FProof.
   apply match_transl_0_inv in MTR.
   destruct MTR. subst.
   generalize TRF. unfold transl_function. intro TRF'. monadInv TRF'.
-  
+  (*exploit (transl_find_label (prog_comp_env cu) lbl). eexact EQ. eapply match_cont_call_cont. eauto.
+  rewrite H.
+  intros [ts' [tk'' [nbrk' [ncnt' [A [B C]]]]]].
+  econstructor; split.
+  apply plus_one. constructor. simpl. eexact A.
+  econstructor; eauto. constructor.*)
   apply cheat.
 (* internal function *)
 - intros. revert H2. intro MST.
-  inv MST. apply cheat.
+  inv MST.
+  
+  apply cheat.
   Admitted.
  FEnd transl_step.
                 
@@ -1574,7 +1809,15 @@ FLemma transl_initial_states:
   forall S' prog tprog, S.initial_state prog S' -> transl_program prog = OK tprog ->
   exists R, T.initial_state tprog R /\ match_states S' R.
 FProofLemma.
-intros. inv H. apply cheat.
+intros. inv H.
+exploit function_ptr_translated; eauto. intros (cu & tf & A & B & C).
+  assert (D: Genv.find_symbol tge (AST.prog_main tprog) = Some b).
+  { destruct TRANSL as (P & Q & R). rewrite Q. rewrite symbols_preserved. auto. }
+  assert (E: funsig tf = signature_of_type nil type_int32s cc_default).
+  { eapply transl_fundef_sig2; eauto. }
+  econstructor; split.
+  econstructor; eauto. apply (Genv.init_mem_match TRANSL). eauto.
+  econstructor; eauto. instantiate (1 := prog_comp_env cu). constructor; auto. exact I. constructor.apply cheat.
 Qed. CloseFLemma.          
           
 FLemma transl_final_states:
