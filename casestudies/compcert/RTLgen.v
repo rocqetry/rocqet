@@ -29,73 +29,6 @@ Local Open Scope string_scope.
 Local Open Scope list_scope.
 Open Scope asm.
 
-(** * Reasoning over monadic computations *)
-
-(** The [monadInv H] tactic below simplifies hypotheses of the form
-<<
-        H: (do x <- a; b) = OK res
->>
-    By definition of the bind operation, both computations [a] and
-    [b] must succeed for their composition to succeed.  The tactic
-    therefore generates the following hypotheses:
-
-         x: ...
-        H1: a = OK x
-        H2: b x = OK res
-*)
-
-Ltac FmonadInv1 H :=
-  match type of H with
-  | (OK _ = OK _) =>
-      inversion H; clear H; try subst
-  | (Error _ = OK _) =>
-      discriminate
-  | (bind ?F ?G = OK ?X) =>
-      let x := fresh "x" in (
-      let EQ1 := fresh "EQ" in (
-      let EQ2 := fresh "EQ" in (
-      destruct (bind_inversion F G H) as [x [EQ1 EQ2]];
-      clear H;
-      try (FmonadInv1 EQ2))))
-  | (bind2 ?F ?G = OK ?X) =>
-      let x1 := fresh "x" in (
-      let x2 := fresh "x" in (
-      let EQ1 := fresh "EQ" in (
-      let EQ2 := fresh "EQ" in (
-      destruct (bind2_inversion F G H) as [x1 [x2 [EQ1 EQ2]]];
-      clear H;
-      try (FmonadInv1 EQ2)))))
-  | (match ?X with left _ => _ | right _ => assertion_failed end = OK _) =>
-      destruct X; [try (FmonadInv1 H) | discriminate]
-  | (match (negb ?X) with true => _ | false => assertion_failed end = OK _) =>
-      destruct X as [] eqn:?; simpl negb in H; [discriminate | try (FmonadInv1 H)]
-  | (match ?X with true => _ | false => assertion_failed end = OK _) =>
-      destruct X as [] eqn:?; [try (FmonadInv1 H) | discriminate]
-  | (mmap ?F ?L = OK ?M) =>
-      generalize (mmap_inversion F L H); intro
-  end.
-
-Ltac FmonadInv H :=
-  FmonadInv1 H ||
-  match type of H with
-  | (?F _ _ _ _ _ _ _ _ = OK _) =>
-      ((progress fsimpl in H) || unfold F in H); FmonadInv1 H
-  | (?F _ _ _ _ _ _ _ = OK _) =>
-      ((progress fsimpl in H) || unfold F in H); FmonadInv1 H
-  | (?F _ _ _ _ _ _ = OK _) =>
-      ((progress fsimpl in H) || unfold F in H); FmonadInv1 H
-  | (?F _ _ _ _ _ = OK _) =>
-      ((progress fsimpl in H) || unfold F in H); FmonadInv1 H
-  | (?F _ _ _ _ = OK _) =>
-      ((progress fsimpl in H) || unfold F in H); FmonadInv1 H
-  | (?F _ _ _ = OK _) =>
-      ((progress fsimpl in H) || unfold F in H); FmonadInv1 H
-  | (?F _ _ = OK _) =>
-      ((progress fsimpl in H) || unfold F in H); FmonadInv1 H
-  | (?F _ = OK _) =>
-      ((progress fsimpl in H) || unfold F in H); FmonadInv1 H
-  end.
-
 Trait Base.
 
 Family Cfam.
@@ -532,6 +465,109 @@ Family T extends RTL. FEnd T.
 FDefinition res := fun (A : Type) => res A T.instruction.
 FDefinition mon := fun (A : Type) => mon A T.instruction.
 FDefinition state := state T.instruction.
+FDefinition state_incr := state_incr T.instruction.
+
+FLemma bind_inversion:
+  forall (A B: Type) (f: mon A) (g: A -> mon B)
+         (y: B) (s1 s3: state) (i: state_incr s1 s3),
+  bind f g s1 = OK y s3 i ->
+  exists x, exists s2, exists i1, exists i2,
+  f s1 = OK x s2 i1 /\ g x s2 = OK y s3 i2.
+FProofLemma.
+intros until i. unfold bind. destruct (f s1); intros.
+  discriminate.
+  exists a; exists s'; exists s.
+  destruct (g a s'); inv H.
+  exists s0; auto.
+Qed. CloseFLemma.
+  
+FLemma bind2_inversion:
+  forall (A B C: Type) (f: mon (A*B)) (g: A -> B -> mon C)
+         (z: C) (s1 s3: state) (i: state_incr s1 s3),
+  bind2 f g s1 = OK z s3 i ->
+  exists x, exists y, exists s2, exists i1, exists i2,
+  f s1 = OK (x, y) s2 i1 /\ g x y s2 = OK z s3 i2.
+FProofLemma.
+unfold bind2; intros.
+  exploit bind_inversion; eauto.
+  intros [[x y] [s2 [i1 [i2 [P Q]]]]]. simpl in Q.
+  exists x; exists y; exists s2; exists i1; exists i2; auto.
+Qed. CloseFLemma.
+
+MetaData monadInv.
+Ltac monadInv1 H :=
+  match type of H with
+  | (OK _ _ _ = OK _ _ _) =>
+      inversion H; clear H; try subst
+  | (Error _ _ = OK _ _ _) =>
+      discriminate
+  | (ret _ _ = OK _ _ _) =>
+      inversion H; clear H; try subst
+  | (error _ _ = OK _ _ _) =>
+      discriminate
+  | (bind ?F ?G ?S = OK ?X ?S' ?I) =>
+      let x := fresh "x" in (
+      let s := fresh "s" in (
+      let i1 := fresh "INCR" in (
+      let i2 := fresh "INCR" in (
+      let EQ1 := fresh "EQ" in (
+      let EQ2 := fresh "EQ" in (
+      destruct (bind_inversion _ _ F G X S S' I H) as [x [s [i1 [i2 [EQ1 EQ2]]]]];
+      clear H;
+      try (monadInv1 EQ2)))))))
+  | (bind2 ?F ?G ?S = OK ?X ?S' ?I) =>
+      let x1 := fresh "x" in (
+      let x2 := fresh "x" in (
+      let s := fresh "s" in (
+      let i1 := fresh "INCR" in (
+      let i2 := fresh "INCR" in (
+      let EQ1 := fresh "EQ" in (
+      let EQ2 := fresh "EQ" in (
+      destruct (bind2_inversion _ _ _ F G X S S' I H) as [x1 [x2 [s [i1 [i2 [EQ1 EQ2]]]]]];
+      clear H;
+      try (monadInv1 EQ2))))))))
+  end.
+
+Ltac monadInv H :=
+  match type of H with
+  | (ret _ _ = OK _ _ _) => monadInv1 H
+  | (error _ _ = OK _ _ _) => monadInv1 H
+  | (bind ?F ?G ?S = OK ?X ?S' ?I) => monadInv1 H
+  | (bind2 ?F ?G ?S = OK ?X ?S' ?I) => monadInv1 H
+  | (?F _ _ _ _ _ _ _ _ = OK _ _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ _ _ _ = OK _ _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ _ _ = OK _ _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ _ = OK _ _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ _ = OK _ _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ _ = OK _ _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ _ = OK _ _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  | (?F _ = OK _ _ _) =>
+      ((progress simpl in H) || unfold F in H); monadInv1 H
+  end.
+FEnd monadInv.
+
+MetaData saturateTrans.
+Ltac saturateTrans :=
+  match goal with
+  | H1: state_incr ?x ?y, H2: state_incr ?y ?z |- _ =>
+      match goal with
+      | H: state_incr x z |- _ =>
+         fail 1
+      | _ =>
+         let i := fresh "INCR" in
+         (generalize (state_incr_trans x y z H1 H2); intro i;
+          saturateTrans)
+      end
+  | _ => idtac
+  end.
+FEnd saturateTrans.
 
 FLemma init_state_wf:
   forall pc, Plt pc 1%positive \/ (PTree.empty T.instruction)!pc = None.
@@ -549,7 +585,7 @@ FProofLemma. apply cheat. Qed. CloseFLemma.
 FLemma add_instr_incr:
   forall s i,
   let n := s.(st_nextnode T.instruction) in
-  state_incr T.instruction s (mkstate T.instruction s.(st_nextreg T.instruction)
+  state_incr s (mkstate T.instruction s.(st_nextreg T.instruction)
                 (Pos.succ n)
                 (PTree.set n i s.(st_code T.instruction))
                 (add_instr_wf s i)).
@@ -571,7 +607,7 @@ FProofLemma. apply cheat. Qed. CloseFLemma.
 FLemma reserve_instr_incr:
   forall s,
   let n := s.(st_nextnode T.instruction) in
-  state_incr T.instruction s (mkstate T.instruction s.(st_nextreg T.instruction)
+  state_incr s (mkstate T.instruction s.(st_nextreg T.instruction)
                 (Pos.succ n)
                 s.(st_code T.instruction)
                     (reserve_instr_wf s)).
@@ -594,7 +630,7 @@ FProofLemma. apply cheat. Qed. CloseFLemma.
 FLemma update_instr_incr:
   forall s n i (LT: Plt n s.(st_nextnode T.instruction)),
   s.(st_code T.instruction)!n = None ->
-  state_incr T.instruction s
+  state_incr s
              (mkstate T.instruction s.(st_nextreg T.instruction) s.(st_nextnode T.instruction) (PTree.set n i s.(st_code T.instruction))
                      (update_instr_wf s n i LT)).
 FProofLemma. apply cheat. Qed. CloseFLemma.
@@ -617,7 +653,7 @@ FDefinition update_instr : T.node -> T.instruction -> mon unit := fun (n: T.node
 
 FLemma new_reg_incr:
   forall s,
-  state_incr T.instruction s (mkstate T.instruction (Pos.succ s.(st_nextreg T.instruction))
+  state_incr s (mkstate T.instruction (Pos.succ s.(st_nextreg T.instruction))
                         s.(st_nextnode T.instruction) s.(st_code T.instruction) s.(st_wf T.instruction)).
 FProofLemma. constructor; simpl. apply Ple_refl. apply Ple_succ. auto. Qed. CloseFLemma.
 
@@ -826,8 +862,19 @@ FDefinition transl_program : So.program -> Errors.res T.program :=
   fun (p: So.program) =>
      transform_partial_program transl_fundef p.                 
 
-(* relational spec *)
+(* Monotonicity property of the state *)
+FLemma instr_at_incr:
+  forall s1 s2 n i,
+  state_incr s1 s2 -> s1.(st_code T.instruction)!n = Some i -> s2.(st_code T.instruction)!n = Some i.
+FProofLemma.
+  intros. inv H.
+  destruct (H3 n); congruence.
+Qed. CloseFLemma.
+MetaData _instr_at_incr.
+Global Hint Resolve instr_at_incr: rtlg.
+FEnd _instr_at_incr.
 
+(* Validity and freshness of registers *)
 FDefinition reg_valid : reg -> state -> Prop := fun r s =>
   Plt r s.(st_nextreg T.instruction).
 
@@ -849,6 +896,17 @@ FLemma add_vars_valid:
   map_valid map1 s1 ->
   regs_valid rl s2 /\ map_valid map2 s2.
 FProofLemma. apply cheat. Qed. CloseFLemma.
+
+(* Properties of basic operations over the state *)
+FLemma add_instr_at:
+  forall s1 s2 incr i n,
+  add_instr i s1 = OK n s2 incr -> s2.(st_code T.instruction)!n = Some i.
+FProofLemma.
+  intros. monadInv H. simpl. apply PTree.gss.
+Qed. CloseFLemma.
+MetaData _add_instr_at.
+Global Hint Resolve add_instr_at: rtlg.
+FEnd _add_instr_at.
 
 MetaData tr_move.
 Inductive tr_move (c: self__RTLgen.T.code): self__RTLgen.T.node -> reg -> self__RTLgen.T.node -> reg -> Prop :=
@@ -980,7 +1038,42 @@ unfold map_valid, init_mapping.
   simpl in A. rewrite PTree.gempty in A; discriminate.
   simpl in B. tauto.
 Qed. CloseFLemma.
-  
+
+MetaData return_reg_ok.
+Inductive return_reg_ok: state -> mapping -> option reg -> Prop :=
+  | return_reg_ok_none:
+      forall s map,
+      return_reg_ok s map None
+  | return_reg_ok_some:
+      forall s map r,
+      ~(reg_in_map map r) -> reg_valid r s ->
+      return_reg_ok s map (Some r).
+FEnd return_reg_ok.
+
+FInduction transl_stmt_charact about So.stmt
+  motive (fun (stmt : So.stmt) =>
+   forall map nd nexits ngoto nret rret s ns s' INCR
+    (TR: transl_stmt stmt map nd nexits ngoto nret rret s = OK ns s' INCR)
+    (WF: map_valid map s)
+    (OK: return_reg_ok s map rret),
+  tr_stmt s'.(st_code T.instruction) map stmt ns nd nexits ngoto nret rret).
+FProof.
+(* Sskip *)
++ apply cheat.
+(* Sassign *)  
++ apply cheat.
+(* Sseq *)  
++ apply cheat.
+(* Sreturn *)  
++ apply cheat.
+(* Slabel *)  
++ apply cheat.
+(* Sgoto *)  
++ apply cheat.
+(* Sifthenelse *)  
++ apply cheat.
+Qed. FEnd transl_stmt_charact.  
+
 FLemma transl_function_charact:
   forall f tf,
   transl_function f = Errors.OK tf ->
@@ -988,18 +1081,17 @@ FLemma transl_function_charact:
 FProofLemma.
   intros until tf. unfold transl_function.
   caseEq (transl_fun f init_state). congruence.
-  intros [nentry rparams] sfinal INCR TR E. inv E.
-  apply cheat.
-  (*FmonadInv TR.
+  intros [nentry rparams] sfinal INCR TR E. inv E.  
+  monadInv TR.
   exploit add_vars_valid. eexact EQ1. apply init_mapping_valid.
   intros [A B].
   exploit add_vars_valid. eexact EQ0. auto.
   intros [C D].
-  eapply tr_function_intro; eauto with rtlg.
+  eapply tr_function_intro; info_eauto with rtlg.
   eapply transl_stmt_charact; eauto with rtlg.
-  unfold ret_reg. destruct (rettype_eq (sig_res (CminorSel.fn_sig f)) Tvoid).
+  unfold ret_reg. destruct (rettype_eq (sig_res (So.fn_sig f)) AST.Tvoid).
   constructor.
-  constructor; eauto with rtlg.*)
+  constructor; eauto with rtlg.
 Qed. CloseFLemma.
 
 MetaData tr_fun.
