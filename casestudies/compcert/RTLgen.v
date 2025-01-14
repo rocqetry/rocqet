@@ -2436,7 +2436,7 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   econstructor; eauto.
   
 (* internal function *)  
-+ monadInv TF. exploit transl_function_charact; eauto. intro TRF.
++ Errors.monadInv TF. exploit transl_function_charact; eauto. intro TRF.
   inversion TRF. subst f0.
   pose (e0 := So.set_locals (So.fn_vars f) (So.set_params vargs (So.fn_params f))).
   pose (rs := T.init_regs targs rparams).
@@ -2603,6 +2603,16 @@ FInductive tr_stmt : T.code -> mapping -> So.stmt -> T.node -> T.node -> list T.
   | tr_Sexit: forall c map n ns nd nexits ngoto nret rret,
      nth_error nexits n = Some ns ->
      tr_stmt c map (So.Sexit n) ns nd nexits ngoto nret rret.
+
+FInduction transl_stmt_charact.
+FProof.
+(* Sblock *)
++ apply cheat.
+(* Sexit *)
++ apply cheat.
+(* Sloop *)
++ apply cheat.
+Qed. FEnd transl_stmt_charact.
 
 FInductive tr_cont: T.code -> mapping ->
                    So.cont -> T.node -> list T.node -> labelmap -> T.node -> option reg ->
@@ -2892,6 +2902,21 @@ FRecursion reserve_labels.
 Case _ := (fun lm => ret lm).
 FEnd reserve_labels.
 
+FInduction alloc_reg_valid.
+FProof.
+all: intros until r; fsimpl; eauto with rtlg.
+Qed. FEnd alloc_reg_valid.
+
+FInduction alloc_reg_fresh_or_in_map.
+FProof.
+all: intros until s'; fsimpl; intros; try (right; eauto with rtlg; fail).
+Qed. FEnd alloc_reg_fresh_or_in_map. 
+
+FInduction alloc_reg_target_ok.
+FProof.
+all: intros; fsimpl in *;  try (eapply new_reg_target_ok; eauto; fail).
+Qed. FEnd alloc_reg_target_ok.
+
 FInductive tr_expr : T.code -> mapping -> list reg -> So.expr -> T.node -> T.node -> reg -> option AST.ident -> Prop :=
 | tr_Ebuiltin: forall c map pr ef al ns nd rd dst n1 rl,
       tr_exprlist c map pr al ns n1 rl ->
@@ -2917,6 +2942,24 @@ FInductive tr_stmt : T.code -> mapping -> So.stmt -> T.node -> T.node -> list T.
    c!n1 = Some (T.Ibuiltin ef (convert_builtin_args args rargs) res' nd) ->
    tr_builtin_res map res res' ->
    tr_stmt c map (So.Sbuiltin res ef args) ns nd nexits ngoto nret rret.
+
+FInduction transl_expr_charact with transl_exprlist_charact with transl_condexpr_charact.
+FProof.
+(* Ebuiltin *)
++ apply cheat.
+Qed. FEnd transl_expr_charact with transl_exprlist_charact with transl_condexpr_charact.
+
+FInduction transl_expr_assign_charact.
+FProof.
+(* Ebuiltin *)
++ apply cheat.
+Qed. FEnd transl_expr_assign_charact.
+
+FInduction transl_stmt_charact.
+FProof.
+(* Sbuiltin *)
++ apply cheat.
+Qed. FEnd transl_stmt_charact.
 
 Closing Fact tr_ebuiltin_inv : forall c map pr ef al ns nd rd dst,
     tr_expr c map pr (So.Ebuiltin ef al) ns nd rd dst -> 
@@ -3241,6 +3284,21 @@ FRecursion reserve_labels.
 Case _ := (fun lm => ret lm).
 FEnd reserve_labels.
 
+FInduction alloc_reg_valid.
+FProof.
+all: intros until r; fsimpl; eauto with rtlg.
+Qed. FEnd alloc_reg_valid.
+
+FInduction alloc_reg_fresh_or_in_map.
+FProof.
+all: intros until s'; fsimpl; intros; try (right; eauto with rtlg; fail).
+Qed. FEnd alloc_reg_fresh_or_in_map.
+
+FInduction alloc_reg_target_ok.
+FProof.
+all: intros; fsimpl in *;  try (eapply new_reg_target_ok; eauto; fail).
+Qed. FEnd alloc_reg_target_ok.
+
 FInductive tr_expr : T.code -> mapping -> list reg -> So.expr -> T.node -> T.node -> reg -> option AST.ident -> Prop :=
 | tr_Eload: forall c map pr chunk addr al ns nd rd n1 rl dst,
       tr_exprlist c map pr al ns n1 rl ->
@@ -3255,6 +3313,23 @@ FInductive tr_stmt : T.code -> mapping -> So.stmt -> T.node -> T.node -> list T.
      c!n2 = Some (T.Istore chunk addr rl rd nd) ->
      tr_stmt c map (So.Sstore chunk addr al b) ns nd nexits ngoto nret rret.
 
+FInduction transl_expr_charact with transl_exprlist_charact with transl_condexpr_charact.
+FProof.
+(* Eload *)
++ apply cheat.
+Qed. FEnd transl_expr_charact with transl_exprlist_charact with transl_condexpr_charact.  
+
+FInduction transl_expr_assign_charact.
+FProof.
+(* Eload *)
++ apply cheat.
+Qed. FEnd transl_expr_assign_charact.
+
+FInduction transl_stmt_charact.
+FProof.
+(* Sstore *)
++ apply cheat.
+Qed. FEnd transl_stmt_charact.
 
 Closing Fact tr_expr_tr_eload : forall c map pr chunk addr al ns nd rd dst,
   tr_expr c map pr (So.Eload chunk addr al) ns nd rd dst ->
@@ -3511,6 +3586,21 @@ FRecursion reserve_labels.
 Case _ := (fun lm => ret lm).
 FEnd reserve_labels.
 
+FInduction alloc_reg_valid.
+FProof.
+all: intros until r; fsimpl; eauto with rtlg.
+Qed. FEnd alloc_reg_valid.
+
+FInduction alloc_reg_fresh_or_in_map.
+FProof.
+all: intros until s'; fsimpl; intros; try (right; eauto with rtlg; fail).
+Qed. FEnd alloc_reg_fresh_or_in_map.
+
+FInduction alloc_reg_target_ok.
+FProof.
+all: intros; fsimpl in *;  try (eapply new_reg_target_ok; eauto; fail).
+Qed. FEnd alloc_reg_target_ok.
+
 FInductive tr_expr : T.code -> mapping -> list reg -> So.expr -> T.node -> T.node -> reg -> option AST.ident -> Prop :=
 | tr_Eexternal: forall c map pr id sg al ns nd rd dst n1 rl,
       tr_exprlist c map pr al ns n1 rl ->
@@ -3539,6 +3629,26 @@ FInductive tr_stmt : T.code -> mapping -> So.stmt -> T.node -> T.node -> list T.
      tr_exprlist c map nil cl ns n2 rargs ->
      c!n2 = Some (T.Itailcall sig (inr _ id) rargs) ->
      tr_stmt c map (So.Stailcall sig (inr _ id) cl) ns nd nexits ngoto nret rret.
+
+FInduction transl_expr_charact with transl_exprlist_charact with transl_condexpr_charact.
+FProof.
+(* Eexternal *)
++ apply cheat.
+Qed. FEnd transl_expr_charact with transl_exprlist_charact with transl_condexpr_charact.  
+
+FInduction transl_expr_assign_charact.
+FProof.
+(* Eexternal *)
++ apply cheat.
+Qed. FEnd transl_expr_assign_charact.
+
+FInduction transl_stmt_charact.
+FProof.
+(* Scall *)
++ apply cheat.
+(* Stailcall *)
++ apply cheat.
+Qed. FEnd transl_stmt_charact.
 
 Inherit map_wf.
 
@@ -3754,7 +3864,7 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   eapply match_env_update_dest; eauto.
 
 (* external call *)
-+  monadInv TF.
++  Errors.monadInv TF.
   edestruct external_call_mem_extends as [tvres [tm' [A [B [C D]]]]]; eauto.
   econstructor; split.
   left; apply plus_one. eapply T.exec_function_external; eauto.
@@ -3902,6 +4012,12 @@ FInductive tr_stmt : T.code -> mapping -> So.stmt -> T.node -> T.node -> list T.
 | tr_Sswitch: forall c map a ns nd nexits ngoto nret rret,
      tr_exitexpr c map a ns nexits ->
      tr_stmt c map (So.Sswitch a) ns nd nexits ngoto nret rret.
+
+FInduction transl_stmt_charact.
+FProof.
+(* Sswitch *)
++ apply cheat.
+Qed. FEnd transl_stmt_charact.
 
 FRecursion size_stmt.
 Case _ := 1.
