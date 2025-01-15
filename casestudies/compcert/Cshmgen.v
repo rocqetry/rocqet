@@ -1344,6 +1344,11 @@ FProofLemma.
     rewrite Int.eq_false. auto. apply Int.one_not_zero.
     rewrite Int.eq_true. auto. }
   apply cheat.
+  (* need to destruct and do case analysis
+   turn this into finduction, for repetition
+   - do a separate definition for default and other asserts
+   - use all: tactic
+   - manually repeat when needed*)
 Qed. CloseFLemma.
 
 FLemma make_cmpu_ne_zero_correct_ptr:
@@ -1364,6 +1369,7 @@ FProofLemma.
   assert (OF_BOOL: forall ob, option_map Val.of_bool ob <> Some (Vptr b i)).
   { intros. destruct ob as [[]|]; discriminate. }
   apply cheat.
+  (* need destruct and case analysis*)
 Qed. CloseFLemma.
 
 FLemma make_cast_int_correct:
@@ -1402,6 +1408,7 @@ FProofLemma.
 intros. unfold make_cast, sem_cast in *;
   destruct (classify_cast ty1 ty2); inv H; destruct v; InvEval; eauto;
   apply cheat.
+(* without cshm database, more cases for manual proof*)
 Qed. CloseFLemma. 
 
 FLemma make_boolean_correct:
@@ -1472,6 +1479,11 @@ FLemma match_env_same_blocks:
   match_env prog e te ->
   T.blocks_of_env te = S.blocks_of_env ge e.
 FProofLemma.
+intros.
+set (R := fun (x: (block * type)) (y: (block * Z)) =>
+         match x, y with
+         | (b1, ty), (b2, sz) => b2 = b1 /\ sz = Ctypes.sizeof (S.genv_cenv ge) ty
+         end).
   apply cheat.
 Qed. CloseFLemma.
 
@@ -1608,18 +1620,18 @@ FInductive match_cont : composite_env -> type -> nat -> nat -> S.cont -> T.cont 
 MetaData match_states.
 Inductive match_states : self__Cshmgen.S.state -> self__Cshmgen.T.state -> Prop :=
 | match_state:
-    forall f nbrk ncnt s k e le m tf ts tk te ts' tk' (cu : self__Cshmgen.S.program)
-        (* (LINK: linkorder cu prog)*)
+    forall f nbrk ncnt s k e le m tf ts tk te ts' tk' (cu prog : self__Cshmgen.S.program)
+        (LINK: linkorder cu prog)
         (TRF: self__Cshmgen.transl_function cu.(prog_comp_env) f = OK tf)
         (TR: self__Cshmgen.transl_stmt s cu.(prog_comp_env) (self__Cshmgen.S.fn_return f) nbrk ncnt = OK ts)
         (MTR: self__Cshmgen.match_transl ts tk ts' tk')
-        (MENV: self__Cshmgen.match_env cu e te)
+        (MENV: self__Cshmgen.match_env prog e te)
         (MK: self__Cshmgen.match_cont cu.(prog_comp_env) (self__Cshmgen.S.fn_return f) nbrk ncnt k tk),
     match_states (self__Cshmgen.S.State f s k e le m)
       (self__Cshmgen.T.State tf ts' tk' te le m)      
 | match_callstate:
-    forall fd args k m tfd tk targs tres cconv cu ce
-        (* (LINK: linkorder cu prog)*)
+    forall fd args k m tfd tk targs tres cconv cu prog ce
+           (LINK: linkorder cu prog)
         (TR: self__Cshmgen.match_fundef cu fd tfd)
         (MK: self__Cshmgen.match_cont ce tres 0%nat 0%nat k tk)
         (ISCC: self__Cshmgen.S.is_call_cont k)
@@ -1637,13 +1649,13 @@ FEnd match_states.
 (* This should probably take tprog and match_prog as Hypothesis *)
 FLemma match_states_skip:
   forall f e le te nbrk ncnt k tf tk m (cu: S.program) (prog: S.program),
-  (*linkorder cu prog ->*)
+  linkorder cu prog ->
   transl_function cu.(prog_comp_env) f = OK tf ->
-  match_env cu e te ->
+  match_env prog e te ->
   match_cont cu.(prog_comp_env) (S.fn_return f) nbrk ncnt k tk ->
   match_states (S.State f S.Sskip k e le m) (T.State tf T.Sskip tk te le m).
 FProofLemma.
-  intros. econstructor; eauto. fsimpl; reflexivity. fconstructor.
+  intros. econstructor; eauto. fsimpl ; reflexivity. fconstructor.
 Qed. CloseFLemma.
 (* ------------------------------------------------ *)
 (*            CORRECTNESS - FIND_LABEL              *)
@@ -1672,11 +1684,24 @@ Qed. FEnd match_cont_is_call_cont.
   
 (* Work Here *)
 (* 
-extra lemmas needed from cshmgenproof's sections:
-goto
-- transl_find_label in FIND_LABEL
-
-fconstructor doesn't work for label *)
+problems
+- can't find the way to use finduction for some lemmas
+  -- solution recorded first occurence
+- ge has different meaning in different sections; which is which?
+  -- one is type, the other is definitoin
+  -- error occurs because plugin doesn't support implicit type conversion
+     between genv and composite_env
+  -- just add S.genv_cenv
+- need this line after the clight eval_expr:
+Scheme eval_expr_ind2 := Minimality for eval_expr Sort Prop
+  with eval_lvalue_ind2 := Minimality for eval_lvalue Sort Prop.
+Combined Scheme eval_expr_lvalue_ind from eval_expr_ind2, eval_lvalue_ind2.
+  -- prove directly, no need for mutual recursion
+- need cu = prog to prove many things
+  -- likely quantifier issue
+- transl_find_label in FIND_LABEL is mutually recursive lemma
+  -- do first half, later extend
+ *)
 (* use closing fact for inversion*)
 Closing Fact match_transl_0_inv :
   forall ts tk ts' tk',
@@ -1698,13 +1723,15 @@ Closing Fact match_Kstop_inv :
 
 FInduction transl_step about S.step
   motive (fun ge S1 t S2 (_ : S.step ge S1 t S2) => 
-            forall prog tprog tge, match_prog prog tprog ->
+            forall prog tprog tge,
+              match_prog prog tprog ->
+              forall cunit, linkorder cunit prog ->
             S.globalenv prog = ge -> Genv.globalenv tprog = tge ->
   forall T1, match_states S1 T1 -> 
   exists T2, plus T.step tge T1 t T2 /\ match_states S2 T2).
 FProof.
 (* skip - done *)
-- intros. revert H2. intro MST.
+- intros. rename H3 into MST.
   inv MST. fsimpl in TR. monadInv TR.
   apply match_transl_0_inv in MTR.
   destruct MTR. subst.
@@ -1714,12 +1741,18 @@ FProof.
   + apply plus_one. rewrite hyp1. fconstructor.
   + econstructor;eauto. fconstructor.
 (* set *)
-- intros. revert H2. intro MST.
+- intros. rename H3 into MST. 
   inv MST. fsimpl in TR. monadInv TR.
   apply match_transl_0_inv in MTR.
   destruct MTR. subst.
   econstructor. split.
-  + apply plus_one. fconstructor. eapply transl_expr_correct;eauto.
+  + apply plus_one. fconstructor. eapply transl_expr_correct.
+    * eapply e0.
+    * apply H.
+    * reflexivity.
+    * reflexivity.
+    * constructor.
+    
     assert (prog = cu). { apply cheat. } subst. eauto.
   + eapply match_states_skip; eauto.
 (* seq - done*)
@@ -1800,7 +1833,7 @@ FProof.
 (* internal function *)
 - intros. revert H2. intro MST.
   inv MST.
-  
+  (* "H5" is "f0", function_entry replaced function_entry0 and 1*)
   apply cheat.
   Admitted.
  FEnd transl_step.
