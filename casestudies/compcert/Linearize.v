@@ -658,6 +658,7 @@ FInduction transf_step_correct about S.step
     ge = Genv.globalenv prog -> tge = Genv.globalenv tprog ->
     (exists s2', plus T.step tge s1' t s2' /\ match_states s2 s2')
     \/ (measure s2 < measure s1 /\ t = E0 /\ match_states s2 s1')%nat).
+
 FProof.
 
 Qed. FEnd transf_step_correct.
