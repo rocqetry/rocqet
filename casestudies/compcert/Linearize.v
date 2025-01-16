@@ -814,6 +814,20 @@ FInductive instruction: Type :=
 | Lload : memory_chunk -> addressing -> list mreg -> mreg -> instruction
 | Lstore : memory_chunk -> addressing -> list mreg -> mreg -> instruction.
 
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_Lload: forall ge s f sp chunk addr args dst bb rs m a v rs',
+      eval_addressing ge sp addr (reglist rs args) = Some a ->
+      Mem.loadv chunk m a = Some v ->
+      rs' = Locmap.set (R dst) v (undef_regs (destroyed_by_load chunk addr) rs) ->
+      step ge (Block s f sp (Lload chunk addr args dst :: bb) rs m)
+        E0 (Block s f sp bb rs' m)
+| exec_Lstore: forall ge s f sp chunk addr args src bb rs m a rs' m',
+      eval_addressing ge sp addr (reglist rs args) = Some a ->
+      Mem.storev chunk m a (rs (R src)) = Some m' ->
+      rs' = undef_regs (destroyed_by_store chunk addr) rs ->
+      step ge (Block s f sp (Lstore chunk addr args src :: bb) rs m)
+        E0 (Block s f sp bb rs' m').
+
 FRecursion successors_instr.
 Case _ := (fun rest => rest).
 FEnd successors_instr.
@@ -821,12 +835,37 @@ FEnd successors_instr.
 FEnd LTL.
 
 Family Lfam.
+(*FInductive instruction: Type :=
+| Lload: memory_chunk -> addressing -> list mreg -> mreg -> instruction
+| Lstore: memory_chunk -> addressing -> list mreg -> mreg -> instruction.*)
+FEnd Lfam.
+
+Family Linear extends Lfam.
 FInductive instruction: Type :=
 | Lload: memory_chunk -> addressing -> list mreg -> mreg -> instruction
 | Lstore: memory_chunk -> addressing -> list mreg -> mreg -> instruction.
-FEnd Lfam.
 
-Family Linear extends Lfam. FEnd Linear.
+FRecursion is_label.
+Case _ := (fun lbl => false).
+FEnd is_label.
+
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_Lload:
+      forall ge s f sp chunk addr args dst b rs m a v rs',
+      eval_addressing ge sp addr (reglist rs args) = Some a ->
+      Mem.loadv chunk m a = Some v ->
+      rs' = Locmap.set (R dst) v (undef_regs (destroyed_by_load chunk addr) rs) ->
+      step ge (State s f sp (Lload chunk addr args dst :: b) rs m)
+        E0 (State s f sp b rs' m)
+| exec_Lstore:
+      forall ge s f sp chunk addr args src b rs m m' a rs',
+      eval_addressing ge sp addr (reglist rs args) = Some a ->
+      Mem.storev chunk m a (rs (R src)) = Some m' ->
+      rs' = undef_regs (destroyed_by_store chunk addr) rs ->
+      step ge (State s f sp (Lstore chunk addr args src :: b) rs m)
+        E0 (State s f sp b rs' m').
+
+FEnd Linear.
 
 Family Linearize.
 Family S extends LTL. FEnd S.
@@ -842,13 +881,19 @@ Case Lstore chunk addr args src := (fun f k => T.Lstore chunk addr args src :: f
 Case Lload chunk addr args dst := (fun f k => T.Lload chunk addr args dst :: f k).
 FEnd translate_instr.
 
+FInduction transf_step_correct.
+FProof.
+(* Lload *)
++ apply cheat.
+(* Lstore *)  
++ apply cheat.  
+Qed. FEnd transf_step_correct.
+
 FEnd Linearize.
 
 FEnd Comp_Heap.
 
-Trait Comp_Field extends Base, Comp_Heap.
-
-FEnd Comp_Field.
+Trait Comp_Field extends Base, Comp_Heap. FEnd Comp_Field.
 
 Trait Comp_Call extends Base, Comp_Builtin.
 
@@ -857,19 +902,88 @@ FInductive instruction: Type :=
 | Lcall : signature -> mreg + ident -> instruction
 | Ltailcall : signature -> mreg + ident -> instruction. 
 
+Inherit locset.
+
+FDefinition find_function := fun (ge: genv) (ros: mreg + ident) (rs: locset) =>
+  match ros with
+  | inl r => Genv.find_funct ge (rs (R r))
+  | inr symb =>
+      match Genv.find_symbol ge symb with
+      | None => None
+      | Some b => Genv.find_funct_ptr ge b
+      end
+  end.
+
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_Lcall: forall ge s f sp sig ros bb rs m fd,
+      find_function ge ros rs = Some fd ->
+      funsig fd = sig ->
+      step ge (Block s f sp (Lcall sig ros :: bb) rs m)
+        E0 (Callstate (Stackframe f sp rs bb :: s) fd rs m)
+| exec_Ltailcall: forall ge s f sp sig ros bb rs m fd rs' m',
+      rs' = return_regs (parent_locset s) rs ->
+      find_function ge ros rs' = Some fd ->
+      funsig fd = sig ->
+      Mem.free m sp 0 (fn_stacksize f) = Some m' ->
+      step ge (Block s f (Vptr sp Ptrofs.zero) (Ltailcall sig ros :: bb) rs m)
+        E0 (Callstate s fd rs' m').
+
 FRecursion successors_instr.
 Case _ := (fun rest => rest).
 FEnd successors_instr.
+
 FEnd LTL.
 
 Family Lfam.
+(*FInductive instruction: Type :=
+| Lcall: signature -> mreg + ident -> instruction
+| Ltailcall: signature -> mreg + ident -> instruction.*)
+FEnd Lfam.   
+
+Family Linear extends Lfam.
 FInductive instruction: Type :=
 | Lcall: signature -> mreg + ident -> instruction
 | Ltailcall: signature -> mreg + ident -> instruction.
-FEnd Lfam.
 
-Family Linear extends Lfam. FEnd Linear.
+FRecursion is_label.
+Case _ := (fun lbl => false).
+FEnd is_label.
 
+FDefinition find_function := fun (ge: genv) (ros: mreg + ident) (rs: storeset) =>
+  match ros with
+  | inl r => Genv.find_funct ge (rs (R r))
+  | inr symb =>
+      match Genv.find_symbol ge symb with
+      | None => None
+      | Some b => Genv.find_funct_ptr ge b
+      end
+  end.
+
+FDefinition return_regs := fun (caller callee: storeset) =>
+  fun (l: loc) =>
+    match l with
+    | R r => if is_callee_save r then caller (R r) else callee (R r)
+    | S Outgoing ofs ty => Vundef
+    | S sl ofs ty => caller (S sl ofs ty)
+    end.
+
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_Lcall:
+      forall ge s f sp sig ros b rs m f',
+      find_function ge ros rs = Some f' ->
+      sig = funsig f' ->
+      step ge (State s f sp (Lcall sig ros :: b) rs m)
+        E0 (Callstate (Stackframe f sp rs b:: s) f' rs m)
+| exec_Ltailcall:
+      forall ge s f stk sig ros b rs m rs' f' m',
+      rs' = return_regs (parent_locset s) rs ->
+      find_function ge ros rs' = Some f' ->
+      sig = funsig f' ->
+      Mem.free m stk 0 (fn_stacksize f) = Some m' ->
+      step ge (State s f (Vptr stk Ptrofs.zero) (Ltailcall sig ros :: b) rs m)
+        E0 (Callstate s f' rs' m').
+
+FEnd Linear.
 
 
 Family Linearize.
@@ -888,14 +1002,20 @@ Case Ltailcall sig ros :=
  (fun f k => T.Ltailcall sig ros :: k).
 FEnd translate_instr.
 
+FInduction transf_step_correct.
+FProof.
+(* Lcall *)
++ apply cheat.
+(* Ltailcall *)
++ apply cheat.
+Qed. FEnd transf_step_correct.
+  
 FEnd Linearize.
 
 FEnd Comp_Call.
 
 (* small extension *)
-Trait Comp_Switch extends Comp_Loops.
-
-FEnd Comp_Switch.
+Trait Comp_Switch extends Comp_Loops. FEnd Comp_Switch.
 
 Family Comp extends
   Comp_Heap,            
