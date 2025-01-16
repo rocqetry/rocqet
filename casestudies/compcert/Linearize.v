@@ -218,7 +218,7 @@ Case Lgetstack a b c d := (fun rest => rest).
 Case Lsetstack a b c d := (fun rest => rest).
 Case Lbranch s := (fun _  => s :: nil).
 Case Lcond cond args s1 s2 := (fun _ => s1 :: s2 :: nil).
-Case Lreturn := (fun rest => rest).
+Case Lreturn := (fun rest => nil).
 FEnd successors_instr.
 
 MetaData successors_block.
@@ -372,7 +372,7 @@ FInductive instruction: Type :=
 
 Inherit code.
 
-MetaData fn.
+MetaData fn binds fn_sig, fn_code, fn_stacksize.
 Record fn: Type := mkfunction {
   fn_sig: signature;
   fn_stacksize: Z;
@@ -692,6 +692,14 @@ Trait LTL_jumptable extends LTL.
 FInductive instruction: Type :=
 | Ljumptable : mreg -> list node -> instruction.
 
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_Ljumptable: forall ge s f sp arg tbl bb rs m n pc rs',
+      rs (R arg) = Vint n ->
+      list_nth_z tbl (Int.unsigned n) = Some pc ->
+      rs' = undef_regs (destroyed_by_jumptable) rs ->
+      step ge (Block s f sp (Ljumptable arg tbl :: bb) rs m)
+        E0 (State s f sp pc rs' m).
+  
 FRecursion successors_instr.
 Case Ljumptable a tbl := (fun rest => tbl).
 FEnd successors_instr.
@@ -700,14 +708,27 @@ FEnd LTL_jumptable.
 Family LTL extends LTL_jumptable.
 FEnd LTL.
 
-Family Lfam.
+Family Linear.
 FInductive instruction: Type :=
 | Ljumptable : mreg -> list label -> instruction.
-FEnd Lfam.
 
-(* nanopassesn*)
-Trait Linearize_jumptable extends Linearize.
-Family S extends LTL_jumptable. FEnd S.
+FRecursion is_label.
+Case _ := (fun lbl => false).
+FEnd is_label.
+
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_Ljumptable:
+      forall ge s f sp arg tbl b rs m n lbl b' rs',
+      rs (R arg) = Vint n ->
+      list_nth_z tbl (Int.unsigned n) = Some lbl ->
+      find_label lbl (fn_code f) = Some b' ->
+      rs' = undef_regs (destroyed_by_jumptable) rs ->
+      step ge (State s f sp (Ljumptable arg tbl :: b) rs m)
+        E0 (State s f sp b' rs' m).
+  
+FEnd Linear.
+
+Family Linearize.
 
 FRecursion starts_with_label.
 Case Ljumptable a b  := (fun lbl => false).
@@ -717,14 +738,72 @@ FRecursion translate_instr.
 Case Ljumptable args tbl := (fun f k => T.Ljumptable args tbl :: k).
 FEnd translate_instr.
 
-FEnd Linearize_jumptable.
+FInduction transf_step_correct.
+FProof.
+(* Ljumptable *)
++ apply cheat.
+Qed. FEnd transf_step_correct.
 
-Family Linearize extends Linearize_jumptable.
 FEnd Linearize.
 
 FEnd Comp_Loops.
 
 Trait Comp_Builtin extends Base.
+
+Family LTL.
+FInductive instruction: Type :=
+| Lbuiltin : external_function -> list (builtin_arg loc) -> builtin_res mreg -> instruction.   
+
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_Lbuiltin: forall ge s f sp ef args res bb rs m vargs t vres rs' m',
+      eval_builtin_args (Genv.to_senv ge) rs sp m args vargs ->
+      external_call ef ge vargs m t vres m' ->
+      rs' = Locmap.setres res vres (undef_regs (destroyed_by_builtin ef) rs) ->
+      step ge (Block s f sp (Lbuiltin ef args res :: bb) rs m)
+        t (Block s f sp bb rs' m').
+
+FRecursion successors_instr.
+Case Lbuiltin a b c := (fun rest => rest).
+FEnd successors_instr.
+
+FEnd LTL.
+
+Family Linear.
+FInductive instruction: Type :=
+| Lbuiltin: external_function -> list (builtin_arg loc) -> builtin_res mreg -> instruction.
+
+FRecursion is_label.
+Case _ := (fun lbl => false).
+FEnd is_label.
+
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_Lbuiltin:
+      forall ge s f sp rs m ef args res b vargs t vres rs' m',
+      eval_builtin_args (Genv.to_senv ge) rs sp m args vargs ->
+      external_call ef ge vargs m t vres m' ->
+      rs' = Locmap.setres res vres (undef_regs (destroyed_by_builtin ef) rs) ->
+      step ge (State s f sp (Lbuiltin ef args res :: b) rs m)
+        t (State s f sp b rs' m').
+
+FEnd Linear.
+
+Family Linearize.
+
+FRecursion starts_with_label.
+Case _ := (fun lbl => false).
+FEnd starts_with_label.
+
+FRecursion translate_instr.
+Case Lbuiltin ef args res := (fun f k => T.Lbuiltin ef args res ::f k).
+FEnd translate_instr.
+
+FInduction transf_step_correct.
+FProof.
+(* Lbuiltin *)
++ apply cheat.
+Qed. FEnd transf_step_correct.
+
+FEnd Linearize.
 
 FEnd Comp_Builtin.
 
