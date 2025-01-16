@@ -658,11 +658,26 @@ FInduction transf_step_correct about S.step
     ge = Genv.globalenv prog -> tge = Genv.globalenv tprog ->
     (exists s2', plus T.step tge s1' t s2' /\ match_states s2 s2')
     \/ (measure s2 < measure s1 /\ t = E0 /\ match_states s2 s1')%nat).
-
 FProof.
-
+(* start of block, at an [add_branch] *)
++ apply cheat.
+ (* Lop *)  
++ apply cheat.
+(* Lgetstack *)  
++ apply cheat.
+(* Lsetstack *)  
++ apply cheat.
+(* Lbranch *)  
++ apply cheat.
+(* Lcond *)  
++ apply cheat.
+(* Lreturn *)  
++ apply cheat.
+(* return *)  
++ apply cheat.
+(* internal functions *)  
++ apply cheat.  
 Qed. FEnd transf_step_correct.
-
 
 FEnd Linearize.  
 
