@@ -320,15 +320,17 @@ let handler_types_table inductive_path name (recursor : CompiledRecursor.t)
          in
          (handler_name, handler_type)) *)
 
-let handler_type_for_recursion ~(names : Names.Id.t list)
-    ~(inductive_paths : Libnames.qualid list) ~(recursor : Recursor.t) :
+let handler_type_for_recursion
+    ~(names : Names.Id.t list)
+    ~(inductive_paths : Libnames.qualid list)
+    ~(recursor : Recursor.t) :
     (Names.Id.t * Constrexpr.constr_expr) list =
   let motive_terms =
     names
     |> List.map @@ fun name ->
        let motive = Naming.motive_of name in
        let self =
-         Naming.self_version (Env.Context.family_name (Env.Context.get ()))
+         Naming.self_version Env.Context.(family_name @@ get ())
        in
        let motive = Naming.list_to_path [ self; motive ] in
        Constrexpr_ops.mkRefC motive
@@ -347,7 +349,8 @@ let handler_type_for_recursion ~(names : Names.Id.t list)
   in
 
   handlers
-  |> List.map (fun (case_name, handler) ->
+  |> List.map (fun (case_name, handler) ->                
+         (* This is the family_path to the inductive. Could be None if it is not nested *)
          let target =
            let inductive_path = List.hd inductive_paths in
            match inductive_path |> Naming.path_to_list |> List.rev with
@@ -355,7 +358,10 @@ let handler_type_for_recursion ~(names : Names.Id.t list)
            (* Remove the inductive name, leave the family *)
            | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
          in
-         let handler = Naming.replace_self_qualification ~target handler in
+         (* This removes the "self__" prefix *)
+         let handler = Naming.replace_self_qualification ~target handler in                  
+         
+         (* Add the correct path back *)
          let handler =
            match target with
            | None -> handler
@@ -371,11 +377,8 @@ let handler_type_for_recursion ~(names : Names.Id.t list)
                  case_name :: inductive_names |> Names.Id.Set.of_list
                in
                Naming.add_prefix_path ~path ~names ~target:handler
-         in
-         let handler =
-           Resolver.resolve_constrexpr ~context:(Env.Context.get ())
-             ~expression:handler
-         in
+         in                  
+         
          let handler_type = Constrexpr_ops.mkAppC (handler, motive_terms) in
          (case_name, handler_type))
 

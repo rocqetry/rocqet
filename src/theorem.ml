@@ -172,7 +172,7 @@ let open_theorem ~(args : Frec_arg.t list) =
     |> List.filter_map (fun (name, handler_type) ->
            if inside name implementing_handler_names then Some handler_type
            else None)
-  in
+  in  
   let goal = Termutils.calculate_inductive_proof_goal ~handler_types ~suffix in
   let rec_principle_prefix =
     let inductive_path = List.hd inductive_paths in
