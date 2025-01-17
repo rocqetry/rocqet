@@ -1469,7 +1469,9 @@ all : intros; fsimpl in TR; try (monadInv TR); saturateTrans.
 + generalize EQ; unfold find_var. caseEq (map_vars map)!i; intros; inv EQ1.
   fconstructor. 
   inv OK. apply evar_injective in H0; unpack; subst.
-  left; split; congruence. right; eauto with rtlg.
+  left; split; congruence.
+  (* I thikn we need eletvar _injective here *)
+  right; eauto with rtlg.
   eapply add_move_charact; eauto.
 (* Econdition *)  
 + apply cheat.
