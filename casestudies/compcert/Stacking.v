@@ -47,7 +47,7 @@ FInductive instruction: Type :=
 | Lop : Op.operation -> list mreg -> mreg -> instruction
 | Lcond : Op.condition -> list mreg -> label -> instruction
 | Llabel: label -> instruction
-| Lgoto: label -> instruction                                                     
+| Lgoto: label -> instruction
 | Lreturn : instruction.
 
 FDefinition code: Type := list instruction.
@@ -65,6 +65,114 @@ FDefinition funsig := fun (fd: fundef) =>
   | AST.Internal f => function_sig f
   | AST.External ef => ef_sig ef
   end.
+
+FDefinition genv := Genv.t fundef unit.
+(* regset/locset *)
+FOpaque Definition storeset : Type := cheat.
+(* function/block *)
+FOpaque Definition func_ptr : Type := cheat.
+FOpaque Definition call_func_ptr : Type := cheat.
+(* return address / locset *)
+FOpaque Definition stack_state : Type := cheat.
+
+
+MetaData stackframe binds Stackframe.
+Inductive stackframe : Type :=
+| Stackframe:
+    forall (f: self__Lfam.func_ptr)(* calling function *)
+           (sp: val)(* stack pointer in calling function *)
+           (ls: self__Lfam.stack_state)(* location state in calling function *)
+           (bb: self__Lfam.code), (* program point in calling function *)
+      stackframe.
+FEnd stackframe.
+
+MetaData state binds State, Callstate, Returnstate.
+Inductive state: Type :=
+| State:
+    forall (stack: list self__Lfam.stackframe)(* call stack *)
+           (f: self__Lfam.func_ptr)(* function currently executing *)
+           (sp: val)(* stack pointer *)
+           (c: self__Lfam.code)(* current program point *)
+           (rs: self__Lfam.storeset)(* location state *)
+           (m: mem),(* memory state *)
+    state
+| Callstate:
+    forall (stack: list self__Lfam.stackframe)(* call stack *)
+           (f: self__Lfam.call_func_ptr)(* function to call *)
+           (rs: self__Lfam.storeset)(* location state at point of call *)
+           (m: mem),(* memory state *)
+    state
+| Returnstate:
+    forall (stack: list self__Lfam.stackframe)(* call stack *)
+           (rs: self__Lfam.storeset)(* location state at point of return *)
+           (m: mem),(* memory state *)
+    state.
+FEnd state.
+
+FRecursion is_label about instruction motive (fun (_ : instruction) => label -> bool) by _rect.
+Case Lop op arg dst := (fun lbl => false).
+(*Case Lgetstack s i t dst := (fun lbl => false). 
+Case Lsetstack d s i t := (fun lbl => false). *)
+Case Lcond c args l := (fun lbl => false). 
+Case Llabel lbl' := (fun lbl => if peq lbl lbl' then true else false).
+Case Lgoto lbl' := (fun lbl => false).
+Case Lreturn := (fun lbl => false). 
+FEnd is_label.
+
+MetaData find_label.
+Fixpoint find_label (lbl: self__Lfam.label) (c: self__Lfam.code) {struct c} : option self__Lfam.code :=
+  match c with
+  | nil => None
+  | i1 :: il => if self__Lfam.is_label i1 lbl then Some il else find_label lbl il
+  end.
+FEnd find_label.
+
+(* FDefinition parent_locset : list stackframe -> locset := fun stack => 
+  match stack with
+  | nil => Locmap.init Vundef
+  | self__Lfam.Stackframe f sp ls c :: stack' => ls
+  end. *)
+
+FOpaque Definition reglist : storeset -> list mreg -> list val := cheat.
+FOpaque Definition undef_regs : list mreg -> storeset -> storeset := cheat.
+FOpaque Definition set_storeset : mreg -> val -> storeset -> storeset := cheat.
+FOpaque Definition find_func_ptr : genv -> func_ptr -> option fundef := cheat. 
+
+FInductive step: genv -> state -> trace -> state -> Prop :=          
+| exec_Llabel:
+    forall ge s f sp lbl b rs m,
+    step ge (State s f sp (Llabel lbl :: b) rs m)
+      E0 (State s f sp b rs m)
+| exec_Lgoto:
+    forall ge s fb f sp lbl b rs m b',
+    find_func_ptr ge fb = Some (AST.Internal f) -> 
+    find_label lbl (function_code f) = Some b' ->
+    step ge (State s fb sp (Lgoto lbl :: b) rs m)
+      E0 (State s fb sp b' rs m)
+| exec_Lop:
+    forall ge s f sp op args res b rs m v rs',
+    eval_operation ge sp op (reglist rs args) m = Some v ->
+    rs' = set_storeset res v (undef_regs (destroyed_by_op op) rs) ->
+    step ge (State s f sp (Lop op args res :: b) rs m)
+      E0 (State s f sp b rs' m)
+| exec_Lcond_true:
+    forall ge s (fb: func_ptr) (f: function) sp cond args lbl b rs m rs' b',
+    eval_condition cond (reglist rs args) m = Some true ->
+    rs' = undef_regs (destroyed_by_cond cond) rs ->
+    find_func_ptr ge fb = Some (AST.Internal f) -> 
+    find_label lbl (function_code f) = Some b' ->
+    step ge (State s fb sp (Lcond cond args lbl :: b) rs m)
+      E0 (State s fb sp b' rs' m)
+| exec_Lcond_false:
+    forall ge s f sp cond args lbl b rs m rs',
+    eval_condition cond (reglist rs args) m = Some false ->
+    rs' = undef_regs (destroyed_by_cond cond) rs ->
+    step ge (State s f sp (Lcond cond args lbl :: b) rs m)
+      E0 (State s f sp b rs' m)
+| exec_return:
+      forall ge s f sp rs0 c rs m,
+      step ge (Returnstate (Stackframe f sp rs0 c :: s) rs m)
+        E0 (State s f sp c rs m).
 
 FEnd Lfam.
 
@@ -87,6 +195,102 @@ FOverride Definition function := fn.
 FOverride Definition function_sig := self__Linear.fn_sig.
 FOverride Definition function_stacksize := self__Linear.fn_stacksize.
 FOverride Definition function_code := self__Linear.fn_code.
+
+FOverride Definition storeset := Locmap.t.
+FOverride Definition func_ptr := function.
+FOverride Definition call_func_ptr := fundef.
+FOverride Definition stack_state := storeset.
+
+FRecursion is_label.
+Case Lgetstack s i t dst := (fun lbl => false).
+Case Lsetstack d s i t := (fun lbl => false).
+FEnd is_label.
+
+FDefinition locset := Locmap.t.
+FDefinition reglist' : locset -> list mreg -> list val := fun rs rl => 
+  List.map (fun r => rs (R r)) rl.
+MetaData undef_regs'.
+Fixpoint undef_regs' (rl: list mreg) (rs: locset) : locset :=
+  match rl with
+  | nil => rs
+  | r1 :: rl => Locmap.set (R r1) Vundef (undef_regs' rl rs)
+  end.
+FEnd undef_regs'.
+
+FOverride Definition reglist := reglist'.
+FOverride Definition undef_regs := undef_regs'.
+FOverride Definition set_storeset := fun dst => Locmap.set (R dst).
+FOverride Definition find_func_ptr := fun ge f => Some (AST.Internal f).
+
+FDefinition destroyed_by_getstack : slot -> list mreg := fun s => 
+  match s with
+  | Incoming => temp_for_parent_frame :: nil
+  | _ => nil
+  end.
+
+FDefinition parent_locset : list stackframe -> storeset := fun stack => 
+  match stack with
+  | nil => Locmap.init Vundef
+  | self__Linear.Stackframe f sp ls c :: stack' => ls
+  end.
+
+FDefinition call_regs : locset -> locset := fun caller => 
+  fun (l: loc) =>
+    match l with
+    | R r => caller (R r)
+    | S Local ofs ty => Vundef
+    | S Incoming ofs ty => caller (S Outgoing ofs ty)
+    | S Outgoing ofs ty => Vundef
+    end.
+
+FDefinition return_regs : locset -> locset -> locset := fun caller callee => 
+  fun (l: loc) =>
+    match l with
+    | R r => if is_callee_save r then caller (R r) else callee (R r)
+    | S Outgoing ofs ty => Vundef
+    | S sl ofs ty => caller (S sl ofs ty)
+    end.
+
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_Lgetstack:
+  forall ge s f sp sl ofs ty dst b rs m rs',
+    rs' = Locmap.set (R dst) (rs (S sl ofs ty)) (undef_regs (destroyed_by_getstack sl) rs) ->
+    step ge (State s f sp (Lgetstack sl ofs ty dst :: b) rs m)
+      E0 (State s f sp b rs' m)
+| exec_Lsetstack:
+  forall ge s f sp src sl ofs ty b rs m rs',
+    rs' = Locmap.set (S sl ofs ty) (rs (R src)) (undef_regs (destroyed_by_setstack ty) rs) ->
+    step ge (State s f sp (Lsetstack src sl ofs ty :: b) rs m)
+      E0 (State s f sp b rs' m)
+| exec_function_internal:
+    forall ge s f rs m rs' m' stk,
+    Mem.alloc m 0 (function_stacksize f) = (m', stk) ->
+    rs' = undef_regs destroyed_at_function_entry (call_regs rs) ->
+    step ge (Callstate s (AST.Internal f) rs m)
+      E0 (State s f (Vptr stk Ptrofs.zero) (function_code f) rs' m')
+| exec_Lreturn:
+      forall ge s f stk b rs m m',
+      Mem.free m stk 0 (function_stacksize f) = Some m' ->
+      step ge (State s f (Vptr stk Ptrofs.zero) (Lreturn :: b) rs m)
+        E0 (Returnstate s (return_regs (parent_locset s) rs) m').
+
+MetaData initial_state.
+Inductive initial_state (p: program): state -> Prop :=
+| initial_state_intro: forall b f m0,
+    let ge := Genv.globalenv p in
+    Genv.init_mem p = Some m0 ->
+    Genv.find_symbol ge p.(AST.prog_main) = Some b ->
+    Genv.find_funct_ptr ge b = Some f ->
+    self__Linear.funsig f = signature_main ->
+    initial_state p (Callstate nil f (Locmap.init Vundef) m0).
+FEnd initial_state.
+
+MetaData final_state.
+Inductive final_state: state -> int -> Prop :=
+| final_state_intro: forall rs m retcode,
+    Locmap.getpair (map_rpair R (loc_result signature_main)) rs = Vint retcode ->
+    final_state (Returnstate nil rs m) retcode.
+FEnd final_state.
 
 FEnd Linear.
 
@@ -114,6 +318,104 @@ FOverride Definition function_stacksize := self__Mach.fn_stacksize.
 FOverride Definition function_code := self__Mach.fn_code.
 
 From NFPOP Require Import Mregisters.
+
+FOverride Definition storeset := Regmap.t val.
+FOverride Definition func_ptr := block.
+FOverride Definition call_func_ptr := block.
+(* Asm return address in calling function *)
+FOverride Definition stack_state := val.
+
+FRecursion is_label.
+Case Lgetstack ptr t dst := (fun lbl => false).
+Case Lsetstack ptr i dst := (fun lbl => false).
+Case Lgetparam ptr i dst := (fun lbl => false).
+FEnd is_label.
+
+FDefinition load_stack := fun (m: mem) (sp: val) (ty: typ) (ofs: ptrofs) =>
+  Mem.loadv (chunk_of_type ty) m (Val.offset_ptr sp ofs).
+
+FDefinition store_stack := fun (m: mem) (sp: val) (ty: typ) (ofs: ptrofs) (v: val) =>
+  Mem.storev (chunk_of_type ty) m (Val.offset_ptr sp ofs) v.
+
+FOverride Definition reglist := fun a b => a ## b.
+MetaData undef_regs_.
+Fixpoint undef_regs_ (rl: list mreg) (rs: self__Mach.storeset) {struct rl} : self__Mach.storeset :=
+  match rl with
+  | nil => rs
+  | r1 :: rl' => Regmap.set r1 Vundef (undef_regs_ rl' rs)
+  end.
+FEnd undef_regs_.
+FOverride Definition undef_regs := undef_regs_.
+FOverride Definition set_storeset := fun b c a => a # b <- c.
+FOverride Definition find_func_ptr := fun ge fb => Genv.find_funct_ptr ge fb.
+
+FDefinition parent_sp := fun (s: list stackframe) =>
+  match s with
+  | nil => Vnullptr
+  | self__Mach.Stackframe f sp ra c :: s' => sp
+  end.
+
+FDefinition parent_ra := fun (s: list stackframe) =>
+  match s with
+  | nil => Vnullptr
+  | self__Mach.Stackframe f sp ra c :: s' => ra
+  end.
+
+FInductive step: genv -> state -> trace -> state -> Prop :=
+| exec_Lgetstack:
+      forall ge s f sp ofs ty dst c rs m v,
+      load_stack m sp ty ofs = Some v ->
+      step ge (self__Mach.State s f sp (Lgetstack ofs ty dst :: c) rs m)
+        E0 (self__Mach.State s f sp c (rs#dst <- v) m)
+| exec_Lsetstack:
+      forall ge s f sp src ofs ty c rs m m' rs',
+      store_stack m sp ty ofs (rs src) = Some m' ->
+      rs' = undef_regs (destroyed_by_setstack ty) rs ->
+      step ge (self__Mach.State s f sp (Lsetstack src ofs ty :: c) rs m)
+        E0 (self__Mach.State s f sp c rs' m')
+| exec_Lgetparam:
+      forall ge s fb f sp ofs ty dst c rs m v rs',
+      Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
+      load_stack m sp Tptr f.(self__Mach.fn_link_ofs) = Some (parent_sp s) ->
+      load_stack m (parent_sp s) ty ofs = Some v ->
+      rs' = (rs # temp_for_parent_frame <- Vundef # dst <- v) ->
+      step ge (self__Mach.State s fb sp (Lgetparam ofs ty dst :: c) rs m)
+        E0 (self__Mach.State s fb sp c rs' m)
+| exec_function_internal:
+      forall ge s fb rs m f m1 m2 m3 stk rs',
+      Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
+      Mem.alloc m 0 f.(self__Mach.fn_stacksize) = (m1, stk) ->
+      let sp := Vptr stk Ptrofs.zero in
+      store_stack m1 sp Tptr f.(self__Mach.fn_link_ofs) (parent_sp s) = Some m2 ->
+      store_stack m2 sp Tptr f.(self__Mach.fn_retaddr_ofs) (parent_ra s) = Some m3 ->
+      rs' = undef_regs destroyed_at_function_entry rs ->
+      step ge (self__Mach.Callstate s fb rs m)
+        E0 (self__Mach.State s fb sp f.(self__Mach.fn_code) rs' m3)
+| exec_Lreturn:
+      forall ge s fb stk soff c rs m f m',
+      Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
+      load_stack m (Vptr stk soff) Tptr f.(self__Mach.fn_link_ofs) = Some (parent_sp s) ->
+      load_stack m (Vptr stk soff) Tptr f.(self__Mach.fn_retaddr_ofs) = Some (parent_ra s) ->
+      Mem.free m stk 0 f.(self__Mach.fn_stacksize) = Some m' ->
+      step ge (self__Mach.State s fb (Vptr stk soff) (Lreturn :: c) rs m)
+        E0 (self__Mach.Returnstate s rs m').
+
+MetaData initial_state.
+Inductive initial_state (p: self__Mach.program): self__Mach.state -> Prop :=
+  | initial_state_intro: forall fb m0,
+      let ge := Genv.globalenv p in
+      Genv.init_mem p = Some m0 ->
+      Genv.find_symbol ge p.(AST.prog_main) = Some fb ->
+      initial_state p (self__Mach.Callstate nil fb (Regmap.init Vundef) m0).
+FEnd initial_state.
+
+MetaData final_state.
+Inductive final_state: self__Mach.state -> int -> Prop :=
+  | final_state_intro: forall rs m r retcode,
+      loc_result signature_main = AST.One r ->
+      rs r = Vint retcode ->
+      final_state (self__Mach.Returnstate nil rs m) retcode.
+FEnd final_state.
 
 FEnd Mach.
    
@@ -289,6 +591,207 @@ FDefinition transf_fundef : S.fundef -> res T.fundef := fun f =>
 
 FDefinition transf_program : S.program -> res T.program := fun p =>
   transform_partial_program transf_fundef p.
+
+From Rocqet Require Import Separation Conventions.
+Local Open Scope sep_scope.
+
+FDefinition match_prog := fun (p: S.program) (tp: T.program) =>
+  match_program (fun _ f tf => transf_fundef f = OK tf) eq p tp.
+
+MetaData agree_locs.
+Record agree_locs (f: S.function) (ls ls0: S.locset) : Prop :=
+  mk_agree_locs {
+    agree_unused_reg:
+      forall r,
+        let b := function_bounds f in
+        ~(mreg_within_bounds b r) -> ls (R r) = ls0 (R r);
+    agree_incoming:
+       forall ofs ty,
+       In (S Incoming ofs ty) (regs_of_rpairs (loc_parameters f.(S.fn_sig))) ->
+       ls (S Incoming ofs ty) = ls0 (S Outgoing ofs ty)
+}.
+FEnd agree_locs.
+
+(*
+Variable prog: Linear.program.
+Variable tprog: Mach.program.
+Hypothesis TRANSF: match_prog prog tprog.
+Let ge := Genv.globalenv prog.
+Let tge := Genv.globalenv tprog.
+*)
+MetaData match_stacks.
+Inductive match_stacks (ge: S.genv) (tge: T.genv) (j: meminj):
+       list S.stackframe -> list T.stackframe -> signature -> Prop :=
+  | match_stacks_empty: forall sg,
+      tailcall_possible sg ->
+      match_stacks ge tge j nil nil sg
+  | match_stacks_cons: forall f sp ls c cs fb sp' ra c' cs' sg trf
+        (TAIL: is_tail c (S.fn_code f))
+        (FINDF: Genv.find_funct_ptr tge fb = Some (AST.Internal trf))
+        (TRF: transf_function f = OK trf)
+        (TRC: transl_code (make_env (function_bounds f)) c = c')
+        (INJ: j sp = Some(sp', (fe_stack_data (make_env (function_bounds f)))))
+        (TY_RA: Val.has_type ra Tptr)
+        (AGL: agree_locs f ls (S.parent_locset cs))
+        (ARGS: forall ofs ty,
+           In (S Outgoing ofs ty) (regs_of_rpairs (loc_arguments sg)) ->
+           slot_within_bounds (function_bounds f) Outgoing ofs ty)
+        (STK: match_stacks ge tge j cs cs' (S.fn_sig f)),
+      match_stacks ge tge j
+                   (S.Stackframe f (Vptr sp Ptrofs.zero) ls c :: cs)
+                   (T.Stackframe fb (Vptr sp' Ptrofs.zero) ra c' :: cs')
+                   sg.
+FEnd match_stacks.
+
+FDefinition agree_regs := fun (j: meminj) (ls: S.storeset) (rs: T.storeset) =>
+  forall r, Val.inject j (ls (R r)) (rs r).
+
+FLemma size_type_chunk:
+  forall ty, size_chunk (chunk_of_type ty) = AST.typesize ty.
+FProofLemma.
+  destruct ty; reflexivity.
+Qed. CloseFLemma.
+
+FLemma typesize_typesize:
+  forall ty, AST.typesize ty = 4 * Locations.typesize ty.
+FProofLemma.
+  destruct ty; auto.
+Qed. CloseFLemma.
+
+MetaData contains_locations.
+Program Definition contains_locations (j: meminj) (sp: block) (pos bound: Z) (sl: slot) (ls: S.locset) : massert := {|
+  m_pred := fun m =>
+    (8 | pos) /\ 0 <= pos /\ pos + 4 * bound <= Ptrofs.modulus /\
+    Mem.range_perm m sp pos (pos + 4 * bound) Cur Freeable /\
+    forall ofs ty, 0 <= ofs -> ofs + typesize ty <= bound -> (typealign ty | ofs) ->
+    exists v, Mem.load (chunk_of_type ty) m sp (pos + 4 * ofs) = Some v
+           /\ Val.inject j (ls (S sl ofs ty)) v;
+  m_footprint := fun b ofs =>
+    b = sp /\ pos <= ofs < pos + 4 * bound
+|}.
+Next Obligation.
+intuition auto.
+- red; intros. eapply Mem.perm_unchanged_on; eauto. simpl; auto.
+- exploit H4; eauto. intros (v & A & B). exists v; split; auto.
+  eapply Mem.load_unchanged_on; eauto.
+  simpl; intros. rewrite size_type_chunk, typesize_typesize in H8.
+  split; auto. apply cheat. (*lia.  *)
+Qed.
+Next Obligation.
+  eauto with mem.
+Qed.
+FEnd contains_locations.
+
+MetaData contains_callee_saves.
+Fixpoint contains_callee_saves (j: meminj) (sp: block) (pos: Z) (rl: list mreg) (ls: S.locset) : massert :=
+  match rl with
+  | nil => pure True
+  | r :: rl =>
+      let ty := mreg_type r in
+      let sz := AST.typesize ty in
+      let pos1 := align pos sz in
+      contains (chunk_of_type ty) sp pos1 (fun v => Val.inject j (ls (R r)) v)
+      ** contains_callee_saves j sp (pos1 + sz) rl ls
+  end.
+FEnd contains_callee_saves.
+
+(* Variable f: Linear.function.
+Let b := function_bounds f.
+Let fe := make_env b. *)
+FDefinition frame_contents_1 := fun (f: S.function) (j: meminj) (sp: block) (ls ls0: S.locset) (parent retaddr: val) =>
+     let b := function_bounds f in
+     let fe := make_env b in 
+    contains_locations j sp fe.(fe_ofs_local) b.(bound_local) Local ls
+ ** contains_locations j sp fe_ofs_arg b.(bound_outgoing) Outgoing ls
+ ** hasvalue Mptr sp fe.(fe_ofs_link) parent
+ ** hasvalue Mptr sp fe.(fe_ofs_retaddr) retaddr
+ ** contains_callee_saves j sp fe.(fe_ofs_callee_save) b.(used_callee_save) ls0.
+
+FDefinition frame_contents := fun (f: S.function) (j: meminj) (sp: block) (ls ls0: S.locset) (parent retaddr: val) =>
+  let b := function_bounds f in
+  let fe := make_env b in                                 
+  mconj (frame_contents_1 f j sp ls ls0 parent retaddr)
+        (range sp 0 fe.(fe_stack_data) **
+         range sp (fe.(fe_stack_data) + b.(bound_stack_data)) fe.(fe_size)).
+
+MetaData stack_contents.
+Fixpoint stack_contents (j: meminj) (cs: list S.stackframe) (cs': list T.stackframe) : massert :=
+  match cs, cs' with
+  | nil, nil => pure True
+  | self__Stacking.S.Stackframe f _ ls c :: cs, T.Stackframe fb (Vptr sp' _) ra c' :: cs' =>
+      frame_contents f j sp' ls (S.parent_locset cs) (T.parent_sp cs') (T.parent_ra cs')
+      ** stack_contents j cs cs'
+  | _, _ => pure False
+  end.
+FEnd stack_contents.
+
+MetaData match_states.
+Inductive match_states (ge: S.genv) (tge: T.genv): S.state -> T.state -> Prop :=
+  | match_states_intro:
+      forall cs f sp c ls m cs' fb sp' rs m' j tf
+        (STACKS: match_stacks ge tge j cs cs' (S.fn_sig f))
+        (TRANSL: transf_function f = OK tf)
+        (FIND: Genv.find_funct_ptr tge fb = Some (AST.Internal tf))
+        (AGREGS: agree_regs j ls rs)
+        (AGLOCS: agree_locs f ls (S.parent_locset cs))
+        (INJSP: j sp = Some(sp', fe_stack_data (make_env (function_bounds f))))
+        (TAIL: is_tail c (S.fn_code f))
+        (SEP: m' |= frame_contents f j sp' ls (S.parent_locset cs) (T.parent_sp cs') (T.parent_ra cs')
+                 ** stack_contents j cs cs'
+                 ** minjection j m
+                 ** globalenv_inject ge j),
+      match_states ge tge (S.State cs f (Vptr sp Ptrofs.zero) c ls m)
+                   (T.State cs' fb (Vptr sp' Ptrofs.zero) (transl_code (make_env (function_bounds f)) c) rs m')
+  | match_states_call:
+      forall cs f ls m cs' fb rs m' j tf
+        (STACKS: match_stacks ge tge j cs cs' (S.funsig f))
+        (TRANSL: transf_fundef f = OK tf)
+        (FIND: Genv.find_funct_ptr tge fb = Some tf)
+        (AGREGS: agree_regs j ls rs)
+        (SEP: m' |= stack_contents j cs cs'
+                 ** minjection j m
+                 ** globalenv_inject ge j),
+      match_states ge tge (S.Callstate cs f ls m)
+                   (T.Callstate cs' fb rs m')
+  | match_states_return:
+      forall cs ls m cs' rs m' j sg
+        (STACKS: match_stacks ge tge j cs cs' sg)
+        (AGREGS: agree_regs j ls rs)
+        (SEP: m' |= stack_contents j cs cs'
+                 ** minjection j m
+                 ** globalenv_inject ge j),
+      match_states ge tge (S.Returnstate cs ls m)
+                  (T.Returnstate cs' rs m').
+FEnd match_states.
+
+FInduction transf_step_correct about S.step motive
+  (fun ge s1 t s2 (_ : S.step ge s1 t s2) =>
+     forall tge prog tprog (TRANSF: match_prog prog tprog),
+     ge = Genv.globalenv prog -> tge = Genv.globalenv tprog ->
+     forall (*(WTS: wt_state s1)*) s1' (MS: match_states ge tge s1 s1'),
+     exists s2', plus T.step tge s1' t s2' /\ match_states ge tge s2 s2').
+FProof.
+(* Llabel *)
++ apply cheat.
+(* Lgoto *)
++ apply cheat.
+(* Lop *)   
++ apply cheat.
+(* Lcond true *)  
++ apply cheat.
+(* Lcond false *)  
++ apply cheat.
+(* return *)  
++ apply cheat.
+(* Lgetstack *)  
++ apply cheat.
+(* Lsetstack *)  
++ apply cheat.
+(* internal function *)  
++ apply cheat.
+(* Lreturn *)  
++ apply cheat.
+Qed. FEnd transf_step_correct.
 
 FEnd Stacking.
 

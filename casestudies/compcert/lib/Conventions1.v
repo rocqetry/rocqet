@@ -319,8 +319,8 @@ Definition fixed_arguments (s: signature) : Z :=
 (** [loc_arguments s] returns the list of locations where to store arguments
   when calling a function with signature [s].  *)
 
-(*Definition loc_arguments (s: signature) : list (rpair loc) :=
-  loc_arguments_rec (AST.proj_sig_args s) (fixed_arguments s) 0 0 0. *)
+Definition loc_arguments (s: signature) : list (rpair loc) :=
+  loc_arguments_rec (AST.proj_sig_args s) (fixed_arguments s) 0 0 0.
 
 (** Argument locations are either non-temporary registers or [Outgoing]
   stack slots at nonnegative offsets. *)
@@ -417,12 +417,12 @@ Proof.
 + (* any64 *) apply B; unfold OKF; auto.
 Qed.
 
-(*Lemma loc_arguments_acceptable:
+Lemma loc_arguments_acceptable:
   forall (s: signature) (p: rpair loc),
   In p (loc_arguments s) -> forall_rpair loc_argument_acceptable p.
 Proof.
   unfold loc_arguments; intros. eapply loc_arguments_rec_charact; eauto. lia.
-Qed.*)
+Qed.
 
 (*Lemma loc_arguments_main:
   loc_arguments signature_main = nil.

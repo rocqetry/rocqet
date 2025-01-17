@@ -148,7 +148,9 @@ Record signature : Type := mksignature {
   sig_cc: calling_convention
 }.
 
+Definition proj_sig_args (s: signature) : list typ := s.(sig_args).
 Definition proj_sig_res (s: signature) : typ := proj_rettype s.(sig_res).
+
 
 Definition signature_eq: forall (s1 s2: signature), {s1=s2} + {s1<>s2}.
 Proof.

@@ -40,6 +40,7 @@
    lib/Machregs
    lib/Locations
    lib/Conventions1
+   lib/Conventions
    lib/Mregisters
    lib/RTLmonad
    lib/Heaps
