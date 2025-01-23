@@ -1436,6 +1436,16 @@ Closing Fact evar_injective : forall a b,
     S.Evar a = S.Evar b -> a = b
    by plain { intros until b; intros H; injection H; eauto }.
 
+FLemma add_move_charact:
+  forall s ns rs nd rd s' i,
+  add_move rs rd nd s = OK ns s' i ->
+  tr_move s'.(st_code T.instruction) ns rs nd rd.
+FProofLemma.
+  intros. unfold add_move in H. destruct (Reg.eq rs rd).
+  inv H. constructor.
+  constructor. eauto with rtlg.
+Qed. CloseFLemma.
+
 FInduction transl_expr_charact about S.expr
   motive (fun (a : S.expr) =>
      forall map rd nd s ns s' pr INCR
@@ -1469,10 +1479,10 @@ all : intros; fsimpl in TR; try (monadInv TR); saturateTrans.
 + generalize EQ; unfold find_var. caseEq (map_vars map)!i; intros; inv EQ1.
   fconstructor. 
   inv OK. apply evar_injective in H0; unpack; subst.
-  left; split; congruence.
-  (* I thikn we need eletvar _injective here *)
-  right; eauto with rtlg.
-  eapply add_move_charact; eauto.
+   - left; split; congruence.
+   - apply cheat. (* fdiscriminate: Eletvar x0 = Evar x1 *)
+   - right; eauto with rtlg.
+   - eapply add_move_charact; eauto.
 (* Econdition *)  
 + apply cheat.
 (* Eop *)  
