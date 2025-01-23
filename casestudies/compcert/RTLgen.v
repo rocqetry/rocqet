@@ -868,6 +868,10 @@ FDefinition transl_program : S.program -> Errors.res T.program :=
   fun (p: S.program) =>
      transform_partial_program transl_fundef p.                 
 
+MetaData _state_incr_refl.
+Global Hint Resolve state_incr_refl: rtlg.
+FEnd  _state_incr_refl.
+
 (* Monotonicity property of the state *)
 FLemma instr_at_incr:
   forall s1 s2 n i,
@@ -1559,7 +1563,15 @@ all : intros; fsimpl in TR; try (monadInv TR); saturateTrans.
     apply tr_expr_incr with s0; auto.
     eapply H1; eauto 2 with rtlg. constructor; auto.
 (* Eop *)  
-+  apply cheat.
++ inv OK.
+  - apply cheat. (* fdiscriminate: S.Evar id = S.Eop __i __i0 __i1 *)
+  - apply cheat. (* fdiscriminate: S.Eletvar idx = S.Eop __i __i0 __i1 *)
+  - fconstructor; eauto with rtlg.
+    eapply H; info_eauto with rtlg. eapply alloc_regs_target_ok; eauto with rtlg.
+    simple eapply regs_valid_incr. exact INCR2. 
+    simple eapply regs_valid_incr.
+   simple apply (state_incr_refl T.instruction).
+   simple eapply alloc_regs_valid. exact WF. exact EQ.
 (* Elet *)   
 + apply cheat.
 (* Eletvar *)  
