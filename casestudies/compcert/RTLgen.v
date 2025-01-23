@@ -1105,6 +1105,22 @@ induction namel; simpl; intros; monadInv H.
   auto.
 Qed. CloseFLemma.
 
+(* properties of add_var *)
+
+(* properties of add_letvar *)
+FLemma add_letvar_valid:
+  forall map s r,
+  map_valid map s ->
+  reg_valid r s ->
+  map_valid (add_letvar map r) s.
+FProofLemma.
+  intros; red; intros.
+  destruct H1 as [[id A]|B].
+  simpl in A. apply H. left; exists id; auto.
+  simpl in B. elim B; intro.
+  subst r0; auto. apply H. right; auto.
+Qed. CloseFLemma.
+
 (* Properties of alloc_reg and alloc_regs *)
 
 FInduction alloc_reg_valid about S.expr
@@ -1573,7 +1589,20 @@ all : intros; fsimpl in TR; try (monadInv TR); saturateTrans.
    simple apply (state_incr_refl T.instruction).
    simple eapply alloc_regs_valid. exact WF. exact EQ.
 (* Elet *)   
-+ apply cheat.
++  inv OK.
+   - apply cheat.
+   - apply cheat.
+   - eapply tr_Elet. eapply new_reg_not_in_map; eauto with rtlg.
+  eapply H; eauto 3 with rtlg.
+  apply tr_expr_incr with s1; auto.
+  eapply H0. eauto.
+  apply add_letvar_valid; eauto with rtlg.
+  constructor; auto.
+  red; unfold reg_in_map. simpl. intros [[id A] | [B | C]].
+  elim H1. left; exists id; auto.
+  subst x. apply valid_fresh_absurd with rd s. auto. eauto with rtlg.
+  elim H1. right; auto.
+  eauto with rtlg. eauto with rtlg.
 (* Eletvar *)  
 + apply cheat.
 (* Enil *)  
