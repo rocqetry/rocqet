@@ -1618,8 +1618,9 @@ all : intros; fsimpl in TR; try (monadInv TR); saturateTrans.
     - right; eauto with rtlg.
     - eapply add_move_charact; eauto.
     - monadInv EQ1.
+
 (* Enil *)  
-+ apply cheat.
++ destruct rl; inv TR. fconstructor. 
 (* Econs *)  
 + apply cheat.
 (* CEcond *)  
