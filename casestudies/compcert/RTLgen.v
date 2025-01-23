@@ -2833,14 +2833,28 @@ FInductive tr_stmt : T.code -> mapping -> S.stmt -> T.node -> T.node -> list T.n
      nth_error nexits n = Some ns ->
      tr_stmt c map (S.Sexit n) ns nd nexits ngoto nret rret.
 
+FLemma transl_exit_charact:
+  forall nexits n s ne s' incr,
+  transl_exit nexits n s = OK ne s' incr ->
+  nth_error nexits n = Some ne /\ s' = s.
+FProofLemma.
+  intros until incr. unfold transl_exit.
+  destruct (nth_error nexits n); intro; monadInv H. auto.
+Qed. CloseFLemma.
+
 FInduction transl_stmt_charact.
 FProof.
+all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
 (* Sblock *)
-+ apply cheat.
++ fconstructor; eapply H; eauto with rtlg.
 (* Sexit *)
-+ apply cheat.
++ exploit transl_exit_charact; eauto. intros [A B].
+  fconstructor.
 (* Sloop *)
-+ apply cheat.
++ fconstructor.
+  apply tr_stmt_incr with s1; auto.
+  eapply H; eauto with rtlg.
+  eauto with rtlg. eauto with rtlg.
 Qed. FEnd transl_stmt_charact.
 
 FInductive tr_cont: T.code -> mapping ->
