@@ -1740,7 +1740,11 @@ all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
   constructor. auto. simpl; tauto.
   monadInv TR. fconstructor.
 (* Slabel *)  
-+ apply cheat.
++ generalize EQ0; clear EQ0. case_eq (ngoto!l); intros; monadInv EQ0.
+  generalize EQ1; clear EQ1. unfold handle_error.
+  case_eq (update_instr n (T.Inop ns) s0); intros; inv EQ1.
+  fconstructor. eauto. eauto with rtlg.
+  eapply tr_stmt_incr with s0; eauto with rtlg.
 (* Sgoto *)  
 + apply cheat.
 (* Sifthenelse *)  
