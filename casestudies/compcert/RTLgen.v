@@ -1661,9 +1661,12 @@ FInduction transl_expr_assign_charact about S.expr
      (WF: map_valid map s)
      (OK: reg_map_ok map rd (Some id)),
    tr_expr s'.(st_code T.instruction) map nil a ns nd rd (Some id)).
-FProof. 
+FProof.
+all : intros; fsimpl in TR; monadInv TR; saturateTrans. 
 (* Evar *)
-+ apply cheat.
++ generalize EQ; unfold find_var. caseEq (map_vars map)!i; intros; inv EQ1.
+  fconstructor; eauto.
+  eapply add_move_charact; eauto.
 (* Econdition *)  
 + apply cheat.
 (* Eop *)  
