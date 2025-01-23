@@ -1695,6 +1695,22 @@ all : intros; fsimpl in TR; monadInv TR; saturateTrans.
   monadInv EQ1.
 Qed. FEnd transl_expr_assign_charact.
 
+MetaData tr_stmt_incr.
+(* TODO *)
+Lemma tr_stmt_incr:
+  forall s1 s2, state_incr s1 s2 ->
+  forall map s ns nd nexits ngoto nret rret,
+  tr_stmt s1.(st_code T.instruction) map s ns nd nexits ngoto nret rret ->
+  tr_stmt s2.(st_code T.instruction) map s ns nd nexits ngoto nret rret.
+Proof.
+  apply cheat.
+  (*intros s1 s2 EXT.
+  generalize tr_expr_incr tr_condition_incr tr_exprlist_incr tr_exitexpr_incr; intros I1 I2 I3 I4.
+  pose (AT := fun pc i => instr_at_incr s1 s2 pc i EXT).
+  induction 1; econstructor; eauto.*)
+Qed.
+FEnd tr_stmt_incr.
+
 FInduction transl_stmt_charact about S.stmt
   motive (fun (stmt : S.stmt) =>
    forall map nd nexits ngoto nret rret s ns s' INCR
@@ -1712,7 +1728,10 @@ all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
   eapply transl_expr_assign_charact; eauto with rtlg.
   constructor. auto.
 (* Sseq *)  
-+ apply cheat.
++ fconstructor.
+  apply tr_stmt_incr with s0; auto.
+  eapply H0; eauto with rtlg.
+  eapply H; eauto with rtlg.
 (* Sreturn *)  
 + apply cheat.
 (* Slabel *)  
