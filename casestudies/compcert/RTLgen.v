@@ -556,13 +556,13 @@ FEnd monadInv.
 MetaData saturateTrans.
 Ltac saturateTrans :=
   match goal with
-  | H1: state_incr ?x ?y, H2: state_incr ?y ?z |- _ =>
+  | H1: RTLmonad.state_incr T.instruction ?x ?y, H2: RTLmonad.state_incr T.instruction ?y ?z |- _ =>
       match goal with
-      | H: state_incr x z |- _ =>
+      | H: RTLmonad.state_incr T.instruction x z |- _ =>
          fail 1
       | _ =>
          let i := fresh "INCR" in
-         (generalize (state_incr_trans x y z H1 H2); intro i;
+         (generalize (state_incr_trans T.instruction x y z H1 H2); intro i;
           saturateTrans)
       end
   | _ => idtac
@@ -1642,7 +1642,11 @@ all : intros; fsimpl in TR; try (monadInv TR); saturateTrans.
    simple eapply regs_valid_incr. exact INCR2.
    simple eapply alloc_regs_valid. exact WF. exact EQ.
 (* CEcondition *)  
-+ apply cheat.
++  saturateTrans. fconstructor. simple eapply H. exact EQ2. 
+  simple eapply map_valid_incr. exact INCR4. exact WF.
+  simple eapply regs_valid_incr. exact INCR4. exact VALID.  
+  apply tr_condition_incr with s1; eauto with rtlg.  
+  apply tr_condition_incr with s0; eauto with rtlg.
 (* CElet *)  
 + apply cheat.
 
