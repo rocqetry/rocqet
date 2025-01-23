@@ -1460,6 +1460,10 @@ Closing Fact Eletvar_injective : forall a b,
   S.Eletvar a = S.Eletvar b -> a = b
    by plain { intros until b; intros H; injection H; eauto }.
 
+Closing Fact Econs_injective : forall a al b bl, 
+  S.Econs a al = S.Econs b bl -> a = b /\ al = bl
+ by plain { intros until bl; intros H; injection H; eauto }.
+
 FLemma add_move_charact:
   forall s ns rs nd rd s' i,
   add_move rs rd nd s = OK ns s' i ->
@@ -1622,7 +1626,16 @@ all : intros; fsimpl in TR; try (monadInv TR); saturateTrans.
 (* Enil *)  
 + destruct rl; inv TR. fconstructor. 
 (* Econs *)  
-+ apply cheat.
++ destruct rl; simpl in TR; monadInv TR. inv OK.
+  apply Econs_injective in H1; unpack H1; subst.
+  fconstructor.
+  eapply H; eauto with rtlg.
+  generalize (VALID2 r (in_eq _ _)). eauto with rtlg.
+  apply tr_exprlist_incr with s0; auto.
+  eapply H0; eauto with rtlg.
+  apply regs_valid_cons. apply VALID2. auto with coqlib. auto.
+  red; intros; apply VALID2; auto with coqlib.
+ 
 (* CEcond *)  
 + apply cheat.
 (* CEcondition *)  
