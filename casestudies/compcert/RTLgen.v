@@ -1675,7 +1675,11 @@ all : intros; fsimpl in TR; monadInv TR; saturateTrans.
   apply tr_expr_incr with s0; auto.
   eapply H0; eauto 2 with rtlg.
 (* Eop *)  
-+  apply cheat.
++ fconstructor; eauto with rtlg.
+  eapply transl_exprlist_charact; eauto with rtlg.  
+  eapply alloc_regs_target_ok; eauto with rtlg.
+  simple eapply regs_valid_incr. exact INCR2. 
+  simple eapply alloc_regs_valid. exact WF. exact EQ.
 (* Elet *)   
 + apply cheat.
 (* Eletvar *)  
