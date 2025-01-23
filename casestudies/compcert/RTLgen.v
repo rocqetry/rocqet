@@ -1688,7 +1688,11 @@ all : intros; fsimpl in TR; monadInv TR; saturateTrans.
   apply add_letvar_valid; eauto with rtlg.
   inv OK. constructor. auto.
 (* Eletvar *)  
-+ apply cheat.
++ generalize EQ; unfold find_letvar. caseEq (nth_error (map_letvars map) n); intros; inv EQ0.
+  monadInv EQ1.
+  fconstructor; eauto with rtlg.
+  eapply add_move_charact; eauto.
+  monadInv EQ1.
 Qed. FEnd transl_expr_assign_charact.
 
 FInduction transl_stmt_charact about S.stmt
