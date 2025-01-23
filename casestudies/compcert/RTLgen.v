@@ -1446,6 +1446,71 @@ FProofLemma.
   constructor. eauto with rtlg.
 Qed. CloseFLemma.
 
+FLemma tr_move_incr:
+  forall s1 s2, state_incr s1 s2 ->
+  forall ns rs nd rd,
+  tr_move s1.(st_code T.instruction) ns rs nd rd ->
+  tr_move s2.(st_code T.instruction) ns rs nd rd.
+FProofLemma.
+  induction 2; econstructor; eauto with rtlg.
+Qed. CloseFLemma.
+
+MetaData exprs_incr binds tr_expr_incr, tr_condition_incr, tr_exprlist_incr.
+
+(* TODO : *)
+Lemma tr_expr_incr:
+  forall s1 s2, state_incr s1 s2 ->
+  forall map pr a ns nd rd dst,
+  tr_expr s1.(st_code T.instruction) map pr a ns nd rd dst ->
+  tr_expr s2.(st_code T.instruction) map pr a ns nd rd dst.
+Proof. apply cheat. Qed.
+
+Lemma tr_condition_incr:
+  forall s1 s2, state_incr s1 s2 ->
+  forall map pr a ns ntrue nfalse,
+  tr_condition s1.(st_code T.instruction) map pr a ns ntrue nfalse ->
+  tr_condition s2.(st_code T.instruction) map pr a ns ntrue nfalse.
+Proof. apply cheat. Qed.
+
+Lemma tr_exprlist_incr:
+  forall s1 s2, state_incr s1 s2 ->
+  forall map pr al ns nd rl,
+  tr_exprlist s1.(st_code T.instruction) map pr al ns nd rl ->
+  tr_exprlist s2.(st_code T.instruction) map pr al ns nd rl.
+Proof. apply cheat. Qed.
+
+FEnd exprs_incr.
+
+(*FInduction tr_expr_incr about tr_expr 
+  motive (fun c m l e n n0 r o (_ : tr_expr c m l e n n0 r o) => 
+    forall s1 s2, 
+    state_incr s1 s2 -> 
+    c = s1.(st_code T.instruction) ->
+    tr_expr s2.(st_code T.instruction) m l e n n0 r o)
+
+with tr_condition_incr about tr_condition
+  motive (fun c map pr a ns ntrue nfalse
+  (_ : tr_condition c map pr a ns ntrue nfalse) => 
+  forall s1 s2 (_ : state_incr s1 s2), c = s1.(st_code T.instruction) ->
+    tr_condition s2.(st_code T.instruction) map pr a ns ntrue nfalse)
+
+with tr_exprlist_incr about tr_exprlist 
+  motive (fun c map pr al ns nd rl (_ : tr_exprlist c map pr al ns nd rl) => 
+  forall s1 s2 (_ : state_incr s1 s2), c = s1.(st_code T.instruction) -> 
+  tr_exprlist s2.(st_code T.instruction) map pr al ns nd rl).
+FProof.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
++ apply cheat.
+Qed. FEnd tr_expr_incr with tr_condition_incr with tr_exprlist_incr. *)
+
 FInduction transl_expr_charact about S.expr
   motive (fun (a : S.expr) =>
      forall map rd nd s ns s' pr INCR
@@ -1484,7 +1549,15 @@ all : intros; fsimpl in TR; try (monadInv TR); saturateTrans.
    - right; eauto with rtlg.
    - eapply add_move_charact; eauto.
 (* Econdition *)  
-+ apply cheat.
++ inv OK.
+  - apply cheat. (* fdiscriminate: S.Evar id = S.Econdition __i __i0 __i1 *)
+  - apply cheat. (* fdiscriminate: S.Eletvar idx = S.Econdition __i __i0 __i1 *)
+  - fconstructor. 
+    simple eapply H; eauto with rtlg.
+    apply tr_expr_incr with s1; auto.
+    eapply H0; eauto 2 with rtlg. constructor; auto.
+    apply tr_expr_incr with s0; auto.
+    eapply H1; eauto 2 with rtlg. constructor; auto.
 (* Eop *)  
 +  apply cheat.
 (* Elet *)   
