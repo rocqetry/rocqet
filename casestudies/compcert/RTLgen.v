@@ -1456,6 +1456,10 @@ Closing Fact evar_injective : forall a b,
     S.Evar a = S.Evar b -> a = b
    by plain { intros until b; intros H; injection H; eauto }.
 
+Closing Fact Eletvar_injective : forall a b, 
+  S.Eletvar a = S.Eletvar b -> a = b
+   by plain { intros until b; intros H; injection H; eauto }.
+
 FLemma add_move_charact:
   forall s ns rs nd rd s' i,
   add_move rs rd nd s = OK ns s' i ->
@@ -1604,7 +1608,16 @@ all : intros; fsimpl in TR; try (monadInv TR); saturateTrans.
   elim H1. right; auto.
   eauto with rtlg. eauto with rtlg.
 (* Eletvar *)  
-+ apply cheat.
++ generalize EQ; unfold find_letvar. caseEq (nth_error (map_letvars map) n); intros; inv EQ0.
+  monadInv EQ1.
+  fconstructor; eauto with rtlg.
+  inv OK.  
+    - apply cheat. (* discriminate *)
+    - apply Eletvar_injective in H0; subst.
+      left; split; congruence. 
+    - right; eauto with rtlg.
+    - eapply add_move_charact; eauto.
+    - monadInv EQ1.
 (* Enil *)  
 + apply cheat.
 (* Econs *)  
