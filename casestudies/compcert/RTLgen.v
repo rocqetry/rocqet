@@ -1681,7 +1681,12 @@ all : intros; fsimpl in TR; monadInv TR; saturateTrans.
   simple eapply regs_valid_incr. exact INCR2. 
   simple eapply alloc_regs_valid. exact WF. exact EQ.
 (* Elet *)   
-+ apply cheat.
++ fconstructor. eapply new_reg_not_in_map; eauto with rtlg.
+  eapply transl_expr_charact; eauto 3 with rtlg.
+  apply tr_expr_incr with s1; auto.
+  eapply H0; eauto.
+  apply add_letvar_valid; eauto with rtlg.
+  inv OK. constructor. auto.
 (* Eletvar *)  
 + apply cheat.
 Qed. FEnd transl_expr_assign_charact.
