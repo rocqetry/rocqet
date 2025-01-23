@@ -1749,7 +1749,12 @@ all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
 + generalize TR; clear TR. case_eq (ngoto!l); intros; monadInv TR.
   fconstructor.
 (* Sifthenelse *)  
-+ apply cheat.
++ fconstructor.
+  apply tr_stmt_incr with s0; auto.
+  eapply H; eauto with rtlg.
+  apply tr_stmt_incr with s1; auto.
+  eapply H0; eauto with rtlg.
+  eapply transl_condexpr_charact; eauto with rtlg.
 Qed. FEnd transl_stmt_charact.  
 
 FLemma transl_function_charact:
