@@ -1668,7 +1668,12 @@ all : intros; fsimpl in TR; monadInv TR; saturateTrans.
   fconstructor; eauto.
   eapply add_move_charact; eauto.
 (* Econdition *)  
-+ apply cheat.
++ fconstructor; eauto with rtlg.
+  eapply transl_condexpr_charact; eauto with rtlg.
+  apply tr_expr_incr with s1; auto.
+  eapply H; eauto 2 with rtlg.
+  apply tr_expr_incr with s0; auto.
+  eapply H0; eauto 2 with rtlg.
 (* Eop *)  
 +  apply cheat.
 (* Elet *)   
