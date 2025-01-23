@@ -1746,7 +1746,8 @@ all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
   fconstructor. eauto. eauto with rtlg.
   eapply tr_stmt_incr with s0; eauto with rtlg.
 (* Sgoto *)  
-+ apply cheat.
++ generalize TR; clear TR. case_eq (ngoto!l); intros; monadInv TR.
+  fconstructor.
 (* Sifthenelse *)  
 + apply cheat.
 Qed. FEnd transl_stmt_charact.  
