@@ -1703,8 +1703,9 @@ FInduction transl_stmt_charact about S.stmt
     (OK: return_reg_ok s map rret),
   tr_stmt s'.(st_code T.instruction) map stmt ns nd nexits ngoto nret rret).
 FProof.
+all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
 (* Sskip *)
-+ apply cheat.
++ fconstructor.
 (* Sassign *)  
 + apply cheat.
 (* Sseq *)  
