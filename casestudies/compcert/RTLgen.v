@@ -1642,14 +1642,15 @@ all : intros; fsimpl in TR; try (monadInv TR); saturateTrans.
    simple eapply regs_valid_incr. exact INCR2.
    simple eapply alloc_regs_valid. exact WF. exact EQ.
 (* CEcondition *)  
-+  saturateTrans. fconstructor. simple eapply H. exact EQ2. 
-  simple eapply map_valid_incr. exact INCR4. exact WF.
-  simple eapply regs_valid_incr. exact INCR4. exact VALID.  
-  apply tr_condition_incr with s1; eauto with rtlg.  
++   fconstructor; eauto with rtlg.
+  apply tr_condition_incr with s1; eauto with rtlg.
   apply tr_condition_incr with s0; eauto with rtlg.
 (* CElet *)  
-+ apply cheat.
-
++ fconstructor; eauto with rtlg.
+  eapply H; eauto with rtlg.
+  apply tr_condition_incr with s1; eauto with rtlg.
+  eapply H0; eauto with rtlg.
+  apply add_letvar_valid; eauto with rtlg.
 Qed. FEnd transl_expr_charact with transl_exprlist_charact with transl_condexpr_charact.
 
 (* A variant of transl_expr_charact, for use when the destination register is the one associated with a variable. *)
