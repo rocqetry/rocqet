@@ -1733,7 +1733,12 @@ all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
   eapply H0; eauto with rtlg.
   eapply H; eauto with rtlg.
 (* Sreturn *)  
-+ apply cheat.
++ destruct o.
+  destruct rret; inv TR. inv OK.
+  fconstructor; eauto with rtlg.
+  eapply transl_expr_charact; eauto with rtlg.
+  constructor. auto. simpl; tauto.
+  monadInv TR. fconstructor.
 (* Slabel *)  
 + apply cheat.
 (* Sgoto *)  
