@@ -1707,7 +1707,10 @@ all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
 (* Sskip *)
 + fconstructor.
 (* Sassign *)  
-+ apply cheat.
++ revert EQ. unfold find_var. case_eq (map_vars map)!i; intros; monadInv EQ.
+  eapply tr_Sassign; eauto.
+  eapply transl_expr_assign_charact; eauto with rtlg.
+  constructor. auto.
 (* Sseq *)  
 + apply cheat.
 (* Sreturn *)  
