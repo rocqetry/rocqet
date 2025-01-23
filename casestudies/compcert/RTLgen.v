@@ -1637,7 +1637,10 @@ all : intros; fsimpl in TR; try (monadInv TR); saturateTrans.
   red; intros; apply VALID2; auto with coqlib.
  
 (* CEcond *)  
-+ apply cheat.
++  fconstructor; eauto with rtlg. eapply H; info_eauto with rtlg.
+   eapply alloc_regs_target_ok; eauto with rtlg.   
+   simple eapply regs_valid_incr. exact INCR2.
+   simple eapply alloc_regs_valid. exact WF. exact EQ.
 (* CEcondition *)  
 + apply cheat.
 (* CElet *)  
