@@ -3620,7 +3620,43 @@ FInduction transl_stmt_charact.
 FProof.
 all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
 (* Sstore *)
-+ apply cheat.
++ fconstructor; eauto with rtlg.
+  eapply transl_exprlist_charact; eauto 3 with rtlg. 
+  eapply alloc_regs_target_ok; eauto with rtlg.
+  simple eapply regs_valid_incr. exact INCR9. 
+  simple eapply alloc_regs_valid. exact WF. exact EQ.  
+  apply tr_expr_incr with s3; auto.
+  eapply transl_expr_charact. exact EQ2. 
+  simple eapply map_valid_incr. exact INCR12. exact WF.
+  simple eapply alloc_reg_target_ok.  
+  simple eapply map_valid_incr.        
+  exact INCR0.                        
+  exact WF.                           
+  simple eapply regs_valid_incr.      
+  simple apply (state_incr_refl T.instruction).
+  simple eapply alloc_regs_valid.    
+    exact WF. 
+    exact EQ.                         
+    exact EQ1.  
+ simple eapply regs_valid_incr.                                                                                   
+ exact INCR11.                                                                                                    
+ simple eapply regs_valid_incr.                                                                                   
+  simple apply (state_incr_refl T.instruction). 
+  simple eapply regs_valid_incr.                                                                                  
+   simple apply (state_incr_refl T.instruction).
+   simple eapply alloc_regs_valid.                                                                                
+    exact WF.                                                                                                     
+    exact EQ.     
+
+ simple eapply reg_valid_incr.                                                                                    
+ exact INCR4.                                                                                                     
+ simple eapply reg_valid_incr.                                                                                    
+  simple apply (state_incr_refl T.instruction).
+  simple eapply alloc_reg_valid.                                                                                  
+   simple eapply map_valid_incr.                                                                                  
+    exact INCR0.                                                                                                  
+    exact WF.                                                                                                     
+    exact EQ1.       
 Qed. FEnd transl_stmt_charact.
 
 Closing Fact tr_expr_tr_eload : forall c map pr chunk addr al ns nd rd dst,
