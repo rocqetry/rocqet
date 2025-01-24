@@ -3982,13 +3982,51 @@ all : intros; fsimpl in TR; monadInv TR; saturateTrans.
   simple eapply alloc_regs_valid. exact WF. exact EQ.  
 Qed. FEnd transl_expr_assign_charact.
 
+FLemma alloc_optreg_map_ok:
+  forall map optid s1 r s2 i,
+  map_valid map s1 ->
+  alloc_optreg map optid s1 = OK r s2 i ->
+  reg_map_ok map r optid.
+FProofLemma.
+  unfold alloc_optreg; intros. destruct optid.
+  constructor. unfold find_var in H0. destruct (map_vars map)!i0; monadInv H0. auto.
+  constructor. eapply new_reg_not_in_map; eauto.
+Qed. CloseFLemma.
+
 FInduction transl_stmt_charact.
 FProof.
 all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
 (* Scall *)
-+ apply cheat.
++ destruct s0 as [b | id]; monadInv TR; saturateTrans.
+  (* indirect *)
+  fconstructor; eauto 4 with rtlg.
+  eapply transl_expr_charact; eauto 3 with rtlg.    
+  apply cheat. apply cheat.  
+  apply tr_exprlist_incr with s5. auto.
+  eapply transl_exprlist_charact; eauto 3 with rtlg.
+  eapply alloc_regs_target_ok with (s1 := s0); eauto 3 with rtlg.
+  apply regs_valid_cons; eauto 3 with rtlg. apply cheat.
+  apply regs_valid_incr with s0; eauto 3 with rtlg.
+  apply regs_valid_cons; eauto 3 with rtlg. apply cheat.
+  apply regs_valid_incr with s2; eauto 3 with rtlg. apply cheat.
+  eapply alloc_optreg_map_ok with (s1 := s2); eauto 3 with rtlg.
+  (* direct *)
+  fconstructor; eauto 4 with rtlg.
+  eapply transl_exprlist_charact; eauto 3 with rtlg. apply cheat. apply cheat.
+  eapply alloc_optreg_map_ok with (s1 := s0); eauto 3 with rtlg.
+
 (* Stailcall *)
-+ apply cheat.
++ destruct s0 as [b | id]; monadInv TR; saturateTrans.
+  (* indirect *)
+  assert (RV: regs_valid (x :: nil) s0).
+    apply regs_valid_cons; eauto 3 with rtlg. apply cheat.
+  fconstructor; eauto 3 with rtlg.
+  eapply transl_expr_charact; eauto 3 with rtlg. apply cheat. apply cheat.
+  apply tr_exprlist_incr with s4; auto.
+  eapply transl_exprlist_charact; eauto 4 with rtlg. apply cheat. apply cheat.
+  (* direct *)
+  fconstructor; eauto 3 with rtlg.
+  eapply transl_exprlist_charact; eauto 4 with rtlg. apply cheat. apply cheat.
 Qed. FEnd transl_stmt_charact.
 
 Inherit map_wf.
