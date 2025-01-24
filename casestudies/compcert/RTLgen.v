@@ -3853,7 +3853,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
 FEnd RTL.
 
 Family RTLgen.
-Family So extends CminorSel. FEnd S.
+Family S extends CminorSel. FEnd S.
 Family T extends RTL. FEnd T.
 
 FRecursion alloc_reg.
@@ -3960,18 +3960,27 @@ FInductive tr_stmt : T.code -> mapping -> S.stmt -> T.node -> T.node -> list T.n
 
 FInduction transl_expr_charact with transl_exprlist_charact with transl_condexpr_charact.
 FProof.
-(* Eexternal *)
-+ apply cheat.
+all : intros; fsimpl in TR; (monadInv TR); saturateTrans.
++ inv OK.
+  - apply cheat.
+  - apply cheat.
+  - fconstructor; eauto with rtlg.    
+    eapply H; eauto with rtlg.
+    eapply alloc_regs_target_ok; eauto with rtlg.
+  simple eapply regs_valid_incr. exact INCR2. 
+  simple eapply alloc_regs_valid. exact WF. exact EQ.  
 Qed. FEnd transl_expr_charact with transl_exprlist_charact with transl_condexpr_charact.  
 
 FInduction transl_expr_assign_charact.
 FProof.
+all : intros; fsimpl in TR; monadInv TR; saturateTrans.
 (* Eexternal *)
 + apply cheat.
 Qed. FEnd transl_expr_assign_charact.
 
 FInduction transl_stmt_charact.
 FProof.
+all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
 (* Scall *)
 + apply cheat.
 (* Stailcall *)
