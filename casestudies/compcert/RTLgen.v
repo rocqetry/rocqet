@@ -3201,8 +3201,13 @@ Qed. FEnd transl_expr_charact with transl_exprlist_charact with transl_condexpr_
 
 FInduction transl_expr_assign_charact.
 FProof.
+all : intros; fsimpl in TR; monadInv TR; saturateTrans. 
 (* Ebuiltin *)
-+ apply cheat.
++ fconstructor; eauto with rtlg.
+  eapply transl_exprlist_charact; eauto with rtlg. 
+  eapply alloc_regs_target_ok; eauto with rtlg.
+  simple eapply regs_valid_incr. exact INCR2. 
+  simple eapply alloc_regs_valid. exact WF. exact EQ.
 Qed. FEnd transl_expr_assign_charact.
 
 FInduction transl_stmt_charact.
