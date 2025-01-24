@@ -3210,10 +3210,35 @@ all : intros; fsimpl in TR; monadInv TR; saturateTrans.
   simple eapply alloc_regs_valid. exact WF. exact EQ.
 Qed. FEnd transl_expr_assign_charact.
 
+FLemma convert_builtin_res_charact:
+  forall map oty res s res' s' INCR
+    (TR: convert_builtin_res map oty res s = OK res' s' INCR)
+    (WF: map_valid map s),
+  tr_builtin_res map res res'.
+FProofLemma.
+  destruct res0; simpl; intros.
+- monadInv TR. constructor. unfold find_var in EQ. destruct (map_vars map)!x; inv EQ; auto.
+- destruct (rettype_eq oty AST.Tvoid); monadInv TR.
++ constructor.
++ constructor. eauto with rtlg.
+- monadInv TR.
+Qed. CloseFLemma.
+
 FInduction transl_stmt_charact.
 FProof.
+all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
 (* Sbuiltin *)
-+ apply cheat.
++ fconstructor; eauto 4 with rtlg.
+  eapply transl_exprlist_charact.
+  eauto with rtlg. eauto with rtlg.
+  simple eapply alloc_regs_target_ok. exact WF. 
+  simple apply regs_valid_nil. exact EQ. 
+  simple apply regs_valid_nil. 
+  simple eapply regs_valid_incr. exact INCR6. 
+  simple eapply regs_valid_incr.
+  simple apply (state_incr_refl T.instruction). 
+  simple eapply alloc_regs_valid. exact WF. exact EQ.  
+  eapply convert_builtin_res_charact; eauto with rtlg.
 Qed. FEnd transl_stmt_charact.
 
 Closing Fact tr_ebuiltin_inv : forall c map pr ef al ns nd rd dst,
