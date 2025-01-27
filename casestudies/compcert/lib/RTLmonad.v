@@ -83,5 +83,3 @@ Definition handle_error {A: Type} {C: Type} (f g: mon A C) : mon A C :=
     end.
 
 
-
-
