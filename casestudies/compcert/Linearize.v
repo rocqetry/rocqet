@@ -1,4 +1,5 @@
 From Rocqet Require Import Loader.
+From Rocqet Require Import LibTactics.
 
 From Rocqet Require Import Coqlib.
 From Rocqet Require Import Errors.
@@ -652,6 +653,16 @@ FDefinition measure := fun (S0: S.state) =>
   | _ => 0%nat
   end.
 
+Closing Fact MS_add_branch_inv : forall s f sp pc ls m s2,
+  match_states (S.State s f sp pc ls m) s2 -> 
+  exists ts tf c, 
+  list_forall2 match_stackframes s ts /\
+  transf_function f = OK tf /\
+  (reachable f)!!pc = true /\
+  is_tail c (T.fn_code tf) /\
+  s2 = (T.State ts tf sp (add_branch pc c) ls m)
+by plain { intros until s2; intros H; inv H; eauto }.
+
 FInduction transf_step_correct about S.step
   motive (fun ge s1 t s2 (_ : S.step ge s1 t s2) =>    
     forall prog tprog tge (TRANSF: match_prog prog tprog) s1' (MS: match_states s1 s1'),
@@ -660,7 +671,8 @@ FInduction transf_step_correct about S.step
     \/ (measure s2 < measure s1 /\ t = E0 /\ match_states s2 s1')%nat).
 FProof.
 (* start of block, at an [add_branch] *)
-+ apply cheat.
++ intros. apply MS_add_branch_inv in MS; unpack MS; subst.
+    apply cheat.
  (* Lop *)  
 + apply cheat.
 (* Lgetstack *)  
@@ -670,7 +682,7 @@ FProof.
 (* Lbranch *)  
 + apply cheat.
 (* Lcond *)  
-+ apply cheat.
++ intros. apply cheat.
 (* Lreturn *)  
 + apply cheat.
 (* return *)  
