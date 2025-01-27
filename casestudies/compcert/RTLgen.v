@@ -4392,10 +4392,67 @@ FInductive tr_stmt : T.code -> mapping -> S.stmt -> T.node -> T.node -> list T.n
      tr_exitexpr c map a ns nexits ->
      tr_stmt c map (S.Sswitch a) ns nd nexits ngoto nret rret.
 
+Inherit transl_expr_charact.
+Inherit rec__transl_expr_charact. 
+Inherit rec__transl_condexpr_charact. (* hack! from the *internals* *)
+
+FLemma tr_exitexpr_incr:
+  forall s1 s2, state_incr s1 s2 ->
+  forall map a ns nexits,
+  tr_exitexpr s1.(st_code T.instruction) map a ns nexits ->
+  tr_exitexpr s2.(st_code T.instruction) map a ns nexits.
+FProofLemma.
+  intros s1 s2 EXT.
+  generalize tr_expr_incr tr_condition_incr; intros I1 I2.
+  induction 1; econstructor; eauto with rtlg.
+Qed. CloseFLemma.
+
+FLemma transl_jumptable_charact:
+  forall nexits tbl s nl s' incr,
+  transl_jumptable nexits tbl s = OK nl s' incr ->
+  tr_jumptable nexits tbl nl /\ s' = s.
+FProofLemma.
+  induction tbl; intros.
+  monadInv H. split. red. simpl. intros. discriminate. auto.
+  monadInv H. exploit transl_exit_charact; eauto. intros [A B].
+  exploit IHtbl; eauto. intros [C D].
+  split. red. simpl. intros. destruct (zeq v 0). inv H. exists x; auto. auto.
+  congruence.
+Qed. CloseFLemma.
+
+FLemma transl_exitexpr_charact:
+  forall nexits a map s ns s' INCR
+     (TR: transl_exitexpr map a nexits s = OK ns s' INCR)
+     (WF: map_valid map s),
+  tr_exitexpr s'.(st_code T.instruction) map a ns nexits.
+FProofLemma.
+  induction a; simpl; intros; try (monadInv TR); saturateTrans.
+- (* XEexit *)
+  exploit transl_exit_charact; eauto. intros [A B].
+  econstructor; eauto.
+- (* XEjumptable *)
+  exploit transl_jumptable_charact; eauto. intros [A B].
+  econstructor; eauto.
+  eapply transl_expr_charact; eauto with rtlg.
+  apply cheat. apply cheat. apply cheat.
+  (* eauto with rtlg.*)
+- (* XEcondition *)
+  econstructor.
+  eapply transl_condexpr_charact; eauto with rtlg. 
+  apply tr_exitexpr_incr with s1; eauto with rtlg.
+  apply tr_exitexpr_incr with s0; eauto with rtlg.
+- (* XElet *)
+  econstructor; eauto with rtlg.
+  eapply transl_expr_charact; eauto with rtlg.
+  apply tr_exitexpr_incr with s1; auto. eapply IHa; eauto with rtlg.
+  apply add_letvar_valid; eauto with rtlg.
+Qed. CloseFLemma.
+
 FInduction transl_stmt_charact.
 FProof.
+all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
 (* Sswitch *)
-+ apply cheat.
++ fconstructor. eapply transl_exitexpr_charact; eauto.
 Qed. FEnd transl_stmt_charact.
 
 FRecursion size_stmt.
