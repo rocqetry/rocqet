@@ -45,4 +45,5 @@
   ;Inherit_mutual 
   ;MetaData_bound_names
   ;Extend_with_mutual
+  ;Inherit_directly
   ))
