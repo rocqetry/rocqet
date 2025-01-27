@@ -607,8 +607,10 @@ let inherit_name ~(name : Names.Id.t) =
   let context = Context.get () in
   let base = Context.base_linkage context in
   let linkage = Context.family_linkage context in
-  let inherit_name ~(name : Names.Id.t) ~(base : Linkage.t)
-      ~(linkage : Linkage.t) =
+  let inherit_name 
+        ~(name : Names.Id.t) 
+        ~(base : Linkage.t)
+        ~(linkage : Linkage.t) =
     let rec find_element name = function
       | Bwd.Emp -> None
       | Snoc (_, (field, element)) when Names.Id.equal name field ->
@@ -625,6 +627,18 @@ let inherit_name ~(name : Names.Id.t) =
             (Names.Id.to_string name)
         in
         Errors.fail ~info
+    | Some (TheoremDefinition { names; _ } | RecursorDefinition { names; _  } as element) ->               
+       let elements = 
+         names |> List.filter_map @@ fun name -> 
+         let axiom = (Naming.recursive_axiom_name name) in                                     
+         match find_element axiom base.fields with 
+         | None -> Errors.fail ~info:"Couldn't find recursive axiom"
+         | Some elem -> Some (axiom, elem)
+       in 
+       let elements = (name, element) :: elements in
+       List.fold_left 
+         (fun linkage (name, element) -> inherit_one ~name ~element ~linkage ~context)
+         linkage elements
     | Some (InductiveDefinition { inductive; _ } as element) ->
         let names =
           let find_axiom name =

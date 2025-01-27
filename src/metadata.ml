@@ -58,8 +58,6 @@ let close_metadata () =
   let elem =
     LinkageElem.MetaDataSection
       { name; bound_names; compiled_impl; compiled_context; default_ctx_params }
-  in
-  let s = bound_names |> List.map Names.Id.to_string |> String.concat ", " in
-  Feedback.msg_info Pp.(str "Binding: " ++ str s);
+  in  
   Context.add_field ~name ~elem;
   Ctx.clear ()
