@@ -645,6 +645,33 @@ FInductive match_states: S.state -> T.state -> Prop :=
       match_states (S.Returnstate s ls m)
                    (T.Returnstate ts ls m).
 
+Closing Fact MS_add_branch_inv : forall s f sp pc ls m s2,
+  match_states (S.State s f sp pc ls m) s2 -> 
+  exists ts tf c, 
+  list_forall2 match_stackframes s ts /\
+  transf_function f = OK tf /\
+  (reachable f)!!pc = true /\
+  is_tail c (T.fn_code tf) /\
+  s2 = (T.State ts tf sp (add_branch pc c) ls m)
+by plain { intros until s2; intros H; inv H; eauto }.
+
+Closing Fact MS_block_inv : forall s f sp bb ls m s2, 
+    match_states (S.Block s f sp bb ls m) s2 -> 
+    exists ts tf c, 
+    list_forall2 match_stackframes s ts /\
+    transf_function f = OK tf /\
+    (forall pc, In pc (S.successors_block bb) -> (reachable f)!!pc = true) /\
+    is_tail c (T.fn_code tf) /\
+    s2 = (T.State ts tf sp (linearize_block bb c) ls m)
+by plain { intros until s2; intros H; inv H; eauto }.
+
+Closing Fact MS_return_inv : forall s ls m s2,
+  match_states (S.Returnstate s ls m) s2 ->             
+  exists ts, 
+  list_forall2 match_stackframes s ts /\
+  s2 = (T.Returnstate ts ls m)
+by plain { intros until s2; intros H; inv H; eauto }.          
+
 FDefinition measure := fun (S0: S.state) =>
   match S0 with
   | self__Linearize.S.State s f sp pc ls m => 0%nat
@@ -812,26 +839,6 @@ FProofLemma.
   eapply enumerate_complete; eauto. auto.
 Qed. CloseFLemma.
 
-Closing Fact MS_add_branch_inv : forall s f sp pc ls m s2,
-  match_states (S.State s f sp pc ls m) s2 -> 
-  exists ts tf c, 
-  list_forall2 match_stackframes s ts /\
-  transf_function f = OK tf /\
-  (reachable f)!!pc = true /\
-  is_tail c (T.fn_code tf) /\
-  s2 = (T.State ts tf sp (add_branch pc c) ls m)
-by plain { intros until s2; intros H; inv H; eauto }.
-
-Closing Fact MS_block_inv : forall s f sp bb ls m s2, 
-    match_states (S.Block s f sp bb ls m) s2 -> 
-    exists ts tf c, 
-    list_forall2 match_stackframes s ts /\
-    transf_function f = OK tf /\
-    (forall pc, In pc (S.successors_block bb) -> (reachable f)!!pc = true) /\
-    is_tail c (T.fn_code tf) /\
-    s2 = (T.State ts tf sp (linearize_block bb c) ls m)
-by plain { intros until s2; intros H; inv H; eauto }.
-
 FLemma is_tail_find_label:
   forall lbl c2 c1,
   T.find_label lbl c1 = Some c2 -> is_tail c2 c1.
@@ -978,12 +985,18 @@ destruct (starts_with pc1 c).
 + intros. apply MS_block_inv in MS; unpack MS; subst.
   simpl in TEMP1. fsimpl in TEMP1.
   left; econstructor; split.
+
   simpl. apply plus_one. simpl. fsimpl. fconstructor; eauto.
   rewrite (stacksize_preserved _ _ TEMP). eauto.
   rewrite (match_parent_locset _ _ TEMP0). fconstructor; eauto.
 
 (* return *)  
-+ apply cheat.
++ intros. apply MS_return_inv in MS; unpack MS; subst.
+  inv TEMP0. inv H1.
+  left; econstructor; split.
+  apply plus_one. fconstructor.
+  fconstructor; eauto.
+
 (* internal functions *)  
 + apply cheat.  
 Qed. FEnd transf_step_correct.
