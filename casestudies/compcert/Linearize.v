@@ -1417,10 +1417,48 @@ Case Ltailcall sig ros :=
  (fun f k => T.Ltailcall sig ros :: k).
 FEnd translate_instr.
 
+FInduction find_label_lin_block_helper.
+FProof.
+all: intros; generalize (find_label_add_branch lbl k); intro; info_auto with fsimpl. 
+Qed. FEnd find_label_lin_block_helper.
+
+Lemma functions_translated:
+  forall v f,
+  Genv.find_funct ge v = Some f ->
+  exists tf,
+  Genv.find_funct tge v = Some tf /\ transf_fundef f = OK tf.
+Proof (Genv.find_funct_transf_partial TRANSF).
+
+Lemma function_ptr_translated:
+  forall v f,
+  Genv.find_funct_ptr ge v = Some f ->
+  exists tf,
+  Genv.find_funct_ptr tge v = Some tf /\ transf_fundef f = OK tf.
+Proof (Genv.find_funct_ptr_transf_partial TRANSF).
+
+FLemma find_function_translated:
+  forall ge tge ros ls f,
+  S.find_function ge ros ls = Some f ->
+  exists tf,
+  T.find_function tge ros ls = Some tf /\ transf_fundef f = OK tf.
+FProofLemma.
+  unfold S.find_function; intros; destruct ros; simpl.
+  apply functions_translated; auto.
+  rewrite symbols_preserved. destruct (Genv.find_symbol ge i).
+  apply function_ptr_translated; auto.
+  congruence.
+Qed.
+
 FInduction transf_step_correct.
 FProof.
 (* Lcall *)
-+ apply cheat.
++ intros. apply MS_block_inv in MS; unpack MS; subst. 
+  simpl in TEMP1. fsimpl in TEMP1. 
+  exploit find_function_translated; eauto. intros [tfd [A B]].
+  left; econstructor; split. simpl.
+  apply plus_one. econstructor; eauto.
+  symmetry; eapply sig_preserved; eauto.
+  econstructor; eauto. constructor; auto. econstructor; eauto.
 (* Ltailcall *)
 + apply cheat.
 Qed. FEnd transf_step_correct.
