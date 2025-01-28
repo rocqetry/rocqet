@@ -653,6 +653,24 @@ FDefinition measure := fun (S0: S.state) =>
   | _ => 0%nat
   end.
 
+(* Correctness of reachability analysis *)
+
+FLemma reachable_successors:
+  forall f pc pc' b,
+  (S.fn_code f)!pc = Some b -> In pc' (S.successors_block b) ->
+  (reachable f)!!pc = true ->
+  (reachable f)!!pc' = true.
+FProofLemma.
+  intro f. unfold reachable.
+  caseEq (reachable_aux f).
+  unfold reachable_aux. intro reach; intros.
+  assert (LBoolean.ge reach!!pc' reach!!pc).
+  change (reach!!pc) with ((fun pc r => r) pc (reach!!pc)).
+  eapply DS.fixpoint_solution; eauto. intros; apply DS.L.eq_refl.
+  elim H3; intro. congruence. auto.
+  intros. apply PMap.gi.
+Qed. CloseFLemma.
+
 (* Properties of node enumeration *)
 
 Module NodesetFacts := FSetFacts.Facts(Nodeset).
@@ -805,6 +823,46 @@ Closing Fact MS_add_branch_inv : forall s f sp pc ls m s2,
   s2 = (T.State ts tf sp (add_branch pc c) ls m)
 by plain { intros until s2; intros H; inv H; eauto }.
 
+FLemma is_tail_find_label:
+  forall lbl c2 c1,
+  T.find_label lbl c1 = Some c2 -> is_tail c2 c1.
+FProofLemma.
+  induction c1; simpl.
+  intros; discriminate.
+  case (T.is_label a lbl). intro. injection H; intro. subst c2.
+  constructor. constructor.
+  intro. constructor. auto.
+Qed. CloseFLemma.
+
+FLemma is_tail_lin_block:
+  forall b c1 c2,
+  is_tail (linearize_block b c1) c2 -> is_tail c1 c2.
+FProofLemma.
+  induction b; simpl; intros.
+  auto. apply cheat.
+  (* TODO: similar to above *)
+  (*destruct a; eauto with coqlib.
+  eapply is_tail_add_branch; eauto.
+  destruct (starts_with s1 c1); eapply is_tail_add_branch; eauto with coqlib. *)
+Qed. CloseFLemma.
+
+FLemma add_branch_correct:
+  forall tge lbl c k s f tf sp ls m,
+  transf_function f = OK tf ->
+  is_tail k (T.fn_code tf) ->
+  T.find_label lbl (T.fn_code tf) = Some c ->
+  plus T.step tge (T.State s tf sp (add_branch lbl k) ls m)
+             E0 (T.State s tf sp c ls m).
+FProofLemma.
+  intros. unfold add_branch.
+  caseEq (starts_with lbl k); intro SW.
+  apply cheat. apply cheat. 
+  (*TODO*)
+  (*eapply starts_with_correct; eauto.
+  eapply unique_labels_transf_function; eauto.
+  apply plus_one. apply exec_Lgoto. auto.*)
+Qed. CloseFLemma.
+
 FInduction transf_step_correct about S.step
   motive (fun ge s1 t s2 (_ : S.step ge s1 t s2) =>    
     forall prog tprog tge (TRANSF: match_prog prog tprog) s1' (MS: match_states s1 s1'),
@@ -814,9 +872,17 @@ FInduction transf_step_correct about S.step
 FProof.
 (* start of block, at an [add_branch] *)
 + intros. apply MS_add_branch_inv in MS; unpack MS; subst.
-    apply cheat.
+  exploit find_label_lin; eauto. intros [k F].
+  left; econstructor; split.
+  eapply add_branch_correct; eauto.
+  fconstructor; eauto.
+  intros; eapply reachable_successors; eauto.
+  eapply is_tail_lin_block; eauto. eapply is_tail_find_label; eauto.
+  
  (* Lop *)  
 + apply cheat.
+
+
 (* Lgetstack *)  
 + apply cheat.
 (* Lsetstack *)  
