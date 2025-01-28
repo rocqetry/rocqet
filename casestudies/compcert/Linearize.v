@@ -425,13 +425,13 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       E0 (self__Linear.State s f sp b rs' m)
 | exec_function_internal:
     forall ge s f rs m rs' m' stk,
-    Mem.alloc m 0 (function_stacksize f) = (m', stk) ->
+    Mem.alloc m 0 (self__Linear.fn_stacksize f) = (m', stk) ->
     rs' = undef_regs destroyed_at_function_entry (LTL.call_regs rs) ->
     step ge (self__Linear.Callstate s (AST.Internal f) rs m)
       E0 (self__Linear.State s f (Vptr stk Ptrofs.zero) (function_code f) rs' m')
 | exec_Lreturn:
       forall ge s f stk b rs m m',
-      Mem.free m stk 0 (function_stacksize f) = Some m' ->
+      Mem.free m stk 0 (self__Linear.fn_stacksize f) = Some m' ->
       step ge (self__Linear.State s f (Vptr stk Ptrofs.zero) (Lreturn :: b) rs m)
         E0 (self__Linear.Returnstate s (LTL.return_regs (parent_locset s) rs) m').
 
@@ -882,6 +882,20 @@ intros until tge; intros TRANSL A B. rewrite A. rewrite B.
 apply (Genv.find_symbol_transf_partial TRANSL).
 Qed. CloseFLemma.
 
+FLemma stacksize_preserved:
+  forall f tf,
+  transf_function f = OK tf ->
+  T.fn_stacksize tf = S.fn_stacksize f.
+FProofLemma.
+  intros. monadInv H. auto.
+Qed. CloseFLemma.
+
+FLemma match_parent_locset:
+  forall s ts, list_forall2 match_stackframes s ts -> T.parent_locset ts = S.parent_locset s.
+FProofLemma.
+  induction 1; simpl. auto. inv H; auto.
+Qed. CloseFLemma.
+
 FInduction transf_step_correct about S.step
   motive (fun ge s1 t s2 (_ : S.step ge s1 t s2) =>    
     forall prog tprog tge (TRANSF: match_prog prog tprog) s1' (MS: match_states s1 s1'),
@@ -960,7 +974,13 @@ destruct (starts_with pc1 c).
   fconstructor; eauto.
 
 (* Lreturn *)  
-+ apply cheat.
++ intros. apply MS_block_inv in MS; unpack MS; subst.
+  simpl in TEMP1. fsimpl in TEMP1.
+  left; econstructor; split.
+  simpl. apply plus_one. simpl. fsimpl. fconstructor; eauto.
+  rewrite (stacksize_preserved _ _ TEMP). eauto.
+  rewrite (match_parent_locset _ _ TEMP0). fconstructor; eauto.
+
 (* return *)  
 + apply cheat.
 (* internal functions *)  
