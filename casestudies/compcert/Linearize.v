@@ -608,6 +608,7 @@ Inductive match_stackframes: S.stackframe -> T.stackframe -> Prop :=
         (T.Stackframe tf sp ls (linearize_block bb c)).
 FEnd match_stackframes.
 
+(*MetaData _blah.*)
 FInductive match_states: S.state -> T.state -> Prop :=
   | match_states_add_branch:
       forall s f sp pc ls m tf ts c
@@ -645,6 +646,23 @@ FInductive match_states: S.state -> T.state -> Prop :=
       match_states (S.Returnstate s ls m)
                    (T.Returnstate ts ls m).
 
+(*Theorem MS_add_branch_inv : forall s f sp pc ls m s2,
+  match_states (S.State s f sp pc ls m) s2 -> 
+  exists ts tf c, 
+  list_forall2 match_stackframes s ts /\
+  transf_function f = OK tf /\
+  (reachable f)!!pc = true /\
+  is_tail c (T.fn_code tf) /\
+  s2 = (T.State ts tf sp (add_branch pc c) ls m).
+Proof.
+intros until s2. intros H. inv H. 
+do 3 econstructor. eauto.
+do 3 econstructor. eauto.
+split. apply STACKS. 
+split. apply TRF.
+split. apply REACH.
+split. apply *)
+ 
 Closing Fact MS_add_branch_inv : forall s f sp pc ls m s2,
   match_states (S.State s f sp pc ls m) s2 -> 
   exists ts tf c, 
@@ -1137,7 +1155,13 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       external_call ef ge vargs m t vres m' ->
       rs' = Locmap.setres res vres (undef_regs (destroyed_by_builtin ef) rs) ->
       step ge (Block s f sp (Lbuiltin ef args res :: bb) rs m)
-        t (Block s f sp bb rs' m').
+        t (Block s f sp bb rs' m')
+| exec_function_external: forall ge s ef t args res rs m rs' m',
+      args = map (fun p => Locmap.getpair p rs) (loc_arguments (ef_sig ef)) ->
+      external_call ef ge args m t res m' ->
+      rs' = Locmap.setpair (loc_result (ef_sig ef)) res (undef_caller_save_regs rs) ->
+      step ge (Callstate s (AST.External ef) rs m)
+         t (Returnstate s rs' m').
 
 FRecursion successors_instr.
 Case Lbuiltin a b c := (fun rest => rest).
