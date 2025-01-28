@@ -1184,7 +1184,14 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       external_call ef ge vargs m t vres m' ->
       rs' = Locmap.setres res vres (undef_regs (destroyed_by_builtin ef) rs) ->
       step ge (State s f sp (Lbuiltin ef args res :: b) rs m)
-        t (State s f sp b rs' m').
+        t (State s f sp b rs' m')
+| exec_function_external:
+      forall s ef args res rs1 rs2 m t m',
+      args = map (fun p => Locmap.getpair p rs1) (loc_arguments (ef_sig ef)) ->
+      external_call ef ge args m t res m' ->
+      rs2 = Locmap.setpair (loc_result (ef_sig ef)) res (undef_caller_save_regs rs1) ->
+      step (Callstate s (External ef) rs1 m)
+         t (Returnstate s rs2 m').
 
 FEnd Linear.
 
