@@ -672,6 +672,14 @@ Closing Fact MS_return_inv : forall s ls m s2,
   s2 = (T.Returnstate ts ls m)
 by plain { intros until s2; intros H; inv H; eauto }.          
 
+Closing Fact MS_call_inv : forall s f ls m s2, 
+  match_states (S.Callstate s f ls m) s2 -> 
+  exists ts tf, 
+  list_forall2 match_stackframes s ts /\
+  transf_fundef f = OK tf /\
+  s2 = (T.Callstate ts tf ls m)
+by plain { intros until s2; intros H; inv H; eauto }.
+
 FDefinition measure := fun (S0: S.state) =>
   match S0 with
   | self__Linearize.S.State s f sp pc ls m => 0%nat
@@ -850,6 +858,13 @@ FProofLemma.
   intro. constructor. auto.
 Qed. CloseFLemma.
 
+FLemma is_tail_add_branch:
+  forall lbl c1 c2, is_tail (add_branch lbl c1) c2 -> is_tail c1 c2.
+FProofLemma.
+  intros until c2. unfold add_branch. destruct (starts_with lbl c1).
+  auto. eauto with coqlib.
+Qed. CloseFLemma.
+
 FLemma is_tail_lin_block:
   forall b c1 c2,
   is_tail (linearize_block b c1) c2 -> is_tail c1 c2.
@@ -901,6 +916,18 @@ FLemma match_parent_locset:
   forall s ts, list_forall2 match_stackframes s ts -> T.parent_locset ts = S.parent_locset s.
 FProofLemma.
   induction 1; simpl. auto. inv H; auto.
+Qed. CloseFLemma.
+
+FLemma reachable_entrypoint:
+  forall f, (reachable f)!!((S.fn_entrypoint f)) = true.
+FProofLemma.
+  intros. unfold reachable.
+  caseEq (reachable_aux f).
+  unfold reachable_aux; intros reach A.
+  assert (LBoolean.ge reach!!((S.fn_entrypoint f)) true).
+  eapply DS.fixpoint_entry. eexact A. auto.
+  unfold LBoolean.ge in H. tauto.
+  intros. apply PMap.gi.
 Qed. CloseFLemma.
 
 FInduction transf_step_correct about S.step
@@ -998,7 +1025,15 @@ destruct (starts_with pc1 c).
   fconstructor; eauto.
 
 (* internal functions *)  
-+ apply cheat.  
++ intros. apply MS_call_inv in MS; unpack MS; subst. 
+assert (REACH: (reachable f)!!(S.fn_entrypoint f) = true).
+    apply reachable_entrypoint.
+  monadInv TEMP0.
+  left; econstructor; split.
+  apply plus_one. eapply T.exec_function_internal; eauto.
+  rewrite (stacksize_preserved _ _ EQ). eauto.
+  generalize EQ; intro EQ'; monadInv EQ'. simpl.
+  fconstructor; eauto. simpl. eapply is_tail_add_branch. constructor.
 Qed. FEnd transf_step_correct.
 
 FEnd Linearize.  
