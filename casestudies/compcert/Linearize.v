@@ -923,7 +923,11 @@ FProof.
   fconstructor; eauto.
 
 (* Lbranch *)  
-+ apply cheat.
++ intros. apply MS_block_inv in MS; unpack MS; subst.
+ simpl in TEMP1. fsimpl in TEMP1.
+ assert ((reachable f)!!pc = true). apply TEMP1; simpl; auto.
+ right; split. simpl; lia. split. auto. simpl. fsimpl. fconstructor; eauto.
+
 (* Lcond *)  
 + intros. apply cheat.
 (* Lreturn *)  
