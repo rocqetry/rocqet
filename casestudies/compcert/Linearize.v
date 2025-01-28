@@ -948,6 +948,7 @@ FProof.
  assert (REACH2: (reachable f)!!pc2 = true) by (apply TEMP1; simpl; auto).
  simpl linearize_block. fsimpl.
 destruct (starts_with pc1 c).
+  (* TODO: I think we can prove this by hand *)
   assert (S.reglist = T.reglist) by (apply cheat).  
   (* branch if cond is false *)
   assert (DC: destroyed_by_cond (negate_condition cond) = destroyed_by_cond cond).
