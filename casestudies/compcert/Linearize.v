@@ -38,7 +38,6 @@ From Rocqet Require Import Machregs.
 From Rocqet Require Import Conventions1.
 From Rocqet Require Import Locations.
 
-
 Family LTL.
 FDefinition node := positive.
 
@@ -929,7 +928,37 @@ FProof.
  right; split. simpl; lia. split. auto. simpl. fsimpl. fconstructor; eauto.
 
 (* Lcond *)  
-+ intros. apply cheat.
++ intros. apply MS_block_inv in MS; unpack MS; subst.
+ simpl in TEMP1. fsimpl in TEMP1.
+ assert (REACH1: (reachable f)!!pc1 = true) by (apply TEMP1; simpl; auto).
+ assert (REACH2: (reachable f)!!pc2 = true) by (apply TEMP1; simpl; auto).
+ simpl linearize_block. fsimpl.
+destruct (starts_with pc1 c).
+  assert (S.reglist = T.reglist) by (apply cheat).  
+  (* branch if cond is false *)
+  assert (DC: destroyed_by_cond (negate_condition cond) = destroyed_by_cond cond).
+    destruct cond; reflexivity.
+  destruct b.
+  (* cond is true: no branch *)
+  left; econstructor; split.
+  apply plus_one. eapply T.exec_Lcond_false.
+  rewrite eval_negate_condition. 
+  (* TODO *)
+  rewrite <- H.
+  rewrite e. auto. eauto.
+  rewrite DC. fconstructor; eauto.
+  (* cond is false: branch is taken *)
+  right; split. simpl; lia. split. auto. rewrite <- DC. fconstructor; eauto.
+  rewrite eval_negate_condition. rewrite e. auto.
+  (* branch if cond is true *)
+  destruct b.
+  (* cond is true: branch is taken *)
+  right; split. simpl; lia. split. auto. fconstructor; eauto.
+  (* cond is false: no branch *)
+  left; econstructor; split.
+  apply plus_one. eapply T.exec_Lcond_false. eauto. eauto.
+  fconstructor; eauto.
+
 (* Lreturn *)  
 + apply cheat.
 (* return *)  
