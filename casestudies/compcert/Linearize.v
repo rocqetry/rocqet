@@ -1263,7 +1263,6 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       rs' = undef_regs (destroyed_by_store chunk addr) rs ->
       step ge (State s f sp (Lstore chunk addr args src :: b) rs m)
         E0 (State s f sp b rs' m').
-
 FEnd Linear.
 
 Family Linearize.
@@ -1280,10 +1279,21 @@ Case Lstore chunk addr args src := (fun f k => T.Lstore chunk addr args src :: f
 Case Lload chunk addr args dst := (fun f k => T.Lload chunk addr args dst :: f k).
 FEnd translate_instr.
 
+FInduction find_label_lin_block_helper.
+FProof.
+all: intros; generalize (find_label_add_branch lbl k); intro; info_auto with fsimpl. 
+Qed. FEnd find_label_lin_block_helper.
+
 FInduction transf_step_correct.
 FProof.
 (* Lload *)
-+ apply cheat.
++ intros. apply MS_block_inv in MS; unpack MS; subst. 
+  simpl in TEMP1. fsimpl in TEMP1.
+  left; econstructor; split. simpl.
+  apply plus_one. fsimpl. fconstructor.
+  (*instantiate (1 := a). *) rewrite <- e; apply eval_addressing_preserved.
+  exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl). 
+  fconstructor.
 (* Lstore *)  
 + apply cheat.  
 Qed. FEnd transf_step_correct.
