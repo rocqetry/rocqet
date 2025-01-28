@@ -1488,7 +1488,16 @@ FProof.
   symmetry; eapply sig_preserved; eauto.
   fconstructor; eauto. constructor; auto. econstructor; eauto.
 (* Ltailcall *)
-+ apply cheat.
++ intros. apply MS_block_inv in MS; unpack MS; subst. 
+  simpl in TEMP1. fsimpl in TEMP1. 
+  exploit find_function_translated; eauto. intros [tfd [A B]].
+  left; econstructor; split. simpl. fsimpl.
+  apply plus_one. fconstructor; eauto.
+  rewrite (match_parent_locset _ _ TEMP0). eauto.
+  symmetry; eapply sig_preserved; eauto.
+  rewrite (stacksize_preserved _ _ TEMP); eauto.
+  rewrite (match_parent_locset _ _ TEMP0).
+  fconstructor; eauto.
 Qed. FEnd transf_step_correct.
   
 FEnd Linearize.
