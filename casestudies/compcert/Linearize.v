@@ -823,6 +823,16 @@ Closing Fact MS_add_branch_inv : forall s f sp pc ls m s2,
   s2 = (T.State ts tf sp (add_branch pc c) ls m)
 by plain { intros until s2; intros H; inv H; eauto }.
 
+Closing Fact MS_block_inv : forall s f sp bb ls m s2, 
+    match_states (S.Block s f sp bb ls m) s2 -> 
+    exists ts tf c, 
+    list_forall2 match_stackframes s ts /\
+    transf_function f = OK tf /\
+    (forall pc, In pc (S.successors_block bb) -> (reachable f)!!pc = true) /\
+    is_tail c (T.fn_code tf) /\
+    s2 = (T.State ts tf sp (linearize_block bb c) ls m)
+by plain { intros until s2; intros H; inv H; eauto }.
+
 FLemma is_tail_find_label:
   forall lbl c2 c1,
   T.find_label lbl c1 = Some c2 -> is_tail c2 c1.
@@ -863,6 +873,16 @@ FProofLemma.
   apply plus_one. apply exec_Lgoto. auto.*)
 Qed. CloseFLemma.
 
+FLemma symbols_preserved:
+  forall prog tprog ge tge, match_prog prog tprog ->
+  ge = Genv.globalenv prog ->
+  tge = Genv.globalenv tprog ->
+  forall (s: ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
+FProofLemma.
+intros until tge; intros TRANSL A B. rewrite A. rewrite B.
+apply (Genv.find_symbol_transf_partial TRANSL).
+Qed. CloseFLemma.
+
 FInduction transf_step_correct about S.step
   motive (fun ge s1 t s2 (_ : S.step ge s1 t s2) =>    
     forall prog tprog tge (TRANSF: match_prog prog tprog) s1' (MS: match_states s1 s1'),
@@ -880,8 +900,13 @@ FProof.
   eapply is_tail_lin_block; eauto. eapply is_tail_find_label; eauto.
   
  (* Lop *)  
-+ apply cheat.
-
++ intros. apply MS_block_inv in MS; unpack MS; subst. 
+  left; econstructor; split. simpl. fsimpl.
+  apply plus_one. fconstructor; eauto.
+  instantiate (1 := v); rewrite <- e; apply eval_operation_preserved.
+  exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl).
+  simpl in TEMP1. fsimpl in TEMP1.
+  fconstructor; eauto. 
 
 (* Lgetstack *)  
 + apply cheat.
