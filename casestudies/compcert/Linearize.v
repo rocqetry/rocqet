@@ -1422,32 +1422,50 @@ FProof.
 all: intros; generalize (find_label_add_branch lbl k); intro; info_auto with fsimpl. 
 Qed. FEnd find_label_lin_block_helper.
 
-Lemma functions_translated:
-  forall v f,
+FLemma functions_translated:
+  forall prog tprog ge tge, match_prog prog tprog ->
+  ge = Genv.globalenv prog ->
+  tge = Genv.globalenv tprog ->
+  forall (v: val) (f: S.fundef),
   Genv.find_funct ge v = Some f ->
   exists tf,
-  Genv.find_funct tge v = Some tf /\ transf_fundef f = OK tf.
-Proof (Genv.find_funct_transf_partial TRANSF).
+  Genv.find_funct tge v = Some tf /\ transf_fundef f = Errors.OK tf.
+FProofLemma.
+intros until tge; intros TRANSL A B. rewrite A. rewrite B.
+apply (Genv.find_funct_transf_partial TRANSL).
+Qed. CloseFLemma.
 
-Lemma function_ptr_translated:
-  forall v f,
-  Genv.find_funct_ptr ge v = Some f ->
+FLemma function_ptr_translated:
+  forall prog tprog ge tge, match_prog prog tprog ->
+  ge = Genv.globalenv prog ->
+  tge = Genv.globalenv tprog ->
+  forall (b: block) (f: S.fundef),
+  Genv.find_funct_ptr ge b = Some f ->
   exists tf,
-  Genv.find_funct_ptr tge v = Some tf /\ transf_fundef f = OK tf.
-Proof (Genv.find_funct_ptr_transf_partial TRANSF).
+  Genv.find_funct_ptr tge b = Some tf /\ transf_fundef f = Errors.OK tf.
+FProofLemma.
+intros until tge; intros TRANSL A B. rewrite A. rewrite B.
+apply Genv.find_funct_ptr_transf_partial; eauto.
+Qed. CloseFLemma.
+
+Inherit symbols_preserved.
 
 FLemma find_function_translated:
-  forall ge tge ros ls f,
+  forall prog tprog ge tge, match_prog prog tprog ->
+  ge = Genv.globalenv prog ->
+  tge = Genv.globalenv tprog ->
+  forall ros ls f,
   S.find_function ge ros ls = Some f ->
   exists tf,
   T.find_function tge ros ls = Some tf /\ transf_fundef f = OK tf.
 FProofLemma.
   unfold S.find_function; intros; destruct ros; simpl.
-  apply functions_translated; auto.
-  rewrite symbols_preserved. destruct (Genv.find_symbol ge i).
-  apply function_ptr_translated; auto.
+  eapply functions_translated; eauto.
+  rewrite (symbols_preserved prog tprog ge tge H H0 H1).  
+  destruct (Genv.find_symbol ge i).
+  apply (function_ptr_translated prog tprog ge tge H H0 H1); auto.   
   congruence.
-Qed.
+Qed. CloseFLemma.
 
 FInduction transf_step_correct.
 FProof.
