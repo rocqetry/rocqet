@@ -1467,16 +1467,26 @@ FProofLemma.
   congruence.
 Qed. CloseFLemma.
 
+FLemma sig_preserved:
+  forall f tf,
+  transf_fundef f = OK tf ->
+  T.funsig tf = S.funsig f.
+FProofLemma.
+  unfold transf_fundef, transf_partial_fundef; intros.
+  destruct f. monadInv H. monadInv EQ. reflexivity.
+  inv H. reflexivity.
+Qed. CloseFLemma.
+
 FInduction transf_step_correct.
 FProof.
 (* Lcall *)
 + intros. apply MS_block_inv in MS; unpack MS; subst. 
   simpl in TEMP1. fsimpl in TEMP1. 
   exploit find_function_translated; eauto. intros [tfd [A B]].
-  left; econstructor; split. simpl.
-  apply plus_one. econstructor; eauto.
+  left; econstructor; split. simpl. fsimpl.
+  apply plus_one. fconstructor; eauto.
   symmetry; eapply sig_preserved; eauto.
-  econstructor; eauto. constructor; auto. econstructor; eauto.
+  fconstructor; eauto. constructor; auto. econstructor; eauto.
 (* Ltailcall *)
 + apply cheat.
 Qed. FEnd transf_step_correct.
