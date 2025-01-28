@@ -1174,10 +1174,32 @@ FRecursion translate_instr.
 Case Lbuiltin ef args res := (fun f k => T.Lbuiltin ef args res ::f k).
 FEnd translate_instr.
 
+FInduction find_label_lin_block_helper.
+FProof.
+all: intros; generalize (find_label_add_branch lbl k); intro; info_auto with fsimpl. 
+Qed. FEnd find_label_lin_block_helper.
+
+FLemma senv_preserved: forall prog tprog ge tge, match_prog prog tprog ->
+  ge = Genv.globalenv prog ->
+  tge = Genv.globalenv tprog ->
+  Senv.equiv (Genv.to_senv ge) (Genv.to_senv tge).
+FProofLemma.
+intros until tge; intros TRANSL A B. rewrite A. rewrite B.
+apply (Genv.senv_transf_partial TRANSL).
+Qed. CloseFLemma.
+
 FInduction transf_step_correct.
 FProof.
 (* Lbuiltin *)
-+ apply cheat.
++ intros. apply MS_block_inv in MS; unpack MS; subst. 
+  simpl in TEMP1. fsimpl in TEMP1.
+  left; econstructor; split. simpl.
+  apply plus_one. fsimpl. eapply T.exec_Lbuiltin; eauto.
+  eapply eval_builtin_args_preserved with (ge1 := (Genv.globalenv prog)); eauto. 
+  exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl).  
+  eapply external_call_symbols_preserved; eauto. 
+  apply (senv_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl).
+  fconstructor.
 Qed. FEnd transf_step_correct.
 
 FEnd Linearize.
