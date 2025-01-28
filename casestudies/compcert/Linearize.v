@@ -1295,7 +1295,13 @@ FProof.
   exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl). 
   fconstructor.
 (* Lstore *)  
-+ apply cheat.  
++ intros. apply MS_block_inv in MS; unpack MS; subst. 
+  simpl in TEMP1. fsimpl in TEMP1. 
+  left; econstructor; split. simpl.
+  apply plus_one. fsimpl. fconstructor.
+  (*instantiate (1 := a).*) rewrite <- e; apply eval_addressing_preserved.
+  exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl). 
+  fconstructor.  
 Qed. FEnd transf_step_correct.
 
 FEnd Linearize.
