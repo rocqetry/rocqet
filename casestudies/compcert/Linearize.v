@@ -653,6 +653,148 @@ FDefinition measure := fun (S0: S.state) =>
   | _ => 0%nat
   end.
 
+(* Properties of node enumeration *)
+
+Module NodesetFacts := FSetFacts.Facts(Nodeset).
+
+FLemma nodeset_of_list_correct:
+  forall l s s',
+  nodeset_of_list l s = OK s' ->
+  list_norepet l
+  /\ (forall pc, Nodeset.In pc s' <-> Nodeset.In pc s \/ In pc l)
+  /\ (forall pc, In pc l -> ~Nodeset.In pc s).
+FProofLemma.
+  induction l; simpl; intros.
+  inv H. split. constructor. split. intro; tauto. intros; tauto.
+  generalize H; clear H; caseEq (Nodeset.mem a s); intros.
+  inv H0.
+  exploit IHl; eauto. intros [A [B C]].
+  split. constructor; auto. red; intro. elim (C a H1). apply Nodeset.add_1. hnf. auto.
+  split. intros. rewrite B. rewrite NodesetFacts.add_iff.
+  unfold Nodeset.E.eq. unfold OrderedPositive.eq. tauto.
+  intros. destruct H1. subst pc. rewrite NodesetFacts.not_mem_iff. auto.
+  generalize (C pc H1). rewrite NodesetFacts.add_iff. tauto.
+Qed. CloseFLemma.
+
+FLemma check_reachable_correct:
+  forall f reach s pc i,
+  check_reachable f reach s = true ->
+  (S.fn_code f)!pc = Some i ->
+  reach!!pc = true ->
+  Nodeset.In pc s.
+FProofLemma.
+  intros f reach s.
+  assert (forall l ok,
+    List.fold_left (fun a p => check_reachable_aux reach s a (fst p) (snd p)) l ok = true ->
+    ok = true /\
+    (forall pc i,
+     In (pc, i) l ->
+     reach!!pc = true ->
+     Nodeset.In pc s)).
+  induction l; simpl; intros.
+  split. auto. intros. destruct H0.
+  destruct a as [pc1 i1]. simpl in H.
+  exploit IHl; eauto. intros [A B].
+  unfold check_reachable_aux in A.
+  split. destruct (reach!!pc1). elim (andb_prop _ _ A). auto. auto.
+  intros. destruct H0. inv H0. rewrite H1 in A. destruct (andb_prop _ _ A).
+  apply Nodeset.mem_2; auto.
+  eauto.
+
+  intros pc i. unfold check_reachable. rewrite PTree.fold_spec. intros.
+  exploit H; eauto. intros [A B]. eapply B; eauto.
+  apply PTree.elements_correct. eauto.
+Qed. CloseFLemma.
+
+FLemma enumerate_complete:
+  forall f enum pc i,
+  enumerate f = OK enum ->
+  (S.fn_code f)!pc = Some i ->
+  (reachable f)!!pc = true ->
+  In pc enum.
+FProofLemma.
+  intros until i. unfold enumerate.
+  set (reach := reachable f).
+  intros. monadInv H.
+  generalize EQ0; clear EQ0. caseEq (check_reachable f reach x); intros; inv EQ0.
+  exploit check_reachable_correct; eauto. intro.
+  exploit nodeset_of_list_correct; eauto. intros [A [B C]].
+  rewrite B in H2. destruct H2. elim (Nodeset.empty_1 H2). auto.
+Qed. CloseFLemma.
+
+FLemma find_label_add_branch:
+  forall lbl k s,
+  T.find_label lbl (add_branch s k) = T.find_label lbl k.
+FProofLemma.
+  intros. unfold add_branch. destruct (starts_with s k).
+  - auto.
+  - simpl. fsimpl. reflexivity.
+Qed. CloseFLemma.
+
+Create HintDb fsimpl.
+Hint Extern 1 => fsimpl : fsimpl.
+Hint Extern 1 => simpl : fsimpl.
+
+FInduction find_label_lin_block_helper about S.instruction motive (fun (a : S.instruction) => 
+  forall lbl b k (IH: T.find_label lbl (linearize_block b k) = T.find_label lbl k), 
+    T.find_label lbl (translate_instr a (linearize_block b) k) = T.find_label lbl k).
+FProof.
+all: intros; generalize (find_label_add_branch lbl k); intro; info_auto with fsimpl. 
++ fsimpl. case (starts_with n k); auto with fsimpl. 
+Qed. FEnd find_label_lin_block_helper.
+
+FLemma find_label_lin_block:
+  forall lbl k b,
+  T.find_label lbl (linearize_block b k) = T.find_label lbl k.
+FProofLemma.
+  intros lbl k. generalize (find_label_add_branch lbl k); intro.
+  induction b; simpl; auto. eapply find_label_lin_block_helper; eauto.  
+Qed. CloseFLemma.
+
+FLemma linearize_body_cons:
+  forall f pc enum,
+  linearize_body f (pc :: enum) =
+  match (S.fn_code f)!pc with
+  | None => linearize_body f enum
+  | Some b => T.Llabel pc :: linearize_block b (linearize_body f enum)
+  end.
+FProofLemma.
+  intros. unfold linearize_body. rewrite list_fold_right_eq.
+  unfold linearize_node. destruct (S.fn_code f)!pc; auto.
+Qed. CloseFLemma.
+
+FLemma find_label_lin_rec:
+  forall f enum pc b,
+  In pc enum ->
+  (S.fn_code f)!pc = Some b ->
+  exists k, T.find_label pc (linearize_body f enum) = Some (linearize_block b k).
+FProofLemma.
+  induction enum; intros.
+  elim H.
+  rewrite linearize_body_cons.
+  destruct (peq a pc).
+  subst a. exists (linearize_body f enum).
+  rewrite H0. simpl. fsimpl. rewrite peq_true. auto.
+  assert (In pc enum). simpl in H. tauto.
+  destruct (IHenum pc b H1 H0) as [k FIND].
+  exists k. destruct (S.fn_code f)!a.
+  simpl. fsimpl. rewrite peq_false. rewrite find_label_lin_block. auto. auto.
+  auto.
+Qed. CloseFLemma.
+
+FLemma find_label_lin:
+  forall f tf pc b,
+  transf_function f = OK tf ->
+  (S.fn_code f)!pc = Some b ->
+  (reachable f)!!pc = true ->
+  exists k,
+  T.find_label pc (T.fn_code tf) = Some (linearize_block b k).
+FProofLemma.
+  intros. monadInv H. simpl.
+  rewrite find_label_add_branch. apply find_label_lin_rec.
+  eapply enumerate_complete; eauto. auto.
+Qed. CloseFLemma.
+
 Closing Fact MS_add_branch_inv : forall s f sp pc ls m s2,
   match_states (S.State s f sp pc ls m) s2 -> 
   exists ts tf c, 
