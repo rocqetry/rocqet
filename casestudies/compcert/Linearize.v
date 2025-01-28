@@ -909,7 +909,12 @@ FProof.
   fconstructor; eauto. 
 
 (* Lgetstack *)  
-+ apply cheat.
++ intros. apply MS_block_inv in MS; unpack MS; subst.
+  left; econstructor; split. simpl. fsimpl.
+  apply plus_one. fconstructor; eauto.
+  simpl in TEMP1. fsimpl in TEMP1.
+  fconstructor; eauto.
+
 (* Lsetstack *)  
 + apply cheat.
 (* Lbranch *)  
