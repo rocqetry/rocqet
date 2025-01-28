@@ -1095,10 +1095,30 @@ FRecursion translate_instr.
 Case Ljumptable args tbl := (fun f k => T.Ljumptable args tbl :: k).
 FEnd translate_instr.
 
+FInductive match_states: S.state -> T.state -> Prop :=
+| match_states_jumptable:
+      forall s f sp pc ls m tf ts arg tbl c n
+        (STACKS: list_forall2 match_stackframes s ts)
+        (TRF: transf_function f = OK tf)
+        (REACH: (reachable f)!!pc = true)
+        (ARG: ls (R arg) = Vint n)
+        (JUMP: list_nth_z tbl (Int.unsigned n) = Some pc),
+      match_states (S.State s f sp pc (S.undef_regs destroyed_by_jumptable ls) m)
+                   (T.State ts tf sp (T.Ljumptable arg tbl :: c) ls m).
+
+FInduction find_label_lin_block_helper.
+FProof.
+all: intros; generalize (find_label_add_branch lbl k); intro; info_auto with fsimpl. 
+Qed. FEnd find_label_lin_block_helper.
+
 FInduction transf_step_correct.
 FProof.
 (* Ljumptable *)
-+ apply cheat.
++ intros. apply MS_block_inv in MS; unpack MS; subst.
+  simpl in TEMP1. fsimpl in TEMP1.
+  assert (REACH': (reachable f)!!pc = true).
+    apply TEMP1. simpl. eapply list_nth_z_in; eauto.
+    right; split. simpl; lia. split. auto. simpl. fsimpl. fconstructor; eauto.
 Qed. FEnd transf_step_correct.
 
 FEnd Linearize.
