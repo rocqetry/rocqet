@@ -139,6 +139,15 @@ Proof.
   red; intros. eelim RegSet.empty_1; eauto.
 Qed.*)
 
+Definition mreg_within_bounds (b: bounds) (r: mreg) :=
+  is_callee_save r = true -> In r (used_callee_save b).
+
+Definition slot_within_bounds (b: bounds) (sl: slot) (ofs: Z) (ty: typ) :=
+  match sl with
+  | Local => ofs + typesize ty <= bound_local b
+  | Outgoing => ofs + typesize ty <= bound_outgoing b
+  | Incoming => True
+  end.
 
 (*
 
