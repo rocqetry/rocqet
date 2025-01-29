@@ -1133,8 +1133,8 @@ FInduction transf_step_correct.
 FProof.
 (* Ljumptable *)
 + intros. apply MS_block_inv in MS; unpack MS; subst.
-  simpl in TEMP1. fsimpl in TEMP1.
-  assert (REACH': (reachable f)!!pc = true).
+  simpl in TEMP1. fsimpl in TEMP1.  
+  assert (REACH': (reachable f)!!pc = true).  
     apply TEMP1. simpl. eapply list_nth_z_in; eauto.
     right; split. simpl; lia. split. auto. simpl. fsimpl. fconstructor; eauto.
 Qed. FEnd transf_step_correct.
@@ -1149,6 +1149,16 @@ Family LTL.
 FInductive instruction: Type :=
 | Lbuiltin : external_function -> list (builtin_arg loc) -> builtin_res mreg -> instruction.   
 
+Inherit locset.
+
+FDefinition undef_caller_save_regs : locset -> locset := fun ls =>
+  fun (l: loc) =>
+    match l with
+    | R r => if is_callee_save r then ls (R r) else Vundef
+    | S Outgoing ofs ty => Vundef
+    | S sl ofs ty => ls (S sl ofs ty)
+    end.
+
 FInductive step: genv -> state -> trace -> state -> Prop :=
 | exec_Lbuiltin: forall ge s f sp ef args res bb rs m vargs t vres rs' m',
       eval_builtin_args (Genv.to_senv ge) rs sp m args vargs ->
@@ -1158,7 +1168,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
         t (Block s f sp bb rs' m')
 | exec_function_external: forall ge s ef t args res rs m rs' m',
       args = map (fun p => Locmap.getpair p rs) (loc_arguments (ef_sig ef)) ->
-      external_call ef ge args m t res m' ->
+      external_call ef (Genv.to_senv ge) args m t res m' ->
       rs' = Locmap.setpair (loc_result (ef_sig ef)) res (undef_caller_save_regs rs) ->
       step ge (Callstate s (AST.External ef) rs m)
          t (Returnstate s rs' m').
@@ -1186,11 +1196,11 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       step ge (State s f sp (Lbuiltin ef args res :: b) rs m)
         t (State s f sp b rs' m')
 | exec_function_external:
-      forall s ef args res rs1 rs2 m t m',
+      forall ge s ef args res rs1 rs2 m t m',
       args = map (fun p => Locmap.getpair p rs1) (loc_arguments (ef_sig ef)) ->
-      external_call ef ge args m t res m' ->
-      rs2 = Locmap.setpair (loc_result (ef_sig ef)) res (undef_caller_save_regs rs1) ->
-      step (Callstate s (External ef) rs1 m)
+      external_call ef (Genv.to_senv ge) args m t res m' ->
+      rs2 = Locmap.setpair (loc_result (ef_sig ef)) res (LTL.undef_caller_save_regs rs1) ->
+      step ge (Callstate s (AST.External ef) rs1 m)
          t (Returnstate s rs2 m').
 
 FEnd Linear.
@@ -1231,6 +1241,13 @@ FProof.
   eapply external_call_symbols_preserved; eauto. 
   apply (senv_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl).
   fconstructor.
+(* external function *)
++ intros. apply MS_call_inv in MS; unpack MS; subst.
+  monadInv TEMP0. left; econstructor; split.
+  apply plus_one. eapply T.exec_function_external; eauto.
+  eapply external_call_symbols_preserved; eauto. 
+  apply (senv_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl).  
+  fconstructor.  
 Qed. FEnd transf_step_correct.
 
 FEnd Linearize.
