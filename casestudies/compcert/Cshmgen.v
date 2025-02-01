@@ -1310,76 +1310,120 @@ FProofLemma.
 Qed. CloseFLemma.
 
 (* Hint Extern 2 (@eq trace _ _) => traceEq: cshm. *)
-(*FInduction make_cmpu_ne_zero_correct_helper
+(* helper lemmas for make_cmpu_ne_zero_correct *)
+FLemma default_Vint :
+  forall lenv ge e le m a n,
+    T.eval_expr ge e le m lenv a (Vint n) ->
+    T.eval_expr ge e le m lenv (T.Ebinop (Ocmpu Cne) a (make_intconst Int.zero))
+      (Vint (if Int.eq n Int.zero then Int.zero else Int.one)).
+FProofLemma.
+intros. fconstructor; eauto.
+- fconstructor. fsimpl. reflexivity.
+- simpl. unfold Val.cmpu, Val.cmpu_bool.
+unfold Int.cmpu. destruct (Int.eq n Int.zero); auto.
+Qed. CloseFLemma.
+
+FLemma cmp :
+  forall n ob,
+    Val.of_optbool ob = Vint n ->
+    n = (if Int.eq n Int.zero then Int.zero else Int.one).
+FProofLemma.
+intros. destruct ob; simpl in H; inv H. destruct b; inv H1.
+- rewrite Int.eq_false; auto. apply Int.one_not_zero.
+- rewrite Int.eq_true. auto.
+Qed. CloseFLemma.
+(* inversion lemmas for use in make_cmpu_ne_zero_correct *)
+Closing Fact eval_Ebinop_inv :
+  forall ge lenv e le m op a1 a2 v1 v2 v,
+    T.eval_expr ge e le m lenv (T.Ebinop op a1 a2) v ->
+    T.eval_expr ge e le m lenv a1 v1 /\
+      T.eval_expr ge e le m lenv a2 v2 /\
+      eval_binop op v1 v2 m = Some v
+    by plain {intros until tmp; intros H; inv H; eauto}.
+
+FInduction make_cmpu_ne_zero_correct
   about T.eval_expr motive
   fun ge e le m lenv a v (_ : T.eval_expr ge e le m lenv a v) =>
     forall (* ge e le m lenv a v (_ : T.eval_expr ge e le m lenv a v)*) n,
-      T.eval_expr ge e le m lenv (T.Ebinop (Ocmpu Cne) a (make_intconst Int.zero))
-        (Vint (if Int.eq n Int.zero then Int.zero else Int.one)) ->
-  T.eval_expr ge e le m lenv (make_cmpu_ne_zero a)
-  (Vint (if Int.eq n Int.zero then Int.zero else Int.one)).
+      T.eval_expr ge e le m lenv a (Vint n) ->
+      T.eval_expr ge e le m lenv (make_cmpu_ne_zero a)
+        (Vint (if Int.eq n Int.zero then Int.zero else Int.one)).
 FProof.
-- intros. fsimpl. auto.
-- intros. fsimpl. auto.
-- intros. fsimpl. auto.
-- intros. fsimpl. auto. simpl.    
-Qed. FEnd make_cmpu_ne_zero_correct_helper.*)
+all:
+  intros; pose proof default_Vint; pose proof cmp; 
+  fsimpl; auto. apply cheat.
+(*destruct op; fsimpl; eauto.
+all: eapply eval_Ebinop_inv in H1; destruct H1 as [hyp1 [hyp2 hyp3]];
+  fconstructor; eauto; rewrite hyp3; decEq; decEq;
+  simpl in hyp3.
+- inv hyp3; eauto.
+- inv hyp3; eauto.
+- inv hyp3; eauto.
+- inv hyp3; eauto.
+- unfold Val.cmpl in hyp3. destruct (Val.cmpl_bool c ?[v13] ?[v23])
+    as [[]|]; inv hyp3; reflexivity.
+- unfold Val.cmplu in hyp3. destruct (Val.cmplu_bool (Mem.valid_pointer m) c ?[v1] ?[v2])
+    as [[]|]; inv hyp3; reflexivity.*)
+Qed. FEnd make_cmpu_ne_zero_correct.
 
-FLemma make_cmpu_ne_zero_correct:
-  forall lenv ge e le m a n,
-  T.eval_expr ge e le m lenv a (Vint n) ->
-  T.eval_expr ge e le m lenv (make_cmpu_ne_zero a) (Vint (if Int.eq n Int.zero then Int.zero else Int.one)).
+
+(* For proving make_cmpu_ne_zero_correct_ptr *)
+FLemma default_Vone :
+  forall lenv ge e le m a b i,
+    T.eval_expr ge e le m lenv a (Vptr b i) ->
+    Archi.ptr64 = false ->
+    Mem.weak_valid_pointer m b (Ptrofs.unsigned i) = true ->
+    T.eval_expr ge e le m lenv (T.Ebinop (Ocmpu Cne) a (make_intconst Int.zero)) Vone.
 FProofLemma.
-  intros.
-  assert (DEFAULT: T.eval_expr ge e le m lenv (T.Ebinop (Ocmpu Cne) a (make_intconst Int.zero))
-                                       (Vint (if Int.eq n Int.zero then Int.zero else Int.one))).
-  { fconstructor; eauto. fconstructor.
-    { fsimpl. auto. }
-    simpl. unfold Val.cmpu, Val.cmpu_bool.
-    unfold Int.cmpu. destruct (Int.eq n Int.zero); auto. }
-  assert (CMP: forall ob,
-               Val.of_optbool ob = Vint n ->
-               n = (if Int.eq n Int.zero then Int.zero else Int.one)).
-  { intros. destruct ob; simpl in H0; inv H0. destruct b; inv H2.
-    rewrite Int.eq_false. auto. apply Int.one_not_zero.
-    rewrite Int.eq_true. auto. }
-  apply cheat.
-  (* need to destruct and do case analysis
-   turn this into finduction, for repetition
-   - do a separate definition for default and other asserts
-   - use all: tactic
-   - manually repeat when needed*)
+intros. fconstructor. { fconstructor. fsimpl. reflexivity. }
+simpl. unfold Val.cmpu, Val.cmpu_bool.
+unfold Mem.weak_valid_pointer in H1. rewrite H0, H1.
+rewrite Int.eq_true; auto.
 Qed. CloseFLemma.
 
-FLemma make_cmpu_ne_zero_correct_ptr:
-  forall lenv ge e le m a b i,
+FLemma of_optbool :
+  forall ob b i,
+    Some (Val.of_optbool ob) <> Some (Vptr b i).
+FProofLemma.
+intros. destruct ob as [[]|]; discriminate.
+Qed. CloseFLemma.
+FLemma of_bool :
+  forall ob b i,
+    option_map Val.of_bool ob <> Some (Vptr b i).
+FProofLemma.
+intros. destruct ob as [[]|]; discriminate.
+Qed. CloseFLemma.
+
+FInduction make_cmpu_ne_zero_correct_ptr
+  about T.eval_expr motive
+  fun ge e le m lenv a v (_ : T.eval_expr ge e le m lenv a v) =>
+    forall b i,
   T.eval_expr ge e le m lenv a (Vptr b i) ->
   Archi.ptr64 = false ->
   Mem.weak_valid_pointer m b (Ptrofs.unsigned i) = true ->
   T.eval_expr ge e le m lenv (make_cmpu_ne_zero a) Vone.
-FProofLemma.
-  intros.
-  assert (DEFAULT: T.eval_expr ge e le m lenv (T.Ebinop (Ocmpu Cne) a (make_intconst Int.zero)) Vone).
-  { fconstructor. { fconstructor. fsimpl. reflexivity. }
-    simpl. unfold Val.cmpu, Val.cmpu_bool.
-    unfold Mem.weak_valid_pointer in H1. rewrite H0, H1.
-    rewrite Int.eq_true; auto. }
-  assert (OF_OPTBOOL: forall ob, Some (Val.of_optbool ob) <> Some (Vptr b i)).
-  { intros. destruct ob as [[]|]; discriminate. }
-  assert (OF_BOOL: forall ob, option_map Val.of_bool ob <> Some (Vptr b i)).
-  { intros. destruct ob as [[]|]; discriminate. }
-  apply cheat.
-  (* need destruct and case analysis*)
-Qed. CloseFLemma.
+FProof.
+all: intros;
+  pose proof default_Vone;
+  pose proof of_optbool;
+  pose proof of_bool;
+  fsimpl; eauto.
+unfold make_cmpu_ne_zero_helper.
+apply cheat.
+(*destruct op; fsimpl; eauto.
+all: eapply eval_Ebinop_inv in H1; destruct H1 as [hyp1 [hyp2 hyp3]];
+  eelim of_optbool; eauto.
+all: eelim of_bool; eauto.*)
+Qed.  FEnd make_cmpu_ne_zero_correct_ptr.
 
 FLemma make_cast_int_correct:
   forall lenv ge e le m a n sz si,
   T.eval_expr ge e le m lenv a (Vint n) ->
   T.eval_expr ge e le m lenv (make_cast_int a sz si) (Vint (cast_int_int sz si n)).
 FProofLemma.
-  intros. unfold make_cast_int, cast_int_int.
-  destruct sz; destruct si; eauto;try fconstructor;
-    apply make_cmpu_ne_zero_correct; auto.    
+intros. unfold make_cast_int, cast_int_int.
+destruct sz; destruct si; eauto;try fconstructor;
+  eapply make_cmpu_ne_zero_correct in H; apply H ; auto.    
 Qed. CloseFLemma.
 
 FLemma make_longofint_correct:
@@ -1407,7 +1451,7 @@ FLemma make_cast_correct:
 FProofLemma.
 intros. unfold make_cast, sem_cast in *;
   destruct (classify_cast ty1 ty2); inv H; destruct v; InvEval; eauto;
-  apply cheat.
+apply cheat.
 (* without cshm database, more cases for manual proof*)
 Qed. CloseFLemma. 
 
@@ -1422,8 +1466,9 @@ FProofLemma.
 intros. unfold make_boolean. unfold bool_val in H0.
   destruct (classify_bool ty); destruct v; InvEval.
 - (* int *)
-  econstructor; split. apply make_cmpu_ne_zero_correct with (n := i); auto.
-  destruct (Int.eq i Int.zero); simpl; constructor.
+  econstructor; split.
+  + eapply make_cmpu_ne_zero_correct ; eauto.
+  + destruct (Int.eq i Int.zero); simpl; constructor.
 - (* ptr 32 bits *)
   exists Vone; split. eapply make_cmpu_ne_zero_correct_ptr; eauto. constructor.
 - (* long *)
@@ -1481,10 +1526,32 @@ FLemma match_env_same_blocks:
 FProofLemma.
 intros.
 set (R := fun (x: (block * type)) (y: (block * Z)) =>
-         match x, y with
-         | (b1, ty), (b2, sz) => b2 = b1 /\ sz = Ctypes.sizeof (S.genv_cenv ge) ty
-         end).
-  apply cheat.
+            match x, y with
+            | (b1, ty), (b2, sz) => b2 = b1 /\ sz = Ctypes.sizeof (S.genv_cenv ge) ty
+            end).
+assert (list_forall2
+          (fun i_x i_y => fst i_x = fst i_y /\ R (snd i_x) (snd i_y))
+          (PTree.elements e) (PTree.elements te)).
+{ apply PTree.elements_canonical_order. 
+  - intros id [b ty] GET.
+    exists (b, Ctypes.sizeof (S.genv_cenv ge) ty); split.
+    (* type needed different for ge 
+    exists (b, Ctypes.sizeof (S.genv_cenv (S.globalenv ge)) ty); split.*)
+    + destruct ge. (*eapply me_local; eauto.*) apply cheat.
+    + red; auto.
+  - intros id [b sz] GET. exploit me_local_inv; eauto. intros [ty EQ].
+    exploit me_local; eauto. intros EQ1.
+    exists (b, ty); split; eauto.
+    red; split.
+    + congruence.
+    (* ge in EQ1 is the standard ge, but in environment outside is not*) 
+    + apply cheat. }
+unfold T.blocks_of_env, S.blocks_of_env.
+generalize H0. induction 1. auto.
+simpl. f_equal; auto.
+unfold T.block_of_binding, S.block_of_binding.
+destruct a1 as [id1 [blk1 ty1]]. destruct b1 as [id2 [blk2 sz2]].
+simpl in *. destruct H1 as [A [B C]]. congruence.
 Qed. CloseFLemma.
 
 FLemma match_env_free_blocks:
@@ -1520,7 +1587,24 @@ FProofLemma.
 - inv H0. exists te1; split. constructor. auto.
 - monadInv H2. monadInv EQ. simpl in *.
   exploit transl_sizeof. eexact H. eauto. intros SZ; rewrite SZ.
-  apply cheat.
+  exploit (IHalloc_variables x0 (PTree.set id (b1, Ctypes.sizeof (S.genv_cenv ge) ty) te1)).
+  + auto.
+  + constructor.
+    * (* me_local *)
+      intros until ty0. repeat rewrite PTree.gsspec.
+      destruct (peq id0 id); intros.
+      -- (*constructor creates a ge0 variable, compcert didn't have this behaviour*)
+        apply cheat.
+      -- eapply me_local; eauto.
+    * (* me_local_inv *)
+      intros until sz. repeat rewrite PTree.gsspec.
+      destruct (peq id0 id); intros.
+      -- exists ty; congruence.
+      -- eapply me_local_inv; eauto.
+  + intros [te2 [ALLOC MENV]].
+    exists te2; split;eauto.
+    econstructor; eauto.
+    *
 Qed. CloseFLemma.
 FLemma create_undef_temps_match:
   forall temps,
