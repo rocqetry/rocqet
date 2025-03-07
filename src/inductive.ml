@@ -73,16 +73,12 @@ let add_new_inductive_definition ~inductive ~inductive_name =
   in
   Context.add_field ~name:inductive_name ~elem;
 
-  let _ =
-    types inductive
-    |> List.iter (fun (name, ty) -> add_inductive_axiom ~name ~ty)
-  in
-
-  let _ =
-    constructors inductive
-    |> List.iter (fun (name, ty) -> add_inductive_axiom ~name ~ty)
-  in
-  ()
+  Context.with_pinned_context (fun () ->
+      types inductive
+      |> List.iter (fun (name, ty) -> add_inductive_axiom ~name ~ty));
+  Context.with_pinned_context (fun () ->
+      constructors inductive
+      |> List.iter (fun (name, ty) -> add_inductive_axiom ~name ~ty))
 (* if not (Termutils.is_indexed_inductive inductive) then
    let inductive_path = Libnames.qualid_of_ident inductive_name in
    (* Would not work for mutually inductive *)

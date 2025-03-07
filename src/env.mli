@@ -21,6 +21,14 @@ end
 module Context : sig
   val get : unit -> LinkageCtx.t
   val get_store : unit -> LinkageCtx.t option
+
+  type compiled_context =
+    Libnames.qualid * (Names.variable * Constrexpr.module_ast) list
+
+  val pin_context : unit -> unit
+  val unpin_context : unit -> unit
+  val with_pinned_context : 'a. (unit -> 'a) -> 'a
+  val compute_or_pinned : (unit -> compiled_context) -> compiled_context
   val local_lookup : LinkageCtx.t -> Libnames.qualid -> Linkage.t option
   val lookup : LinkageCtx.t option -> Libnames.qualid -> Linkage.t option
 

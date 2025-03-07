@@ -172,7 +172,7 @@ let open_theorem ~(args : Frec_arg.t list) =
     |> List.filter_map (fun (name, handler_type) ->
            if inside name implementing_handler_names then Some handler_type
            else None)
-  in  
+  in
   let goal = Termutils.calculate_inductive_proof_goal ~handler_types ~suffix in
   let rec_principle_prefix =
     let inductive_path = List.hd inductive_paths in
@@ -386,16 +386,19 @@ let close_theorem () =
   let name = List.hd names in
   Context.add_field ~name ~elem;
 
-  (* Add non-inherited names axioms *)
-  let defined_names =
-    names |> List.filter (fun n -> not (List.mem n inherited_names))
-  in
-  if not (List.is_empty defined_names) then
-    add_recursive_axiom ~names:defined_names;
+  let define_recursive_axioms () =
+    (* Add non-inherited names axioms *)
+    let defined_names =
+      names |> List.filter (fun n -> not (List.mem n inherited_names))
+    in
+    if not (List.is_empty defined_names) then
+      add_recursive_axiom ~names:defined_names;
 
-  (* Inherit axioms *)
-  inherited_names
-  |> List.iter (fun n ->
-         Inheritance.inherit_name ~name:(Naming.recursive_axiom_name n));
+    (* Inherit axioms *)
+    inherited_names
+    |> List.iter (fun n ->
+           Inheritance.inherit_name ~name:(Naming.recursive_axiom_name n))
+  in
+  Context.with_pinned_context define_recursive_axioms;
 
   Ctx.clear ()
