@@ -349,14 +349,13 @@ let close_theorem () =
     List.map (fun (name, expr) -> (name, expr)) implemented_handlers
   in
   (* Add the handlers as fields *)
-  let _ =
-    implemented_handlers
-    |> List.iter (fun (constructor_name, handler) ->
-           let name =
-             Naming.handler_name ~recursors:names ~case:constructor_name
-           in
-           Definition.add_definition ~name handler)
-  in
+  Context.with_pinned_context (fun () ->
+      implemented_handlers
+      |> List.iter (fun (constructor_name, handler) ->
+             let name =
+               Naming.handler_name ~recursors:names ~case:constructor_name
+             in
+             Definition.add_definition ~name handler));
   let handlers_table =
     implementing_handler_names
     |> List.map (fun handler ->
