@@ -97,18 +97,16 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
   in
   (* Filter principles not defined on this inductive *)
   let filter_mutual_principle suffixes =
-    if Termutils.is_prop_indexed_inductive ind_def
-    then [ RecKind.IndComplete ]
-    else     
-    suffixes
-    |> List.filter_map (fun suffix ->
-           RecursorStore.find_opt suffix !defined_recursors
-           |> Option.map (Fun.const suffix))
+    if Termutils.is_prop_indexed_inductive ind_def then [ RecKind.IndComplete ]
+    else
+      suffixes
+      |> List.filter_map (fun suffix ->
+             RecursorStore.find_opt suffix !defined_recursors
+             |> Option.map (Fun.const suffix))
   in
   let collect_mutual_recursor () : unit B.t =
-    if List.length type_names > 1 then 
-      (possible_mutual_suffixes
-      |> filter_mutual_principle
+    if List.length type_names > 1 then (
+      possible_mutual_suffixes |> filter_mutual_principle
       |> List.iter (fun suffix ->
              let one_type_name = List.hd type_names in
              let principle =
@@ -117,7 +115,9 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
              in
              let principle =
                Names.Id.of_string
-                 (Names.Id.to_string one_type_name ^ "_" ^ Names.Id.to_string principle)
+                 (Names.Id.to_string one_type_name
+                 ^ "_"
+                 ^ Names.Id.to_string principle)
              in
              let recursor_type =
                principle |> Constrexpr_ops.mkIdentC |> Termutils.checked_type_of
@@ -127,7 +127,7 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
              in
              defined_mutual_recursor :=
                RecursorStore.add suffix recursor_type !defined_mutual_recursor);
-       B.return ())
+      B.return ())
     else B.return ()
   in
   let compiled_impl =
@@ -487,7 +487,7 @@ let normalize_parameters
          let self_name = Libnames.qualid_of_ident self_name in
          if is_in_context self_name then self_name else default)
 
-let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
+let rec compile_linkage_context_impl ~field_name (context : LinkageCtx.t) acc :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
   let linkage =
     match context with
@@ -495,17 +495,23 @@ let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
     | LinkageCtx.Nested (_, linkage) -> linkage
   in
   let Linkage.{ fields; _ } = linkage in
-  let module_name_ctx =
+  let module_name_ctx () =
     Naming.fresh_name
       ~prefix:(Nameops.add_suffix field_name "Ctx" |> Names.Id.to_string)
+  in
+  let context_with ~fields =
+    match context with
+    | LinkageCtx.Toplevel linkage -> LinkageCtx.Toplevel { linkage with fields }
+    | LinkageCtx.Nested (upper, linkage) ->
+        LinkageCtx.Nested (upper, { linkage with fields })
   in
   (* Invariant: linkage.context contains self prefixed paths *)
   let parameters = Linkage.context_parameters linkage in
   match fields with
-  | Bwd.Emp ->
+  | Bwd.Emp when List.is_empty acc ->
       let signature_name =
         B.run
-        @@ B.define_moduletype ~module_name:module_name_ctx
+        @@ B.define_moduletype ~module_name:(module_name_ctx ())
              ~parameters:(Bwd.to_list linkage.context) ~body:(fun _arguments ->
                B.return ())
       in
@@ -516,90 +522,58 @@ let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
       in
       ( signature_name,
         linkage.context @> [ (Naming.self_version linkage.name, signature) ] )
-  | Bwd.Snoc (fields, (_, TraitDefinition _)) ->
-      let context =
-        match context with
-        | LinkageCtx.Toplevel linkage ->
-            LinkageCtx.Toplevel { linkage with fields }
-        | LinkageCtx.Nested (upper, linkage) ->
-            LinkageCtx.Nested (upper, { linkage with fields })
-      in
-      compile_linkage_context ~field_name context
+  | Bwd.Snoc (fields, (_, TraitDefinition _)) when List.is_empty acc ->
+      compile_linkage_context_impl ~field_name (context_with ~fields) []
   | Bwd.Snoc
-      ( _,
+      ( fields,
         ( _,
-          MetaDataSection
-            {
-              default_ctx_params;
-              compiled_context;
-              compiled_impl = compiled_signature;
-              _;
-            } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          ComputationalAxiom
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          InductiveAxiom
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          RecursiveAxiom
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          TheoremDefinition
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          OpaqueFieldDefinition
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          FieldDefinition
-            {
-              default_ctx_params;
-              compiled_context;
-              compiled_impl = compiled_signature;
-              _;
-            } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          PartialRecursor
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          InductiveDefinition
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          ClosingFact
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          FamilyDefinition
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          RecursorDefinition
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-    ->
+          ( MetaDataSection
+              {
+                default_ctx_params;
+                compiled_context;
+                compiled_impl = compiled_signature;
+                _;
+              }
+          | ComputationalAxiom
+              { default_ctx_params; compiled_context; compiled_signature; _ }
+          | InductiveAxiom
+              { default_ctx_params; compiled_context; compiled_signature; _ }
+          | RecursiveAxiom
+              { default_ctx_params; compiled_context; compiled_signature; _ }
+          | TheoremDefinition
+              { default_ctx_params; compiled_context; compiled_signature; _ }
+          | OpaqueFieldDefinition
+              { default_ctx_params; compiled_context; compiled_signature; _ }
+          | FieldDefinition
+              {
+                default_ctx_params;
+                compiled_context;
+                compiled_impl = compiled_signature;
+                _;
+              }
+          | PartialRecursor
+              { default_ctx_params; compiled_context; compiled_signature; _ }
+          | InductiveDefinition
+              { default_ctx_params; compiled_context; compiled_signature; _ }
+          | ClosingFact
+              { default_ctx_params; compiled_context; compiled_signature; _ }
+          | FamilyDefinition
+              { default_ctx_params; compiled_context; compiled_signature; _ }
+          | RecursorDefinition
+              { default_ctx_params; compiled_context; compiled_signature; _ } )
+        ) )
+    when match acc with
+         | [] -> true
+         | (_, compiled_context', _) :: _ ->
+             Libnames.qualid_eq compiled_context compiled_context' ->
+      compile_linkage_context_impl ~field_name (context_with ~fields)
+        ((default_ctx_params, compiled_context, compiled_signature) :: acc)
+  | _ ->
+      let _, compiled_context, _ = List.hd acc in
       let signature_name =
         B.(
           run
-          @@ define_moduletype ~module_name:module_name_ctx
+          @@ define_moduletype ~module_name:(module_name_ctx ())
                ~parameters:(Bwd.to_list linkage.context)
                ~body:(fun _arguments ->
                  let ctx =
@@ -609,17 +583,19 @@ let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
                      ~arguments:parameters
                  in
                  let* () = include_module ~module_expr:ctx in
-                 let parameters =
-                   normalize_parameters ~default_ctx_params ~parameters
-                 in
-                 let signature =
-                   Termutils.apply_module
-                     ~functor_expr:
-                       (Termutils.ident_to_module_expr compiled_signature)
-                     ~arguments:parameters
-                 in
-                 let* () = include_module ~module_expr:signature in
-                 return ()))
+                 acc
+                 |> List.map (fun (default_ctx_params, _, compiled_signature) ->
+                        let parameters =
+                          normalize_parameters ~default_ctx_params ~parameters
+                        in
+                        let signature =
+                          Termutils.apply_module
+                            ~functor_expr:
+                              (Termutils.ident_to_module_expr compiled_signature)
+                            ~arguments:parameters
+                        in
+                        include_module ~module_expr:signature)
+                 |> flatmap))
       in
       let signature =
         Termutils.apply_module
@@ -628,6 +604,10 @@ let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
       in
       ( signature_name,
         linkage.context @> [ (Naming.self_version linkage.name, signature) ] )
+
+let compile_linkage_context ~field_name context =
+  Env.Context.compute_or_pinned (fun () ->
+      compile_linkage_context_impl ~field_name context [])
 
 let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
     ~(module_name : Names.Id.t) ~(fields : (Names.Id.t * LinkageElem.t) Bwd.t) =
