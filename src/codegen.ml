@@ -487,7 +487,7 @@ let normalize_parameters
          let self_name = Libnames.qualid_of_ident self_name in
          if is_in_context self_name then self_name else default)
 
-let rec compile_linkage_context_impl ~field_name (context : LinkageCtx.t) acc :
+let rec compile_linkage_context ~field_name (context : LinkageCtx.t) acc :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
   let linkage =
     match context with
@@ -523,7 +523,7 @@ let rec compile_linkage_context_impl ~field_name (context : LinkageCtx.t) acc :
       ( signature_name,
         linkage.context @> [ (Naming.self_version linkage.name, signature) ] )
   | Bwd.Snoc (fields, (_, TraitDefinition _)) when List.is_empty acc ->
-      compile_linkage_context_impl ~field_name (context_with ~fields) []
+      compile_linkage_context ~field_name (context_with ~fields) []
   | Bwd.Snoc
       ( fields,
         ( _,
@@ -566,7 +566,7 @@ let rec compile_linkage_context_impl ~field_name (context : LinkageCtx.t) acc :
          | [] -> true
          | (_, compiled_context', _) :: _ ->
              Libnames.qualid_eq compiled_context compiled_context' ->
-      compile_linkage_context_impl ~field_name (context_with ~fields)
+      compile_linkage_context ~field_name (context_with ~fields)
         ((default_ctx_params, compiled_context, compiled_signature) :: acc)
   | _ ->
       let _, compiled_context, _ = List.hd acc in
@@ -607,7 +607,7 @@ let rec compile_linkage_context_impl ~field_name (context : LinkageCtx.t) acc :
 
 let compile_linkage_context ~field_name context =
   Env.Context.compute_or_pinned (fun () ->
-      compile_linkage_context_impl ~field_name context [])
+      compile_linkage_context ~field_name context [])
 
 let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
     ~(module_name : Names.Id.t) ~(fields : (Names.Id.t * LinkageElem.t) Bwd.t) =
@@ -911,89 +911,43 @@ let compile_linkage_signature linkage =
     | Snoc
         ( _,
           ( _,
-            LinkageElem.FamilyDefinition
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Snoc
-        ( _,
-          ( _,
-            LinkageElem.TraitDefinition
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Snoc
-        ( _,
-          ( _,
-            ComputationalAxiom
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Snoc
-        ( _,
-          ( _,
-            InductiveAxiom
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Snoc
-        ( _,
-          ( _,
-            RecursiveAxiom
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Snoc
-        ( _,
-          ( _,
-            MetaDataSection
-              {
-                default_ctx_params;
-                compiled_context;
-                compiled_impl = compiled_signature;
-                _;
-              } ) )
-    | Snoc
-        ( _,
-          ( _,
-            FieldDefinition
-              {
-                default_ctx_params;
-                compiled_context;
-                compiled_impl = compiled_signature;
-                _;
-              } ) )
-    | Bwd.Snoc
-        ( _,
-          ( _,
-            TheoremDefinition
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Bwd.Snoc
-        ( _,
-          ( _,
-            PartialRecursor
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Bwd.Snoc
-        ( _,
-          ( _,
-            ClosingFact
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Bwd.Snoc
-        ( _,
-          ( _,
-            OpaqueFieldDefinition
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Bwd.Snoc
-        ( _,
-          ( _,
-            InductiveDefinition
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Bwd.Snoc
-        ( _,
-          ( _,
-            RecursorDefinition
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        ) ->
+            ( FamilyDefinition
+                { default_ctx_params; compiled_context; compiled_signature; _ }
+            | TraitDefinition
+                { default_ctx_params; compiled_context; compiled_signature; _ }
+            | ComputationalAxiom
+                { default_ctx_params; compiled_context; compiled_signature; _ }
+            | InductiveAxiom
+                { default_ctx_params; compiled_context; compiled_signature; _ }
+            | RecursiveAxiom
+                { default_ctx_params; compiled_context; compiled_signature; _ }
+            | MetaDataSection
+                {
+                  default_ctx_params;
+                  compiled_context;
+                  compiled_impl = compiled_signature;
+                  _;
+                }
+            | FieldDefinition
+                {
+                  default_ctx_params;
+                  compiled_context;
+                  compiled_impl = compiled_signature;
+                  _;
+                }
+            | TheoremDefinition
+                { default_ctx_params; compiled_context; compiled_signature; _ }
+            | PartialRecursor
+                { default_ctx_params; compiled_context; compiled_signature; _ }
+            | ClosingFact
+                { default_ctx_params; compiled_context; compiled_signature; _ }
+            | OpaqueFieldDefinition
+                { default_ctx_params; compiled_context; compiled_signature; _ }
+            | InductiveDefinition
+                { default_ctx_params; compiled_context; compiled_signature; _ }
+            | RecursorDefinition
+                { default_ctx_params; compiled_context; compiled_signature; _ }
+              ) ) ) ->
         B.(
           run
           @@ define_moduletype ~module_name:helper
