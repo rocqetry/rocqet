@@ -140,14 +140,13 @@ let open_theorem ~(args : Frec_arg.t list) =
         (names, handlers, handlers_table)
     | _ -> ([], [], [])
   in
-  let () =
-    List.iter2
-      (fun name motive ->
-        if not (List.mem name inherited_names) then
-          let motive_name = Naming.motive_of name in
-          Definition.add_definition ~name:motive_name motive)
-      names motives
-  in
+  Context.with_pinned_context (fun () ->
+      List.iter2
+        (fun name motive ->
+          if not (List.mem name inherited_names) then
+            let motive_name = Naming.motive_of name in
+            Definition.add_definition ~name:motive_name motive)
+        names motives);
   let context = Context.get () in
   let compiled_context, parameters =
     Codegen.compile_linkage_context
