@@ -185,6 +185,14 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
+
+  type compiled_sig = {
+    default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+    compiled_context : CompiledModuleType.t;
+    compiled_signature : CompiledModuleType.t;
+  }
+
+  val to_compiled_sig : t -> compiled_sig
 end
 
 and Linkage : sig
@@ -206,6 +214,7 @@ and Linkage : sig
     LinkageElem.t -> source:Names.Id.t -> target:Names.Id.t -> LinkageElem.t
 
   val path_subtitution : t -> source:Names.Id.t -> target:Names.Id.t -> t
+  val fields_for_next_context : t -> LinkageElem.compiled_sig list
 end
 
 and LinkageCtx : sig

@@ -487,7 +487,7 @@ let normalize_parameters
          let self_name = Libnames.qualid_of_ident self_name in
          if is_in_context self_name then self_name else default)
 
-let rec compile_linkage_context ~field_name (context : LinkageCtx.t) acc :
+let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
     CompiledModuleType.t * (Names.Id.t * Constrexpr.module_ast) list =
   let linkage =
     match context with
@@ -499,16 +499,10 @@ let rec compile_linkage_context ~field_name (context : LinkageCtx.t) acc :
     Naming.fresh_name
       ~prefix:(Nameops.add_suffix field_name "Ctx" |> Names.Id.to_string)
   in
-  let context_with ~fields =
-    match context with
-    | LinkageCtx.Toplevel linkage -> LinkageCtx.Toplevel { linkage with fields }
-    | LinkageCtx.Nested (upper, linkage) ->
-        LinkageCtx.Nested (upper, { linkage with fields })
-  in
   (* Invariant: linkage.context contains self prefixed paths *)
   let parameters = Linkage.context_parameters linkage in
   match fields with
-  | Bwd.Emp when List.is_empty acc ->
+  | Bwd.Emp ->
       let signature_name =
         B.run
         @@ B.define_moduletype ~module_name:(module_name_ctx ())
@@ -522,54 +516,18 @@ let rec compile_linkage_context ~field_name (context : LinkageCtx.t) acc :
       in
       ( signature_name,
         linkage.context @> [ (Naming.self_version linkage.name, signature) ] )
-  | Bwd.Snoc (fields, (_, TraitDefinition _)) when List.is_empty acc ->
-      compile_linkage_context ~field_name (context_with ~fields) []
-  | Bwd.Snoc
-      ( fields,
-        ( _,
-          ( MetaDataSection
-              {
-                default_ctx_params;
-                compiled_context;
-                compiled_impl = compiled_signature;
-                _;
-              }
-          | ComputationalAxiom
-              { default_ctx_params; compiled_context; compiled_signature; _ }
-          | InductiveAxiom
-              { default_ctx_params; compiled_context; compiled_signature; _ }
-          | RecursiveAxiom
-              { default_ctx_params; compiled_context; compiled_signature; _ }
-          | TheoremDefinition
-              { default_ctx_params; compiled_context; compiled_signature; _ }
-          | OpaqueFieldDefinition
-              { default_ctx_params; compiled_context; compiled_signature; _ }
-          | FieldDefinition
-              {
-                default_ctx_params;
-                compiled_context;
-                compiled_impl = compiled_signature;
-                _;
-              }
-          | PartialRecursor
-              { default_ctx_params; compiled_context; compiled_signature; _ }
-          | InductiveDefinition
-              { default_ctx_params; compiled_context; compiled_signature; _ }
-          | ClosingFact
-              { default_ctx_params; compiled_context; compiled_signature; _ }
-          | FamilyDefinition
-              { default_ctx_params; compiled_context; compiled_signature; _ }
-          | RecursorDefinition
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        ) )
-    when match acc with
-         | [] -> true
-         | (_, compiled_context', _) :: _ ->
-             Libnames.qualid_eq compiled_context compiled_context' ->
-      compile_linkage_context ~field_name (context_with ~fields)
-        ((default_ctx_params, compiled_context, compiled_signature) :: acc)
+  | Bwd.Snoc (fields, (_, TraitDefinition _)) ->
+      let context =
+        match context with
+        | LinkageCtx.Toplevel linkage ->
+            LinkageCtx.Toplevel { linkage with fields }
+        | LinkageCtx.Nested (upper, linkage) ->
+            LinkageCtx.Nested (upper, { linkage with fields })
+      in
+      compile_linkage_context ~field_name context
   | _ ->
-      let _, compiled_context, _ = List.hd acc in
+      let fields = Linkage.fields_for_next_context linkage in
+      let { LinkageElem.compiled_context; _ } = List.hd fields in
       let signature_name =
         B.(
           run
@@ -583,8 +541,12 @@ let rec compile_linkage_context ~field_name (context : LinkageCtx.t) acc :
                      ~arguments:parameters
                  in
                  let* () = include_module ~module_expr:ctx in
-                 acc
-                 |> List.map (fun (default_ctx_params, _, compiled_signature) ->
+                 fields
+                 |> List.map
+                      (fun
+                        LinkageElem.
+                          { default_ctx_params; compiled_signature; _ }
+                      ->
                         let parameters =
                           normalize_parameters ~default_ctx_params ~parameters
                         in
@@ -607,7 +569,7 @@ let rec compile_linkage_context ~field_name (context : LinkageCtx.t) acc :
 
 let compile_linkage_context ~field_name context =
   Env.Context.compute_or_pinned (fun () ->
-      compile_linkage_context ~field_name context [])
+      compile_linkage_context ~field_name context)
 
 let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
     ~(module_name : Names.Id.t) ~(fields : (Names.Id.t * LinkageElem.t) Bwd.t) =
@@ -899,55 +861,17 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
 let compile_linkage = compile_linkage None
 
 let compile_linkage_signature linkage =
-  let Linkage.{ name; fields; context; _ } = linkage in
+  let Linkage.{ name; context; _ } = linkage in
   let helper = Naming.fresh_name ~prefix:"HelperSig" in
   let helper_module =
-    match fields with
-    | Bwd.Emp ->
+    match Linkage.fields_for_next_context linkage with
+    | [] ->
         B.(
           run
           @@ define_moduletype ~module_name:helper
                ~parameters:(Bwd.to_list context) ~body:(fun _ctx -> return ()))
-    | Snoc
-        ( _,
-          ( _,
-            ( FamilyDefinition
-                { default_ctx_params; compiled_context; compiled_signature; _ }
-            | TraitDefinition
-                { default_ctx_params; compiled_context; compiled_signature; _ }
-            | ComputationalAxiom
-                { default_ctx_params; compiled_context; compiled_signature; _ }
-            | InductiveAxiom
-                { default_ctx_params; compiled_context; compiled_signature; _ }
-            | RecursiveAxiom
-                { default_ctx_params; compiled_context; compiled_signature; _ }
-            | MetaDataSection
-                {
-                  default_ctx_params;
-                  compiled_context;
-                  compiled_impl = compiled_signature;
-                  _;
-                }
-            | FieldDefinition
-                {
-                  default_ctx_params;
-                  compiled_context;
-                  compiled_impl = compiled_signature;
-                  _;
-                }
-            | TheoremDefinition
-                { default_ctx_params; compiled_context; compiled_signature; _ }
-            | PartialRecursor
-                { default_ctx_params; compiled_context; compiled_signature; _ }
-            | ClosingFact
-                { default_ctx_params; compiled_context; compiled_signature; _ }
-            | OpaqueFieldDefinition
-                { default_ctx_params; compiled_context; compiled_signature; _ }
-            | InductiveDefinition
-                { default_ctx_params; compiled_context; compiled_signature; _ }
-            | RecursorDefinition
-                { default_ctx_params; compiled_context; compiled_signature; _ }
-              ) ) ) ->
+    | fields ->
+        let { LinkageElem.compiled_context; _ } = List.hd fields in
         B.(
           run
           @@ define_moduletype ~module_name:helper
@@ -958,18 +882,25 @@ let compile_linkage_signature linkage =
                        (Termutils.ident_to_module_expr compiled_context)
                      ~arguments:ctx
                  in
-                 let* _ = include_module ~module_expr:context_module_expr in
-                 let ctx =
-                   normalize_parameters ~default_ctx_params ~parameters:ctx
-                 in
-                 let signature_module_expr =
-                   Termutils.apply_module
-                     ~functor_expr:
-                       (Termutils.ident_to_module_expr compiled_signature)
-                     ~arguments:ctx
-                 in
-                 let* _ = include_module ~module_expr:signature_module_expr in
-                 return ()))
+                 let* () = include_module ~module_expr:context_module_expr in
+                 fields
+                 |> List.map
+                      (fun
+                        LinkageElem.
+                          { default_ctx_params; compiled_signature; _ }
+                      ->
+                        let ctx =
+                          normalize_parameters ~default_ctx_params
+                            ~parameters:ctx
+                        in
+                        let signature_module_expr =
+                          Termutils.apply_module
+                            ~functor_expr:
+                              (Termutils.ident_to_module_expr compiled_signature)
+                            ~arguments:ctx
+                        in
+                        include_module ~module_expr:signature_module_expr)
+                 |> flatmap))
   in
   let sig_final = Naming.fresh_name ~prefix:"Sig" in
   let include_signature =
