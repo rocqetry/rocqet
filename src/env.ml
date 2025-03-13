@@ -178,16 +178,17 @@ module Context = struct
     | Some _ -> pinned_context := None
 
   let with_pinned_context f =
-    Fun.protect ~finally:unpin_context (fun () ->
+    match !pinned_context with
+    | None ->
         pin_context ();
-        f ())
+        Fun.protect ~finally:unpin_context f
+    | Some _ -> f ()
 
   let with_unpinned_context f =
     match !pinned_context with
     | Some _ ->
-        Fun.protect ~finally:pin_context (fun () ->
-            unpin_context ();
-            f ())
+        unpin_context ();
+        Fun.protect ~finally:pin_context f
     | None -> f ()
 
   let compute_or_pinned f =

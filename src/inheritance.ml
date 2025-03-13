@@ -644,7 +644,8 @@ let inherit_deps ~(field : Names.Id.t) ~(base : Linkage.t)
     | Snoc (fields, _) -> find_dependencies fields
   in
   let deps = find_dependencies base.fields in
-  inherit_elements ~elements:deps ~linkage:derived ~context
+  Context.with_pinned_context (fun () ->
+      inherit_elements ~elements:deps ~linkage:derived ~context)
 
 let inherit_name ~(name : Names.Id.t) =
   let context = Context.get () in
