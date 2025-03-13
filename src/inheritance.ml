@@ -340,7 +340,8 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
         match element with
         | LinkageElem.InductiveDefinition inductive ->
             let compiled_context, parameters =
-              compile_context inductive.compiled_context
+              Context.with_unpinned_context (fun () ->
+                  compile_context inductive.compiled_context)
             in
             let compiled_impl, principles, mutual_principle =
               Codegen.compile_inductive_implementation
