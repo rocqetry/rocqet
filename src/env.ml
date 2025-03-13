@@ -182,6 +182,14 @@ module Context = struct
         pin_context ();
         f ())
 
+  let with_unpinned_context f =
+    match !pinned_context with
+    | Some _ ->
+        Fun.protect ~finally:pin_context (fun () ->
+            unpin_context ();
+            f ())
+    | None -> f ()
+
   let compute_or_pinned f =
     match !pinned_context with
     | Some (Some p) -> p
@@ -377,7 +385,9 @@ module Context = struct
         | x :: xs -> (
             (* We don't want to include the current family's base,
                as that is not a further bound linkage *)
-            match l.base with None -> x :: xs | Some _ -> xs))
+            match l.base with
+            | None -> x :: xs
+            | Some _ -> xs))
 
   let base_linkage context =
     match context with
