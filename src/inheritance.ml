@@ -436,134 +436,138 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
               let compiled_signature = Codegen.compile_same_linkage_signature ~linkage in
               FamilyDefinition { family with linkage; compiled_signature; compiled_context; }, []
            end *)
-        | FamilyDefinition family -> (
+        | FamilyDefinition family ->
             let compiled_context, parameters =
               compile_context family.compiled_context
             in
-            match family.linkage.base with
-            | None ->
-                let linkage =
+            let f () =
+              match family.linkage.base with
+              | None ->
+                  let linkage =
+                    let default_ctx_params =
+                      Codegen.compile_default_params ~context:parameters
+                    in
+                    let empty_linkage =
+                      {
+                        family.linkage with
+                        fields = Bwd.Emp;
+                        default_ctx_params;
+                        context = Bwd.of_list parameters;
+                      }
+                    in
+                    inherit_elements
+                      ~elements:(Bwd.to_list family.linkage.fields)
+                      ~linkage:empty_linkage
+                      ~context:(LinkageCtx.Nested (context, empty_linkage))
+                  in
+                  let compiled_signature, _ =
+                    Codegen.compile_linkage_signature linkage
+                  in
                   let default_ctx_params =
-                    Codegen.compile_default_params ~context:parameters
+                    context |> Context.family_linkage |> function
+                    | { default_ctx_params; _ } -> default_ctx_params
                   in
-                  let empty_linkage =
-                    {
-                      family.linkage with
-                      fields = Bwd.Emp;
-                      default_ctx_params;
-                      context = Bwd.of_list parameters;
-                    }
-                  in
-                  inherit_elements
-                    ~elements:(Bwd.to_list family.linkage.fields)
-                    ~linkage:empty_linkage
-                    ~context:(LinkageCtx.Nested (context, empty_linkage))
-                in
-                let compiled_signature, _ =
-                  Codegen.compile_linkage_signature linkage
-                in
-                let default_ctx_params =
-                  context |> Context.family_linkage |> function
-                  | { default_ctx_params; _ } -> default_ctx_params
-                in
-                ( FamilyDefinition
-                    {
-                      default_ctx_params;
-                      compiled_context;
-                      compiled_signature;
-                      linkage;
-                    },
-                  [] )
-            | Some base -> (
-                (* TODO: store an actual path in the base *)
-                let path = Libnames.qualid_of_ident base.name in
-                match Context.local_lookup context path with
-                | None ->
-                    let linkage =
+                  ( LinkageElem.FamilyDefinition
+                      {
+                        default_ctx_params;
+                        compiled_context;
+                        compiled_signature;
+                        linkage;
+                      },
+                    [] )
+              | Some base -> (
+                  (* TODO: store an actual path in the base *)
+                  let path = Libnames.qualid_of_ident base.name in
+                  match Context.local_lookup context path with
+                  | None ->
+                      let linkage =
+                        let default_ctx_params =
+                          Codegen.compile_default_params ~context:parameters
+                        in
+                        let empty_linkage =
+                          {
+                            family.linkage with
+                            fields = Bwd.Emp;
+                            default_ctx_params;
+                            context = Bwd.of_list parameters;
+                          }
+                        in
+                        inherit_elements
+                          ~elements:(Bwd.to_list family.linkage.fields)
+                          ~linkage:empty_linkage
+                          ~context:(LinkageCtx.Nested (context, empty_linkage))
+                      in
+                      let compiled_signature, _ =
+                        Codegen.compile_linkage_signature linkage
+                      in
                       let default_ctx_params =
-                        Codegen.compile_default_params ~context:parameters
+                        context |> Context.family_linkage |> function
+                        | { default_ctx_params; _ } -> default_ctx_params
                       in
-                      let empty_linkage =
-                        {
-                          family.linkage with
-                          fields = Bwd.Emp;
-                          default_ctx_params;
-                          context = Bwd.of_list parameters;
-                        }
+                      ( FamilyDefinition
+                          {
+                            default_ctx_params;
+                            compiled_signature;
+                            compiled_context;
+                            linkage;
+                          },
+                        [] )
+                  | Some new_base ->
+                      let new_base =
+                        Linkage.path_subtitution new_base
+                          ~source:(Naming.self_version new_base.name)
+                          ~target:(Naming.self_version family.linkage.name)
                       in
-                      inherit_elements
-                        ~elements:(Bwd.to_list family.linkage.fields)
-                        ~linkage:empty_linkage
-                        ~context:(LinkageCtx.Nested (context, empty_linkage))
-                    in
-                    let compiled_signature, _ =
-                      Codegen.compile_linkage_signature linkage
-                    in
-                    let default_ctx_params =
-                      context |> Context.family_linkage |> function
-                      | { default_ctx_params; _ } -> default_ctx_params
-                    in
-                    ( FamilyDefinition
-                        {
-                          default_ctx_params;
-                          compiled_signature;
-                          compiled_context;
-                          linkage;
-                        },
-                      [] )
-                | Some new_base ->
-                    let new_base =
-                      Linkage.path_subtitution new_base
-                        ~source:(Naming.self_version new_base.name)
-                        ~target:(Naming.self_version family.linkage.name)
-                    in
-                    let family_linkage =
-                      (* family.linkage *)
-                      { family.linkage with context = Bwd.of_list parameters }
-                    in
-                    (* Update the context too? *)
-                    let _context =
-                      LinkageCtx.Nested (context, family_linkage)
-                    in
-                    let linkage =
-                      linkage_concatenate ~derived:family_linkage ~base:new_base
-                    in
-                    let linkage =
+                      let family_linkage =
+                        (* family.linkage *)
+                        { family.linkage with context = Bwd.of_list parameters }
+                      in
+                      (* Update the context too? *)
+                      let _context =
+                        LinkageCtx.Nested (context, family_linkage)
+                      in
+                      let linkage =
+                        linkage_concatenate ~derived:family_linkage
+                          ~base:new_base
+                      in
+                      let linkage =
+                        let default_ctx_params =
+                          Codegen.compile_default_params ~context:parameters
+                        in
+                        let empty_linkage =
+                          {
+                            linkage with
+                            fields = Bwd.Emp;
+                            context = Bwd.of_list parameters;
+                            default_ctx_params;
+                          }
+                        in
+                        inherit_elements
+                          ~elements:(Bwd.to_list linkage.fields)
+                          ~linkage:empty_linkage
+                          ~context:(LinkageCtx.Nested (context, empty_linkage))
+                      in
+                      (* Should the linkage context parameters not be updated? *)
+                      let linkage =
+                        Linkage.{ linkage with base = Some new_base }
+                      in
+                      let compiled_signature, _ =
+                        Codegen.compile_linkage_signature linkage
+                      in
                       let default_ctx_params =
-                        Codegen.compile_default_params ~context:parameters
+                        context |> Context.family_linkage |> function
+                        | { default_ctx_params; _ } -> default_ctx_params
                       in
-                      let empty_linkage =
-                        {
-                          linkage with
-                          fields = Bwd.Emp;
-                          context = Bwd.of_list parameters;
-                          default_ctx_params;
-                        }
-                      in
-                      inherit_elements
-                        ~elements:(Bwd.to_list linkage.fields)
-                        ~linkage:empty_linkage
-                        ~context:(LinkageCtx.Nested (context, empty_linkage))
-                    in
-                    (* Should the linkage context parameters not be updated? *)
-                    let linkage =
-                      Linkage.{ linkage with base = Some new_base }
-                    in
-                    let compiled_signature, _ =
-                      Codegen.compile_linkage_signature linkage
-                    in
-                    let default_ctx_params =
-                      context |> Context.family_linkage |> function
-                      | { default_ctx_params; _ } -> default_ctx_params
-                    in
-                    ( FamilyDefinition
-                        {
-                          default_ctx_params;
-                          linkage;
-                          compiled_context;
-                          compiled_signature;
-                        },
-                      [] )))
+                      ( FamilyDefinition
+                          {
+                            default_ctx_params;
+                            linkage;
+                            compiled_context;
+                            compiled_signature;
+                          },
+                        [] ))
+            in
+            Context.with_unpinned_context f
         (* late bound base? *)
         | TraitDefinition trait ->
             let compiled_context, _ = compile_context trait.compiled_context in
