@@ -46,4 +46,10 @@
   ;MetaData_bound_names
   ;Extend_with_mutual
   ;Inherit_directly
+  ;STLC_base
+  ;STLC_bool
+  ;STLC_prod
+  ;STLC_all
+  ;STLC_horizon
+  ;STLC_horizontal
   ))

@@ -12,6 +12,9 @@ end
 module Linkages : sig
   val add : Linkage.t -> unit
   val lookup : Names.Id.t -> Linkage.t option
+  (* exposing this here for implicit horizontal import *)
+  val lookup_external : Names.Id.t -> Linkage.t option
+  val lookup_external_horizontals : Names.Id.t -> Linkage.t list
 end
 
 (* Computing a linkage in an open context *)

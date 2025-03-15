@@ -79,6 +79,19 @@ let open_with_base ~name ~base =
             signature = None;
           }
       in
+      let linkage =
+        let elements =
+          name
+          |> Linkages.lookup_external_horizontals
+          |> List.concat_map (fun (linkage: Linkage.t) -> linkage.fields |> Bwd.to_list)
+        in
+        let linkage =
+          Inheritance.inherit_elements
+            ~elements
+            ~linkage ~context:(LinkageCtx.Toplevel linkage)
+        in          
+        linkage
+      in
       let context = LinkageCtx.Toplevel linkage in
       Context.destructive_update (Some context)
 
@@ -151,6 +164,19 @@ let open_with_base_list ~name ~(bases : Names.Id.t list) =
             signature = None;
           }
       in
+      let linkage =
+        let elements =
+          name
+          |> Linkages.lookup_external_horizontals
+          |> List.concat_map (fun (linkage: Linkage.t) -> linkage.fields |> Bwd.to_list)
+        in
+        let linkage =
+          Inheritance.inherit_elements
+            ~elements
+            ~linkage ~context:(LinkageCtx.Toplevel linkage)
+        in          
+        linkage
+      in
       let context = LinkageCtx.Toplevel linkage in
       Context.destructive_update (Some context)
 
@@ -191,6 +217,19 @@ let open_trait ~name =
             default_ctx_params = [];
             signature = None;
           }
+      in
+      let linkage =
+        let elements =
+          name
+          |> Linkages.lookup_external_horizontals
+          |> List.concat_map (fun (linkage: Linkage.t) -> linkage.fields |> Bwd.to_list)
+        in
+        let linkage =
+          Inheritance.inherit_elements
+            ~elements
+            ~linkage ~context:(LinkageCtx.Toplevel linkage)
+        in          
+        linkage
       in
       Context.destructive_update (Some (LinkageCtx.Toplevel linkage))
 

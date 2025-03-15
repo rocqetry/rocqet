@@ -38,6 +38,7 @@ let open_family name =
       (* Check further binding structure? *)
       Context.destructive_update (Some (LinkageCtx.Nested (context, linkage)))
   | None ->
+     (* Check for horizontal import here *)     
       let linkage =
         Linkage.
           {
@@ -51,7 +52,20 @@ let open_family name =
             signature = None;
           }
       in
-      Context.destructive_update (Some (LinkageCtx.Toplevel linkage))
+      let linkage =
+        let elements =
+          name
+          |> Linkages.lookup_external_horizontals
+          |> List.concat_map (fun (linkage: Linkage.t) -> linkage.fields |> Bwd.to_list)
+        in
+        let linkage =
+            Inheritance.inherit_elements
+              ~elements
+              ~linkage ~context:(LinkageCtx.Toplevel linkage)
+        in          
+        linkage
+     in
+     Context.destructive_update (Some (LinkageCtx.Toplevel linkage))
 
 let open_family_with_base ~name ~base =
   let context = Context.get_store () in
@@ -102,7 +116,8 @@ let open_family_with_base ~name ~base =
           Checks.check_further_binding_structure context;
           Context.destructive_update (Some context)
       | None ->
-          let linkage =
+         (* Check for horizontal import here *)         
+         let linkage =
             Linkage.
               {
                 context = Bwd.Emp;
@@ -114,7 +129,20 @@ let open_family_with_base ~name ~base =
                 default_ctx_params = [];
                 signature = None;
               }
-          in
+         in
+         let linkage =
+            let elements =
+              name
+              |> Linkages.lookup_external_horizontals
+              |> List.concat_map (fun (linkage: Linkage.t) -> linkage.fields |> Bwd.to_list)
+            in
+            let linkage =
+              Inheritance.inherit_elements
+                ~elements
+                ~linkage ~context:(LinkageCtx.Toplevel linkage)
+            in          
+            linkage
+         in
           let context = LinkageCtx.Toplevel linkage in
           Context.destructive_update (Some context))
 
@@ -185,6 +213,19 @@ let open_family_with_base_list ~name ~bases =
             default_ctx_params = [];
             signature = None;
           }
+      in
+      let linkage =
+        let elements =
+          name
+          |> Linkages.lookup_external_horizontals
+          |> List.concat_map (fun (linkage: Linkage.t) -> linkage.fields |> Bwd.to_list)
+        in
+        let linkage =
+          Inheritance.inherit_elements
+            ~elements
+            ~linkage ~context:(LinkageCtx.Toplevel linkage)
+        in          
+        linkage
       in
       let context = LinkageCtx.Toplevel linkage in
       Context.destructive_update (Some context)

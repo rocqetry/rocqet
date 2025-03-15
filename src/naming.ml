@@ -284,6 +284,15 @@ let add_prefix_path ~(path : Libnames.qualid) ~(names : Names.Id.Set.t)
   in
   go names target
 
+let get_current_module () =
+  let remove_dots str =
+    Str.global_replace (Str.regexp "\\.") "" str
+  in
+  let mp = Lib.current_mp () in
+  (* remove the dots becuase they will lead to invalid IDs, but
+   qualified modules have the dot *)
+  mp |> Names.ModPath.to_string |> remove_dots
+
 let unique_id =
   let counter = Summary.ref ~name:"FreshCounter" 0 in
   fun () ->
@@ -291,8 +300,9 @@ let unique_id =
     !counter
 
 let fresh_name ~prefix =
+  let current_module = get_current_module () in 
   let time_stamp = string_of_int @@ unique_id () in
-  Names.Id.of_string (prefix ^ "回" ^ time_stamp)
+  Names.Id.of_string (prefix ^ "回" ^ current_module ^ "_" ^ time_stamp)
 
 let module_name_of ~family_name type_name =
   let prefix =

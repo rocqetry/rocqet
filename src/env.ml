@@ -73,12 +73,47 @@ end
 
 (* Take note that there is now a local scope for linkages *)
 module Linkages = struct
-  let store = Summary.ref ~name:"Linkages" (Bwd.Emp : Linkage.t Bwd.t)
-  let add linkage = store := Bwd.Snoc (!store, linkage)
+  let store = Summary.ref ~name:"Linkages" (Bwd.Emp : Linkage.t Bwd.t)    
+  (* let add linkage = store := Bwd.Snoc (!store, linkage) *)
 
-  let lookup name =
+  (* FImports *)
+
+  (* a vertical import + horizontal import *)  
+  let external_store = Summary.ref ~name:"ExternalLinkages" (Bwd.Emp : Linkage.t Bwd.t)
+  
+  let cache_linkages v =
+    (* TODO: combine horizontal linkages here *)
+    external_store := Bwd.of_list (!external_store @> Bwd.to_list v)
+  
+  let declare_linkages : Linkage.t Bwd.t -> Libobject.obj =
+    let open Libobject in    
+    declare_object
+      {
+        (default_object "LINKAGES") with
+        cache_function = cache_linkages;
+        load_function = (fun _ -> cache_linkages);
+      }
+
+  let add linkage =
+    let linkages = Bwd.Snoc (!store, linkage) in
+    Lib.add_leaf (declare_linkages linkages)
+
+  let lookup_external_horizontals name =
+    let s = Bwd.to_list !external_store in
+    s |> List.find_all (fun linkage -> Names.Id.equal linkage.Linkage.name name)      
+  
+  let lookup_external name =
+    !external_store
+    |> Bwd.find_opt (fun linkage -> Names.Id.equal linkage.Linkage.name name)
+
+  let lookup_internal name =
     !store
     |> Bwd.find_opt (fun linkage -> Names.Id.equal linkage.Linkage.name name)
+
+  let lookup name =
+    match lookup_internal name with
+    | None -> lookup_external name
+    | Some l -> Some l
 end
 
 (* TODO: Give this a better name *)
