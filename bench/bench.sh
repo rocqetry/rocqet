@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # set -x #echo on
 # 
 # time coqc STLC.v -R ../_build/default/theories Rocqet -I ../_build/default/src &> output1.txt
