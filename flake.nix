@@ -3,22 +3,26 @@
 
   inputs = {
     nixpkgs.url = "nixpkgs/nixpkgs-unstable";
-    flake-utils.url = "github:numtide/flake-utils";    
+    flake-utils.url = "github:numtide/flake-utils";
   };
 
   outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = import nixpkgs { inherit system; overlays = [ ]; };
-        coq = pkgs.coq.override { coq-version = "8.19.0"; customOCamlPackages = pkgs.ocaml-ng.ocamlPackages_5_1; };        
-        ocamlPkgs = coq.ocamlPackages;
-        coqPkgs = pkgs.coqPackages_8_19;
+        pkgs = import nixpkgs { inherit system; overlays = [ ]; };        
+        coq_8_19 = pkgs.coq_8_19.override { customOCamlPackages = pkgs.ocaml-ng.ocamlPackages_5_1; };
+        ocamlPkgs = coq_8_19.ocamlPackages;
+        
+        # Make sure Coq packages use our custom Coq 8.19, which is built with OCaml 5.1
+        coqPkgs = pkgs.coqPackages_8_19.overrideScope' (self: super: {
+            coq = coq_8_19;
+        });
 
         shellDeps = [
-          ocamlPkgs.ocaml          
+          ocamlPkgs.ocaml
           ocamlPkgs.findlib
           pkgs.dune_3
-          coq
+          coq_8_19
           coqPkgs.flocq
           pkgs.emacs
           pkgs.emacsPackages.exec-path-from-shell
@@ -28,6 +32,10 @@
         {
           devShell = pkgs.mkShell {
             buildInputs = shellDeps;
+            shellHook = ''
+              echo "Using OCaml version: $(ocaml -version)"
+              echo "Using Coq version: $(coqc --version)"
+            '';
           };
         }
     );
