@@ -27,6 +27,12 @@
           pkgs.emacs
           pkgs.emacsPackages.exec-path-from-shell
           pkgs.emacsPackages.proof-general
+
+          # For bench
+          pkg.coreutils
+          pkg.gnugrep
+          pkg.gawk
+          pkg.bc
         ];
       in
         {
