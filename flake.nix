@@ -29,10 +29,10 @@
           pkgs.emacsPackages.proof-general
 
           # For bench
-          pkg.coreutils
-          pkg.gnugrep
-          pkg.gawk
-          pkg.bc
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.gawk
+          pkgs.bc
         ];
       in
         {
