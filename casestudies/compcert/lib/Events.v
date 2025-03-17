@@ -26,6 +26,7 @@ Require Import Values.
 Require Import Memory.
 Require Import Globalenvs.
 Require Import Builtins.
+Local Open Scope asttyp_scope.
 
 (** Backwards compatibility for Hint Rewrite locality attributes. *)
 Set Warnings "-unsupported-attributes".
@@ -779,12 +780,12 @@ Qed.
 Lemma volatile_load_ok:
   forall chunk,
   extcall_properties (volatile_load_sem chunk)
-                     (mksignature (Tptr :: nil) (rettype_of_chunk chunk) cc_default).
+                     [Xptr ---> xtype_of_chunk chunk].
 Proof.
   intros; constructor; intros.
 (* well typed *)
-- inv H. inv H0. apply Val.load_result_rettype.
-  eapply Mem.load_rettype; eauto.
+- inv H. inv H0. apply Val.load_result_xtype.
+  eapply Mem.load_xtype; eauto.
 (* symbols *)
 - inv H0. constructor. eapply volatile_load_preserved; eauto.
 (* valid blocks *)
@@ -943,7 +944,7 @@ Qed.
 Lemma volatile_store_ok:
   forall chunk,
   extcall_properties (volatile_store_sem chunk)
-                     (mksignature (Tptr :: type_of_chunk chunk :: nil) Tvoid cc_default).
+                     [Xptr; xtype_of_chunk chunk ---> Xvoid].
 Proof.
   intros; constructor; intros.
 (* well typed *)
@@ -988,7 +989,7 @@ Inductive extcall_malloc_sem (ge: Senv.t):
 
 Lemma extcall_malloc_ok:
   extcall_properties extcall_malloc_sem
-                     (mksignature (Tptr :: nil) Tptr cc_default).
+                     [Xsize_t ---> Xptr].
 Proof.
   assert (UNCHANGED:
     forall (P: block -> Z -> Prop) m lo hi v m' b m'',
@@ -1075,7 +1076,7 @@ Inductive extcall_free_sem (ge: Senv.t):
 
 Lemma extcall_free_ok:
   extcall_properties extcall_free_sem
-                     (mksignature (Tptr :: nil) Tvoid cc_default).
+                     [Xptr ---> Xvoid].
 Proof.
   constructor; intros.
 (* well typed *)
@@ -1183,7 +1184,7 @@ Inductive extcall_memcpy_sem (sz al: Z) (ge: Senv.t):
 Lemma extcall_memcpy_ok:
   forall sz al,
   extcall_properties (extcall_memcpy_sem sz al)
-                     (mksignature (Tptr :: Tptr :: nil) Tvoid cc_default).
+                     [Xptr; Xptr ---> Xvoid].
 Proof.
   intros. constructor.
 - (* return type *)
@@ -1295,7 +1296,7 @@ Inductive extcall_annot_sem (text: string) (targs: list typ) (ge: Senv.t):
 Lemma extcall_annot_ok:
   forall text targs,
   extcall_properties (extcall_annot_sem text targs)
-                     (mksignature targs Tvoid cc_default).
+                     (mksignature (List.map inj_type targs) Xvoid cc_default).
 Proof.
   intros; constructor; intros.
 (* well typed *)
@@ -1340,11 +1341,11 @@ Inductive extcall_annot_val_sem (text: string) (targ: typ) (ge: Senv.t):
 Lemma extcall_annot_val_ok:
   forall text targ,
   extcall_properties (extcall_annot_val_sem text targ)
-                     (mksignature (targ :: nil) targ cc_default).
+                     [inj_type targ ---> inj_type targ].
 Proof.
   intros; constructor; intros.
 (* well typed *)
-- inv H. eapply eventval_match_type; eauto.
+- inv H. apply Val.has_inj_type. eapply eventval_match_type; eauto.
 (* symbols *)
 - destruct H as (A & B & C). inv H0. econstructor; eauto.
   eapply eventval_match_preserved; eauto.
@@ -1384,7 +1385,7 @@ Inductive extcall_debug_sem (ge: Senv.t):
 Lemma extcall_debug_ok:
   forall targs,
   extcall_properties extcall_debug_sem
-                     (mksignature targs Tvoid cc_default).
+                     (mksignature (List.map inj_type targs) Xvoid cc_default).
 Proof.
   intros; constructor; intros.
 (* well typed *)
@@ -1572,7 +1573,7 @@ Lemma external_call_well_typed:
   external_call ef ge vargs m1 t vres m2 ->
   Val.has_type vres (proj_sig_res (ef_sig ef)).
 Proof.
-  intros. apply Val.has_proj_rettype. eapply external_call_well_typed_gen; eauto.
+  intros. apply Val.has_proj_xtype. eapply external_call_well_typed_gen; eauto.
 Qed.
 
 (** Corollary of [external_call_valid_block]. *)

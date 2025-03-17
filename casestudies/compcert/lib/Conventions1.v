@@ -134,7 +134,7 @@ Definition allocatable_registers (_: unit) :=
   with one integer result. *)
 
 Definition loc_result (s: signature) : rpair mreg :=
-  match AST.proj_sig_res s with
+  match proj_sig_res s with
   | Tint | Tany32 => One R10
   | Tfloat | Tsingle | Tany64 => One F10
   | Tlong => if Archi.ptr64 then One R10 else Twolong R11 R10
@@ -320,7 +320,7 @@ Definition fixed_arguments (s: signature) : Z :=
   when calling a function with signature [s].  *)
 
 Definition loc_arguments (s: signature) : list (rpair loc) :=
-  loc_arguments_rec (AST.proj_sig_args s) (fixed_arguments s) 0 0 0.
+  loc_arguments_rec (proj_sig_args s) (fixed_arguments s) 0 0 0.  
 
 (** Argument locations are either non-temporary registers or [Outgoing]
   stack slots at nonnegative offsets. *)
@@ -424,15 +424,15 @@ Proof.
   unfold loc_arguments; intros. eapply loc_arguments_rec_charact; eauto. lia.
 Qed.
 
-(*Lemma loc_arguments_main:
+Lemma loc_arguments_main:
   loc_arguments signature_main = nil.
 Proof.
   reflexivity.
-Qed.*)
+Qed.
 
 (** ** Normalization of function results and parameters *)
 
 (** No normalization needed. *)
 
-Definition return_value_needs_normalization (t: rettype) := false.
-Definition parameter_needs_normalization (t: rettype) := false.
+Definition return_value_needs_normalization (t: xtype) := false.
+Definition parameter_needs_normalization (t: xtype) := false.
