@@ -54,5 +54,7 @@
    lib/Switch
    lib/Op
    lib/BoolEqual
+
+   Cfam
   ))
 
