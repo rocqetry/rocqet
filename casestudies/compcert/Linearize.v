@@ -371,7 +371,6 @@ FInductive instruction: Type :=
 | Lsetstack: mreg -> slot -> Z -> typ -> instruction.
 
 Inherit code.
-
 MetaData fn binds fn_sig, fn_code, fn_stacksize.
 Record fn: Type := mkfunction {
   fn_sig: signature;
@@ -818,7 +817,8 @@ FLemma find_label_lin_block:
   T.find_label lbl (linearize_block b k) = T.find_label lbl k.
 FProofLemma.
   intros lbl k. generalize (find_label_add_branch lbl k); intro.
-  induction b; simpl; auto. eapply find_label_lin_block_helper; eauto.  
+  induction b; simpl; auto. 
+  (*fdestruct a: *) eapply find_label_lin_block_helper; eauto.  
 Qed. CloseFLemma.
 
 FLemma linearize_body_cons:
