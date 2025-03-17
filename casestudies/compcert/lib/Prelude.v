@@ -87,6 +87,16 @@ Declare Scope asm.
 Notation "'SP'" := X2 (only parsing) : asm.
 Notation "'RA'" := X1 (only parsing) : asm.
 
+Open Scope asm.
+Definition data_preg (r: preg) : bool :=
+  match r with
+  | IR RA  => false
+  | IR X31 => false
+  | IR _   => true
+  | FR _   => true
+  | PC     => false
+  end.
+
 Definition get0w (rs: Pregmap.t val) (r: ireg0) : val :=
   match r with
   | X0 => Vint Int.zero
