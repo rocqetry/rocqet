@@ -4,7 +4,7 @@ From Rocqet Require Import Coqlib.
 From Rocqet Require Import Errors.
 From Rocqet Require Import Values.
 From Rocqet Require Import AST.
-From Rocqet Require Import Integers. 
+From Rocqet Require Import Integers.
 From Rocqet Require Import Floats.
 From Rocqet Require Import Memory.
 From Rocqet Require Import Globalenvs.
@@ -15,6 +15,7 @@ From Rocqet Require Import Linking.
 Require Import Rocqet.CompCert.lib.Ctypes.
 From Rocqet Require Import Cop.
 From Rocqet Require Import Mon.
+From Rocqet Require Import Zbits.
 Require Import FSets.
 Require Import FSetAVL.
 Require Import Orders.
@@ -41,7 +42,7 @@ Inductive offset : Type :=
 FEnd offset.
 
 FDefinition label := positive.
-    
+
 FInductive instruction : Type :=
 (* Pseudo-instructions *)
 | Plabel : label -> instruction  (**r define a code label *)
@@ -55,26 +56,26 @@ FInductive instruction : Type :=
 | Pcfi_rel_offset : int -> instruction (**r .cfi_rel_offset debug directive *)
 | Pallocframe : Z -> ptrofs -> instruction (**r allocate new stack frame *)
 | Pfreeframe  : Z -> ptrofs -> instruction (**r deallocate stack frame and restore previous frame *)
-| Ploadsymbol : ireg -> ident -> ptrofs -> instruction (**r load the address of a symbol *)                                   
+| Ploadsymbol : ireg -> ident -> ptrofs -> instruction (**r load the address of a symbol *)
 | Ploadsymbol_high : ireg -> ident -> ptrofs  -> instruction
 | Pnop : instruction (**r nop instruction *)
 | Pbuiltin: external_function -> list (builtin_arg preg)
-     -> builtin_res preg -> instruction.    (**r built-in function (pseudo) *)             
-                       
+     -> builtin_res preg -> instruction.    (**r built-in function (pseudo) *)
+
 FDefinition code := list instruction.
-MetaData function.
-Record function : Type := mkfunction { fn_sig: signature; fn_code: self__Common.code }.
+MetaData function binds fn_sig, fn_code.
+Record function : Type := mkfunction { fn_sig: signature; fn_code: code }.
 FEnd function.
 
 FDefinition fundef := AST.fundef function.
 FDefinition program := AST.program fundef unit.
 
-(* Operational Semantics *)    
+(* Operational Semantics *)
 FDefinition regset := Pregmap.t val.
 FDefinition genv := Genv.t fundef unit.
 
 Open Scope asm.
-          
+
 MetaData undef_regs.
 Fixpoint undef_regs (l: list preg) (rs: regset) : regset :=
 match l with
@@ -82,7 +83,7 @@ match l with
 | r :: l' => undef_regs l' (rs#r <- Vundef)
 end.
 FEnd undef_regs.
-          
+
 MetaData set_regs.
 Fixpoint set_regs (rl: list preg) (vl: list val) (rs: regset) : regset :=
 match rl, vl with
@@ -103,7 +104,7 @@ FRecursion is_label about instruction motive (fun (_ : instruction) => label -> 
 Case Plabel lbl' := (fun lbl => peq lbl lbl').
 Case _ := (fun lbl => false).
 FEnd is_label.
-          
+
 MetaData label_pos.
 Fixpoint label_pos (lbl: label) (pos: Z) (c: code) {struct c} : option Z :=
 match c with
@@ -112,18 +113,18 @@ match c with
   if is_label instr lbl then Some (pos + 1) else label_pos lbl (pos + 1) c'
 end.
 FEnd label_pos.
-          
+
 MetaData outcome binds Next, Stuck.
 Inductive outcome: Type :=
 | Next: regset -> mem -> outcome
 | Stuck: outcome.
 FEnd outcome.
-          
+
 FDefinition nextinstr := fun (rs: regset) =>
   Pregmap.set PC (Val.offset_ptr (rs PC) Ptrofs.one) rs.
 
 FDefinition goto_label := fun (f: function) (lbl: label) (rs: regset) (m: mem) =>
-match label_pos lbl 0 (self__Common.fn_code f) with
+match label_pos lbl 0 (fn_code f) with
 | None => Stuck
 | Some pos =>
     match (rs PC) with
@@ -132,92 +133,94 @@ match label_pos lbl 0 (self__Common.fn_code f) with
     end
 end.
 
-MetaData low_half.
-Parameter low_half: self__Common.genv -> ident -> ptrofs -> ptrofs.
+MetaData low_half binds high_half.
+Parameter low_half: genv -> ident -> ptrofs -> ptrofs.
+
+Parameter high_half: genv -> ident -> ptrofs -> val.
+
+Axiom low_high_half:
+  forall ge id ofs,
+  Val.offset_ptr (high_half ge id ofs) (low_half ge id ofs) = Genv.symbol_address ge id ofs.
 FEnd low_half.
 
-MetaData high_half.
-Parameter high_half: self__Common.genv -> ident -> ptrofs -> val.
-FEnd high_half.
-                    
-FDefinition eval_offset : self__Common.genv -> self__Common.offset -> ptrofs := fun ge ofs =>
+FDefinition eval_offset : genv -> offset -> ptrofs := fun ge ofs =>
 match ofs with
 | self__Common.Ofsimm n => n
 | self__Common.Ofslow id delta => low_half ge id delta
-end.          
+end.
 
 FDefinition exec_load := fun (ge : genv) (chunk: memory_chunk) (rs: regset) (m: mem)
     (d: preg) (a: ireg) (ofs: offset) =>
 match  Mem.loadv chunk m (Val.offset_ptr (rs a) (eval_offset ge ofs)) with
-| None => self__Common.Stuck
-| Some v => self__Common.Next (nextinstr (Pregmap.set d v rs)) m
-end.          
-          
+| None => Stuck
+| Some v => Next (nextinstr (Pregmap.set d v rs)) m
+end.
+
 FDefinition exec_store := fun (ge : genv) (chunk: memory_chunk) (rs: regset) (m: mem)
   (s: preg) (a: ireg) (ofs: offset) =>
 match Mem.storev chunk m (Val.offset_ptr (rs a) (eval_offset ge ofs)) (rs s) with
-| None => self__Common.Stuck
-| Some m' => self__Common.Next (nextinstr rs) m'
+| None => Stuck
+| Some m' => Next (nextinstr rs) m'
 end.
 
 FDefinition eval_branch := fun (f: function) (l: label) (rs: regset) (m: mem) (res: option bool) =>
 match res with
 | Some true  => goto_label f l rs m
-| Some false => self__Common.Next (nextinstr rs) m
-| None => self__Common.Stuck
+| Some false => Next (nextinstr rs) m
+| None => Stuck
 end.
-          
+
 FRecursion exec_instr about instruction motive (fun (_ : instruction) => genv -> function -> regset -> mem -> outcome) by _rect.
-Case Plabel lbl := (fun ge f rs m => self__Common.Next (nextinstr rs) m).
-Case Pbtbl r tbl := 
-(fun ge f rs m => 
+Case Plabel lbl := (fun ge f rs m => Next (nextinstr rs) m).
+Case Pbtbl r tbl :=
+(fun ge f rs m =>
   match rs r with
       | Vint n =>
           match list_nth_z tbl (Int.unsigned n) with
-          | None => self__Common.Stuck
+          | None => Stuck
           | Some lbl => goto_label f lbl (rs#X5 <- Vundef #X31 <- Vundef) m
           end
-      | _ => self__Common.Stuck
+      | _ => Stuck
       end).
 Case Pj_l lbl := (fun ge f rs m => goto_label f lbl rs m).
-Case Pj_r r sg := (fun ge f rs m => self__Common.Next (rs#PC <- (rs#r)) m).
-Case Pj_s s sg := (fun ge f rs m =>  self__Common.Next (rs#PC <- (Genv.symbol_address ge s Ptrofs.zero) #X31 <- Vundef) m).
-Case Pjal_s s sg := 
-(fun ge f rs m =>  
-   self__Common.Next (rs#PC <- (Genv.symbol_address ge s Ptrofs.zero)
-                    #RA <- (Val.offset_ptr rs#PC Ptrofs.one)) m).
-Case Pjal_r r sg := 
-(fun ge f rs m => 
-    self__Common.Next (rs#PC <- (rs#r)
-              #RA <- (Val.offset_ptr rs#PC Ptrofs.one)) m).
+Case Pj_r r sg := (fun ge f rs m => Next (rs#PC <- (rs#r)) m).
+Case Pj_s s sg := (fun ge f rs m =>  Next (rs#PC <- (Genv.symbol_address ge s Ptrofs.zero) #X31 <- Vundef) m).
+Case Pjal_s s sg :=
+(fun ge f rs m =>
+   Next (rs#PC <- (Genv.symbol_address ge s Ptrofs.zero)
+         #RA <- (Val.offset_ptr rs#PC Ptrofs.one)) m).
+Case Pjal_r r sg :=
+(fun ge f rs m =>
+    Next (rs#PC <- (rs#r)
+          #RA <- (Val.offset_ptr rs#PC Ptrofs.one)) m).
 (** The following instructions and directives are not generated directly by Asmgen,
     so we do not model them. *)
-Case Pnop := (fun ge f rs m => self__Common.Stuck).
+Case Pnop := (fun ge f rs m => Stuck).
 Case Pbuiltin ef args res := (fun ge f rs m => Stuck). (**r treated specially below *)
-Case Pcfi_rel_offset a := (fun ge f rs m =>   self__Common.Next (nextinstr rs) m).
-Case Pallocframe sz pos := 
-(fun ge f rs m => 
+Case Pcfi_rel_offset a := (fun ge f rs m =>   Next (nextinstr rs) m).
+Case Pallocframe sz pos :=
+(fun ge f rs m =>
    let (m1, stk) := Mem.alloc m 0 sz in
    let sp := (Vptr stk Ptrofs.zero) in
    match Mem.storev Mptr m1 (Val.offset_ptr sp pos) rs#SP with
-   | None => self__Common.Stuck
-   | Some m2 => self__Common.Next (nextinstr (rs #X30 <- (rs SP) #SP <- sp #X31 <- Vundef)) m2
+   | None => Stuck
+   | Some m2 => Next (nextinstr (rs #X30 <- (rs SP) #SP <- sp #X31 <- Vundef)) m2
    end).
-Case Pfreeframe sz pos := 
-(fun ge f rs m => 
+Case Pfreeframe sz pos :=
+(fun ge f rs m =>
   match Mem.loadv Mptr m (Val.offset_ptr rs#SP pos) with
-  | None => self__Common.Stuck
+  | None => Stuck
   | Some v =>
       match rs SP with
       | Vptr stk ofs =>
           match Mem.free m stk 0 sz with
-          | None => self__Common.Stuck
-          | Some m' => self__Common.Next (nextinstr (rs#SP <- v #X31 <- Vundef)) m'
+          | None => Stuck
+          | Some m' => Next (nextinstr (rs#SP <- v #X31 <- Vundef)) m'
           end
-      | _ => self__Common.Stuck
+      | _ => Stuck
       end
   end).
-Case Ploadsymbol rd s ofs := 
+Case Ploadsymbol rd s ofs :=
   (fun ge f rs m => Next (nextinstr (rs#rd <- (Genv.symbol_address ge s ofs))) m).
 Case Ploadsymbol_high rd s ofs :=
   (fun ge f rs m =>  Next (nextinstr (rs#rd <- (high_half ge s ofs))) m).
@@ -289,14 +292,14 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
     forall ge b ofs f i rs m rs' m',
     rs PC = Vptr b ofs ->
     Genv.find_funct_ptr ge b = Some (AST.Internal f) ->
-    find_instr (Ptrofs.unsigned ofs) (self__Common.fn_code f) = Some i ->
-    exec_instr i ge f rs m = self__Common.Next rs' m' ->
-    step ge (self__Common.State rs m) E0 (self__Common.State rs' m')
+    find_instr (Ptrofs.unsigned ofs) (fn_code f) = Some i ->
+    exec_instr i ge f rs m = Next rs' m' ->
+    step ge (State rs m) E0 (State rs' m')
 | exec_step_builtin:
       forall ge b ofs f ef args res rs m vargs t vres rs' m',
       rs PC = Vptr b ofs ->
       Genv.find_funct_ptr ge b = Some (AST.Internal f) ->
-      find_instr (Ptrofs.unsigned ofs) (self__Common.fn_code f) = Some (Pbuiltin ef args res) ->
+      find_instr (Ptrofs.unsigned ofs) (fn_code f) = Some (Pbuiltin ef args res) ->
       eval_builtin_args (Genv.to_senv ge) rs (rs SP) m args vargs ->
       external_call ef (Genv.to_senv ge) vargs m t vres m' ->
       rs' = nextinstr
@@ -311,10 +314,10 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       external_call ef (Genv.to_senv ge) args m t res m' ->
       extcall_arguments rs m (ef_sig ef) args ->
       rs' = (set_pair (loc_external_result (ef_sig ef) ) res (undef_caller_save_regs rs))#PC <- (rs RA) ->
-      step ge (State rs m) t (State rs' m').           
+      step ge (State rs m) t (State rs' m').
 
 MetaData initial_state.
-Inductive initial_state (p: self__Common.program): self__Common.state -> Prop :=
+Inductive initial_state (p: program): state -> Prop :=
 | initial_state_intro: forall m0,
     let ge := Genv.globalenv p in
     let rs0 :=
@@ -323,22 +326,22 @@ Inductive initial_state (p: self__Common.program): self__Common.state -> Prop :=
       # SP <- Vnullptr
       # RA <- Vnullptr in
     Genv.init_mem p = Some m0 ->
-    initial_state p (self__Common.State rs0 m0).
+    initial_state p (State rs0 m0).
 FEnd initial_state.
 
 MetaData final_state.
-Inductive final_state: self__Common.state -> int -> Prop :=
+Inductive final_state: state -> int -> Prop :=
 | final_state_intro: forall rs m r,
    rs PC = Vnullptr ->
    rs X10 = Vint r ->
-    final_state (self__Common.State rs m) r.
+    final_state (State rs m) r.
 FEnd final_state.
 
 FEnd Common.
 
 (* Base integer instruction set, 32-bit *)
 Family RV32I extends Common.
-    
+
 FInductive instruction : Type :=
 | Pmv : ireg -> ireg -> instruction
 (** 32-bit integer register-immediate instructions *)
@@ -381,37 +384,37 @@ FInductive instruction : Type :=
 | Psb  : ireg -> ireg -> offset -> instruction     (**r store int8 *)
 | Psh  : ireg -> ireg -> offset -> instruction     (**r store int16 *)
 | Psw  : ireg -> ireg -> offset -> instruction     (**r store int32 *)
-| Plw_a : ireg -> ireg -> offset -> instruction    (**r load any32 *)       
+| Plw_a : ireg -> ireg -> offset -> instruction    (**r load any32 *)
 | Psw_a : ireg -> ireg -> offset -> instruction.    (**r store any32 *)
 
 FRecursion is_label.
 Case _ := (fun lbl => false).
 FEnd is_label.
-          
+
 FRecursion exec_instr.
-Case Pmv d s := (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (rs#s))) m).
-Case Paddiw d s i :=  (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.add rs##s (Vint i)))) m).
-Case Psltiw  d s i := (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.cmp Clt rs##s (Vint i)))) m).
-Case Psltiuw d s i :=  (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.cmpu (Mem.valid_pointer m) Clt rs##s (Vint i)))) m).
-Case Pandiw d s i := (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.and rs##s (Vint i)))) m).
-Case Poriw d s i := (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.or rs##s (Vint i)))) m).
-Case Pxoriw d s i := (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.xor rs##s (Vint i)))) m).
-Case Pslliw d s i := (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.shl rs##s (Vint i)))) m).
-Case Psrliw d s i := (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.shru rs##s (Vint i)))) m).
-Case Psraiw d s i := (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.shr rs##s (Vint i)))) m).
-Case Pluiw d i := (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Vint (Int.shl i (Int.repr 12))))) m).
-Case Paddw d s1 s2 := (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.add rs##s1 rs##s2))) m).
-Case Psubw d s1 s2 :=  (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.sub rs##s1 rs##s2))) m).
-Case Psltw d s1 s2 :=  (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.cmp Clt rs##s1 rs##s2))) m).
-Case Psltuw d s1 s2 := (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.cmpu (Mem.valid_pointer m) Clt rs##s1 rs##s2))) m). 
-Case Pseqw d s1 s2 :=  (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.cmpu (Mem.valid_pointer m) Ceq rs##s1 rs##s2))) m).
-Case Psnew d s1 s2 :=  (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.cmpu (Mem.valid_pointer m) Cne rs##s1 rs##s2))) m).
-Case Pandw d s1 s2 :=  (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.and rs##s1 rs##s2))) m).
-Case Porw d s1 s2 :=  (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.or rs##s1 rs##s2))) m).
-Case Pxorw d s1 s2 := (fun ge f rs m =>   self__RV32I.Next (nextinstr (rs#d <- (Val.xor rs##s1 rs##s2))) m). 
-Case Psllw d s1 s2 := (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.shl rs##s1 rs##s2))) m). 
-Case Psrlw d s1 s2 := (fun ge f rs m =>  self__RV32I.Next (nextinstr (rs#d <- (Val.shru rs##s1 rs##s2))) m). 
-Case Psraw d s1 s2 := (fun ge f rs m => self__RV32I.Next (nextinstr (rs#d <- (Val.shr rs##s1 rs##s2))) m). 
+Case Pmv d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (rs#s))) m).
+Case Paddiw d s i :=  (fun ge f rs m => Next (nextinstr (rs#d <- (Val.add rs##s (Vint i)))) m).
+Case Psltiw  d s i := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.cmp Clt rs##s (Vint i)))) m).
+Case Psltiuw d s i :=  (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.cmpu (Mem.valid_pointer m) Clt rs##s (Vint i)))) m).
+Case Pandiw d s i := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.and rs##s (Vint i)))) m).
+Case Poriw d s i := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.or rs##s (Vint i)))) m).
+Case Pxoriw d s i := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.xor rs##s (Vint i)))) m).
+Case Pslliw d s i := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.shl rs##s (Vint i)))) m).
+Case Psrliw d s i := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.shru rs##s (Vint i)))) m).
+Case Psraiw d s i := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.shr rs##s (Vint i)))) m).
+Case Pluiw d i := (fun ge f rs m => Next (nextinstr (rs#d <- (Vint (Int.shl i (Int.repr 12))))) m).
+Case Paddw d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.add rs##s1 rs##s2))) m).
+Case Psubw d s1 s2 :=  (fun ge f rs m => Next (nextinstr (rs#d <- (Val.sub rs##s1 rs##s2))) m).
+Case Psltw d s1 s2 :=  (fun ge f rs m => Next (nextinstr (rs#d <- (Val.cmp Clt rs##s1 rs##s2))) m).
+Case Psltuw d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.cmpu (Mem.valid_pointer m) Clt rs##s1 rs##s2))) m).
+Case Pseqw d s1 s2 :=  (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.cmpu (Mem.valid_pointer m) Ceq rs##s1 rs##s2))) m).
+Case Psnew d s1 s2 :=  (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.cmpu (Mem.valid_pointer m) Cne rs##s1 rs##s2))) m).
+Case Pandw d s1 s2 :=  (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.and rs##s1 rs##s2))) m).
+Case Porw d s1 s2 :=  (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.or rs##s1 rs##s2))) m).
+Case Pxorw d s1 s2 := (fun ge f rs m =>   Next (nextinstr (rs#d <- (Val.xor rs##s1 rs##s2))) m).
+Case Psllw d s1 s2 := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.shl rs##s1 rs##s2))) m).
+Case Psrlw d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.shru rs##s1 rs##s2))) m).
+Case Psraw d s1 s2 := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.shr rs##s1 rs##s2))) m).
 Case Pbeqw s1 s2 l :=  (fun ge f rs m =>  eval_branch f l rs m (Val.cmpu_bool (Mem.valid_pointer m) Ceq rs##s1 rs##s2)).
 Case Pbnew s1 s2 l :=  (fun ge f rs m =>  eval_branch f l rs m (Val.cmpu_bool (Mem.valid_pointer m) Cne rs##s1 rs##s2)).
 Case Pbltw s1 s2 l :=  (fun ge f rs m => eval_branch f l rs m (Val.cmp_bool Clt rs##s1 rs##s2)).
@@ -468,7 +471,7 @@ FInductive instruction : Type :=
 | Pbltul  : ireg0 -> ireg0 -> label -> instruction (**r branch-if-less unsigned *)
 | Pbgel   : ireg0 -> ireg0 -> label -> instruction (**r branch-if-greater-or-equal signed *)
 | Pbgeul  : ireg0 -> ireg0 -> label -> instruction (**r branch-if-greater-or-equal unsigned *)
-| Pld : ireg -> ireg -> offset -> instruction     (**r load int64 *)            
+| Pld : ireg -> ireg -> offset -> instruction     (**r load int64 *)
 | Psd : ireg -> ireg -> offset -> instruction     (**r store int64 *)
 | Ploadli : ireg -> int64 -> instruction (**r load an immediate int64 *)
 | Pld_a   : ireg -> ireg -> offset -> instruction (**r load any64 *)
@@ -479,37 +482,37 @@ Case _ := (fun lbl => false).
 FEnd is_label.
 
 FRecursion exec_instr.
-Case Paddil d s i := (fun ge f rs m => self__RV64I.Next (nextinstr (rs#d <- (Val.addl rs###s (Vlong i)))) m).
-Case Psltil d s i := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.cmpl Clt rs###s (Vlong i))))) m).
-Case Psltiul d s i := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.cmplu (Mem.valid_pointer m) Clt rs###s (Vlong i))))) m).
-Case Pandil d s i := (fun ge f rs m =>   self__RV64I.Next (nextinstr (rs#d <- (Val.andl rs###s (Vlong i)))) m).
-Case Poril d s i := (fun ge f rs m =>   self__RV64I.Next (nextinstr (rs#d <- (Val.orl rs###s (Vlong i)))) m).
-Case Pxoril d s i := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.xorl rs###s (Vlong i)))) m).
-Case Psllil d s i := (fun ge f rs m =>   self__RV64I.Next (nextinstr (rs#d <- (Val.shll rs###s (Vint i)))) m).
-Case Psrlil d s i := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.shrlu rs###s (Vint i)))) m).
-Case Psrail d s i := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.shrl rs###s (Vint i)))) m).
-Case Pluil d i := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Vlong (Int64.sign_ext 32 (Int64.shl i (Int64.repr 12)))))) m).
-Case Paddl d s1 s2 := (fun ge f rs m =>   self__RV64I.Next (nextinstr (rs#d <- (Val.addl rs###s1 rs###s2))) m).
-Case Psubl d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.subl rs###s1 rs###s2))) m).
-(* Case Pmull d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.mull rs###s1 rs###s2))) m).*)
-(* Case Pmulhl d s1 s2 := (fun ge f rs m => self__RV64I.Next (nextinstr (rs#d <- (Val.mullhs rs###s1 rs###s2))) m).*)
-(* Case Pmulhul d s1 s2 := (fun ge f rs m =>   self__RV64I.Next (nextinstr (rs#d <- (Val.mullhu rs###s1 rs###s2))) m).*)
-(* Case Pdivl d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.divls rs###s1 rs###s2)))) m).*)
-(* Case Pdivul d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.divlu rs###s1 rs###s2)))) m).*)
-(* Case Preml d s1 s2 := (fun ge f rs m => self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.modls rs###s1 rs###s2)))) m).*)
-(* Case Premul d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.modlu rs###s1 rs###s2)))) m).*)
-Case Psltl d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.cmpl Clt rs###s1 rs###s2)))) m).
-Case Psltul d s1 s2 := (fun ge f rs m =>   self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.cmplu (Mem.valid_pointer m) Clt rs###s1 rs###s2)))) m).
-Case Pseql d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.cmplu (Mem.valid_pointer m) Ceq rs###s1 rs###s2)))) m).
-Case Psnel d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.maketotal (Val.cmplu (Mem.valid_pointer m) Cne rs###s1 rs###s2)))) m).
-Case Pandl d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.andl rs###s1 rs###s2))) m).
-Case Porl d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.orl rs###s1 rs###s2))) m).
-Case Pxorl d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.orl rs###s1 rs###s2))) m).
-Case Pslll d s1 s2 := (fun ge f rs m =>   self__RV64I.Next (nextinstr (rs#d <- (Val.shll rs###s1 rs###s2))) m).
-Case Psrll d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.shrlu rs###s1 rs###s2))) m).
-Case Psral d s1 s2 := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.shrl rs###s1 rs###s2))) m).
-Case Pcvtl2w d s := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#d <- (Val.loword rs##s))) m).
-Case Pcvtw2l r := (fun ge f rs m =>  self__RV64I.Next (nextinstr (rs#r <- (Val.longofint rs#r))) m).
+Case Paddil d s i := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.addl rs###s (Vlong i)))) m).
+Case Psltil d s i := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.cmpl Clt rs###s (Vlong i))))) m).
+Case Psltiul d s i := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.cmplu (Mem.valid_pointer m) Clt rs###s (Vlong i))))) m).
+Case Pandil d s i := (fun ge f rs m =>   Next (nextinstr (rs#d <- (Val.andl rs###s (Vlong i)))) m).
+Case Poril d s i := (fun ge f rs m =>   Next (nextinstr (rs#d <- (Val.orl rs###s (Vlong i)))) m).
+Case Pxoril d s i := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.xorl rs###s (Vlong i)))) m).
+Case Psllil d s i := (fun ge f rs m =>   Next (nextinstr (rs#d <- (Val.shll rs###s (Vint i)))) m).
+Case Psrlil d s i := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.shrlu rs###s (Vint i)))) m).
+Case Psrail d s i := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.shrl rs###s (Vint i)))) m).
+Case Pluil d i := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Vlong (Int64.sign_ext 32 (Int64.shl i (Int64.repr 12)))))) m).
+Case Paddl d s1 s2 := (fun ge f rs m =>   Next (nextinstr (rs#d <- (Val.addl rs###s1 rs###s2))) m).
+Case Psubl d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.subl rs###s1 rs###s2))) m).
+(* Case Pmull d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.mull rs###s1 rs###s2))) m).*)
+(* Case Pmulhl d s1 s2 := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.mullhs rs###s1 rs###s2))) m).*)
+(* Case Pmulhul d s1 s2 := (fun ge f rs m =>   Next (nextinstr (rs#d <- (Val.mullhu rs###s1 rs###s2))) m).*)
+(* Case Pdivl d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.divls rs###s1 rs###s2)))) m).*)
+(* Case Pdivul d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.divlu rs###s1 rs###s2)))) m).*)
+(* Case Preml d s1 s2 := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.maketotal (Val.modls rs###s1 rs###s2)))) m).*)
+(* Case Premul d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.modlu rs###s1 rs###s2)))) m).*)
+Case Psltl d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.cmpl Clt rs###s1 rs###s2)))) m).
+Case Psltul d s1 s2 := (fun ge f rs m =>   Next (nextinstr (rs#d <- (Val.maketotal (Val.cmplu (Mem.valid_pointer m) Clt rs###s1 rs###s2)))) m).
+Case Pseql d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.cmplu (Mem.valid_pointer m) Ceq rs###s1 rs###s2)))) m).
+Case Psnel d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.cmplu (Mem.valid_pointer m) Cne rs###s1 rs###s2)))) m).
+Case Pandl d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.andl rs###s1 rs###s2))) m).
+Case Porl d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.orl rs###s1 rs###s2))) m).
+Case Pxorl d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.xorl rs###s1 rs###s2))) m).
+Case Pslll d s1 s2 := (fun ge f rs m =>   Next (nextinstr (rs#d <- (Val.shll rs###s1 rs###s2))) m).
+Case Psrll d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.shrlu rs###s1 rs###s2))) m).
+Case Psral d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.shrl rs###s1 rs###s2))) m).
+Case Pcvtl2w d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.loword rs##s))) m).
+Case Pcvtw2l r := (fun ge f rs m =>  Next (nextinstr (rs#r <- (Val.longofint rs#r))) m).
 Case Pbeql s1 s2 l :=  (fun ge f rs m => eval_branch f l rs m (Val.cmplu_bool (Mem.valid_pointer m) Ceq rs###s1 rs###s2)).
 Case Pbnel s1 s2 l :=  (fun ge f rs m =>   eval_branch f l rs m (Val.cmplu_bool (Mem.valid_pointer m) Cne rs###s1 rs###s2)).
 Case Pbltl s1 s2 l :=  (fun ge f rs m =>  eval_branch f l rs m (Val.cmpl_bool Clt rs###s1 rs###s2)).
@@ -518,7 +521,7 @@ Case Pbgel s1 s2 l :=  (fun ge f rs m =>  eval_branch f l rs m (Val.cmpl_bool Cg
 Case Pbgeul s1 s2 l := (fun ge f rs m =>  eval_branch f l rs m (Val.cmplu_bool (Mem.valid_pointer m) Cge rs###s1 rs###s2)).
 Case Pld d a ofs := (fun ge f rs m =>  exec_load ge Mint64 rs m d a ofs).
 Case Psd s a ofs := (fun ge f rs m => exec_store ge Mint64 rs m s a ofs).
-Case Ploadli rd i :=  (fun ge f rs m => self__RV64I.Next (nextinstr (rs#X31 <- Vundef #rd <- (Vlong i))) m).
+Case Ploadli rd i :=  (fun ge f rs m => Next (nextinstr (rs#X31 <- Vundef #rd <- (Vlong i))) m).
 Case Pld_a d a ofs := (fun ge f rs m => exec_load ge Many64 rs m d a ofs).
 Case Psd_a s a ofs := (fun ge f rs m => exec_store ge Many64 rs m s a ofs).
 FEnd exec_instr.
@@ -526,7 +529,7 @@ FEnd exec_instr.
 FEnd RV64I.
 
 (* Standard extension for integer multiplication and division *)
-Family M extends Common. 
+Family M extends Common.
 FInductive instruction : Type :=
 | Pmulw   : ireg -> ireg0 -> ireg0 -> instruction  (**r integer multiply low *)
 | Pmulhw  : ireg -> ireg0 -> ireg0 -> instruction  (**r integer multiply high signed *)
@@ -549,26 +552,26 @@ Case _ := (fun lbl => false).
 FEnd is_label.
 
 FRecursion exec_instr.
-Case Pmulw d s1 s2 := (fun ge f rs m =>   self__M.Next (nextinstr (rs#d <- (Val.mul rs##s1 rs##s2))) m).
-Case Pmulhw d s1 s2 := (fun ge f rs m => self__M.Next (nextinstr (rs#d <- (Val.mulhs rs##s1 rs##s2))) m).
-Case Pmulhuw d s1 s2 := (fun ge f rs m =>  self__M.Next (nextinstr (rs#d <- (Val.mulhu rs##s1 rs##s2))) m).
-Case Pdivw d s1 s2 := (fun ge f rs m =>  self__M.Next (nextinstr (rs#d <- (Val.maketotal (Val.divu rs##s1 rs##s2)))) m).
-Case Pdivuw d s1 s2 := (fun ge f rs m =>  self__M.Next (nextinstr (rs#d <- (Val.maketotal (Val.divu rs##s1 rs##s2)))) m).
-Case Premw d s1 s2 := (fun ge f rs m => self__M.Next (nextinstr (rs#d <- (Val.maketotal (Val.mods rs##s1 rs##s2)))) m).
-Case Premuw d s1 s2 := (fun ge f rs m =>  self__M.Next (nextinstr (rs#d <- (Val.maketotal (Val.modu rs##s1 rs##s2)))) m).
-Case Pmull d s1 s2 := (fun ge f rs m =>  self__M.Next (nextinstr (rs#d <- (Val.mull rs###s1 rs###s2))) m).
-Case Pmulhl d s1 s2 := (fun ge f rs m =>   self__M.Next (nextinstr (rs#d <- (Val.mullhs rs###s1 rs###s2))) m).
-Case Pmulhul d s1 s2 := (fun ge f rs m => self__M.Next (nextinstr (rs#d <- (Val.mullhu rs###s1 rs###s2))) m).
-Case Pdivl d s1 s2 := (fun ge f rs m =>   self__M.Next (nextinstr (rs#d <- (Val.maketotal (Val.divls rs###s1 rs###s2)))) m).
-Case Pdivul d s1 s2 := (fun ge f rs m =>  self__M.Next (nextinstr (rs#d <- (Val.maketotal (Val.divlu rs###s1 rs###s2)))) m).
-Case Preml d s1 s2 := (fun ge f rs m =>  self__M.Next (nextinstr (rs#d <- (Val.maketotal (Val.modls rs###s1 rs###s2)))) m).
-Case Premul d s1 s2 := (fun ge f rs m =>   self__M.Next (nextinstr (rs#d <- (Val.maketotal (Val.modlu rs###s1 rs###s2)))) m).
+Case Pmulw d s1 s2 := (fun ge f rs m =>   Next (nextinstr (rs#d <- (Val.mul rs##s1 rs##s2))) m).
+Case Pmulhw d s1 s2 := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.mulhs rs##s1 rs##s2))) m).
+Case Pmulhuw d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.mulhu rs##s1 rs##s2))) m).
+Case Pdivw d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.divs rs##s1 rs##s2)))) m).
+Case Pdivuw d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.divu rs##s1 rs##s2)))) m).
+Case Premw d s1 s2 := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.maketotal (Val.mods rs##s1 rs##s2)))) m).
+Case Premuw d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.modu rs##s1 rs##s2)))) m).
+Case Pmull d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.mull rs###s1 rs###s2))) m).
+Case Pmulhl d s1 s2 := (fun ge f rs m =>   Next (nextinstr (rs#d <- (Val.mullhs rs###s1 rs###s2))) m).
+Case Pmulhul d s1 s2 := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.mullhu rs###s1 rs###s2))) m).
+Case Pdivl d s1 s2 := (fun ge f rs m =>   Next (nextinstr (rs#d <- (Val.maketotal (Val.divls rs###s1 rs###s2)))) m).
+Case Pdivul d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.divlu rs###s1 rs###s2)))) m).
+Case Preml d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.modls rs###s1 rs###s2)))) m).
+Case Premul d s1 s2 := (fun ge f rs m =>   Next (nextinstr (rs#d <- (Val.maketotal (Val.modlu rs###s1 rs###s2)))) m).
 FEnd exec_instr.
 
 FEnd M.
 
 (* Standard extension for single-precision floating-point *)
-Family F extends Common. 
+Family F extends Common.
 FInductive instruction : Type :=
 (* floating point register move *)
 | Pfmv   : freg -> freg -> instruction (**r move *)
@@ -610,40 +613,40 @@ Case _ := (fun lbl => false).
 FEnd is_label.
 
 FRecursion exec_instr.
-Case Pfmv d s := (fun ge f rs m =>  self__F.Next (nextinstr (rs#d <- (rs#s))) m).
+Case Pfmv d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (rs#s))) m).
 Case Pfls d a ofs := (fun ge f rs m => exec_load ge Mfloat32 rs m d a ofs).
 Case Pfss s a ofs := (fun ge f rs m => exec_store ge Mfloat32 rs m s a ofs).
-Case Pfnegs d s := (fun ge f rs m => self__F.Next (nextinstr (rs#d <- (Val.negfs rs#s))) m).
-Case Pfabss d s := (fun ge f rs m =>  self__F.Next (nextinstr (rs#d <- (Val.absfs rs#s))) m).
-Case Pfadds d s1 s2 := (fun ge f rs m =>  self__F.Next (nextinstr (rs#d <- (Val.addfs rs#s1 rs#s2))) m).
-Case Pfsubs d s1 s2 := (fun ge f rs m =>  self__F.Next (nextinstr (rs#d <- (Val.subfs rs#s1 rs#s2))) m).
-Case Pfmuls d s1 s2 := (fun ge f rs m =>  self__F.Next (nextinstr (rs#d <- (Val.mulfs rs#s1 rs#s2))) m).
-Case Pfdivs d s1 s2 := (fun ge f rs m =>  self__F.Next (nextinstr (rs#d <- (Val.divfs rs#s1 rs#s2))) m).
-Case Pfeqs d s1 s2 := (fun ge f rs m =>  self__F.Next (nextinstr (rs#d <- (Val.cmpfs Ceq rs#s1 rs#s2))) m).
-Case Pflts d s1 s2 := (fun ge f rs m =>  self__F.Next (nextinstr (rs#d <- (Val.cmpfs Clt rs#s1 rs#s2))) m).
-Case Pfles d s1 s2 := (fun ge f rs m =>  self__F.Next (nextinstr (rs#d <- (Val.cmpfs Cle rs#s1 rs#s2))) m).
-Case Pfcvtws d s := (fun ge f rs m =>  self__F.Next (nextinstr (rs#d <- (Val.maketotal (Val.intofsingle rs#s)))) m).
-Case Pfcvtwus d s := (fun ge f rs m =>  self__F.Next (nextinstr (rs#d <- (Val.maketotal (Val.intuofsingle rs#s)))) m).
-Case Pfcvtsw d s := (fun ge f rs m =>  self__F.Next (nextinstr (rs#d <- (Val.maketotal (Val.singleofint rs##s)))) m).
-Case Pfcvtswu d s := (fun ge f rs m => self__F.Next (nextinstr (rs#d <- (Val.maketotal (Val.singleofintu rs##s)))) m).
-Case Pfcvtls d s := (fun ge f rs m => self__F.Next (nextinstr (rs#d <- (Val.maketotal (Val.longofsingle rs#s)))) m).
-Case Pfcvtlus d s := (fun ge f rs m =>  self__F.Next (nextinstr (rs#d <- (Val.maketotal (Val.longuofsingle rs#s)))) m).
-Case Pfcvtsl d s := (fun ge f rs m =>  self__F.Next (nextinstr (rs#d <- (Val.maketotal (Val.singleoflong rs###s)))) m).
-Case Pfcvtslu d s := (fun ge f rs m =>  self__F.Next (nextinstr (rs#d <- (Val.maketotal (Val.singleoflongu rs###s)))) m).
-Case Ploadsi rd f := (fun ge _ rs m =>  self__F.Next (nextinstr (rs#X31 <- Vundef #rd <- (Vsingle f))) m).
+Case Pfnegs d s := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.negfs rs#s))) m).
+Case Pfabss d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.absfs rs#s))) m).
+Case Pfadds d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.addfs rs#s1 rs#s2))) m).
+Case Pfsubs d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.subfs rs#s1 rs#s2))) m).
+Case Pfmuls d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.mulfs rs#s1 rs#s2))) m).
+Case Pfdivs d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.divfs rs#s1 rs#s2))) m).
+Case Pfeqs d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.cmpfs Ceq rs#s1 rs#s2))) m).
+Case Pflts d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.cmpfs Clt rs#s1 rs#s2))) m).
+Case Pfles d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.cmpfs Cle rs#s1 rs#s2))) m).
+Case Pfcvtws d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.intofsingle rs#s)))) m).
+Case Pfcvtwus d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.intuofsingle rs#s)))) m).
+Case Pfcvtsw d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.singleofint rs##s)))) m).
+Case Pfcvtswu d s := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.maketotal (Val.singleofintu rs##s)))) m).
+Case Pfcvtls d s := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.maketotal (Val.longofsingle rs#s)))) m).
+Case Pfcvtlus d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.longuofsingle rs#s)))) m).
+Case Pfcvtsl d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.singleoflong rs###s)))) m).
+Case Pfcvtslu d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.singleoflongu rs###s)))) m).
+Case Ploadsi rd f := (fun ge _ rs m =>  Next (nextinstr (rs#X31 <- Vundef #rd <- (Vsingle f))) m).
 
 (*not in the execution model *)
-Case Pfmins a b c := (fun ge f rs m => self__F.Stuck).
-Case Pfmaxs a b c := (fun ge f rs m => self__F.Stuck).
-Case Pfsqrts a b := (fun ge f rs m => self__F.Stuck).
-Case Pfmadds a b c d := (fun ge f rs m => self__F.Stuck).
-Case Pfmsubs a b c d := (fun ge f rs m => self__F.Stuck).
-Case Pfnmadds a b c d := (fun ge f rs m => self__F.Stuck).
-Case Pfnmsubs a b c d := (fun ge f rs m => self__F.Stuck).
-Case Pfmvxs a b := (fun ge f rs m => self__F.Stuck).
-Case Pfmvsx a b := (fun ge f rs m => self__F.Stuck).
-Case Pfmvxd a b := (fun ge f rs m => self__F.Stuck).
-Case Pfmvdx a b := (fun ge f rs m => self__F.Stuck).
+Case Pfmins a b c := (fun ge f rs m => Stuck).
+Case Pfmaxs a b c := (fun ge f rs m => Stuck).
+Case Pfsqrts a b := (fun ge f rs m => Stuck).
+Case Pfmadds a b c d := (fun ge f rs m => Stuck).
+Case Pfmsubs a b c d := (fun ge f rs m => Stuck).
+Case Pfnmadds a b c d := (fun ge f rs m => Stuck).
+Case Pfnmsubs a b c d := (fun ge f rs m => Stuck).
+Case Pfmvxs a b := (fun ge f rs m => Stuck).
+Case Pfmvsx a b := (fun ge f rs m => Stuck).
+Case Pfmvxd a b := (fun ge f rs m => Stuck).
+Case Pfmvdx a b := (fun ge f rs m => Stuck).
 
 FEnd exec_instr.
 
@@ -652,8 +655,8 @@ FEnd F.
 (* Standard extension for double-precision floating-point *)
 Family D extends F.
 FInductive instruction : Type :=
-| Pfld     : freg -> ireg -> offset -> instruction (**r load 64-bit float *)  
-| Pfsd     : freg -> ireg -> offset -> instruction (**r store 64-bit float *)  
+| Pfld     : freg -> ireg -> offset -> instruction (**r load 64-bit float *)
+| Pfsd     : freg -> ireg -> offset -> instruction (**r store 64-bit float *)
 | Pfnegd   : freg -> freg -> instruction (**r negation *)
 | Pfabsd   : freg -> freg -> instruction (**r absolute value *)
 | Pfaddd   : freg -> freg -> freg -> instruction (**r addition *)
@@ -690,38 +693,38 @@ FEnd is_label.
 
 FRecursion exec_instr.
 Case Pfld d a ofs := (fun ge f rs m =>  exec_load ge Mfloat64 rs m d a ofs).
-Case Pfsd s a ofs := (fun ge f rs m => exec_store ge Mfloat64 rs m s a ofs). 
-Case Pfnegd d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.negf rs#s))) m).
-Case Pfabsd d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.absf rs#s))) m).
-Case Pfaddd d s1 s2 := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.addf rs#s1 rs#s2))) m).
-Case Pfsubd d s1 s2 := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.subf rs#s1 rs#s2))) m).
-Case Pfmuld d s1 s2 := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.mulf rs#s1 rs#s2))) m).
-Case Pfdivd d s1 s2 := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.divf rs#s1 rs#s2))) m).
-Case Pfeqd d s1 s2 := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.cmpf Ceq rs#s1 rs#s2))) m).
-Case Pfltd d s1 s2 := (fun ge f rs m =>   self__D.Next (nextinstr (rs#d <- (Val.cmpf Clt rs#s1 rs#s2))) m).
-Case Pfled d s1 s2 := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.cmpf Cle rs#s1 rs#s2))) m).
-Case Ploadfi rd f := (fun ge _ rs m => self__D.Next (nextinstr (rs#X31 <- Vundef #rd <- (Vfloat f))) m).
-Case Pfcvtwd d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.maketotal (Val.intoffloat rs#s)))) m).
-Case Pfcvtwud d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.maketotal (Val.intuoffloat rs#s)))) m).
-Case Pfcvtdw d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.maketotal (Val.floatofint rs##s)))) m).
-Case Pfcvtdwu d s := (fun ge f rs m => self__D.Next (nextinstr (rs#d <- (Val.maketotal (Val.floatofintu rs##s)))) m).
-Case Pfcvtld d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.maketotal (Val.longoffloat rs#s)))) m).
-Case Pfcvtlud d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.maketotal (Val.longoffloat rs#s)))) m).
-Case Pfcvtdl d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.maketotal (Val.floatoflong rs###s)))) m).
-Case Pfcvtdlu d s := (fun ge f rs m =>  self__D.Next (nextinstr (rs#d <- (Val.maketotal (Val.floatoflongu rs###s)))) m).
-Case Pfcvtds d s := (fun ge f rs m =>   self__D.Next (nextinstr (rs#d <- (Val.floatofsingle rs#s))) m).
-Case Pfcvtsd d s := (fun ge f rs m => self__D.Next (nextinstr (rs#d <- (Val.singleoffloat rs#s))) m).
+Case Pfsd s a ofs := (fun ge f rs m => exec_store ge Mfloat64 rs m s a ofs).
+Case Pfnegd d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.negf rs#s))) m).
+Case Pfabsd d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.absf rs#s))) m).
+Case Pfaddd d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.addf rs#s1 rs#s2))) m).
+Case Pfsubd d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.subf rs#s1 rs#s2))) m).
+Case Pfmuld d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.mulf rs#s1 rs#s2))) m).
+Case Pfdivd d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.divf rs#s1 rs#s2))) m).
+Case Pfeqd d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.cmpf Ceq rs#s1 rs#s2))) m).
+Case Pfltd d s1 s2 := (fun ge f rs m =>   Next (nextinstr (rs#d <- (Val.cmpf Clt rs#s1 rs#s2))) m).
+Case Pfled d s1 s2 := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.cmpf Cle rs#s1 rs#s2))) m).
+Case Ploadfi rd f := (fun ge _ rs m => Next (nextinstr (rs#X31 <- Vundef #rd <- (Vfloat f))) m).
+Case Pfcvtwd d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.intoffloat rs#s)))) m).
+Case Pfcvtwud d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.intuoffloat rs#s)))) m).
+Case Pfcvtdw d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.floatofint rs##s)))) m).
+Case Pfcvtdwu d s := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.maketotal (Val.floatofintu rs##s)))) m).
+Case Pfcvtld d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.longoffloat rs#s)))) m).
+Case Pfcvtlud d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.longuoffloat rs#s)))) m).
+Case Pfcvtdl d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.floatoflong rs###s)))) m).
+Case Pfcvtdlu d s := (fun ge f rs m =>  Next (nextinstr (rs#d <- (Val.maketotal (Val.floatoflongu rs###s)))) m).
+Case Pfcvtds d s := (fun ge f rs m =>   Next (nextinstr (rs#d <- (Val.floatofsingle rs#s))) m).
+Case Pfcvtsd d s := (fun ge f rs m => Next (nextinstr (rs#d <- (Val.singleoffloat rs#s))) m).
 Case Pfld_a d a ofs := (fun ge f rs m => exec_load ge Many64 rs m d a ofs).
 Case Pfsd_a s a ofs := (fun ge f rs m => exec_store ge Many64 rs m s a ofs).
 
 (* not modeled *)
-Case Pfmind d s1 s2 := (fun ge f rs m => self__D.Stuck ).
-Case Pfmaxd d s1 s2 := (fun ge f rs m => self__D.Stuck).
-Case Pfsqrtd a b := (fun ge f rs m => self__D.Stuck).
-Case Pfmaddd a b c d := (fun ge f rs m => self__D.Stuck).
-Case Pfmsubd  a b c d := (fun ge f rs m => self__D.Stuck).
-Case Pfnmaddd a b c d  := (fun ge f rs m => self__D.Stuck).
-Case Pfnmsubd a b c d  := (fun ge f rs m => self__D.Stuck).
+Case Pfmind d s1 s2 := (fun ge f rs m => Stuck ).
+Case Pfmaxd d s1 s2 := (fun ge f rs m => Stuck).
+Case Pfsqrtd a b := (fun ge f rs m => Stuck).
+Case Pfmaddd a b c d := (fun ge f rs m => Stuck).
+Case Pfmsubd  a b c d := (fun ge f rs m => Stuck).
+Case Pfnmaddd a b c d  := (fun ge f rs m => Stuck).
+Case Pfnmsubd a b c d  := (fun ge f rs m => Stuck).
 
 FEnd exec_instr.
 
@@ -741,7 +744,7 @@ Trait Base.
 
 (* C family languages: Csharpminor, Cminor, CminorSel *)
 
-From Rocqet Require Import Registers.      
+From Rocqet Require Import Registers.
 
 From Rocqet Require Import Machregs.
 
@@ -758,7 +761,7 @@ FInductive instruction: Type :=
 | Lop : Op.operation -> list mreg -> mreg -> instruction
 | Lcond : Op.condition -> list mreg -> label -> instruction
 | Llabel: label -> instruction
-| Lgoto: label -> instruction                                                     
+| Lgoto: label -> instruction
 | Lreturn : instruction
 | Lgetstack: ptrofs -> typ -> mreg -> instruction
 | Lgetparam: ptrofs -> typ -> mreg -> instruction
@@ -768,14 +771,14 @@ FInductive instruction: Type :=
 | Lstore: memory_chunk -> addressing -> list mreg -> mreg -> instruction.
 
 FDefinition code: Type := list instruction.
-        
-MetaData function.
+
+MetaData function binds fn_sig, fn_code, fn_stacksize, fn_link_ofs, fn_retaddr_ofs.
 Record function: Type := mkfunction {
   fn_sig: signature;
-  fn_code: self__Mach.code;
+  fn_code: code;
   fn_stacksize: Z;
   fn_link_ofs: ptrofs;
-  fn_retaddr_ofs: ptrofs 
+  fn_retaddr_ofs: ptrofs
 }.
 FEnd function.
 
@@ -784,7 +787,7 @@ FDefinition program := AST.program fundef unit.
 
 FDefinition funsig := fun (fd: fundef) =>
   match fd with
-  | AST.Internal f => self__Mach.fn_sig f
+  | AST.Internal f => fn_sig f
   | AST.External ef => ef_sig ef
   end.
 
@@ -846,13 +849,27 @@ FDefinition store_stack := fun (m: mem) (sp: val) (ty: typ) (ofs: ptrofs) (v: va
 
 (*From Rocqet Require Import Mregisters.
 FDefinition reglist := fun (a: regset) (b: list mreg) => a ## b.*)
-                                    
+
 MetaData undef_regs.
 Fixpoint undef_regs (rl: list mreg) (rs: Regmap.t val) {struct rl} :=
   match rl with
   | nil => rs
   | r1 :: rl' => Regmap.set r1 Vundef (undef_regs rl' rs)
   end.
+
+Lemma undef_regs_other:
+  forall r rl rs, ~In r rl -> undef_regs rl rs r = rs r.
+Proof.
+  induction rl; simpl; intros. auto. rewrite Regmap.gso. apply IHrl. intuition. intuition.
+Qed.
+
+Lemma undef_regs_same:
+  forall r rl rs, In r rl -> undef_regs rl rs r = Vundef.
+Proof.
+  induction rl; simpl; intros. tauto.
+  destruct H. subst a. apply Regmap.gss.
+  unfold Regmap.set. destruct (RegEq.eq r a); auto.
+Qed.
 FEnd undef_regs.
 
 FDefinition parent_sp := fun (s: list stackframe) =>
@@ -867,7 +884,7 @@ FDefinition parent_ra := fun (s: list stackframe) =>
   | self__Mach.Stackframe f sp ra c :: s' => ra
   end.
 
-FInductive step: genv -> state -> trace -> state -> Prop :=          
+FInductive step: genv -> state -> trace -> state -> Prop :=
 | exec_Llabel:
     forall ge s f sp lbl b rs m,
     step ge (State s f sp (Llabel lbl :: b) rs m)
@@ -875,7 +892,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
 | exec_Lgoto:
     forall ge s fb f sp lbl b rs m c',
     Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
-    find_label lbl (self__Mach.fn_code f) = Some c' ->
+    find_label lbl (fn_code f) = Some c' ->
     step ge (State s fb sp (Lgoto lbl :: b) rs m)
       E0 (State s fb sp c' rs m)
 | exec_Lop:
@@ -888,7 +905,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
     forall ge s f fb sp cond args lbl b rs m rs' c',
     eval_condition cond rs##args m = Some true ->
     Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
-    find_label lbl (self__Mach.fn_code f) = Some c' ->
+    find_label lbl (fn_code f) = Some c' ->
     rs' = undef_regs (destroyed_by_cond cond) rs ->
     step ge (State s fb sp (Lcond cond args lbl :: b) rs m)
       E0 (State s fb sp c' rs' m)
@@ -905,40 +922,40 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
 | exec_Lgetstack:
       forall ge s f sp ofs ty dst c rs m v,
       load_stack m sp ty ofs = Some v ->
-      step ge (self__Mach.State s f sp (Lgetstack ofs ty dst :: c) rs m)
-        E0 (self__Mach.State s f sp c (rs#dst <- v) m)
+      step ge (State s f sp (Lgetstack ofs ty dst :: c) rs m)
+        E0 (State s f sp c (rs#dst <- v) m)
 | exec_Lsetstack:
       forall ge s f sp src ofs ty c rs m m' rs',
       store_stack m sp ty ofs (rs src) = Some m' ->
       rs' = undef_regs (destroyed_by_setstack ty) rs ->
-      step ge (self__Mach.State s f sp (Lsetstack src ofs ty :: c) rs m)
-        E0 (self__Mach.State s f sp c rs' m')
+      step ge (State s f sp (Lsetstack src ofs ty :: c) rs m)
+        E0 (State s f sp c rs' m')
 | exec_Lgetparam:
       forall ge s fb f sp ofs ty dst c rs m v rs',
       Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
-      load_stack m sp Tptr (self__Mach.fn_link_ofs f) = Some (parent_sp s) ->
+      load_stack m sp Tptr (fn_link_ofs f) = Some (parent_sp s) ->
       load_stack m (parent_sp s) ty ofs = Some v ->
       rs' = (rs # temp_for_parent_frame <- Vundef # dst <- v) ->
-      step ge (self__Mach.State s fb sp (Lgetparam ofs ty dst :: c) rs m)
-        E0 (self__Mach.State s fb sp c rs' m)
+      step ge (State s fb sp (Lgetparam ofs ty dst :: c) rs m)
+        E0 (State s fb sp c rs' m)
 | exec_function_internal:
       forall ge s fb rs m f m1 m2 m3 stk rs',
       Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
-      Mem.alloc m 0 (self__Mach.fn_stacksize f) = (m1, stk) ->
+      Mem.alloc m 0 (fn_stacksize f) = (m1, stk) ->
       let sp := Vptr stk Ptrofs.zero in
-      store_stack m1 sp Tptr (self__Mach.fn_link_ofs f) (parent_sp s) = Some m2 ->
-      store_stack m2 sp Tptr (self__Mach.fn_retaddr_ofs f) (parent_ra s) = Some m3 ->
+      store_stack m1 sp Tptr (fn_link_ofs f) (parent_sp s) = Some m2 ->
+      store_stack m2 sp Tptr (fn_retaddr_ofs f) (parent_ra s) = Some m3 ->
       rs' = undef_regs destroyed_at_function_entry rs ->
-      step ge (self__Mach.Callstate s fb rs m)
-        E0 (self__Mach.State s fb sp (self__Mach.fn_code f) rs' m3)
+      step ge (Callstate s fb rs m)
+        E0 (State s fb sp (fn_code f) rs' m3)
 | exec_Lreturn:
       forall ge s fb stk soff c rs m f m',
       Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
-      load_stack m (Vptr stk soff) Tptr (self__Mach.fn_link_ofs f) = Some (parent_sp s) ->
-      load_stack m (Vptr stk soff) Tptr (self__Mach.fn_retaddr_ofs f) = Some (parent_ra s) ->
-      Mem.free m stk 0 (self__Mach.fn_stacksize f) = Some m' ->
-      step ge (self__Mach.State s fb (Vptr stk soff) (Lreturn :: c) rs m)
-        E0 (self__Mach.Returnstate s rs m')
+      load_stack m (Vptr stk soff) Tptr (fn_link_ofs f) = Some (parent_sp s) ->
+      load_stack m (Vptr stk soff) Tptr (fn_retaddr_ofs f) = Some (parent_ra s) ->
+      Mem.free m stk 0 (fn_stacksize f) = Some m' ->
+      step ge (State s fb (Vptr stk soff) (Lreturn :: c) rs m)
+        E0 (Returnstate s rs m')
 (* Heap *)
 | exec_Lload:
       forall ge s f sp chunk addr args dst c rs m a v rs',
@@ -956,20 +973,20 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
         E0 (State s f sp c rs' m').
 
 MetaData initial_state.
-Inductive initial_state (p: self__Mach.program): self__Mach.state -> Prop :=
+Inductive initial_state (p: program): state -> Prop :=
   | initial_state_intro: forall fb m0,
       let ge := Genv.globalenv p in
       Genv.init_mem p = Some m0 ->
       Genv.find_symbol ge p.(AST.prog_main) = Some fb ->
-      initial_state p (self__Mach.Callstate nil fb (Regmap.init Vundef) m0).
+      initial_state p (Callstate nil fb (Regmap.init Vundef) m0).
 FEnd initial_state.
 
 MetaData final_state.
-Inductive final_state: self__Mach.state -> int -> Prop :=
+Inductive final_state: state -> int -> Prop :=
   | final_state_intro: forall rs m r retcode,
       loc_result signature_main = AST.One r ->
       rs r = Vint retcode ->
-      final_state (self__Mach.Returnstate nil rs m) retcode.
+      final_state (Returnstate nil rs m) retcode.
 FEnd final_state.
 
 FEnd Mach.
@@ -984,7 +1001,7 @@ FDefinition ireg_of : mreg -> res ireg := fun r =>
 FDefinition freg_of : mreg -> res freg := fun r =>
   match preg_of r with FR mr => OK mr | _ => Error(msg "Asmgen.freg_of") end.
 
-MetaData immed32.
+MetaData immed32 binds Imm32_single, Imm32_pair.
 Inductive immed32 : Type :=
   | Imm32_single (imm: int)
   | Imm32_pair   (hi: int) (lo: int).
@@ -993,8 +1010,8 @@ FEnd immed32.
 FDefinition make_immed32 := fun (val: int) =>
   let lo := Int.sign_ext 12 val in
   if Int.eq val lo
-  then self__Asmgen.Imm32_single val
-  else self__Asmgen.Imm32_pair (Int.shru (Int.sub val lo) (Int.repr 12)) lo.
+  then Imm32_single val
+  else Imm32_pair (Int.shru (Int.sub val lo) (Int.repr 12)) lo.
 
 FDefinition load_hilo32 := fun (r: ireg) (hi lo: int) k =>
   if Int.eq lo Int.zero then Asm.Pluiw r hi :: k
@@ -1006,7 +1023,7 @@ FDefinition loadimm32 := fun (r: ireg) (n: int) (k: Asm.code) =>
   | self__Asmgen.Imm32_pair hi lo => load_hilo32 r hi lo k
   end.
 
-MetaData immed64.
+MetaData immed64 binds Imm64_single, Imm64_pair, Imm64_large.
 Inductive immed64 : Type :=
   | Imm64_single (imm: int64)
   | Imm64_pair   (hi: int64) (lo: int64)
@@ -1015,11 +1032,11 @@ FEnd immed64.
 
 FDefinition make_immed64 := fun (val: int64) =>
   let lo := Int64.sign_ext 12 val in
-  if Int64.eq val lo then self__Asmgen.Imm64_single lo else
+  if Int64.eq val lo then Imm64_single lo else
   let hi := Int64.zero_ext 20 (Int64.shru (Int64.sub val lo) (Int64.repr 12)) in
   if Int64.eq val (Int64.add (Int64.sign_ext 32 (Int64.shl hi (Int64.repr 12))) lo)
-  then self__Asmgen.Imm64_pair hi lo
-  else self__Asmgen.Imm64_large val.
+  then Imm64_pair hi lo
+  else Imm64_large val.
 
 FDefinition load_hilo64 := fun (r: ireg) (hi lo: int64) k =>
   if Int64.eq lo Int64.zero then Asm.Pluil r hi :: k
@@ -1032,7 +1049,7 @@ FDefinition loadimm64 := fun (r: ireg) (n: int64) (k: Asm.code) =>
   | self__Asmgen.Imm64_large imm  => Asm.Ploadli r imm :: k
   end.
 
-FDefinition opimm32 := 
+FDefinition opimm32 :=
 fun (op: ireg -> ireg0 -> ireg0 -> Asm.instruction)
     (opimm: ireg -> ireg0 -> int -> Asm.instruction)
     (rd rs: ireg) (n: int) (k: Asm.code) =>
@@ -1041,7 +1058,7 @@ fun (op: ireg -> ireg0 -> ireg0 -> Asm.instruction)
   | self__Asmgen.Imm32_pair hi lo => load_hilo32 X31 hi lo (op rd rs X31 :: k)
   end.
 
-FDefinition opimm64 := 
+FDefinition opimm64 :=
   fun (op: ireg -> ireg0 -> ireg0 -> Asm.instruction)
       (opimm: ireg -> ireg0 -> int64 -> Asm.instruction)
       (rd rs: ireg) (n: int64) (k: Asm.code) =>
@@ -1086,7 +1103,7 @@ FDefinition transl_cond_int32u := fun (cmp: comparison) (rd: ireg) (r1 r2: ireg0
   | Cge => Asm.Psltuw rd r1 r2 :: Asm.Pxoriw rd rd Int.one :: k
   end.
 
-FDefinition transl_condimm_int32s := fun (cmp: comparison) (rd: ireg) (r1: ireg) (n: int) (k: Asm.code) => 
+FDefinition transl_condimm_int32s := fun (cmp: comparison) (rd: ireg) (r1: ireg) (n: int) (k: Asm.code) =>
   if Int.eq n Int.zero then transl_cond_int32s cmp rd r1 X0 k else
   match cmp with
   | Ceq | Cne => xorimm32 rd r1 n (transl_cond_int32s cmp rd rd X0 k)
@@ -1133,7 +1150,7 @@ FDefinition transl_cond_float := fun (cmp: comparison) (rd: ireg) (fs1 fs2: freg
   | Cgt => (Asm.Pfltd rd fs2 fs1, true)
   | Cge => (Asm.Pfled rd fs2 fs1, true)
   end.
-  
+
 FDefinition transl_cond_single := fun (cmp: comparison) (rd: ireg) (fs1 fs2: freg) =>
   match cmp with
   | Ceq => (Asm.Pfeqs rd fs1 fs2, true)
@@ -1212,26 +1229,26 @@ FDefinition transl_cond_op
   end.
 
 (*FRecursion transl_cond_op about Op.condition motive (fun (_ : Op.condition) => ireg -> list mreg -> Asm.code -> res Asm.code) by _rect.
-Case Ccomp c := 
-(fun rd args k => 
-  match args with 
-  | a1 :: a2 :: nil => 
+Case Ccomp c :=
+(fun rd args k =>
+  match args with
+  | a1 :: a2 :: nil =>
       do r1 <- ireg_of a1; do r2 <- ireg_of a2;
       OK (transl_cond_int32s c rd r1 r2 k)
   | _ =>  Error(msg "Asmgen.transl_cond_op")
   end).
 Case Ccompimm c n :=
-(fun rd args k => 
-  match args with 
-  | a1 :: a2 :: nil => 
+(fun rd args k =>
+  match args with
+  | a1 :: a2 :: nil =>
        do r1 <- ireg_of a1;
       OK (transl_condimm_int32s c rd r1 n k)
   | _ =>  Error(msg "Asmgen.transl_cond_op")
   end).
 Case Ccompuimm c n :=
-(fun rd args k => 
-  match args with 
-  | a1 :: a2 :: nil => 
+(fun rd args k =>
+  match args with
+  | a1 :: a2 :: nil =>
       do r1 <- ireg_of a1;
       OK (transl_condimm_int32u c rd r1 n k)
   | _ =>  Error(msg "Asmgen.transl_cond_op")
@@ -1362,12 +1379,12 @@ FDefinition transl_op
           Asm.Psraiw X31 rs (Int.repr 31) ::
           Asm.Psrliw X31 X31 (Int.sub Int.iwordsize n) ::
           Asm.Paddw X31 rs X31 ::
-          Asm.Psraiw rd X31 n :: k)  
+          Asm.Psraiw rd X31 n :: k)
 
   (* [Omakelong], [Ohighlong]  should not occur *)
   | Op.Olowlong, a1 :: nil =>
       do rd <- ireg_of res; do rs <- ireg_of a1;
-      OK (Asm.Pcvtl2w rd rs :: k)  
+      OK (Asm.Pcvtl2w rd rs :: k)
   | Op.Ocast32signed, a1 :: nil =>
       do rd <- ireg_of res; do rs <- ireg_of a1;
       assertion (ireg_eq rd rs);
@@ -1451,7 +1468,7 @@ FDefinition transl_op
           Asm.Psrail X31 rs (Int.repr 63) ::
           Asm.Psrlil X31 X31 (Int.sub Int64.iwordsize' n) ::
           Asm.Paddl X31 rs X31 ::
-          Asm.Psrail rd X31 n :: k)  
+          Asm.Psrail rd X31 n :: k)
 
   | Op.Onegf, a1 :: nil =>
       do rd <- freg_of res; do rs <- freg_of a1;
@@ -1559,7 +1576,7 @@ FDefinition transl_op
 (*FRecursion transl_op about Op.operation motive (fun (_ : Op.operation) => list mreg -> mreg -> Asm.code -> res Asm.code) by _rect.
 Case Omove :=
 (fun args res k =>
-  match args with 
+  match args with
   | a1 :: nil =>
       match preg_of res, preg_of a1 with
       | IR r, IR a => OK (Asm.Pmv r a :: k)
@@ -1568,40 +1585,40 @@ Case Omove :=
       end
   | _ =>  Error(msg "Asmgen.transl_op")
   end).
-Case Ointconst n := 
-(fun args res k => 
+Case Ointconst n :=
+(fun args res k =>
   match args with
   | nil => do rd <- ireg_of res; OK (loadimm32 rd n k)
   | _ => Error(msg "Asmgen.transl_op")
   end).
-Case Olongconst n := 
-(fun args res k => 
+Case Olongconst n :=
+(fun args res k =>
   match args with
   | nil => do rd <- ireg_of res; OK (loadimm64 rd n k)
   | _ => Error(msg "Asmgen.transl_op")
   end).
-Case Ofloatconst f := 
-(fun args res k => 
+Case Ofloatconst f :=
+(fun args res k =>
   match args with
-  | nil => 
+  | nil =>
       do rd <- freg_of res;
       OK (if Float.eq_dec f Float.zero
           then Asm.Pfcvtdw rd X0 :: k
           else cheat Asm.Ploadfi rd f :: k)
   | _ => Error(msg "Asmgen.transl_op")
   end).
-Case Osingleconst f := 
-(fun args res k => 
+Case Osingleconst f :=
+(fun args res k =>
   match args with
-  | nil => 
+  | nil =>
        do rd <- freg_of res;
       OK (if Float32.eq_dec f Float32.zero
           then Asm.Pfcvtsw rd X0 :: k
           else Asm.Ploadsi rd f :: k)
   | _ => Error(msg "Asmgen.transl_op")
   end).
-Case Oaddrstack n := 
-(fun args res k => 
+Case Oaddrstack n :=
+(fun args res k =>
   match args with
   | nil =>  do rd <- ireg_of res; OK (addptrofs rd SP n k)
   | _ => Error(msg "Asmgen.transl_op")
@@ -1650,7 +1667,7 @@ FDefinition transl_cbranch_int64u := fun (cmp: comparison) (r1 r2: ireg0) (lbl: 
   | Cgt => Asm.Pbltul r2 r1 lbl
   | Cge => Asm.Pbgeul r1 r2 lbl
   end.
-  
+
 FDefinition transl_cbranch
            := fun (cond: condition) (args: list mreg) (lbl: Asm.label) (k: Asm.code) =>
   match cond, args with
@@ -1711,16 +1728,16 @@ FDefinition transl_cbranch
   end.
 
 (*FRecursion transl_cbranch about Op.condition motive (fun (_ : Op.condition) => list mreg -> Asm.label -> Asm.code -> res Asm.code) by _rect.
-Case Ccomp c := 
-(fun args lbl k => 
+Case Ccomp c :=
+(fun args lbl k =>
   match args with
   | a1 :: a2 :: nil =>
       do r1 <- ireg_of a1; do r2 <- ireg_of a2;
       OK (transl_cbranch_int32s c r1 r2 lbl :: k)
   | _ =>  Error(msg "Asmgen.transl_cond_branch")
   end).
-Case Ccompimm c n := 
-(fun args lbl k => 
+Case Ccompimm c n :=
+(fun args lbl k =>
   match args with
   | a1 :: nil =>
       do r1 <- ireg_of a1;
@@ -1731,7 +1748,7 @@ Case Ccompimm c n :=
   | _ => Error(msg "Asmgen.transl_cond_branch")
   end).
 Case Ccompuimm c n :=
-(fun args lbl k => 
+(fun args lbl k =>
   match args with
   | a1 :: nil =>
       do r1 <- ireg_of a1;
@@ -1740,7 +1757,7 @@ Case Ccompuimm c n :=
           else
             loadimm32 X31 n (transl_cbranch_int32u c r1 X31 lbl :: k))
   | _ => Error(msg "Asmgen.transl_cond_branch")
-  end).  
+  end).
 FEnd transl_cbranch.*)
 
 FDefinition indexed_memory_access :=
@@ -1763,7 +1780,7 @@ FDefinition indexed_memory_access :=
         Asm.Pluiw X31 hi :: Asm.Paddw X31 base X31 :: mk_instr X31 (Asm.Ofsimm (Ptrofs.of_int lo)) :: k
     end.
 
-FDefinition loadind := 
+FDefinition loadind :=
   fun (base: ireg) (ofs: ptrofs) (ty: typ) (dst: mreg) (k: Asm.code) =>
   match ty, preg_of dst with
   | AST.Tint,    IR rd => OK (indexed_memory_access (Asm.Plw rd) base ofs k)
@@ -1776,7 +1793,7 @@ FDefinition loadind :=
   | _, _           => Error (msg "Asmgen.loadind")
   end.
 
-FDefinition storeind := fun (src: mreg) (base: ireg) (ofs: ptrofs) (ty: typ) (k: Asm.code) => 
+FDefinition storeind := fun (src: mreg) (base: ireg) (ofs: ptrofs) (ty: typ) (k: Asm.code) =>
   match ty, preg_of src with
   | AST.Tint,    IR rd => OK (indexed_memory_access (Asm.Psw rd) base ofs k)
   | AST.Tlong,   IR rd => OK (indexed_memory_access (Asm.Psd rd) base ofs k)
@@ -1788,7 +1805,7 @@ FDefinition storeind := fun (src: mreg) (base: ireg) (ofs: ptrofs) (ty: typ) (k:
   | _, _           => Error (msg "Asmgen.storeind")
   end.
 
-FDefinition loadind_ptr := fun (base: ireg) (ofs: ptrofs) (dst: ireg) (k: Asm.code) => 
+FDefinition loadind_ptr := fun (base: ireg) (ofs: ptrofs) (dst: ireg) (k: Asm.code) =>
   indexed_memory_access (if Archi.ptr64 then Asm.Pld dst else Asm.Plw dst) base ofs k.
 
 FDefinition storeind_ptr := fun (src: ireg) (base: ireg) (ofs: ptrofs) (k: Asm.code) =>
@@ -1808,15 +1825,15 @@ FDefinition transl_memory_access
   | Aindexed ofs, a1 :: nil =>
       do rs <- ireg_of a1;
       OK (indexed_memory_access mk_instr rs ofs k)
-  | Aglobal id ofs, nil =>   
-    OK (Asm.Ploadsymbol_high X31 id ofs :: mk_instr X31 (Asm.Ofslow id ofs) :: k)      
+  | Aglobal id ofs, nil =>
+    OK (Asm.Ploadsymbol_high X31 id ofs :: mk_instr X31 (Asm.Ofslow id ofs) :: k)
   | Ainstack ofs, nil =>
       OK (indexed_memory_access mk_instr SP ofs k)
   | _, _ =>
       Error(msg "Asmgen.transl_memory_access")
   end.
 
-FDefinition transl_load := fun 
+FDefinition transl_load := fun
   (chunk: memory_chunk) (addr: addressing)
   (args: list mreg) (dst: mreg) (k: Asm.code) =>
   match chunk with
@@ -1876,8 +1893,8 @@ FDefinition transl_store := fun (chunk: memory_chunk) (addr: addressing)
 FRecursion transl_instr about S.instruction motive (fun (_ : S.instruction) => S.function -> bool -> Asm.code -> res Asm.code) by _rect.
 Case Lgetstack ofs ty dst := (fun f ep k => loadind SP ofs ty dst k).
 Case Lsetstack src ofs ty := (fun f ep k =>  storeind src SP ofs ty k).
-Case Lgetparam ofs ty dst := 
-(fun f ep k => 
+Case Lgetparam ofs ty dst :=
+(fun f ep k =>
     do c <- loadind X30 ofs ty dst k;
       OK (if ep then c
                 else loadind_ptr SP (S.fn_link_ofs f) X30 c)).
@@ -1887,7 +1904,7 @@ Case Lgoto lbl := (fun f ep k => OK (Asm.Pj_l lbl :: k)).
 Case Lcond cond args lbl := (fun f ep k => transl_cbranch cond args lbl k).
 Case Lreturn := (fun f ep k => OK (make_epilogue f (Asm.Pj_r RA (S.fn_sig f) :: k))).
 (* Heap *)
-Case Lload chunk addr args dst := 
+Case Lload chunk addr args dst :=
  (fun f ep k => transl_load chunk addr args dst k).
 Case Lstore chunk addr args src :=
  (fun f ep k => transl_store chunk addr args src k).
@@ -1905,7 +1922,7 @@ Case Lreturn := (fun before => false).
 (* Heap *)
 Case _ := (fun before => false).
 FEnd it1_is_parent.
-      
+
 (** This is the naive definition that we no longer use because it
   is not tail-recursive.  It is kept as specification. *)
 MetaData transl_code.
@@ -1913,25 +1930,25 @@ Fixpoint transl_code (f: S.function) (il: list S.instruction) (it1p: bool) :=
   match il with
   | nil => OK nil
   | i1 :: il' =>
-      do k <- transl_code f il' (self__Asmgen.it1_is_parent i1 it1p);
-      self__Asmgen.transl_instr i1 f it1p k
+      do k <- transl_code f il' (it1_is_parent i1 it1p);
+      transl_instr i1 f it1p k
   end.
 FEnd transl_code.
 
 (** This is an equivalent definition in continuation-passing style
-  that runs in constant stack space. *)      
+  that runs in constant stack space. *)
 MetaData transl_code_rec.
-Fixpoint transl_code_rec (f: self__Asmgen.S.function) (il: list self__Asmgen.S.instruction)
+Fixpoint transl_code_rec (f: S.function) (il: list S.instruction)
                          (it1p: bool) (k: Asm.code -> res Asm.code) :=
   match il with
   | nil => k nil
   | i1 :: il' =>
-      transl_code_rec f il' (self__Asmgen.it1_is_parent i1 it1p)
-        (fun c1 => do c2 <- self__Asmgen.transl_instr i1 f it1p c1; k c2)
-  end.      
+      transl_code_rec f il' (it1_is_parent i1 it1p)
+        (fun c1 => do c2 <- transl_instr i1 f it1p c1; k c2)
+  end.
 FEnd transl_code_rec.
 
-FDefinition transl_code' := 
+FDefinition transl_code' :=
   fun (f: S.function) (il: list S.instruction) (it1p: bool) =>
   transl_code_rec f il it1p (fun c => OK c).
 
@@ -1969,6 +1986,72 @@ Inductive code_tail: Z -> Asm.code -> Asm.code -> Prop :=
   | code_tail_S: forall pos i c1 c2,
       code_tail pos c1 c2 ->
       code_tail (pos + 1) (i :: c1) c2.
+
+Lemma code_tail_pos:
+  forall pos c1 c2, code_tail pos c1 c2 -> pos >= 0.
+Proof.
+  induction 1. lia. lia.
+Qed.
+
+Import Asm.
+
+Lemma find_instr_tail:
+  forall c1 i c2 pos,
+  code_tail pos c1 (i :: c2) ->
+  find_instr pos c1 = Some i.
+Proof.
+  induction c1; simpl; intros.
+  inv H.
+  destruct (zeq pos 0). subst pos.
+  inv H. auto. generalize (code_tail_pos _ _ _ H4). intro. extlia.
+  inv H. congruence. replace (pos0 + 1 - 1) with pos0 by lia.
+  eauto.
+Qed.
+
+Remark code_tail_bounds_1:
+  forall fn ofs c,
+  code_tail ofs fn c -> 0 <= ofs <= list_length_z fn.
+Proof.
+  induction 1; intros; simpl.
+  generalize (list_length_z_pos c). lia.
+  rewrite list_length_z_cons. lia.
+Qed.
+
+Remark code_tail_bounds_2:
+  forall fn ofs i c,
+  code_tail ofs fn (i :: c) -> 0 <= ofs < list_length_z fn.
+Proof.
+  assert (forall ofs fn c, code_tail ofs fn c ->
+          forall i c', c = i :: c' -> 0 <= ofs < list_length_z fn).
+  induction 1; intros; simpl.
+  rewrite H. rewrite list_length_z_cons. generalize (list_length_z_pos c'). lia.
+  rewrite list_length_z_cons. generalize (IHcode_tail _ _ H0). lia.
+  eauto.
+Qed.
+
+Lemma code_tail_next:
+  forall fn ofs i c,
+  code_tail ofs fn (i :: c) ->
+  code_tail (ofs + 1) fn c.
+Proof.
+  assert (forall ofs fn c, code_tail ofs fn c ->
+          forall i c', c = i :: c' -> code_tail (ofs + 1) fn c').
+  induction 1; intros.
+  subst c. constructor. constructor.
+  constructor. eauto.
+  eauto.
+Qed.
+
+Lemma code_tail_next_int:
+  forall fn ofs i c,
+  list_length_z fn <= Ptrofs.max_unsigned ->
+  code_tail (Ptrofs.unsigned ofs) fn (i :: c) ->
+  code_tail (Ptrofs.unsigned (Ptrofs.add ofs Ptrofs.one)) fn c.
+Proof.
+  intros. rewrite Ptrofs.add_unsigned, Ptrofs.unsigned_one.
+  rewrite Ptrofs.unsigned_repr. apply code_tail_next with i; auto.
+  generalize (code_tail_bounds_2 _ _ _ _ H0). lia.
+Qed.
 FEnd code_tail.
 
 (** [transl_code_at_pc pc fb f c ep tf tc] holds if the code pointer [pc] points
@@ -1989,38 +2072,299 @@ Inductive transl_code_at_pc (ge: S.genv):
 FEnd transl_code_at_pc.
 
 MetaData match_stack.
-Inductive match_stack (ge: S.genv): list S.stackframe -> Prop :=
+(** * Properties of the Mach call stack *)
+Section MATCH_STACK.
+Import S.
+Variable ge: genv.
+
+Inductive match_stack: list stackframe -> Prop :=
   | match_stack_nil:
-      match_stack ge nil
+      match_stack nil
   | match_stack_cons: forall fb sp ra c s f tf tc,
       Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
       transl_code_at_pc ge ra fb f c false tf tc ->
       sp <> Vundef ->
-      match_stack ge s ->
-      match_stack ge (S.Stackframe fb sp ra c :: s).
-FEnd match_stack.
+      match_stack s ->
+      match_stack (Stackframe fb sp ra c :: s).
 
-(*
-Variable prog: Mach.program.
-Variable tprog: Asm.program.
-Hypothesis TRANSF: match_prog prog tprog.
-Let ge := Genv.globalenv prog.
-Let tge := Genv.globalenv tprog.
- *)
+Lemma parent_sp_def: forall s, match_stack s -> parent_sp s <> Vundef.
+Proof.
+  induction 1; simpl.
+  unfold Vnullptr; destruct Archi.ptr64; congruence.
+  auto.
+Qed.
+
+Lemma parent_ra_def: forall s, match_stack s -> parent_ra s <> Vundef.
+Proof.
+  induction 1; simpl.
+  unfold Vnullptr; destruct Archi.ptr64; congruence.
+  inv H0. congruence.
+Qed.
+
+Lemma lessdef_parent_sp:
+  forall s v,
+  match_stack s -> Val.lessdef (parent_sp s) v -> v = parent_sp s.
+Proof.
+  intros. inv H0. auto. exploit parent_sp_def; eauto. tauto.
+Qed.
+
+Lemma lessdef_parent_ra:
+  forall s v,
+  match_stack s -> Val.lessdef (parent_ra s) v -> v = parent_ra s.
+Proof.
+  intros. inv H0. auto. exploit parent_ra_def; eauto. tauto.
+Qed.
+
+End MATCH_STACK.
+FEnd match_stack.
 
 FDefinition match_prog := fun (p: S.program) (tp: Asm.program) =>
   match_program (fun _ f tf => transf_fundef f = OK tf) eq p tp.
 
+Open Scope asm.
+MetaData Proof0 binds agree.
+Global Hint Extern 2 (_ <> _) => congruence: asmgen.
+
+Lemma ireg_of_eq:
+  forall r r', ireg_of r = OK r' -> preg_of r = IR r'.
+Proof.
+  unfold ireg_of; intros. destruct (preg_of r); inv H; auto.
+Qed.
+
+Lemma freg_of_eq:
+  forall r r', freg_of r = OK r' -> preg_of r = FR r'.
+Proof.
+  unfold freg_of; intros. destruct (preg_of r); inv H; auto.
+Qed.
+
+Lemma preg_of_injective:
+  forall r1 r2, preg_of r1 = preg_of r2 -> r1 = r2.
+Proof.
+  destruct r1; destruct r2; simpl; intros; reflexivity || discriminate.
+Qed.
+
+Lemma preg_of_data:
+  forall r, data_preg (preg_of r) = true.
+Proof.
+  intros. destruct r; reflexivity.
+Qed.
+Global Hint Resolve preg_of_data: asmgen.
+
+Lemma data_diff:
+  forall r r',
+  data_preg r = true -> data_preg r' = false -> r <> r'.
+Proof.
+  congruence.
+Qed.
+Global Hint Resolve data_diff: asmgen.
+
+Lemma preg_of_not_SP:
+  forall r, preg_of r <> SP.
+Proof.
+  intros. unfold preg_of; destruct r; simpl; congruence.
+Qed.
+
+Lemma preg_of_not_PC:
+  forall r, preg_of r <> PC.
+Proof.
+  intros. apply data_diff; auto with asmgen.
+Qed.
+
+Global Hint Resolve preg_of_not_SP preg_of_not_PC: asmgen.
+
+Lemma undef_regs_other:
+  forall r rl rs,
+  (forall r', In r' rl -> r <> r') ->
+  Asm.undef_regs rl rs r = rs r.
+Proof.
+  induction rl; simpl; intros. auto.
+  rewrite IHrl by auto. rewrite Pregmap.gso; auto.
+Qed.
+
+Fixpoint preg_notin (r: preg) (rl: list mreg) : Prop :=
+  match rl with
+  | nil => True
+  | r1 :: nil => r <> preg_of r1
+  | r1 :: rl => r <> preg_of r1 /\ preg_notin r rl
+  end.
+
+Remark preg_notin_charact:
+  forall r rl,
+  preg_notin r rl <-> (forall mr, In mr rl -> r <> preg_of mr).
+Proof.
+  induction rl; simpl; intros.
+  tauto.
+  destruct rl.
+  simpl. split. intros. intuition congruence. auto.
+  rewrite IHrl. split.
+  intros [A B]. intros. destruct H. congruence. auto.
+  auto.
+Qed.
+
+Lemma undef_regs_other_2:
+  forall r rl rs,
+  preg_notin r rl ->
+  Asm.undef_regs (map preg_of rl) rs r = rs r.
+Proof.
+  intros. apply undef_regs_other. intros.
+  exploit list_in_map_inv; eauto. intros [mr [A B]]. subst.
+  rewrite preg_notin_charact in H. auto.
+Qed.
 
 (** * Agreement between Mach registers and processor registers *)
-Open Scope asm.
-MetaData agree.
 Record agree (ms: regset) (sp: val) (rs: Asm.regset) : Prop := mkagree {
   agree_sp: rs#SP = sp;
   agree_sp_def: sp <> Vundef;
   agree_mregs: forall r: mreg, Val.lessdef (ms r) (rs#(preg_of r))
 }.
-FEnd agree.
+
+Lemma preg_val:
+  forall ms sp rs r, agree ms sp rs -> Val.lessdef (ms r) rs#(preg_of r).
+Proof.
+  intros. destruct H. auto.
+Qed.
+
+Lemma preg_vals:
+  forall ms sp rs, agree ms sp rs ->
+  forall l, Val.lessdef_list (map ms l) (map rs (map preg_of l)).
+Proof.
+  induction l; simpl. constructor. constructor. eapply preg_val; eauto. auto.
+Qed.
+
+Lemma sp_val:
+  forall ms sp rs, agree ms sp rs -> sp = rs#SP.
+Proof.
+  intros. destruct H; auto.
+Qed.
+
+Lemma ireg_val:
+  forall ms sp rs r r',
+  agree ms sp rs ->
+  ireg_of r = OK r' ->
+  Val.lessdef (ms r) rs#r'.
+Proof.
+  intros. rewrite <- (ireg_of_eq _ _ H0). eapply preg_val; eauto.
+Qed.
+
+Lemma freg_val:
+  forall ms sp rs r r',
+  agree ms sp rs ->
+  freg_of r = OK r' ->
+  Val.lessdef (ms r) (rs#r').
+Proof.
+  intros. rewrite <- (freg_of_eq _ _ H0). eapply preg_val; eauto.
+Qed.
+
+Lemma agree_exten:
+  forall ms sp rs rs',
+  agree ms sp rs ->
+  (forall r, data_preg r = true -> rs'#r = rs#r) ->
+  agree ms sp rs'.
+Proof.
+  intros. destruct H. split; auto.
+  rewrite H0; auto. auto.
+  intros. rewrite H0; auto. apply preg_of_data.
+Qed.
+
+(** Preservation of register agreement under various assignments. *)
+
+Lemma agree_set_mreg:
+  forall ms sp rs r v rs',
+  agree ms sp rs ->
+  Val.lessdef v (rs'#(preg_of r)) ->
+  (forall r', data_preg r' = true -> r' <> preg_of r -> rs'#r' = rs#r') ->
+  agree (Regmap.set r v ms) sp rs'.
+Proof.
+  intros. destruct H. split; auto.
+  rewrite H1; auto. apply not_eq_sym. apply preg_of_not_SP.
+  intros. unfold Regmap.set. destruct (RegEq.eq r0 r). congruence.
+  rewrite H1. auto. apply preg_of_data.
+  red; intros; elim n. eapply preg_of_injective; eauto.
+Qed.
+
+Corollary agree_set_mreg_parallel:
+  forall ms sp rs r v v',
+  agree ms sp rs ->
+  Val.lessdef v v' ->
+  agree (Regmap.set r v ms) sp (Pregmap.set (preg_of r) v' rs).
+Proof.
+  intros. eapply agree_set_mreg; eauto. rewrite Pregmap.gss; auto. intros; apply Pregmap.gso; auto.
+Qed.
+
+Lemma agree_set_other:
+  forall ms sp rs r v,
+  agree ms sp rs ->
+  data_preg r = false ->
+  agree ms sp (rs#r <- v).
+Proof.
+  intros. apply agree_exten with rs. auto.
+  intros. apply Pregmap.gso. congruence.
+Qed.
+
+Lemma agree_nextinstr:
+  forall ms sp rs,
+  agree ms sp rs -> agree ms sp (Asm.nextinstr rs).
+Proof.
+  intros. unfold Asm.nextinstr. apply agree_set_other. auto. auto.
+Qed.
+
+Lemma agree_undef_regs:
+  forall ms sp rl rs rs',
+  agree ms sp rs ->
+  (forall r', data_preg r' = true -> preg_notin r' rl -> rs'#r' = rs#r') ->
+  agree (S.undef_regs rl ms) sp rs'.
+Proof.
+  intros. destruct H. split; auto.
+  rewrite <- agree_sp0. apply H0; auto.
+  rewrite preg_notin_charact. intros. apply not_eq_sym. apply preg_of_not_SP.
+  intros. destruct (In_dec mreg_eq r rl).
+  rewrite S.undef_regs_same; auto.
+  rewrite S.undef_regs_other; auto. rewrite H0; auto.
+  apply preg_of_data.
+  rewrite preg_notin_charact. intros; red; intros. elim n.
+  exploit preg_of_injective; eauto. congruence.
+Qed.
+
+Lemma agree_undef_regs2:
+  forall ms sp rl rs rs',
+  agree (S.undef_regs rl ms) sp rs ->
+  (forall r', data_preg r' = true -> preg_notin r' rl -> rs'#r' = rs#r') ->
+  agree (S.undef_regs rl ms) sp rs'.
+Proof.
+  intros. destruct H. split; auto.
+  rewrite <- agree_sp0. apply H0; auto.
+  rewrite preg_notin_charact. intros. apply not_eq_sym. apply preg_of_not_SP.
+  intros. destruct (In_dec mreg_eq r rl).
+  rewrite S.undef_regs_same; auto.
+  rewrite H0; auto.
+  apply preg_of_data.
+  rewrite preg_notin_charact. intros; red; intros. elim n.
+  exploit preg_of_injective; eauto. congruence.
+Qed.
+
+Lemma agree_set_undef_mreg:
+  forall ms sp rs r v rl rs',
+  agree ms sp rs ->
+  Val.lessdef v (rs'#(preg_of r)) ->
+  (forall r', data_preg r' = true -> r' <> preg_of r -> preg_notin r' rl -> rs'#r' = rs#r') ->
+  agree (Regmap.set r v (S.undef_regs rl ms)) sp rs'.
+Proof.
+  intros. apply agree_set_mreg with (rs'#(preg_of r) <- (rs#(preg_of r))); auto.
+  apply agree_undef_regs with rs; auto.
+  intros. unfold Pregmap.set. destruct (PregEq.eq r' (preg_of r)).
+  congruence. auto.
+  intros. rewrite Pregmap.gso; auto.
+Qed.
+
+Lemma agree_change_sp:
+  forall ms sp rs sp',
+  agree ms sp rs -> sp' <> Vundef ->
+  agree ms sp' (rs#SP <- sp').
+Proof.
+  intros. inv H. split; auto.
+  intros. rewrite Pregmap.gso; auto with asmgen.
+Qed.
+FEnd Proof0.
 
 MetaData match_states.
 Inductive match_states (ge: S.genv): S.state -> Asm.state -> Prop :=
@@ -2053,115 +2397,76 @@ Inductive match_states (ge: S.genv): S.state -> Asm.state -> Prop :=
                    (Asm.State rs m').
 FEnd match_states.
 
-MetaData exec_straight.
-Inductive exec_straight (ge : Asm.genv) (fn: Asm.function) :
-    Asm.code -> Asm.regset -> mem ->
-    Asm.code -> Asm.regset -> mem -> Prop :=
+MetaData exec_straight binds exec_straight_opt.
+Section STRAIGHTLINE.
+Import Asm.
+Variable ge: Asm.genv.
+Variable fn: Asm.function.
+
+Inductive exec_straight: Asm.code -> Asm.regset -> mem ->
+                         Asm.code -> Asm.regset -> mem -> Prop :=
   | exec_straight_one:
       forall i1 c rs1 m1 rs2 m2,
-      Asm.exec_instr i1 ge fn rs1 m1 = Asm.Next rs2 m2 ->
+      exec_instr i1 ge fn rs1 m1 = Next rs2 m2 ->
       rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
-      exec_straight ge fn (i1 :: c) rs1 m1 c rs2 m2
+      exec_straight (i1 :: c) rs1 m1 c rs2 m2
   | exec_straight_step:
       forall i c rs1 m1 rs2 m2 c' rs3 m3,
-      Asm.exec_instr i ge fn rs1 m1 = Asm.Next rs2 m2 ->
+      exec_instr i ge fn rs1 m1 = Next rs2 m2 ->
       rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
-      exec_straight ge fn c rs2 m2 c' rs3 m3 ->
-      exec_straight ge fn (i :: c) rs1 m1 c' rs3 m3.
-FEnd exec_straight.
+      exec_straight c rs2 m2 c' rs3 m3 ->
+      exec_straight (i :: c) rs1 m1 c' rs3 m3.
 
-FLemma code_tail_pos:
-  forall pos c1 c2, code_tail pos c1 c2 -> pos >= 0.
-FProofLemma.
-  induction 1. lia. lia.
-Qed. CloseFLemma.
-
-FLemma find_instr_tail:
-  forall c1 i c2 pos,
-  code_tail pos c1 (i :: c2) ->
-  Asm.find_instr pos c1 = Some i.
-FProofLemma.
-  induction c1; simpl; intros.
-  inv H.
-  destruct (zeq pos 0). subst pos.
-  inv H. auto. generalize (code_tail_pos _ _ _ H4). intro. extlia.
-  inv H. congruence. replace (pos0 + 1 - 1) with pos0 by lia.
-  eauto.
-Qed. CloseFLemma.
-
-FLemma code_tail_next:
-  forall fn ofs i c,
-  code_tail ofs fn (i :: c) ->
-  code_tail (ofs + 1) fn c.
-FProofLemma.
-  assert (forall ofs fn c, code_tail ofs fn c ->
-          forall i c', c = i :: c' -> code_tail (ofs + 1) fn c').
+Lemma exec_straight_trans:
+  forall c1 rs1 m1 c2 rs2 m2 c3 rs3 m3,
+  exec_straight c1 rs1 m1 c2 rs2 m2 ->
+  exec_straight c2 rs2 m2 c3 rs3 m3 ->
+  exec_straight c1 rs1 m1 c3 rs3 m3.
+Proof.
   induction 1; intros.
-  subst c. constructor. constructor.
-  constructor. eauto.
-  eauto.
-Qed. CloseFLemma.
+  apply exec_straight_step with rs2 m2; auto.
+  apply exec_straight_step with rs2 m2; auto.
+Qed.
 
-FLemma code_tail_bounds_2:
-  forall fn ofs i c,
-  code_tail ofs fn (i :: c) -> 0 <= ofs < list_length_z fn.
-FProofLemma.
-  assert (forall ofs fn c, code_tail ofs fn c ->
-          forall i c', c = i :: c' -> 0 <= ofs < list_length_z fn).
-  induction 1; intros; simpl.
-  rewrite H. rewrite list_length_z_cons. generalize (list_length_z_pos c'). lia.
-  rewrite list_length_z_cons. generalize (IHcode_tail _ _ H0). lia.
-  eauto.
-Qed. CloseFLemma.
+Lemma exec_straight_two:
+  forall i1 i2 c rs1 m1 rs2 m2 rs3 m3,
+  exec_instr i1 ge fn rs1 m1 = Next rs2 m2 ->
+  exec_instr i2 ge fn rs2 m2 = Next rs3 m3 ->
+  rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
+  rs3#PC = Val.offset_ptr rs2#PC Ptrofs.one ->
+  exec_straight (i1 :: i2 :: c) rs1 m1 c rs3 m3.
+Proof.
+  intros. apply exec_straight_step with rs2 m2; auto.
+  apply exec_straight_one; auto.
+Qed.
 
-FLemma code_tail_next_int:
-  forall fn ofs i c,
-  list_length_z fn <= Ptrofs.max_unsigned ->
-  code_tail (Ptrofs.unsigned ofs) fn (i :: c) ->
-  code_tail (Ptrofs.unsigned (Ptrofs.add ofs Ptrofs.one)) fn c.
-FProofLemma.
-  intros. rewrite Ptrofs.add_unsigned, Ptrofs.unsigned_one.
-  rewrite Ptrofs.unsigned_repr. apply code_tail_next with i; auto.
-  generalize (code_tail_bounds_2 _ _ _ _ H0). lia.
-Qed. CloseFLemma.
-
-FLemma exec_strainght_steps_1:
-  forall ge fn c rs m c' rs' m',
-  exec_straight ge fn c rs m c' rs' m' ->
-  list_length_z (Asm.fn_code fn) <= Ptrofs.max_unsigned ->
-  forall b ofs,
-  rs#PC = Vptr b ofs ->
-  Genv.find_funct_ptr ge b = Some (AST.Internal fn) ->
-  code_tail (Ptrofs.unsigned ofs) (Asm.fn_code fn) c ->
-  plus Asm.step ge (Asm.State rs m) E0 (Asm.State rs' m').
-FProofLemma.
-  induction 1; intros.
-  apply plus_one.
-  econstructor; eauto.
-  eapply find_instr_tail. eauto.
-  eapply plus_left'.
-  econstructor; eauto.
-  eapply find_instr_tail. eauto.
-  apply IHexec_straight with b (Ptrofs.add ofs Ptrofs.one).
-  auto. rewrite H0. rewrite H3. reflexivity.
-  auto.
-  apply code_tail_next_int with i; auto.
-  traceEq.
-Qed. CloseFLemma.
+Lemma exec_straight_three:
+  forall i1 i2 i3 c rs1 m1 rs2 m2 rs3 m3 rs4 m4,
+  exec_instr i1 ge fn rs1 m1 = Next rs2 m2 ->
+  exec_instr i2 ge fn rs2 m2 = Next rs3 m3 ->
+  exec_instr i3 ge fn rs3 m3 = Next rs4 m4 ->
+  rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
+  rs3#PC = Val.offset_ptr rs2#PC Ptrofs.one ->
+  rs4#PC = Val.offset_ptr rs3#PC Ptrofs.one ->
+  exec_straight (i1 :: i2 :: i3 :: c) rs1 m1 c rs4 m4.
+Proof.
+  intros. apply exec_straight_step with rs2 m2; auto.
+  eapply exec_straight_two; eauto.
+Qed.
 
 (** The following lemmas show that straight-line executions
   (predicate [exec_straight]) correspond to correct Asm executions. *)
 
-FLemma exec_straight_steps_1:
-  forall ge fn c rs m c' rs' m',
-  exec_straight ge fn c rs m c' rs' m' ->
-  list_length_z (Asm.fn_code fn) <= Ptrofs.max_unsigned ->
+Lemma exec_straight_steps_1:
+  forall c rs m c' rs' m',
+  exec_straight c rs m c' rs' m' ->
+  list_length_z (fn_code fn) <= Ptrofs.max_unsigned ->
   forall b ofs,
   rs#PC = Vptr b ofs ->
   Genv.find_funct_ptr ge b = Some (AST.Internal fn) ->
-  code_tail (Ptrofs.unsigned ofs) (Asm.fn_code fn) c ->
-  plus Asm.step ge (Asm.State rs m) E0 (Asm.State rs' m').
-FProofLemma.
+  code_tail (Ptrofs.unsigned ofs) (fn_code fn) c ->
+  plus step ge (State rs m) E0 (State rs' m').
+Proof.
   induction 1; intros.
   apply plus_one.
   econstructor; eauto.
@@ -2174,74 +2479,20 @@ FProofLemma.
   auto.
   apply code_tail_next_int with i; auto.
   traceEq.
-Qed. CloseFLemma.
+Qed.
 
-FLemma transf_function_no_overflow:
-  forall f tf,
-  transf_function f = OK tf -> list_length_z (Asm.fn_code tf) <= Ptrofs.max_unsigned.
-FProofLemma.
-  intros. monadInv H. destruct (zlt Ptrofs.max_unsigned (list_length_z x.(Asm.fn_code))); inv EQ0.
-  lia.
-Qed. CloseFLemma.
-
-FLemma symbols_preserved:
-  forall prog tprog ge tge, match_prog prog tprog ->
-  ge = Genv.globalenv prog ->
-  tge = Genv.globalenv tprog ->
-  forall (s: ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
-FProofLemma.
-intros until tge; intros TRANSL A B. rewrite A. rewrite B.
-apply (Genv.find_symbol_match TRANSL).
-Qed. CloseFLemma.
-
-FLemma senv_preserved:
-  forall prog tprog ge tge, match_prog prog tprog ->
-  ge = Genv.globalenv prog ->
-  tge = Genv.globalenv tprog ->
-  Senv.equiv ge tge.
-FProofLemma.
-intros until tge; intros TRANSL A B. rewrite A. rewrite B.
-apply (Genv.senv_match TRANSL).
-Qed. CloseFLemma.
-
-FLemma functions_translated:
-  forall prog tprog ge tge, match_prog prog tprog ->
-  ge = Genv.globalenv prog ->
-  tge = Genv.globalenv tprog ->
-  forall b f,
-  Genv.find_funct_ptr ge b = Some f ->
-  exists tf,
-  Genv.find_funct_ptr tge b = Some tf /\ transf_fundef f = OK tf.
-FProofLemma.
-intros until tge; intros TRANSL A B. rewrite A. rewrite B.
-apply (Genv.find_funct_ptr_transf_partial TRANSL).
-Qed. CloseFLemma.
-
-FLemma functions_transl:
-  forall prog tprog ge tge, match_prog prog tprog ->
-  ge = Genv.globalenv prog ->
-  tge = Genv.globalenv tprog ->
-  forall fb f tf,
-  Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
-  transf_function f = OK tf ->
-  Genv.find_funct_ptr tge fb = Some (AST.Internal tf).
-FProofLemma.
-  intros. exploit functions_translated; eauto. intros [tf' [A B]].
-  monadInv B. rewrite H3 in EQ; inv EQ; auto.
-Qed. CloseFLemma.
-
-FLemma exec_straight_steps_2:
-  forall ge fn c rs m c' rs' m',
-  exec_straight ge fn c rs m c' rs' m' ->
-  list_length_z (Asm.fn_code fn) <= Ptrofs.max_unsigned ->
+Lemma exec_straight_steps_2:
+  forall c rs m c' rs' m',
+  exec_straight c rs m c' rs' m' ->
+  list_length_z (fn_code fn) <= Ptrofs.max_unsigned ->
   forall b ofs,
   rs#PC = Vptr b ofs ->
   Genv.find_funct_ptr ge b = Some (AST.Internal fn) ->
-  code_tail (Ptrofs.unsigned ofs) (Asm.fn_code fn) c ->
+  code_tail (Ptrofs.unsigned ofs) (fn_code fn) c ->
   exists ofs',
      rs'#PC = Vptr b ofs'
-  /\ code_tail (Ptrofs.unsigned ofs') (Asm.fn_code fn) c'.
-FProofLemma.
+  /\ code_tail (Ptrofs.unsigned ofs') (fn_code fn) c'.
+Proof.
   induction 1; intros.
   exists (Ptrofs.add ofs Ptrofs.one). split.
   rewrite H0. rewrite H2. auto.
@@ -2249,46 +2500,134 @@ FProofLemma.
   apply IHexec_straight with (Ptrofs.add ofs Ptrofs.one).
   auto. rewrite H0. rewrite H3. reflexivity. auto.
   apply code_tail_next_int with i; auto.
-Qed. CloseFLemma.
+Qed.
 
-FLemma exec_straight_at:
-  forall prog tprog ge tge, match_prog prog tprog ->
-  ge = Genv.globalenv prog ->
-  tge = Genv.globalenv tprog ->
-  forall (*ge tge*) fb f c ep tf tc c' ep' tc' rs m rs' m',
+Inductive exec_straight_opt: code -> regset -> mem -> code -> regset -> mem -> Prop :=
+  | exec_straight_opt_refl: forall c rs m,
+      exec_straight_opt c rs m c rs m
+  | exec_straight_opt_intro: forall c1 rs1 m1 c2 rs2 m2,
+      exec_straight c1 rs1 m1 c2 rs2 m2 ->
+      exec_straight_opt c1 rs1 m1 c2 rs2 m2.
+
+Lemma exec_straight_opt_left:
+  forall c3 rs3 m3 c1 rs1 m1 c2 rs2 m2,
+  exec_straight c1 rs1 m1 c2 rs2 m2 ->
+  exec_straight_opt c2 rs2 m2 c3 rs3 m3 ->
+  exec_straight c1 rs1 m1 c3 rs3 m3.
+Proof.
+  destruct 2; intros. auto. eapply exec_straight_trans; eauto.
+Qed.
+
+Lemma exec_straight_opt_right:
+  forall c3 rs3 m3 c1 rs1 m1 c2 rs2 m2,
+  exec_straight_opt c1 rs1 m1 c2 rs2 m2 ->
+  exec_straight c2 rs2 m2 c3 rs3 m3 ->
+  exec_straight c1 rs1 m1 c3 rs3 m3.
+Proof.
+  destruct 1; intros. auto. eapply exec_straight_trans; eauto.
+Qed.
+
+Lemma exec_straight_opt_step:
+  forall i c rs1 m1 rs2 m2 c' rs3 m3,
+  exec_instr i ge fn rs1 m1 = Next rs2 m2 ->
+  rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
+  exec_straight_opt c rs2 m2 c' rs3 m3 ->
+  exec_straight (i :: c) rs1 m1 c' rs3 m3.
+Proof.
+  intros. inv H1.
+- apply exec_straight_one; auto.
+- eapply exec_straight_step; eauto.
+Qed.
+
+Lemma exec_straight_opt_step_opt:
+  forall i c rs1 m1 rs2 m2 c' rs3 m3,
+  exec_instr i ge fn rs1 m1 = Next rs2 m2 ->
+  rs2#PC = Val.offset_ptr rs1#PC Ptrofs.one ->
+  exec_straight_opt c rs2 m2 c' rs3 m3 ->
+  exec_straight_opt (i :: c) rs1 m1 c' rs3 m3.
+Proof.
+  intros. apply exec_straight_opt_intro. eapply exec_straight_opt_step; eauto.
+Qed.
+End STRAIGHTLINE.
+FEnd exec_straight.
+
+MetaData PRESERVATION0.
+Section PRESERVATION0.
+
+Variable prog: S.program.
+Variable tprog: Asm.program.
+Hypothesis TRANSF: match_prog prog tprog.
+Let ge := Genv.globalenv prog.
+Let tge := Genv.globalenv tprog.
+
+Lemma symbols_preserved:
+  forall (s: ident), Genv.find_symbol tge s = Genv.find_symbol ge s.
+Proof (Genv.find_symbol_match TRANSF).
+
+Lemma senv_preserved:
+  Senv.equiv ge tge.
+Proof (Genv.senv_match TRANSF).
+
+Lemma functions_translated:
+  forall b f,
+  Genv.find_funct_ptr ge b = Some f ->
+  exists tf,
+  Genv.find_funct_ptr tge b = Some tf /\ transf_fundef f = OK tf.
+Proof (Genv.find_funct_ptr_transf_partial TRANSF).
+
+Lemma functions_transl:
+  forall fb f tf,
+  Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
+  transf_function f = OK tf ->
+  Genv.find_funct_ptr tge fb = Some (AST.Internal tf).
+Proof.
+  intros. exploit functions_translated; eauto. intros [tf' [A B]].
+  monadInv B. rewrite H0 in EQ; inv EQ; auto.
+Qed.
+
+Lemma transf_function_no_overflow:
+  forall f tf,
+  transf_function f = OK tf -> list_length_z (Asm.fn_code tf) <= Ptrofs.max_unsigned.
+Proof.
+  intros. monadInv H. destruct (zlt Ptrofs.max_unsigned (list_length_z x.(Asm.fn_code))); inv EQ0.
+  lia.
+Qed.
+
+Lemma exec_straight_exec:
+  forall fb f c ep tf tc c' rs m rs' m',
+  transl_code_at_pc ge (rs PC) fb f c ep tf tc ->
+  exec_straight tge tf tc rs m c' rs' m' ->
+  plus Asm.step tge (Asm.State rs m) E0 (Asm.State rs' m').
+Proof.
+  intros. inv H.
+  eapply exec_straight_steps_1; eauto.
+  eapply transf_function_no_overflow; eauto.
+  eapply functions_transl; eauto.
+Qed.
+
+Lemma exec_straight_at:
+  forall fb f c ep tf tc c' ep' tc' rs m rs' m',
   transl_code_at_pc ge (rs PC) fb f c ep tf tc ->
   transl_code f c' ep' = OK tc' ->
   exec_straight tge tf tc rs m tc' rs' m' ->
   transl_code_at_pc ge (rs' PC) fb f c' ep' tf tc'.
-FProofLemma.
-  intros. inv H2.
+Proof.
+  intros. inv H.
   exploit exec_straight_steps_2; eauto.
   eapply transf_function_no_overflow; eauto.
-  eapply functions_transl; eauto.  
+  eapply functions_transl; eauto.
   intros [ofs' [PC' CT']].
   rewrite PC'. constructor; auto.
-Qed. CloseFLemma.
+Qed.
 
-FLemma exec_straight_exec:
-  forall prog tprog ge tge, match_prog prog tprog ->
-  ge = Genv.globalenv prog ->
-  tge = Genv.globalenv tprog ->
-  forall (*ge tge*) fb f c ep tf tc c' rs m rs' m',
-  transl_code_at_pc ge (rs PC) fb f c ep tf tc ->
-  exec_straight tge tf tc rs m c' rs' m' ->
-  plus Asm.step tge (Asm.State rs m) E0 (Asm.State rs' m').
-FProofLemma.
-  intros. inv H2.
-  eapply exec_straight_steps_1; eauto.
-  eapply transf_function_no_overflow; eauto.
-  eapply functions_transl; eauto.
-Qed. CloseFLemma.
+End PRESERVATION0.
+FEnd PRESERVATION0.
 
 FLemma exec_straight_steps:
   forall prog tprog ge tge, match_prog prog tprog ->
   ge = Genv.globalenv prog ->
   tge = Genv.globalenv tprog ->
-  forall (*ge tge*) s fb f rs1 i c ep tf tc m1' m2 m2' sp ms2,
+  forall s fb f rs1 i c ep tf tc m1' m2 m2' sp ms2,
   match_stack ge s ->
   Mem.extends m2 m2' ->
   Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
@@ -2302,7 +2641,7 @@ FLemma exec_straight_steps:
   plus Asm.step tge (Asm.State rs1 m1') E0 st' /\
   match_states ge (S.State s fb sp c ms2 m2) st'.
 FProofLemma.
-intros. inversion H5. subst. monadInv H10. 
+intros. inversion H5. subst. monadInv H10.
 exploit H6; eauto. intros [rs2 [A [B C]]].
 exists (Asm.State rs2 m2'); split.
 eapply exec_straight_exec; eauto.
@@ -2316,53 +2655,6 @@ FDefinition measure := fun (s: S.state) =>
   | self__Asmgen.S.Returnstate _ _ _ => 1%nat
   end.
 
-(* Should be in Asmgenproof0 *)
-FDefinition data_preg : preg -> bool := fun r => 
-  match r with
-  | IR RA  => false
-  | IR X31 => false
-  | IR _   => true
-  | FR _   => true
-  | PC     => false
-  end.
-
-FLemma preg_of_data:
-  forall r, data_preg (preg_of r) = true.
-FProofLemma.
-  intros. destruct r; reflexivity.
-Qed. CloseFLemma.
-MetaData _preg_of_data.
-Global Hint Resolve preg_of_data: asmgen.
-FEnd _preg_of_data.
-
-FLemma agree_exten:
-  forall ms sp rs rs',
-  agree ms sp rs ->
-  (forall r, data_preg r = true -> rs'#r = rs#r) ->
-  agree ms sp rs'.
-FProofLemma.
-  intros. destruct H. split; auto.
-  rewrite H0; auto. auto.
-  intros. rewrite H0; auto. apply preg_of_data.
-Qed. CloseFLemma.
-
-FLemma agree_set_other:
-  forall ms sp rs r v,
-  agree ms sp rs ->
-  data_preg r = false ->
-  agree ms sp (rs#r <- v).
-FProofLemma.
-  intros. apply agree_exten with rs. auto.
-  intros. apply Pregmap.gso. congruence.
-Qed. CloseFLemma.
-
-FLemma agree_nextinstr:
-  forall ms sp rs,
-  agree ms sp rs -> agree ms sp (Asm.nextinstr rs).
-FProofLemma.
-  intros. unfold Asm.nextinstr. apply agree_set_other. auto. auto.
-Qed. CloseFLemma.
-
 (* Asmgenproof0 *)
 MetaData find_label.
 Fixpoint find_label (lbl: Asm.label) (c: Asm.code) {struct c} : option Asm.code :=
@@ -2373,9 +2665,9 @@ Fixpoint find_label (lbl: Asm.label) (c: Asm.code) {struct c} : option Asm.code 
   end.
 FEnd find_label.
 
-(* Asmgenproof0 *)  
+(* Asmgenproof0 *)
 FDefinition nolabel := fun (i: Asm.instruction) =>
-  (* __internal becuase Asm is not inside the compiler family *)                         
+  (* __internal becuase Asm is not inside the compiler family *)
   match i with Asm.__internal_Plabel _ => False | _ => True end.
 
 (* Asmgenproof0 *)
@@ -2485,7 +2777,7 @@ FLemma indexed_memory_access_label:
   (forall r o, nolabel (mk_instr r o)) ->
   tail_nolabel k (indexed_memory_access mk_instr base ofs k).
 FProofLemma.
-  unfold indexed_memory_access; intros. 
+  unfold indexed_memory_access; intros.
   destruct Archi.ptr64.
   destruct (make_immed64 (Ptrofs.to_int64 ofs)); TailNoLabel.
   destruct (make_immed32 (Ptrofs.to_int ofs)); TailNoLabel.
@@ -2497,39 +2789,73 @@ FProofLemma.
   intros. apply indexed_memory_access_label. intros; destruct Archi.ptr64; exact I.
 Qed. CloseFLemma.
 
-FLemma transl_op_label:
-  forall op args r k c,
-  transl_op op args r k = OK c -> tail_nolabel k c.
-FProofLemma.
-apply cheat.
-(*Opaque Int.eq.
-  unfold transl_op; intros; destruct op; TailNoLabel.
-- destruct (preg_of r); try discriminate; destruct (preg_of m); inv H; TailNoLabel.
-- destruct (Float.eq_dec n Float.zero); TailNoLabel.
-- destruct (Float32.eq_dec n Float32.zero); TailNoLabel.
-- destruct (Archi.pic_code tt && negb (Ptrofs.eq ofs Ptrofs.zero)).
-+ eapply tail_nolabel_trans; [|apply addptrofs_label]. TailNoLabel.
-+ TailNoLabel. 
-- apply opimm32_label; intros; exact I.
-- apply opimm32_label; intros; exact I.
-- apply opimm32_label; intros; exact I.
-- apply opimm32_label; intros; exact I.
-- destruct (Int.eq n Int.zero); TailNoLabel.
-- apply opimm64_label; intros; exact I.
-- apply opimm64_label; intros; exact I.
-- apply opimm64_label; intros; exact I.
-- apply opimm64_label; intros; exact I.
-- destruct (Int.eq n Int.zero); TailNoLabel.
-- eapply transl_cond_op_label; eauto.*)
-Qed. CloseFLemma. 
+MetaData _label_lemmas.
+Remark loadimm32_label:
+  forall r n k, tail_nolabel k (loadimm32 r n k).
+Proof.
+  intros; unfold loadimm32. destruct (make_immed32 n); TailNoLabel.
+  unfold load_hilo32. destruct (Int.eq lo Int.zero); TailNoLabel.
+Qed.
+Hint Resolve loadimm32_label: labels.
 
-FLemma transl_cbranch_label:
+Remark opimm32_label:
+  forall op opimm r1 r2 n k,
+  (forall r1 r2 r3, nolabel (op r1 r2 r3)) ->
+  (forall r1 r2 n, nolabel (opimm r1 r2 n)) ->
+  tail_nolabel k (opimm32 op opimm r1 r2 n k).
+Proof.
+  intros; unfold opimm32. destruct (make_immed32 n); TailNoLabel.
+  unfold load_hilo32. destruct (Int.eq lo Int.zero); TailNoLabel.
+Qed.
+Hint Resolve opimm32_label: labels.
+
+Remark loadimm64_label:
+  forall r n k, tail_nolabel k (loadimm64 r n k).
+Proof.
+  intros; unfold loadimm64. destruct (make_immed64 n); TailNoLabel.
+  unfold load_hilo64. destruct (Int64.eq lo Int64.zero); TailNoLabel.
+Qed.
+Hint Resolve loadimm64_label: labels.
+
+Remark opimm64_label:
+  forall op opimm r1 r2 n k,
+  (forall r1 r2 r3, nolabel (op r1 r2 r3)) ->
+  (forall r1 r2 n, nolabel (opimm r1 r2 n)) ->
+  tail_nolabel k (opimm64 op opimm r1 r2 n k).
+Proof.
+  intros; unfold opimm64. destruct (make_immed64 n); TailNoLabel.
+  unfold load_hilo64. destruct (Int64.eq lo Int64.zero); TailNoLabel.
+Qed.
+Hint Resolve opimm64_label: labels.
+
+Remark addptrofs_label:
+  forall r1 r2 n k, tail_nolabel k (addptrofs r1 r2 n k).
+Proof.
+  unfold addptrofs; intros. destruct (Ptrofs.eq_dec n Ptrofs.zero). TailNoLabel.
+  destruct Archi.ptr64. apply opimm64_label; TailNoLabel. apply opimm32_label; TailNoLabel.
+Qed.
+Hint Resolve addptrofs_label: labels.
+
+Remark transl_cond_float_nolabel:
+  forall c r1 r2 r3 insn normal,
+  transl_cond_float c r1 r2 r3 = (insn, normal) -> nolabel insn.
+Proof.
+  unfold transl_cond_float; intros. destruct c; inv H; exact I.
+Qed.
+
+Remark transl_cond_single_nolabel:
+  forall c r1 r2 r3 insn normal,
+  transl_cond_single c r1 r2 r3 = (insn, normal) -> nolabel insn.
+Proof.
+  unfold transl_cond_single; intros. destruct c; inv H; exact I.
+Qed.
+
+Remark transl_cbranch_label:
   forall cond args lbl k c,
   transl_cbranch cond args lbl k = OK c -> tail_nolabel k c.
-FProofLemma.
-apply cheat.
-(*  intros. unfold transl_cbranch in H; destruct cond; TailNoLabel.
-- destruct c0; simpl; TailNoLabel. 
+Proof.
+  intros. unfold transl_cbranch in H; destruct cond; TailNoLabel.
+- destruct c0; simpl; TailNoLabel.
 - destruct c0; simpl; TailNoLabel.
 - destruct (Int.eq n Int.zero).
   destruct c0; simpl; TailNoLabel.
@@ -2550,17 +2876,98 @@ apply cheat.
   apply tail_nolabel_trans with (transl_cbranch_int64u c0 x X31 lbl :: k).
   auto with labels. destruct c0; simpl; TailNoLabel.
 - destruct (transl_cond_float c0 X31 x x0) as [insn normal] eqn:F; inv EQ2.
-  apply tail_nolabel_cons. eapply transl_cond_float_nolabel; eauto. 
+  apply tail_nolabel_cons. eapply transl_cond_float_nolabel; eauto.
   destruct normal; TailNoLabel.
 - destruct (transl_cond_float c0 X31 x x0) as [insn normal] eqn:F; inv EQ2.
-  apply tail_nolabel_cons. eapply transl_cond_float_nolabel; eauto. 
+  apply tail_nolabel_cons. eapply transl_cond_float_nolabel; eauto.
   destruct normal; TailNoLabel.
 - destruct (transl_cond_single c0 X31 x x0) as [insn normal] eqn:F; inv EQ2.
-  apply tail_nolabel_cons. eapply transl_cond_single_nolabel; eauto. 
+  apply tail_nolabel_cons. eapply transl_cond_single_nolabel; eauto.
   destruct normal; TailNoLabel.
 - destruct (transl_cond_single c0 X31 x x0) as [insn normal] eqn:F; inv EQ2.
-  apply tail_nolabel_cons. eapply transl_cond_single_nolabel; eauto. 
-  destruct normal; TailNoLabel. *)
+  apply tail_nolabel_cons. eapply transl_cond_single_nolabel; eauto.
+  destruct normal; TailNoLabel.
+Qed.
+
+Remark transl_cond_op_label:
+  forall cond args r k c,
+  transl_cond_op cond r args k = OK c -> tail_nolabel k c.
+Proof.
+  intros. unfold transl_cond_op in H; destruct cond; TailNoLabel.
+- destruct c0; simpl; TailNoLabel.
+- destruct c0; simpl; TailNoLabel.
+- unfold transl_condimm_int32s.
+  destruct (Int.eq n Int.zero).
++ destruct c0; simpl; TailNoLabel.
++ destruct c0; simpl.
+* eapply tail_nolabel_trans; [apply opimm32_label; intros; exact I | TailNoLabel].
+* eapply tail_nolabel_trans; [apply opimm32_label; intros; exact I | TailNoLabel].
+* apply opimm32_label; intros; exact I.
+* destruct (Int.eq n (Int.repr Int.max_signed)). apply loadimm32_label. apply opimm32_label; intros; exact I.
+* eapply tail_nolabel_trans. apply loadimm32_label. TailNoLabel.
+* eapply tail_nolabel_trans. apply loadimm32_label. TailNoLabel.
+- unfold transl_condimm_int32u.
+  destruct (Int.eq n Int.zero).
++ destruct c0; simpl; TailNoLabel.
++ destruct c0; simpl;
+  try (eapply tail_nolabel_trans; [apply loadimm32_label | TailNoLabel]).
+  apply opimm32_label; intros; exact I.
+- destruct c0; simpl; TailNoLabel.
+- destruct c0; simpl; TailNoLabel.
+- unfold transl_condimm_int64s.
+  destruct (Int64.eq n Int64.zero).
++ destruct c0; simpl; TailNoLabel.
++ destruct c0; simpl.
+* eapply tail_nolabel_trans; [apply opimm64_label; intros; exact I | TailNoLabel].
+* eapply tail_nolabel_trans; [apply opimm64_label; intros; exact I | TailNoLabel].
+* apply opimm64_label; intros; exact I.
+* destruct (Int64.eq n (Int64.repr Int64.max_signed)). apply loadimm32_label. apply opimm64_label; intros; exact I.
+* eapply tail_nolabel_trans. apply loadimm64_label. TailNoLabel.
+* eapply tail_nolabel_trans. apply loadimm64_label. TailNoLabel.
+- unfold transl_condimm_int64u.
+  destruct (Int64.eq n Int64.zero).
++ destruct c0; simpl; TailNoLabel.
++ destruct c0; simpl;
+  try (eapply tail_nolabel_trans; [apply loadimm64_label | TailNoLabel]).
+  apply opimm64_label; intros; exact I.
+- destruct (transl_cond_float c0 r x x0) as [insn normal] eqn:F; inv EQ2.
+  apply tail_nolabel_cons. eapply transl_cond_float_nolabel; eauto.
+  destruct normal; TailNoLabel.
+- destruct (transl_cond_float c0 r x x0) as [insn normal] eqn:F; inv EQ2.
+  apply tail_nolabel_cons. eapply transl_cond_float_nolabel; eauto.
+  destruct normal; TailNoLabel.
+- destruct (transl_cond_single c0 r x x0) as [insn normal] eqn:F; inv EQ2.
+  apply tail_nolabel_cons. eapply transl_cond_single_nolabel; eauto.
+  destruct normal; TailNoLabel.
+- destruct (transl_cond_single c0 r x x0) as [insn normal] eqn:F; inv EQ2.
+  apply tail_nolabel_cons. eapply transl_cond_single_nolabel; eauto.
+  destruct normal; TailNoLabel.
+Qed.
+FEnd _label_lemmas.
+
+FLemma transl_op_label:
+  forall op args r k c,
+  transl_op op args r k = OK c -> tail_nolabel k c.
+FProofLemma.
+Opaque Int.eq.
+  unfold transl_op; intros; destruct op; TailNoLabel.
+- destruct (preg_of r); try discriminate; destruct (preg_of m); inv H; TailNoLabel.
+- destruct (Float.eq_dec n Float.zero); TailNoLabel.
+- destruct (Float32.eq_dec n Float32.zero); TailNoLabel.
+- destruct (Archi.pic_code tt && negb (Ptrofs.eq ofs Ptrofs.zero)).
++ eapply tail_nolabel_trans; [|apply addptrofs_label]. TailNoLabel.
++ TailNoLabel.
+- apply opimm32_label; intros; exact I.
+- apply opimm32_label; intros; exact I.
+- apply opimm32_label; intros; exact I.
+- apply opimm32_label; intros; exact I.
+- destruct (Int.eq n Int.zero); TailNoLabel.
+- apply opimm64_label; intros; exact I.
+- apply opimm64_label; intros; exact I.
+- apply opimm64_label; intros; exact I.
+- apply opimm64_label; intros; exact I.
+- destruct (Int.eq n Int.zero); TailNoLabel.
+- eapply transl_cond_op_label; eauto.
 Qed. CloseFLemma.
 
 (* match i with Mlabel lbl => c = Plabel lbl :: k | _ => tail_nolabel k c end.*)
@@ -2620,13 +3027,13 @@ all: fsimpl; intros; TailNoLabel; fsimpl; fsimpl in H.
 + eapply tail_nolabel_trans; [eapply make_epilogue_label|TailNoLabel].
 + eapply loadind_label; eauto.
 + destruct ep. monadInv H.  eapply loadind_label; eauto. monadInv H.
-  eapply tail_nolabel_trans. apply loadind_ptr_label. eapply loadind_label; eauto. 
+  eapply tail_nolabel_trans. apply loadind_ptr_label. eapply loadind_label; eauto.
 + eapply storeind_label; eauto.
 (* Heap *)
 + destruct m; monadInv H;  eapply transl_memory_access_label; eauto; intros; exact I.
 + destruct m; monadInv H;  eapply transl_memory_access_label; eauto; intros; exact I.
-Qed. FEnd transl_instr_label. 
- 
+Qed. FEnd transl_instr_label.
+
 FInduction transl_instr_label' about S.instruction
   motive (fun (i : S.instruction) =>
     forall lbl f ep k c,
@@ -2635,18 +3042,19 @@ FInduction transl_instr_label' about S.instruction
 FProof.
 all: intros; exploit transl_instr_label; eauto; do 2 fsimpl; try (intros [A B]; apply B).
 + intros. subst c. simpl. unfold Asm.is_labelPlabel. auto.
-Qed. FEnd transl_instr_label'.  
+Qed. FEnd transl_instr_label'.
 
 FInduction is_mach_label_correct about S.instruction
   motive (fun (instr : S.instruction) => forall lbl,
   if S.is_label instr lbl then instr = S.Llabel lbl else instr <> S.Llabel lbl).
 FProof.
 (* To be proved with fdiscriminate *)
-+ intros. fsimpl. apply cheat.
-+ apply cheat. + apply cheat. + apply cheat. + apply cheat.
+all: intros; fsimpl.
++ apply cheat.
++ apply cheat. + destruct (peq lbl l); subst. auto. apply cheat. + apply cheat. + apply cheat.
 + apply cheat. + apply cheat. + apply cheat.
 (* Heap *)
-+ apply cheat. + apply cheat.                                
++ apply cheat. + apply cheat.
 Qed. FEnd is_mach_label_correct.
 
 FLemma transl_code_label:
@@ -2704,356 +3112,6 @@ FProofLemma.
   intros. apply Pregmap.gso; auto.
 Qed. CloseFLemma.
 
-(* Should be in Asmgenproof0 *)
-FLemma data_diff:
-  forall r r',
-  data_preg r = true -> data_preg r' = false -> r <> r'.
-FProofLemma.
-  congruence.
-Qed. CloseFLemma.
-
-MetaData _data_diff_hint.
-Global Hint Resolve data_diff: asmgen.
-FEnd _data_diff_hint.
-
-(* Should be in Asmgenproof0 *)
-FLemma preg_val:
-  forall ms sp rs r, agree ms sp rs -> Val.lessdef (ms r) rs#(preg_of r).
-FProofLemma.
-  intros. destruct H. auto.
-Qed. CloseFLemma.
-
-(* Should be in Asmgenproof0 *)
-FLemma preg_vals:
-  forall ms sp rs, agree ms sp rs ->
-  forall l, Val.lessdef_list (map ms l) (map rs (map preg_of l)).
-FProofLemma.
-  induction l; simpl. constructor. constructor. eapply preg_val; eauto. auto.
-Qed. CloseFLemma.
-
-(* Should be in Asmgenproof0 *)
-FLemma sp_val:
-  forall ms sp rs, agree ms sp rs -> sp = rs#SP.
-FProofLemma.
-  intros. destruct H; auto.
-Qed. CloseFLemma.
-
-MetaData preg_notin.
-Fixpoint preg_notin (r: preg) (rl: list mreg) : Prop :=
-  match rl with
-  | nil => True
-  | r1 :: nil => r <> preg_of r1
-  | r1 :: rl => r <> preg_of r1 /\ preg_notin r rl
-  end.
-FEnd preg_notin.
-
-FLemma transl_op_correct:
-  forall (ge: Asm.genv) fn op args res k (rs: Asm.regset) m v c,
-  transl_op op args res k = OK c ->
-  eval_operation ge (rs#SP) op (map rs (map preg_of args)) m = Some v ->
-  exists rs',
-     exec_straight ge fn c rs m k rs' m
-  /\ Val.lessdef v rs'#(preg_of res)
-  /\ forall r, data_preg r = true -> r <> preg_of res -> preg_notin r (destroyed_by_op op) -> rs' r = rs r.
-FProofLemma.
-(*  assert (SAME: forall v1 v2, v1 = v2 -> Val.lessdef v2 v1). { intros; subst; auto. }
-Opaque Int.eq.
-  intros until c; intros TR EV.
-  unfold transl_op in TR; destruct op; ArgsInv; simpl in EV; SimplEval EV; try TranslOpSimpl.
-- (* move *)
-  destruct (preg_of res), (preg_of m0); inv TR; TranslOpSimpl.
-- (* intconst *)
-  exploit loadimm32_correct; eauto. intros (rs' & A & B & C).
-  exists rs'; split; eauto. rewrite B; auto with asmgen.
-- (* longconst *)
-  exploit loadimm64_correct; eauto. intros (rs' & A & B & C).
-  exists rs'; split; eauto. rewrite B; auto with asmgen.
-- (* floatconst *)
-  destruct (Float.eq_dec n Float.zero).
-+ subst n. econstructor; split. 
-  apply exec_straight_one. simpl; eauto. auto.
-  split; intros; Simpl. 
-+ econstructor; split. 
-  apply exec_straight_one. simpl; eauto. auto.
-  split; intros; Simpl. 
-- (* singleconst *)
-  destruct (Float32.eq_dec n Float32.zero).
-+ subst n. econstructor; split. 
-  apply exec_straight_one. simpl; eauto. auto.
-  split; intros; Simpl. 
-+ econstructor; split. 
-  apply exec_straight_one. simpl; eauto. auto.
-  split; intros; Simpl. 
-- (* addrsymbol *)
-  destruct (Archi.pic_code tt && negb (Ptrofs.eq ofs Ptrofs.zero)).
-+ set (rs1 := nextinstr (rs#x <- (Genv.symbol_address ge id Ptrofs.zero))).
-  exploit (addptrofs_correct x x ofs k rs1 m); eauto with asmgen. 
-  intros (rs2 & A & B & C).
-  exists rs2; split. 
-  apply exec_straight_step with rs1 m; auto.
-  split. replace ofs with (Ptrofs.add Ptrofs.zero ofs) by (apply Ptrofs.add_zero_l). 
-  rewrite Genv.shift_symbol_address.
-  replace (rs1 x) with (Genv.symbol_address ge id Ptrofs.zero) in B by (unfold rs1; Simpl).
-  exact B.
-  intros. rewrite C by eauto with asmgen. unfold rs1; Simpl.  
-+ TranslOpSimpl.
-- (* stackoffset *)
-  exploit addptrofs_correct. instantiate (1 := X2); auto with asmgen. intros (rs' & A & B & C).
-  exists rs'; split; eauto. auto with asmgen.
-- (* cast8signed *)
-  econstructor; split.
-  eapply exec_straight_two. simpl;eauto. simpl;eauto. auto. auto.
-  split; intros; Simpl.
-  assert (A: Int.ltu (Int.repr 24) Int.iwordsize = true) by auto.
-  destruct (rs x0); auto; simpl. rewrite A; simpl. rewrite A. 
-  apply Val.lessdef_same. f_equal. apply Int.sign_ext_shr_shl. compute; intuition congruence.
-- (* cast16signed *)
-  econstructor; split.
-  eapply exec_straight_two. simpl;eauto. simpl;eauto. auto. auto.
-  split; intros; Simpl.
-  assert (A: Int.ltu (Int.repr 16) Int.iwordsize = true) by auto.
-  destruct (rs x0); auto; simpl. rewrite A; simpl. rewrite A. 
-  apply Val.lessdef_same. f_equal. apply Int.sign_ext_shr_shl. compute; intuition congruence.
-- (* addimm *)
-  exploit (opimm32_correct Paddw Paddiw Val.add); auto. instantiate (1 := x0); eauto with asmgen.
-  intros (rs' & A & B & C).
-  exists rs'; split; eauto. rewrite B; auto with asmgen. 
-- (* andimm *)
-  exploit (opimm32_correct Pandw Pandiw Val.and); auto. instantiate (1 := x0); eauto with asmgen.
-  intros (rs' & A & B & C).
-  exists rs'; split; eauto. rewrite B; auto with asmgen.
-- (* orimm *)
-  exploit (opimm32_correct Porw Poriw Val.or); auto. instantiate (1 := x0); eauto with asmgen.
-  intros (rs' & A & B & C).
-  exists rs'; split; eauto. rewrite B; auto with asmgen.
-- (* xorimm *)
-  exploit (opimm32_correct Pxorw Pxoriw Val.xor); auto. instantiate (1 := x0); eauto with asmgen.
-  intros (rs' & A & B & C).
-  exists rs'; split; eauto. rewrite B; auto with asmgen.
-- (* shrximm *)
-  clear H. exploit Val.shrx_shr_2; eauto. intros E; subst v; clear EV.
-  destruct (Int.eq n Int.zero).
-+ econstructor; split. apply exec_straight_one. simpl; eauto. auto.
-  split; intros; Simpl. 
-+ change (Int.repr 32) with Int.iwordsize. set (n' := Int.sub Int.iwordsize n).
-  econstructor; split.
-  eapply exec_straight_step. simpl; reflexivity. auto. 
-  eapply exec_straight_step. simpl; reflexivity. auto. 
-  eapply exec_straight_step. simpl; reflexivity. auto. 
-  apply exec_straight_one. simpl; reflexivity. auto. 
-  split; intros; Simpl.
-- (* longofintu *)
-  econstructor; split.
-  eapply exec_straight_three. simpl; eauto. simpl; eauto. simpl; eauto. auto. auto. auto.
-  split; intros; Simpl. destruct (rs x0); auto. simpl. 
-  assert (A: Int.ltu (Int.repr 32) Int64.iwordsize' = true) by auto.
-  rewrite A; simpl. rewrite A. apply Val.lessdef_same. f_equal.
-  rewrite cast32unsigned_from_cast32signed. apply Int64.zero_ext_shru_shl. compute; auto.
-- (* addlimm *)
-  exploit (opimm64_correct Paddl Paddil Val.addl); auto. instantiate (1 := x0); eauto with asmgen.
-  intros (rs' & A & B & C).
-  exists rs'; split; eauto. rewrite B; auto with asmgen. 
-- (* andimm *)
-  exploit (opimm64_correct Pandl Pandil Val.andl); auto. instantiate (1 := x0); eauto with asmgen.
-  intros (rs' & A & B & C).
-  exists rs'; split; eauto. rewrite B; auto with asmgen.
-- (* orimm *)
-  exploit (opimm64_correct Porl Poril Val.orl); auto. instantiate (1 := x0); eauto with asmgen.
-  intros (rs' & A & B & C).
-  exists rs'; split; eauto. rewrite B; auto with asmgen.
-- (* xorimm *)
-  exploit (opimm64_correct Pxorl Pxoril Val.xorl); auto. instantiate (1 := x0); eauto with asmgen.
-  intros (rs' & A & B & C).
-  exists rs'; split; eauto. rewrite B; auto with asmgen.
-- (* shrxlimm *)
-  clear H. exploit Val.shrxl_shrl_2; eauto. intros E; subst v; clear EV.
-  destruct (Int.eq n Int.zero).
-+ econstructor; split. apply exec_straight_one. simpl; eauto. auto.
-  split; intros; Simpl. 
-+ change (Int.repr 64) with Int64.iwordsize'. set (n' := Int.sub Int64.iwordsize' n).
-  econstructor; split.
-  eapply exec_straight_step. simpl; reflexivity. auto. 
-  eapply exec_straight_step. simpl; reflexivity. auto. 
-  eapply exec_straight_step. simpl; reflexivity. auto. 
-  apply exec_straight_one. simpl; reflexivity. auto. 
-  split; intros; Simpl.
-- (* cond *)
-  exploit transl_cond_op_correct; eauto. intros (rs' & A & B & C).
-  exists rs'; split. eexact A. eauto with asmgen.*)
-apply cheat.
-Qed. CloseFLemma.
-
-FLemma preg_of_not_SP:
-  forall r, preg_of r <> SP.
-FProofLemma.
-  intros. unfold preg_of; destruct r; simpl; congruence.
-Qed. CloseFLemma.
-
-FLemma preg_of_injective:
-  forall r1 r2, preg_of r1 = preg_of r2 -> r1 = r2.
-FProofLemma.
-  destruct r1; destruct r2; simpl; intros; reflexivity || discriminate.
-Qed. CloseFLemma.
-
-FLemma agree_set_mreg:
-  forall ms sp rs r v rs',
-  agree ms sp rs ->
-  Val.lessdef v (rs'#(preg_of r)) ->
-  (forall r', data_preg r' = true -> r' <> preg_of r -> rs'#r' = rs#r') ->
-  agree (Regmap.set r v ms) sp rs'.
-FProofLemma.
-  intros. destruct H. split; auto.
-  rewrite H1; auto. apply not_eq_sym. apply preg_of_not_SP.
-  intros. unfold Regmap.set. destruct (RegEq.eq r0 r). congruence.
-  rewrite H1. auto. apply preg_of_data.
-  red; intros; elim n. eapply preg_of_injective; eauto.
-Qed. CloseFLemma.
-
-FLemma preg_notin_charact:
-  forall r rl,
-  preg_notin r rl <-> (forall mr, In mr rl -> r <> preg_of mr).
-FProofLemma.
-  induction rl; simpl; intros.
-  tauto.
-  destruct rl.
-  simpl. split. intros. intuition congruence. auto.
-  rewrite IHrl. split.
-  intros [A B]. intros. destruct H. congruence. auto.
-  auto.
-Qed. CloseFLemma.
-
-FLemma agree_undef_regs:
-  forall ms sp rl rs rs',
-  agree ms sp rs ->
-  (forall r', data_preg r' = true -> preg_notin r' rl -> rs'#r' = rs#r') ->
-  agree (S.undef_regs rl ms) sp rs'.
-FProofLemma.
-  (*intros. destruct H. split; auto.
-  rewrite <- agree_sp0. apply H0; auto. 
-  rewrite preg_notin_charact. intros. apply not_eq_sym. apply preg_of_not_SP.
-  intros. destruct (In_dec mreg_eq r rl).
-  rewrite Mach.undef_regs_same; auto.
-  rewrite Mach.undef_regs_other; auto. rewrite H0; auto.
-  apply preg_of_data.
-  rewrite preg_notin_charact. intros; red; intros. elim n.
-  exploit preg_of_injective; eauto. congruence.*)
-  apply cheat.
-Qed. CloseFLemma.
-
-FLemma agree_set_undef_mreg:
-  forall ms sp rs r v rl rs',
-  agree ms sp rs ->
-  Val.lessdef v (rs'#(preg_of r)) ->
-  (forall r', data_preg r' = true -> r' <> preg_of r -> preg_notin r' rl -> rs'#r' = rs#r') ->
-  agree (Regmap.set r v (Mach.undef_regs rl ms)) sp rs'.
-FProofLemma.
-  intros. apply agree_set_mreg with (rs'#(preg_of r) <- (rs#(preg_of r))); auto.
-  apply agree_undef_regs with rs; auto.
-  intros. unfold Pregmap.set. destruct (PregEq.eq r' (preg_of r)).
-  congruence. auto.
-  intros. rewrite Pregmap.gso; auto.
-Qed. CloseFLemma.
-
-FLemma preg_of_not_X30: forall r, negb (mreg_eq r R30) = true -> IR X30 <> preg_of r.
-FProofLemma.
-  intros. change (IR X30) with (preg_of R30). red; intros.
-  exploit preg_of_injective; eauto. intros; subst r; discriminate.
-Qed. CloseFLemma. 
-
-MetaData exec_straight_opt binds exec_straight_opt_refl, exec_straight_opt_intro.
-Inductive exec_straight_opt (ge : Asm.genv) (fn: Asm.function) : Asm.code -> Asm.regset -> mem -> Asm.code -> Asm.regset -> mem -> Prop :=
-  | exec_straight_opt_refl: forall c rs m,
-      exec_straight_opt ge fn c rs m c rs m
-  | exec_straight_opt_intro: forall c1 rs1 m1 c2 rs2 m2,
-      exec_straight ge fn c1 rs1 m1 c2 rs2 m2 ->
-      exec_straight_opt ge fn c1 rs1 m1 c2 rs2 m2.
-FEnd exec_straight_opt.
-
-FLemma exec_straight_trans:
-  forall ge fn c1 rs1 m1 c2 rs2 m2 c3 rs3 m3,
-  exec_straight ge fn c1 rs1 m1 c2 rs2 m2 ->
-  exec_straight ge fn c2 rs2 m2 c3 rs3 m3 ->
-  exec_straight ge fn c1 rs1 m1 c3 rs3 m3.
-FProofLemma.
-  induction 1; intros.
-  apply exec_straight_step with rs2 m2; auto.
-  apply exec_straight_step with rs2 m2; auto.
-Qed. CloseFLemma.
-
-FLemma exec_straight_opt_right:
-  forall ge fn c3 rs3 m3 c1 rs1 m1 c2 rs2 m2,
-  exec_straight_opt ge fn c1 rs1 m1 c2 rs2 m2 ->
-  exec_straight ge fn c2 rs2 m2 c3 rs3 m3 ->
-  exec_straight ge fn c1 rs1 m1 c3 rs3 m3.
-FProofLemma.
-  destruct 1; intros. auto. eapply exec_straight_trans; eauto. 
-Qed. CloseFLemma.
-
-FLemma exec_straight_opt_steps_goto:
-  forall prog tprog ge tge,
-    match_prog prog tprog ->
-    ge = Genv.globalenv prog ->
-    tge = Genv.globalenv tprog ->
-    forall s fb f rs1 i c ep tf tc m1' m2 m2' sp ms2 lbl c',
-  match_stack ge s ->
-  Mem.extends m2 m2' ->
-  Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
-  S.find_label lbl (S.fn_code f) = Some c' ->
-  transl_code_at_pc ge (rs1 PC) fb f (i :: c) ep tf tc ->
-  it1_is_parent i ep = false ->
-  (forall k c (TR: transl_instr i f ep k = OK c),
-   exists jmp, exists k', exists rs2,
-       exec_straight_opt tge tf c rs1 m1' (jmp :: k') rs2 m2'
-    /\ agree ms2 sp rs2
-    /\ Asm.exec_instr jmp tge tf rs2 m2' = Asm.goto_label tf lbl rs2 m2') ->
-  exists st',
-  plus Asm.step tge (Asm.State rs1 m1') E0 st' /\
-  match_states ge (S.State s fb sp c' ms2 m2) st'.
-FProofLemma.
-  intros. inversion H6. subst. monadInv H12.
-  exploit H8; eauto. intros [jmp [k' [rs2 [A [B C]]]]].
-  generalize (functions_transl  prog tprog _ (Genv.globalenv tprog) H eq_refl eq_refl _ _ _ H10 H11); intro FN.
-  generalize (transf_function_no_overflow _ _ H11); intro NOOV.
-  inv A.
-- exploit find_label_goto_label; eauto.
-  intros [tc' [rs3 [GOTO [AT' OTH]]]].
-  exists (Asm.State rs3 m2'); split.
-  apply plus_one. econstructor; eauto.
-  eapply find_instr_tail. eauto.
-  rewrite C. eexact GOTO.
-  econstructor; eauto.
-  apply agree_exten with rs2; auto with asmgen.
-  congruence.
-- exploit exec_straight_steps_2; eauto.
-  intros [ofs' [PC2 CT2]].
-  exploit find_label_goto_label; eauto.
-  intros [tc' [rs3 [GOTO [AT' OTH]]]].
-  exists (Asm.State rs3 m2'); split.
-  eapply plus_right'.
-  eapply exec_straight_steps_1; eauto.
-  econstructor; eauto.
-  eapply find_instr_tail. eauto.
-  rewrite C. eexact GOTO.
-  traceEq.
-  econstructor; eauto.
-  apply agree_exten with rs2; auto with asmgen.
-  congruence.
-Qed. CloseFLemma.  
-
-(* Asmgenproof0 *)
-FLemma ireg_of_eq:
-  forall r r', ireg_of r = OK r' -> preg_of r = IR r'.
-FProofLemma.
-  unfold ireg_of; intros. destruct (preg_of r); inv H; auto.
-Qed. CloseFLemma.
-
-(* Asmgenproof0 *)
-FLemma freg_of_eq:
-  forall r r', freg_of r = OK r' -> preg_of r = FR r'.
-FProofLemma.
-  unfold freg_of; intros. destruct (preg_of r); inv H; auto.
-Qed. CloseFLemma.
-
 MetaData ArgsInv.
 Ltac ArgsInv :=
   repeat (match goal with
@@ -3070,19 +3128,393 @@ Ltac ArgsInv :=
   end).
 FEnd ArgsInv.
 
-FLemma transl_cbranch_correct_1:
-  forall ge fn cond args lbl k c m ms b sp rs m',
+MetaData Simpl.
+Lemma nextinstr_pc:
+  forall rs, (Asm.nextinstr rs)#PC = Val.offset_ptr rs#PC Ptrofs.one.
+Proof.
+  intros. apply Pregmap.gss.
+Qed.
+
+Lemma nextinstr_inv:
+  forall r rs, r <> PC -> (Asm.nextinstr rs)#r = rs#r.
+Proof.
+  intros. unfold Asm.nextinstr. apply Pregmap.gso. red; intro; subst. auto.
+Qed.
+
+Lemma nextinstr_inv1:
+  forall r rs, data_preg r = true -> (Asm.nextinstr rs)#r = rs#r.
+Proof.
+  intros. apply nextinstr_inv. red; intro; subst; discriminate.
+Qed.
+
+Lemma ireg_of_not_X31:
+  forall m r, ireg_of m = OK r -> IR r <> IR X31.
+Proof.
+  intros. erewrite <- ireg_of_eq; eauto with asmgen.
+Qed.
+
+Lemma ireg_of_not_X31':
+  forall m r, ireg_of m = OK r -> r <> X31.
+Proof.
+  intros. apply ireg_of_not_X31 in H. congruence.
+Qed.
+
+Global Hint Resolve ireg_of_not_X31 ireg_of_not_X31': asmgen.
+
+Ltac Simplif :=
+  ((rewrite nextinstr_inv by eauto with asmgen)
+  || (rewrite nextinstr_inv1 by eauto with asmgen)
+  || (rewrite Pregmap.gss)
+  || (rewrite nextinstr_pc)
+  || (rewrite Pregmap.gso by eauto with asmgen)); auto with asmgen.
+
+Ltac Simpl := repeat Simplif.
+FEnd Simpl.
+
+(** * Correctness of RISC-V constructor functions *)
+MetaData CONSTRUCTORS.
+
+(** Decomposition of integer constants. *)
+
+Lemma make_immed32_sound:
+  forall n,
+  match make_immed32 n with
+  | Imm32_single imm => n = imm
+  | Imm32_pair hi lo => n = Int.add (Int.shl hi (Int.repr 12)) lo
+  end.
+Proof.
+  intros; unfold make_immed32. set (lo := Int.sign_ext 12 n).
+  predSpec Int.eq Int.eq_spec n lo.
+- auto.
+- set (m := Int.sub n lo).
+  assert (A: eqmod (two_p 12) (Int.unsigned lo) (Int.unsigned n)) by (apply Int.eqmod_sign_ext'; compute; auto).
+  assert (B: eqmod (two_p 12) (Int.unsigned n - Int.unsigned  lo) 0).
+  { replace 0 with (Int.unsigned n - Int.unsigned n) by lia.
+    auto using eqmod_sub, eqmod_refl. }
+  assert (C: eqmod (two_p 12) (Int.unsigned m) 0).
+  { apply eqmod_trans with (Int.unsigned n - Int.unsigned lo); auto.
+    apply eqmod_divides with Int.modulus. apply Int.eqm_sym; apply Int.eqm_unsigned_repr.
+    exists (two_p (32-12)); auto. }
+  assert (D: Int.modu m (Int.repr 4096) = Int.zero).
+  { apply eqmod_mod_eq in C. unfold Int.modu.
+    change (Int.unsigned (Int.repr 4096)) with (two_p 12). rewrite C.
+    reflexivity.
+    apply two_p_gt_ZERO; lia. }
+  rewrite <- (Int.divu_pow2 m (Int.repr 4096) (Int.repr 12)) by auto.
+  rewrite Int.shl_mul_two_p.
+  change (two_p (Int.unsigned (Int.repr 12))) with 4096.
+  replace (Int.mul (Int.divu m (Int.repr 4096)) (Int.repr 4096)) with m.
+  unfold m. rewrite Int.sub_add_opp. rewrite Int.add_assoc. rewrite <- (Int.add_commut lo).
+  rewrite Int.add_neg_zero. rewrite Int.add_zero. auto.
+  rewrite (Int.modu_divu_Euclid m (Int.repr 4096)) at 1 by (vm_compute; congruence).
+  rewrite D. apply Int.add_zero.
+Qed.
+
+Lemma make_immed64_sound:
+  forall n,
+  match make_immed64 n with
+  | Imm64_single imm => n = imm
+  | Imm64_pair hi lo => n = Int64.add (Int64.sign_ext 32 (Int64.shl hi (Int64.repr 12))) lo
+  | Imm64_large imm => n = imm
+  end.
+Proof.
+  intros; unfold make_immed64. set (lo := Int64.sign_ext 12 n).
+  predSpec Int64.eq Int64.eq_spec n lo.
+- auto.
+- set (m := Int64.sub n lo).
+  set (p := Int64.zero_ext 20 (Int64.shru m (Int64.repr 12))).
+  predSpec Int64.eq Int64.eq_spec n (Int64.add (Int64.sign_ext 32 (Int64.shl p (Int64.repr 12))) lo).
+  auto.
+  auto.
+Qed.
+
+Section CONSTRUCTORS.
+Import Asm.
+Variable ge: genv.
+Variable fn: function.
+
+(** 32-bit integer constants and arithmetic *)
+
+Lemma load_hilo32_correct:
+  forall rd hi lo k rs m,
+  exists rs',
+     exec_straight ge fn (load_hilo32 rd hi lo k) rs m k rs' m
+  /\ rs'#rd = Vint (Int.add (Int.shl hi (Int.repr 12)) lo)
+  /\ forall r, r <> PC -> r <> rd -> rs'#r = rs#r.
+Proof.
+  unfold load_hilo32; intros.
+  predSpec Int.eq Int.eq_spec lo Int.zero.
+- subst lo. econstructor; split.
+  apply exec_straight_one. reflexivity. auto.
+  split. rewrite Int.add_zero. Simpl.
+  intros; Simpl.
+- econstructor; split.
+  eapply exec_straight_two. reflexivity. reflexivity. auto. auto.
+  simpl. split. Simpl.
+  intros; Simpl.
+Qed.
+
+Lemma loadimm32_correct:
+  forall rd n k rs m,
+  exists rs',
+     exec_straight ge fn (loadimm32 rd n k) rs m k rs' m
+  /\ rs'#rd = Vint n
+  /\ forall r, r <> PC -> r <> rd -> rs'#r = rs#r.
+Proof.
+  unfold loadimm32; intros. generalize (make_immed32_sound n); intros E.
+  destruct (make_immed32 n).
+- subst imm. econstructor; split.
+  apply exec_straight_one. reflexivity. auto.
+  split. simpl. rewrite Int.add_zero_l; Simpl.
+  intros; Simpl.
+- rewrite E. apply load_hilo32_correct.
+Qed.
+
+Lemma opimm32_correct:
+  forall (op: ireg -> ireg0 -> ireg0 -> instruction)
+         (opi: ireg -> ireg0 -> int -> instruction)
+         (sem: val -> val -> val) m,
+  (forall d s1 s2 rs,
+   exec_instr (op d s1 s2) ge fn rs m = Next (nextinstr (rs#d <- (sem rs##s1 rs##s2))) m) ->
+  (forall d s n rs,
+   exec_instr (opi d s n) ge fn rs m = Next (nextinstr (rs#d <- (sem rs##s (Vint n)))) m) ->
+  forall rd r1 n k rs,
+  r1 <> X31 ->
+  exists rs',
+     exec_straight ge fn (opimm32 op opi rd r1 n k) rs m k rs' m
+  /\ rs'#rd = sem rs##r1 (Vint n)
+  /\ forall r, r <> PC -> r <> rd -> r <> X31 -> rs'#r = rs#r.
+Proof.
+  intros. unfold opimm32. generalize (make_immed32_sound n); intros E.
+  destruct (make_immed32 n).
+- subst imm. econstructor; split.
+  apply exec_straight_one. rewrite H0. simpl; eauto. auto.
+  split. Simpl. intros; Simpl.
+- destruct (load_hilo32_correct X31 hi lo (op rd r1 X31 :: k) rs m)
+  as (rs' & A & B & C).
+  econstructor; split.
+  eapply exec_straight_trans. eexact A. apply exec_straight_one.
+  rewrite H; eauto. auto.
+  split. Simpl. simpl. rewrite B, C, E. auto. congruence. congruence.
+  intros; Simpl.
+Qed.
+
+(** 64-bit integer constants and arithmetic *)
+
+Lemma load_hilo64_correct:
+  forall rd hi lo k rs m,
+  exists rs',
+     exec_straight ge fn (load_hilo64 rd hi lo k) rs m k rs' m
+  /\ rs'#rd = Vlong (Int64.add (Int64.sign_ext 32 (Int64.shl hi (Int64.repr 12))) lo)
+  /\ forall r, r <> PC -> r <> rd -> rs'#r = rs#r.
+Proof.
+  unfold load_hilo64; intros.
+  predSpec Int64.eq Int64.eq_spec lo Int64.zero.
+- subst lo. econstructor; split.
+  apply exec_straight_one. reflexivity. auto.
+  split. rewrite Int64.add_zero. Simpl.
+  intros; Simpl.
+- econstructor; split.
+  eapply exec_straight_two. reflexivity. reflexivity. auto. auto.
+  simpl. split. Simpl.
+  intros; Simpl.
+Qed.
+
+Lemma loadimm64_correct:
+  forall rd n k rs m,
+  exists rs',
+     exec_straight ge fn (loadimm64 rd n k) rs m k rs' m
+  /\ rs'#rd = Vlong n
+  /\ forall r, r <> PC -> r <> rd -> r <> X31 -> rs'#r = rs#r.
+Proof.
+  unfold loadimm64; intros. generalize (make_immed64_sound n); intros E.
+  destruct (make_immed64 n).
+- subst imm. econstructor; split.
+  apply exec_straight_one. reflexivity. auto.
+  split. simpl. rewrite Int64.add_zero_l; Simpl.
+  intros; Simpl.
+- exploit load_hilo64_correct; eauto. intros (rs' & A & B & C).
+  rewrite E. exists rs'; eauto.
+- subst imm. econstructor; split.
+  apply exec_straight_one. reflexivity. auto.
+  split. Simpl.
+  intros; Simpl.
+Qed.
+
+Lemma opimm64_correct:
+  forall (op: ireg -> ireg0 -> ireg0 -> instruction)
+         (opi: ireg -> ireg0 -> int64 -> instruction)
+         (sem: val -> val -> val) m,
+  (forall d s1 s2 rs,
+   exec_instr (op d s1 s2) ge fn rs m = Next (nextinstr (rs#d <- (sem rs###s1 rs###s2))) m) ->
+  (forall d s n rs,
+   exec_instr (opi d s n) ge fn rs m = Next (nextinstr (rs#d <- (sem rs###s (Vlong n)))) m) ->
+  forall rd r1 n k rs,
+  r1 <> X31 ->
+  exists rs',
+     exec_straight ge fn (opimm64 op opi rd r1 n k) rs m k rs' m
+  /\ rs'#rd = sem rs##r1 (Vlong n)
+  /\ forall r, r <> PC -> r <> rd -> r <> X31 -> rs'#r = rs#r.
+Proof.
+  intros. unfold opimm64. generalize (make_immed64_sound n); intros E.
+  destruct (make_immed64 n).
+- subst imm. econstructor; split.
+  apply exec_straight_one. rewrite H0. simpl; eauto. auto.
+  split. Simpl. intros; Simpl.
+- destruct (load_hilo64_correct X31 hi lo (op rd r1 X31 :: k) rs m)
+  as (rs' & A & B & C).
+  econstructor; split.
+  eapply exec_straight_trans. eexact A. apply exec_straight_one.
+  rewrite H; eauto. auto.
+  split. Simpl. simpl. rewrite B, C, E. auto. congruence. congruence.
+  intros; Simpl.
+- subst imm. econstructor; split.
+  eapply exec_straight_two. reflexivity. rewrite H. simpl; eauto. auto. auto.
+  split. Simpl. intros; Simpl.
+Qed.
+
+(** Add offset to pointer *)
+
+Lemma addptrofs_correct:
+  forall rd r1 n k rs m,
+  r1 <> X31 ->
+  exists rs',
+     exec_straight ge fn (addptrofs rd r1 n k) rs m k rs' m
+  /\ Val.lessdef (Val.offset_ptr rs#r1 n) rs'#rd
+  /\ forall r, r <> PC -> r <> rd -> r <> X31 -> rs'#r = rs#r.
+Proof.
+  unfold addptrofs; intros.
+  destruct (Ptrofs.eq_dec n Ptrofs.zero).
+- subst n. econstructor; split.
+  apply exec_straight_one. reflexivity. auto.
+  split. Simpl. destruct (rs r1); simpl; auto. rewrite Ptrofs.add_zero; auto.
+  intros; Simpl.
+- destruct Archi.ptr64 eqn:SF.
++ unfold addimm64.
+  exploit (opimm64_correct Paddl Paddil Val.addl); eauto. intros (rs' & A & B & C).
+  exists rs'; split. eexact A. split; auto.
+  rewrite B. simpl. destruct (rs r1); simpl; auto. rewrite SF.
+  rewrite Ptrofs.of_int64_to_int64 by auto. auto.
++ unfold addimm32.
+  exploit (opimm32_correct Paddw Paddiw Val.add); eauto. intros (rs' & A & B & C).
+  exists rs'; split. eexact A. split; auto.
+  rewrite B. simpl. destruct (rs r1); simpl; auto. rewrite SF.
+  rewrite Ptrofs.of_int_to_int by auto. auto.
+Qed.
+
+Lemma addptrofs_correct_2:
+  forall rd r1 n k (rs: regset) m b ofs,
+  r1 <> X31 -> rs#r1 = Vptr b ofs ->
+  exists rs',
+     exec_straight ge fn (addptrofs rd r1 n k) rs m k rs' m
+  /\ rs'#rd = Vptr b (Ptrofs.add ofs n)
+  /\ forall r, r <> PC -> r <> rd -> r <> X31 -> rs'#r = rs#r.
+Proof.
+  intros. exploit (addptrofs_correct rd r1 n); eauto. intros (rs' & A & B & C).
+  exists rs'; intuition eauto.
+  rewrite H0 in B. inv B. auto.
+Qed.
+
+(** Translation of conditional branches *)
+
+Lemma transl_cbranch_int32s_correct:
+  forall cmp r1 r2 lbl (rs: regset) m b,
+  Val.cmp_bool cmp rs##r1 rs##r2 = Some b ->
+  exec_instr (transl_cbranch_int32s cmp r1 r2 lbl) ge fn rs m =
+  eval_branch fn lbl rs m (Some b).
+Proof.
+  intros. destruct cmp; simpl; unfold exec_instrPbeqw, exec_instrPbnew, exec_instrPbltw, exec_instrPbgew; rewrite ? H.
+- destruct rs##r1; simpl in H; try discriminate. destruct rs##r2; inv H.
+  simpl; auto.
+- destruct rs##r1; simpl in H; try discriminate. destruct rs##r2; inv H.
+  simpl; auto.
+- auto.
+- rewrite <- Val.swap_cmp_bool. simpl. rewrite H; auto.
+- rewrite <- Val.swap_cmp_bool. simpl. rewrite H; auto.
+- auto.
+Qed.
+
+Lemma transl_cbranch_int32u_correct:
+  forall cmp r1 r2 lbl (rs: regset) m b,
+  Val.cmpu_bool (Mem.valid_pointer m) cmp rs##r1 rs##r2 = Some b ->
+  exec_instr (transl_cbranch_int32u cmp r1 r2 lbl) ge fn rs m =
+  eval_branch fn lbl rs m (Some b).
+Proof.
+  intros. destruct cmp; simpl; unfold exec_instrPbeqw, exec_instrPbnew, exec_instrPbltuw, exec_instrPbgeuw; rewrite ? H; auto.
+- rewrite <- Val.swap_cmpu_bool. simpl. rewrite H; auto.
+- rewrite <- Val.swap_cmpu_bool. simpl. rewrite H; auto.
+Qed.
+
+Lemma transl_cbranch_int64s_correct:
+  forall cmp r1 r2 lbl (rs: regset) m b,
+  Val.cmpl_bool cmp rs###r1 rs###r2 = Some b ->
+  exec_instr (transl_cbranch_int64s cmp r1 r2 lbl) ge fn rs m =
+  eval_branch fn lbl rs m (Some b).
+Proof.
+  intros. destruct cmp; simpl; unfold exec_instrPbeql, exec_instrPbnel, exec_instrPbltl, exec_instrPbgel; rewrite ? H.
+- destruct rs###r1; simpl in H; try discriminate. destruct rs###r2; inv H.
+  simpl; auto.
+- destruct rs###r1; simpl in H; try discriminate. destruct rs###r2; inv H.
+  simpl; auto.
+- auto.
+- rewrite <- Val.swap_cmpl_bool. simpl. rewrite H; auto.
+- rewrite <- Val.swap_cmpl_bool. simpl. rewrite H; auto.
+- auto.
+Qed.
+
+Lemma transl_cbranch_int64u_correct:
+  forall cmp r1 r2 lbl (rs: regset) m b,
+  Val.cmplu_bool (Mem.valid_pointer m) cmp rs###r1 rs###r2 = Some b ->
+  exec_instr (transl_cbranch_int64u cmp r1 r2 lbl) ge fn rs m =
+  eval_branch fn lbl rs m (Some b).
+Proof.
+  intros. destruct cmp; simpl; unfold exec_instrPbeql, exec_instrPbnel, exec_instrPbltul, exec_instrPbgeul; rewrite ? H; auto.
+- rewrite <- Val.swap_cmplu_bool. simpl. rewrite H; auto.
+- rewrite <- Val.swap_cmplu_bool. simpl. rewrite H; auto.
+Qed.
+
+Lemma transl_cond_float_correct:
+  forall (rs: regset) m cmp rd r1 r2 insn normal v,
+  transl_cond_float cmp rd r1 r2 = (insn, normal) ->
+  v = (if normal then Val.cmpf cmp rs#r1 rs#r2 else Val.notbool (Val.cmpf cmp rs#r1 rs#r2)) ->
+  exec_instr insn ge fn rs m = Next (nextinstr (rs#rd <- v)) m.
+Proof.
+  intros. destruct cmp; simpl in H; inv H; auto.
+- rewrite Val.negate_cmpf_eq. auto.
+- simpl. unfold exec_instrPfltd. f_equal. f_equal. f_equal. destruct (rs r2), (rs r1); auto. unfold Val.cmpf, Val.cmpf_bool.
+  rewrite <- Float.cmp_swap. auto.
+- simpl. unfold exec_instrPfled. f_equal. f_equal. f_equal. destruct (rs r2), (rs r1); auto. unfold Val.cmpf, Val.cmpf_bool.
+  rewrite <- Float.cmp_swap. auto.
+Qed.
+
+Lemma transl_cond_single_correct:
+  forall (rs: regset) m cmp rd r1 r2 insn normal v,
+  transl_cond_single cmp rd r1 r2 = (insn, normal) ->
+  v = (if normal then Val.cmpfs cmp rs#r1 rs#r2 else Val.notbool (Val.cmpfs cmp rs#r1 rs#r2)) ->
+  exec_instr insn ge fn rs m = Next (nextinstr (rs#rd <- v)) m.
+Proof.
+  intros. destruct cmp; simpl in H; inv H; auto.
+- simpl. unfold exec_instrPfeqs. f_equal. f_equal. f_equal. destruct (rs r2), (rs r1); auto. unfold Val.cmpfs, Val.cmpfs_bool.
+  rewrite Float32.cmp_ne_eq. destruct (Float32.cmp Ceq f0 f); auto.
+- simpl. unfold exec_instrPflts. f_equal. f_equal. f_equal. destruct (rs r2), (rs r1); auto. unfold Val.cmpfs, Val.cmpfs_bool.
+  rewrite <- Float32.cmp_swap. auto.
+- simpl. unfold exec_instrPfles. f_equal. f_equal. f_equal. destruct (rs r2), (rs r1); auto. unfold Val.cmpfs, Val.cmpfs_bool.
+  rewrite <- Float32.cmp_swap. auto.
+Qed.
+
+Lemma transl_cbranch_correct_1:
+  forall cond args lbl k c m ms b sp rs m',
   transl_cbranch cond args lbl k = OK c ->
   eval_condition cond (List.map ms args) m = Some b ->
   agree ms sp rs ->
   Mem.extends m m' ->
   exists rs', exists insn,
      exec_straight_opt ge fn c rs m' (insn :: k) rs' m'
-  /\ Asm.exec_instr insn ge fn rs' m' = Asm.eval_branch fn lbl rs' m' (Some b)
+  /\ exec_instr insn ge fn rs' m' = eval_branch fn lbl rs' m' (Some b)
   /\ forall r, r <> PC -> r <> X31 -> rs'#r = rs#r.
-FProofLemma.
-  (*intros until m'; intros TRANSL EVAL AG MEXT.
-  set (vl' := map rs (map preg_of args)). 
+Proof.
+  intros until m'; intros TRANSL EVAL AG MEXT.
+  set (vl' := map rs (map preg_of args)).
   assert (EVAL': eval_condition cond vl' m' = Some b).
   { apply eval_condition_lessdef with (map ms args) m; auto. eapply preg_vals; eauto. }
   clear EVAL MEXT AG.
@@ -3098,7 +3530,7 @@ FProofLemma.
   exists rs', (transl_cbranch_int32s c0 x X31 lbl).
   split. constructor; eexact A. split; auto.
   apply transl_cbranch_int32s_correct; auto.
-  simpl; rewrite B, C; eauto with asmgen.
+  simpl; rewrite B, C; try congruence; eauto with asmgen.
 - predSpec Int.eq Int.eq_spec n Int.zero.
 + subst n. exists rs, (transl_cbranch_int32u c0 x X0 lbl).
   intuition auto. constructor. apply transl_cbranch_int32u_correct; auto.
@@ -3106,7 +3538,7 @@ FProofLemma.
   exists rs', (transl_cbranch_int32u c0 x X31 lbl).
   split. constructor; eexact A. split; auto.
   apply transl_cbranch_int32u_correct; auto.
-  simpl; rewrite B, C; eauto with asmgen.
+  simpl; rewrite B, C; try congruence; eauto with asmgen.
 - exists rs, (transl_cbranch_int64s c0 x x0 lbl).
   intuition auto. constructor. apply transl_cbranch_int64s_correct; auto.
 - exists rs, (transl_cbranch_int64u c0 x x0 lbl).
@@ -3118,7 +3550,7 @@ FProofLemma.
   exists rs', (transl_cbranch_int64s c0 x X31 lbl).
   split. constructor; eexact A. split; auto.
   apply transl_cbranch_int64s_correct; auto.
-  simpl; rewrite B, C; eauto with asmgen.
+  simpl; rewrite B, C; try congruence; eauto with asmgen.
 - predSpec Int64.eq Int64.eq_spec n Int64.zero.
 + subst n. exists rs, (transl_cbranch_int64u c0 x X0 lbl).
   intuition auto. constructor. apply transl_cbranch_int64u_correct; auto.
@@ -3126,7 +3558,7 @@ FProofLemma.
   exists rs', (transl_cbranch_int64u c0 x X31 lbl).
   split. constructor; eexact A. split; auto.
   apply transl_cbranch_int64u_correct; auto.
-  simpl; rewrite B, C; eauto with asmgen.
+  simpl; rewrite B, C; try congruence; eauto with asmgen.
 - destruct (transl_cond_float c0 X31 x x0) as [insn normal] eqn:TC; inv EQ2.
   set (v := if normal then Val.cmpf c0 rs#x rs#x0 else Val.notbool (Val.cmpf c0 rs#x rs#x0)).
   assert (V: v = Val.of_bool (eqb normal b)).
@@ -3162,56 +3594,25 @@ FProofLemma.
   econstructor; econstructor.
   split. constructor. apply exec_straight_one. eapply transl_cond_single_correct with (v := v); eauto. auto.
   split. rewrite V; destruct normal, b; reflexivity.
-  intros; Simpl.*)
-  apply cheat. 
-Qed. CloseFLemma.
+  intros; Simpl.
+Qed.
 
-FLemma nextinstr_pc:
-  forall rs, (Asm.nextinstr rs)#PC = Val.offset_ptr rs#PC Ptrofs.one.
-FProofLemma.
-  intros. apply Pregmap.gss.
-Qed. CloseFLemma.
-
-FLemma nextinstr_inv:
-  forall r rs, r <> PC -> (Asm.nextinstr rs)#r = rs#r.
-FProofLemma.
-  intros. unfold Asm.nextinstr. apply Pregmap.gso. red; intro; subst. auto.
-Qed. CloseFLemma.
-
-FLemma nextinstr_inv1:
-  forall r rs, data_preg r = true -> (Asm.nextinstr rs)#r = rs#r.
-FProofLemma.
-  intros. apply nextinstr_inv. red; intro; subst; discriminate.
-Qed. CloseFLemma.
-
-MetaData Simpl binds Simplif.
-Ltac Simplif :=
-  ((rewrite nextinstr_inv by eauto with asmgen)
-  || (rewrite nextinstr_inv1 by eauto with asmgen)
-  || (rewrite Pregmap.gss)
-  || (rewrite nextinstr_pc)
-  || (rewrite Pregmap.gso by eauto with asmgen)); auto with asmgen.
-
-Ltac Simpl := repeat Simplif.
-
-FEnd Simpl.
-
-FLemma transl_cbranch_correct_true:
-  forall ge fn cond args lbl k c m ms sp rs m',
+Lemma transl_cbranch_correct_true:
+  forall cond args lbl k c m ms sp rs m',
   transl_cbranch cond args lbl k = OK c ->
   eval_condition cond (List.map ms args) m = Some true ->
   agree ms sp rs ->
   Mem.extends m m' ->
   exists rs', exists insn,
      exec_straight_opt ge fn c rs m' (insn :: k) rs' m'
-  /\ Asm.exec_instr insn ge fn rs' m' = Asm.goto_label fn lbl rs' m'
+  /\ exec_instr insn ge fn rs' m' = goto_label fn lbl rs' m'
   /\ forall r, r <> PC -> r <> X31 -> rs'#r = rs#r.
-FProofLemma.
+Proof.
   intros. eapply transl_cbranch_correct_1 with (b := true); eauto.
-Qed. CloseFLemma.
+Qed.
 
-FLemma transl_cbranch_correct_false:
-  forall ge fn cond args lbl k c m ms sp rs m',
+Lemma transl_cbranch_correct_false:
+  forall cond args lbl k c m ms sp rs m',
   transl_cbranch cond args lbl k = OK c ->
   eval_condition cond (List.map ms args) m = Some false ->
   agree ms sp rs ->
@@ -3219,80 +3620,661 @@ FLemma transl_cbranch_correct_false:
   exists rs',
      exec_straight ge fn c rs m' k rs' m'
   /\ forall r, r <> PC -> r <> X31 -> rs'#r = rs#r.
-FProofLemma.
-  intros. exploit transl_cbranch_correct_1; eauto. simpl. 
+Proof.
+  intros. exploit transl_cbranch_correct_1; eauto. simpl.
   intros (rs' & insn & A & B & C).
-  exists (Asm.nextinstr rs').
+  exists (nextinstr rs').
   split. eapply exec_straight_opt_right; eauto. apply exec_straight_one; auto.
-  intros; Simpl. 
-Qed. CloseFLemma. 
+  intros; Simpl.
+Qed.
 
-FLemma indexed_memory_access_correct:
-  forall ge fn mk_instr base ofs k rs m,
+(** Translation of condition operators *)
+
+Lemma transl_cond_int32s_correct:
+  forall cmp rd r1 r2 k rs m,
+  exists rs',
+     exec_straight ge fn (transl_cond_int32s cmp rd r1 r2 k) rs m k rs' m
+  /\ Val.lessdef (Val.cmp cmp rs##r1 rs##r2) rs'#rd
+  /\ forall r, r <> PC -> r <> rd -> rs'#r = rs#r.
+Proof.
+  intros. destruct cmp; simpl.
+- econstructor; split. apply exec_straight_one; [reflexivity|auto].
+  split; intros; Simpl. destruct (rs##r1); auto. destruct (rs##r2); auto.
+- econstructor; split. apply exec_straight_one; [reflexivity|auto].
+  split; intros; Simpl. destruct (rs##r1); auto. destruct (rs##r2); auto.
+- econstructor; split. apply exec_straight_one; [reflexivity|auto].
+  split; intros; Simpl.
+- econstructor; split.
+  eapply exec_straight_two. reflexivity. reflexivity. auto. auto.
+  split; intros; Simpl; simpl; Simpl. unfold Val.cmp. rewrite <- Val.swap_cmp_bool.
+  simpl. rewrite (Val.negate_cmp_bool Clt).
+  destruct (Val.cmp_bool Clt rs##r2 rs##r1) as [[]|]; auto.
+- econstructor; split. apply exec_straight_one; [reflexivity|auto].
+  split; intros; Simpl. unfold Val.cmp. rewrite <- Val.swap_cmp_bool. auto.
+- econstructor; split.
+  eapply exec_straight_two. reflexivity. reflexivity. auto. auto.
+  split; intros; Simpl; simpl; Simpl. unfold Val.cmp. rewrite (Val.negate_cmp_bool Clt).
+  destruct (Val.cmp_bool Clt rs##r1 rs##r2) as [[]|]; auto.
+Qed.
+
+Lemma transl_cond_int32u_correct:
+  forall cmp rd r1 r2 k rs m,
+  exists rs',
+     exec_straight ge fn (transl_cond_int32u cmp rd r1 r2 k) rs m k rs' m
+  /\ rs'#rd = Val.cmpu (Mem.valid_pointer m) cmp rs##r1 rs##r2
+  /\ forall r, r <> PC -> r <> rd -> rs'#r = rs#r.
+Proof.
+  intros. destruct cmp; simpl.
+- econstructor; split. apply exec_straight_one; [reflexivity|auto].
+  split; intros; Simpl.
+- econstructor; split. apply exec_straight_one; [reflexivity|auto].
+  split; intros; Simpl.
+- econstructor; split. apply exec_straight_one; [reflexivity|auto].
+  split; intros; Simpl.
+- econstructor; split.
+  eapply exec_straight_two. reflexivity. reflexivity. auto. auto.
+  split; intros; Simpl; simpl; Simpl. unfold Val.cmpu. rewrite <- Val.swap_cmpu_bool.
+  simpl. rewrite (Val.negate_cmpu_bool (Mem.valid_pointer m) Cle).
+  destruct (Val.cmpu_bool (Mem.valid_pointer m) Cle rs##r1 rs##r2) as [[]|]; auto.
+- econstructor; split. apply exec_straight_one; [reflexivity|auto].
+  split; intros; Simpl. unfold Val.cmpu. rewrite <- Val.swap_cmpu_bool. auto.
+- econstructor; split.
+  eapply exec_straight_two. reflexivity. reflexivity. auto. auto.
+  split; intros; Simpl; simpl; Simpl. unfold Val.cmpu. rewrite (Val.negate_cmpu_bool (Mem.valid_pointer m) Clt).
+  destruct (Val.cmpu_bool (Mem.valid_pointer m) Clt rs##r1 rs##r2) as [[]|]; auto.
+Qed.
+
+Lemma transl_cond_int64s_correct:
+  forall cmp rd r1 r2 k rs m,
+  exists rs',
+     exec_straight ge fn (transl_cond_int64s cmp rd r1 r2 k) rs m k rs' m
+  /\ Val.lessdef (Val.maketotal (Val.cmpl cmp rs###r1 rs###r2)) rs'#rd
+  /\ forall r, r <> PC -> r <> rd -> rs'#r = rs#r.
+Proof.
+  intros. destruct cmp; simpl.
+- econstructor; split. apply exec_straight_one; [reflexivity|auto].
+  split; intros; Simpl. destruct (rs###r1); auto. destruct (rs###r2); auto.
+- econstructor; split. apply exec_straight_one; [reflexivity|auto].
+  split; intros; Simpl. destruct (rs###r1); auto. destruct (rs###r2); auto.
+- econstructor; split. apply exec_straight_one; [reflexivity|auto].
+  split; intros; Simpl.
+- econstructor; split.
+  eapply exec_straight_two. reflexivity. reflexivity. auto. auto.
+  split; intros; Simpl; simpl; Simpl. unfold Val.cmpl. rewrite <- Val.swap_cmpl_bool.
+  simpl. rewrite (Val.negate_cmpl_bool Clt).
+  destruct (Val.cmpl_bool Clt rs###r2 rs###r1) as [[]|]; auto.
+- econstructor; split. apply exec_straight_one; [reflexivity|auto].
+  split; intros; Simpl. unfold Val.cmpl. rewrite <- Val.swap_cmpl_bool. auto.
+- econstructor; split.
+  eapply exec_straight_two. reflexivity. reflexivity. auto. auto.
+  split; intros; Simpl; simpl; Simpl. unfold Val.cmpl. rewrite (Val.negate_cmpl_bool Clt).
+  destruct (Val.cmpl_bool Clt rs###r1 rs###r2) as [[]|]; auto.
+Qed.
+
+Lemma transl_cond_int64u_correct:
+  forall cmp rd r1 r2 k rs m,
+  exists rs',
+     exec_straight ge fn (transl_cond_int64u cmp rd r1 r2 k) rs m k rs' m
+  /\ rs'#rd = Val.maketotal (Val.cmplu (Mem.valid_pointer m) cmp rs###r1 rs###r2)
+  /\ forall r, r <> PC -> r <> rd -> rs'#r = rs#r.
+Proof.
+  intros. destruct cmp; simpl.
+- econstructor; split. apply exec_straight_one; [reflexivity|auto].
+  split; intros; Simpl.
+- econstructor; split. apply exec_straight_one; [reflexivity|auto].
+  split; intros; Simpl.
+- econstructor; split. apply exec_straight_one; [reflexivity|auto].
+  split; intros; Simpl.
+- econstructor; split.
+  eapply exec_straight_two. reflexivity. reflexivity. auto. auto.
+  split; intros; Simpl; simpl; Simpl. unfold Val.cmplu. rewrite <- Val.swap_cmplu_bool.
+  simpl. rewrite (Val.negate_cmplu_bool (Mem.valid_pointer m) Cle).
+  destruct (Val.cmplu_bool (Mem.valid_pointer m) Cle rs###r1 rs###r2) as [[]|]; auto.
+- econstructor; split. apply exec_straight_one; [reflexivity|auto].
+  split; intros; Simpl. unfold Val.cmplu. rewrite <- Val.swap_cmplu_bool. auto.
+- econstructor; split.
+  eapply exec_straight_two. reflexivity. reflexivity. auto. auto.
+  split; intros; Simpl; simpl; Simpl. unfold Val.cmplu. rewrite (Val.negate_cmplu_bool (Mem.valid_pointer m) Clt).
+  destruct (Val.cmplu_bool (Mem.valid_pointer m) Clt rs###r1 rs###r2) as [[]|]; auto.
+Qed.
+
+Lemma transl_condimm_int32s_correct:
+  forall cmp rd r1 n k rs m,
+  r1 <> X31 ->
+  exists rs',
+     exec_straight ge fn (transl_condimm_int32s cmp rd r1 n k) rs m k rs' m
+  /\ Val.lessdef (Val.cmp cmp rs#r1 (Vint n)) rs'#rd
+  /\ forall r, r <> PC -> r <> rd -> r <> X31 -> rs'#r = rs#r.
+Proof.
+  intros. unfold transl_condimm_int32s.
+  predSpec Int.eq Int.eq_spec n Int.zero.
+- subst n. exploit transl_cond_int32s_correct. intros (rs' & A & B & C).
+  exists rs'; eauto.
+- assert (DFL:
+    exists rs',
+      exec_straight ge fn (loadimm32 X31 n (transl_cond_int32s cmp rd r1 X31 k)) rs m k rs' m
+   /\ Val.lessdef (Val.cmp cmp rs#r1 (Vint n)) rs'#rd
+   /\ forall r, r <> PC -> r <> rd -> r <> X31 -> rs'#r = rs#r).
+  { exploit loadimm32_correct; eauto. intros (rs1 & A1 & B1 & C1).
+    exploit transl_cond_int32s_correct; eauto. intros (rs2 & A2 & B2 & C2).
+    exists rs2; split.
+    eapply exec_straight_trans. eexact A1. eexact A2.
+    split. simpl in B2. rewrite B1, C1 in B2 by congruence. auto.
+    intros; transitivity (rs1 r); auto. }
+  destruct cmp.
++ unfold xorimm32.
+  exploit (opimm32_correct Pxorw Pxoriw Val.xor); eauto. intros (rs1 & A1 & B1 & C1).
+  exploit transl_cond_int32s_correct; eauto. intros (rs2 & A2 & B2 & C2).
+  exists rs2; split.
+  eapply exec_straight_trans. eexact A1. eexact A2.
+  split. simpl in B2; rewrite B1 in B2; simpl in B2. destruct (rs#r1); auto.
+  unfold Val.cmp in B2; simpl in B2; rewrite Int.xor_is_zero in B2. exact B2.
+  intros; transitivity (rs1 r); auto.
++ unfold xorimm32.
+  exploit (opimm32_correct Pxorw Pxoriw Val.xor); eauto. intros (rs1 & A1 & B1 & C1).
+  exploit transl_cond_int32s_correct; eauto. intros (rs2 & A2 & B2 & C2).
+  exists rs2; split.
+  eapply exec_straight_trans. eexact A1. eexact A2.
+  split. simpl in B2; rewrite B1 in B2; simpl in B2. destruct (rs#r1); auto.
+  unfold Val.cmp in B2; simpl in B2; rewrite Int.xor_is_zero in B2. exact B2.
+  intros; transitivity (rs1 r); auto.
++ exploit (opimm32_correct Psltw Psltiw (Val.cmp Clt)); eauto. intros (rs1 & A1 & B1 & C1).
+  exists rs1; split. eexact A1. split; auto. rewrite B1; auto.
++ predSpec Int.eq Int.eq_spec n (Int.repr Int.max_signed).
+* subst n. exploit loadimm32_correct; eauto. intros (rs1 & A1 & B1 & C1).
+  exists rs1; split. eexact A1. split; auto.
+  unfold Val.cmp; destruct (rs#r1); simpl; auto. rewrite B1.
+  unfold Int.lt. rewrite zlt_false. auto.
+  change (Int.signed (Int.repr Int.max_signed)) with Int.max_signed.
+  generalize (Int.signed_range i); lia.
+* exploit (opimm32_correct Psltw Psltiw (Val.cmp Clt)); eauto. intros (rs1 & A1 & B1 & C1).
+  exists rs1; split. eexact A1. split; auto.
+  rewrite B1. unfold Val.cmp; simpl; destruct (rs#r1); simpl; auto.
+  unfold Int.lt. replace (Int.signed (Int.add n Int.one)) with (Int.signed n + 1).
+  destruct (zlt (Int.signed n) (Int.signed i)).
+  rewrite zlt_false by lia. auto.
+  rewrite zlt_true by lia. auto.
+  rewrite Int.add_signed. symmetry; apply Int.signed_repr.
+  assert (Int.signed n <> Int.max_signed).
+  { red; intros E. elim H1. rewrite <- (Int.repr_signed n). rewrite E. auto. }
+  generalize (Int.signed_range n); lia.
++ apply DFL.
++ apply DFL.
+Qed.
+
+Lemma transl_condimm_int32u_correct:
+  forall cmp rd r1 n k rs m,
+  r1 <> X31 ->
+  exists rs',
+     exec_straight ge fn (transl_condimm_int32u cmp rd r1 n k) rs m k rs' m
+  /\ Val.lessdef (Val.cmpu (Mem.valid_pointer m) cmp rs#r1 (Vint n)) rs'#rd
+  /\ forall r, r <> PC -> r <> rd -> r <> X31 -> rs'#r = rs#r.
+Proof.
+  intros. unfold transl_condimm_int32u.
+  predSpec Int.eq Int.eq_spec n Int.zero.
+- subst n. exploit transl_cond_int32u_correct. intros (rs' & A & B & C).
+  exists rs'; split. eexact A. split; auto. rewrite B; auto.
+- assert (DFL:
+    exists rs',
+      exec_straight ge fn (loadimm32 X31 n (transl_cond_int32u cmp rd r1 X31 k)) rs m k rs' m
+   /\ Val.lessdef (Val.cmpu (Mem.valid_pointer m) cmp rs#r1 (Vint n)) rs'#rd
+   /\ forall r, r <> PC -> r <> rd -> r <> X31 -> rs'#r = rs#r).
+  { exploit loadimm32_correct; eauto. intros (rs1 & A1 & B1 & C1).
+    exploit transl_cond_int32u_correct; eauto. intros (rs2 & A2 & B2 & C2).
+    exists rs2; split.
+    eapply exec_straight_trans. eexact A1. eexact A2.
+    split. simpl in B2. rewrite B1, C1 in B2 by congruence. rewrite B2; auto.
+    intros; transitivity (rs1 r); auto. }
+  destruct cmp.
++ apply DFL.
++ apply DFL.
++ exploit (opimm32_correct Psltuw Psltiuw (Val.cmpu (Mem.valid_pointer m) Clt) m); eauto.
+  intros (rs1 & A1 & B1 & C1).
+  exists rs1; split. eexact A1. split; auto. rewrite B1; auto.
++ apply DFL.
++ apply DFL.
++ apply DFL.
+Qed.
+
+Lemma transl_condimm_int64s_correct:
+  forall cmp rd r1 n k rs m,
+  r1 <> X31 ->
+  exists rs',
+     exec_straight ge fn (transl_condimm_int64s cmp rd r1 n k) rs m k rs' m
+  /\ Val.lessdef (Val.maketotal (Val.cmpl cmp rs#r1 (Vlong n))) rs'#rd
+  /\ forall r, r <> PC -> r <> rd -> r <> X31 -> rs'#r = rs#r.
+Proof.
+  intros. unfold transl_condimm_int64s.
+  predSpec Int64.eq Int64.eq_spec n Int64.zero.
+- subst n. exploit transl_cond_int64s_correct. intros (rs' & A & B & C).
+  exists rs'; eauto.
+- assert (DFL:
+    exists rs',
+      exec_straight ge fn (loadimm64 X31 n (transl_cond_int64s cmp rd r1 X31 k)) rs m k rs' m
+   /\ Val.lessdef (Val.maketotal (Val.cmpl cmp rs#r1 (Vlong n))) rs'#rd
+   /\ forall r, r <> PC -> r <> rd -> r <> X31 -> rs'#r = rs#r).
+  { exploit loadimm64_correct; eauto. intros (rs1 & A1 & B1 & C1).
+    exploit transl_cond_int64s_correct; eauto. intros (rs2 & A2 & B2 & C2).
+    exists rs2; split.
+    eapply exec_straight_trans. eexact A1. eexact A2.
+    split. simpl in B2. rewrite B1, C1 in B2 by congruence. auto.
+    intros; transitivity (rs1 r); auto. }
+  destruct cmp.
++ unfold xorimm64.
+  exploit (opimm64_correct Pxorl Pxoril Val.xorl); eauto. intros (rs1 & A1 & B1 & C1).
+  exploit transl_cond_int64s_correct; eauto. intros (rs2 & A2 & B2 & C2).
+  exists rs2; split.
+  eapply exec_straight_trans. eexact A1. eexact A2.
+  split. simpl in B2; rewrite B1 in B2; simpl in B2. destruct (rs#r1); auto.
+  unfold Val.cmpl in B2; simpl in B2; rewrite Int64.xor_is_zero in B2. exact B2.
+  intros; transitivity (rs1 r); auto.
++ unfold xorimm64.
+  exploit (opimm64_correct Pxorl Pxoril Val.xorl); eauto. intros (rs1 & A1 & B1 & C1).
+  exploit transl_cond_int64s_correct; eauto. intros (rs2 & A2 & B2 & C2).
+  exists rs2; split.
+  eapply exec_straight_trans. eexact A1. eexact A2.
+  split. simpl in B2; rewrite B1 in B2; simpl in B2. destruct (rs#r1); auto.
+  unfold Val.cmpl in B2; simpl in B2; rewrite Int64.xor_is_zero in B2. exact B2.
+  intros; transitivity (rs1 r); auto.
++ exploit (opimm64_correct Psltl Psltil (fun v1 v2 => Val.maketotal (Val.cmpl Clt v1 v2))); eauto. intros (rs1 & A1 & B1 & C1).
+  exists rs1; split. eexact A1. split; auto. rewrite B1; auto.
++ predSpec Int64.eq Int64.eq_spec n (Int64.repr Int64.max_signed).
+* subst n. exploit loadimm32_correct; eauto. intros (rs1 & A1 & B1 & C1).
+  exists rs1; split. eexact A1. split; auto.
+  unfold Val.cmpl; destruct (rs#r1); simpl; auto. rewrite B1.
+  unfold Int64.lt. rewrite zlt_false. auto.
+  change (Int64.signed (Int64.repr Int64.max_signed)) with Int64.max_signed.
+  generalize (Int64.signed_range i); lia.
+* exploit (opimm64_correct Psltl Psltil (fun v1 v2 => Val.maketotal (Val.cmpl Clt v1 v2))); eauto. intros (rs1 & A1 & B1 & C1).
+  exists rs1; split. eexact A1. split; auto.
+  rewrite B1. unfold Val.cmpl; simpl; destruct (rs#r1); simpl; auto.
+  unfold Int64.lt. replace (Int64.signed (Int64.add n Int64.one)) with (Int64.signed n + 1).
+  destruct (zlt (Int64.signed n) (Int64.signed i)).
+  rewrite zlt_false by lia. auto.
+  rewrite zlt_true by lia. auto.
+  rewrite Int64.add_signed. symmetry; apply Int64.signed_repr.
+  assert (Int64.signed n <> Int64.max_signed).
+  { red; intros E. elim H1. rewrite <- (Int64.repr_signed n). rewrite E. auto. }
+  generalize (Int64.signed_range n); lia.
++ apply DFL.
++ apply DFL.
+Qed.
+
+Lemma transl_condimm_int64u_correct:
+  forall cmp rd r1 n k rs m,
+  r1 <> X31 ->
+  exists rs',
+     exec_straight ge fn (transl_condimm_int64u cmp rd r1 n k) rs m k rs' m
+  /\ Val.lessdef (Val.maketotal (Val.cmplu (Mem.valid_pointer m) cmp rs#r1 (Vlong n))) rs'#rd
+  /\ forall r, r <> PC -> r <> rd -> r <> X31 -> rs'#r = rs#r.
+Proof.
+  intros. unfold transl_condimm_int64u.
+  predSpec Int64.eq Int64.eq_spec n Int64.zero.
+- subst n. exploit transl_cond_int64u_correct. intros (rs' & A & B & C).
+  exists rs'; split. eexact A. split; auto. rewrite B; auto.
+- assert (DFL:
+    exists rs',
+      exec_straight ge fn (loadimm64 X31 n (transl_cond_int64u cmp rd r1 X31 k)) rs m k rs' m
+   /\ Val.lessdef (Val.maketotal (Val.cmplu (Mem.valid_pointer m) cmp rs#r1 (Vlong n))) rs'#rd
+   /\ forall r, r <> PC -> r <> rd -> r <> X31 -> rs'#r = rs#r).
+  { exploit loadimm64_correct; eauto. intros (rs1 & A1 & B1 & C1).
+    exploit transl_cond_int64u_correct; eauto. intros (rs2 & A2 & B2 & C2).
+    exists rs2; split.
+    eapply exec_straight_trans. eexact A1. eexact A2.
+    split. simpl in B2. rewrite B1, C1 in B2 by congruence. rewrite B2; auto.
+    intros; transitivity (rs1 r); auto. }
+  destruct cmp.
++ apply DFL.
++ apply DFL.
++ exploit (opimm64_correct Psltul Psltiul (fun v1 v2 => Val.maketotal (Val.cmplu (Mem.valid_pointer m) Clt v1 v2)) m); eauto.
+  intros (rs1 & A1 & B1 & C1).
+  exists rs1; split. eexact A1. split; auto. rewrite B1; auto.
++ apply DFL.
++ apply DFL.
++ apply DFL.
+Qed.
+
+Lemma transl_cond_op_correct:
+  forall cond rd args k c rs m,
+  transl_cond_op cond rd args k = OK c ->
+  exists rs',
+     exec_straight ge fn c rs m k rs' m
+  /\ Val.lessdef (Val.of_optbool (eval_condition cond (map rs (map preg_of args)) m)) rs'#rd
+  /\ forall r, r <> PC -> r <> rd -> r <> X31 -> rs'#r = rs#r.
+Proof.
+  assert (MKTOT: forall ob, Val.of_optbool ob = Val.maketotal (option_map Val.of_bool ob)).
+  { destruct ob as [[]|]; reflexivity. }
+  intros until m; intros TR.
+  destruct cond; simpl in TR; ArgsInv.
++ (* cmp *)
+  exploit transl_cond_int32s_correct; eauto. intros (rs' & A & B & C). exists rs'; eauto.
++ (* cmpu *)
+  exploit transl_cond_int32u_correct; eauto. intros (rs' & A & B & C).
+  exists rs'; repeat split; eauto. rewrite B; auto.
++ (* cmpimm *)
+  apply transl_condimm_int32s_correct; eauto with asmgen.
++ (* cmpuimm *)
+  apply transl_condimm_int32u_correct; eauto with asmgen.
++ (* cmpl *)
+  exploit transl_cond_int64s_correct; eauto. intros (rs' & A & B & C).
+  exists rs'; repeat split; eauto. rewrite MKTOT; eauto.
++ (* cmplu *)
+  exploit transl_cond_int64u_correct; eauto. intros (rs' & A & B & C).
+  exists rs'; repeat split; eauto. rewrite B, MKTOT; eauto.
++ (* cmplimm *)
+  exploit transl_condimm_int64s_correct; eauto. instantiate (1 := x); eauto with asmgen.
+  intros (rs' & A & B & C).
+  exists rs'; repeat split; eauto. rewrite MKTOT; eauto.
++ (* cmpluimm *)
+  exploit transl_condimm_int64u_correct; eauto. instantiate (1 := x); eauto with asmgen.
+  intros (rs' & A & B & C).
+  exists rs'; repeat split; eauto. rewrite MKTOT; eauto.
++ (* cmpf *)
+  destruct (transl_cond_float c0 rd x x0) as [insn normal] eqn:TR.
+  fold (Val.cmpf c0 (rs x) (rs x0)).
+  set (v := Val.cmpf c0 (rs x) (rs x0)).
+  destruct normal; inv EQ2.
+* econstructor; split.
+  apply exec_straight_one. eapply transl_cond_float_correct with (v := v); eauto. auto.
+  split; intros; Simpl.
+* econstructor; split.
+  eapply exec_straight_two.
+  eapply transl_cond_float_correct with (v := Val.notbool v); eauto.
+  simpl; reflexivity.
+  auto. auto.
+  split; intros; Simpl; simpl; Simpl. unfold v, Val.cmpf. destruct (Val.cmpf_bool c0 (rs x) (rs x0)) as [[]|]; auto.
++ (* notcmpf *)
+  destruct (transl_cond_float c0 rd x x0) as [insn normal] eqn:TR.
+  rewrite Val.notbool_negb_3. fold (Val.cmpf c0 (rs x) (rs x0)).
+  set (v := Val.cmpf c0 (rs x) (rs x0)).
+  destruct normal; inv EQ2.
+* econstructor; split.
+  eapply exec_straight_two.
+  eapply transl_cond_float_correct with (v := v); eauto.
+  simpl; reflexivity.
+  auto. auto.
+  split; intros; Simpl; simpl; Simpl. unfold v, Val.cmpf. destruct (Val.cmpf_bool c0 (rs x) (rs x0)) as [[]|]; auto.
+* econstructor; split.
+  apply exec_straight_one. eapply transl_cond_float_correct with (v := Val.notbool v); eauto. auto.
+  split; intros; Simpl.
++ (* cmpfs *)
+  destruct (transl_cond_single c0 rd x x0) as [insn normal] eqn:TR.
+  fold (Val.cmpfs c0 (rs x) (rs x0)).
+  set (v := Val.cmpfs c0 (rs x) (rs x0)).
+  destruct normal; inv EQ2.
+* econstructor; split.
+  apply exec_straight_one. eapply transl_cond_single_correct with (v := v); eauto. auto.
+  split; intros; Simpl.
+* econstructor; split.
+  eapply exec_straight_two.
+  eapply transl_cond_single_correct with (v := Val.notbool v); eauto.
+  simpl; reflexivity.
+  auto. auto.
+  split; intros; Simpl; simpl; Simpl. unfold v, Val.cmpfs. destruct (Val.cmpfs_bool c0 (rs x) (rs x0)) as [[]|]; auto.
++ (* notcmpfs *)
+  destruct (transl_cond_single c0 rd x x0) as [insn normal] eqn:TR.
+  rewrite Val.notbool_negb_3. fold (Val.cmpfs c0 (rs x) (rs x0)).
+  set (v := Val.cmpfs c0 (rs x) (rs x0)).
+  destruct normal; inv EQ2.
+* econstructor; split.
+  eapply exec_straight_two.
+  eapply transl_cond_single_correct with (v := v); eauto.
+  simpl; reflexivity.
+  auto. auto.
+  split; intros; Simpl; simpl; Simpl. unfold v, Val.cmpfs. destruct (Val.cmpfs_bool c0 (rs x) (rs x0)) as [[]|]; auto.
+* econstructor; split.
+  apply exec_straight_one. eapply transl_cond_single_correct with (v := Val.notbool v); eauto. auto.
+  split; intros; Simpl.
+Qed.
+
+(** Some arithmetic properties. *)
+
+Remark cast32unsigned_from_cast32signed:
+  forall i, Int64.repr (Int.unsigned i) = Int64.zero_ext 32 (Int64.repr (Int.signed i)).
+Proof.
+  intros. apply Int64.same_bits_eq; intros.
+  rewrite Int64.bits_zero_ext, !Int64.testbit_repr by tauto.
+  rewrite Int.bits_signed by tauto. fold (Int.testbit i i0).
+  change Int.zwordsize with 32.
+  destruct (zlt i0 32). auto. apply Int.bits_above. auto.
+Qed.
+
+(* Translation of arithmetic operations *)
+
+Ltac SimplEval H :=
+  match type of H with
+  | Some _ = None _ => discriminate
+  | Some _ = Some _ => inv H
+  | ?a = Some ?b => let A := fresh in assert (A: Val.maketotal a = b) by (rewrite H; reflexivity)
+end.
+
+Ltac TranslOpSimpl :=
+  econstructor; split;
+  [ apply exec_straight_one; [reflexivity | reflexivity]
+  | split; [ apply Val.lessdef_same; Simpl; fail | intros; Simpl; fail ] ].
+
+Lemma transl_op_correct:
+  forall op args res k (rs: regset) m v c,
+  transl_op op args res k = OK c ->
+  eval_operation ge (rs#SP) op (map rs (map preg_of args)) m = Some v ->
+  exists rs',
+     exec_straight ge fn c rs m k rs' m
+  /\ Val.lessdef v rs'#(preg_of res)
+  /\ forall r, data_preg r = true -> r <> preg_of res -> preg_notin r (destroyed_by_op op) -> rs' r = rs r.
+Proof.
+  assert (SAME: forall v1 v2, v1 = v2 -> Val.lessdef v2 v1). { intros; subst; auto. }
+Opaque Int.eq.
+  intros until c; intros TR EV.
+  unfold transl_op in TR; destruct op; ArgsInv; simpl in EV; SimplEval EV; try TranslOpSimpl.
+- (* move *)
+  destruct (preg_of res), (preg_of m0); inv TR; TranslOpSimpl.
+- (* intconst *)
+  exploit loadimm32_correct; eauto. intros (rs' & A & B & C).
+  exists rs'; split; eauto. rewrite B; auto with asmgen.
+- (* longconst *)
+  exploit loadimm64_correct; eauto. intros (rs' & A & B & C).
+  exists rs'; split; eauto. rewrite B; auto with asmgen.
+- (* floatconst *)
+  destruct (Float.eq_dec n Float.zero).
++ subst n. econstructor; split.
+  apply exec_straight_one. reflexivity. auto.
+  split; intros; Simpl.
++ econstructor; split.
+  apply exec_straight_one. reflexivity. auto.
+  split; intros; Simpl.
+- (* singleconst *)
+  destruct (Float32.eq_dec n Float32.zero).
++ subst n. econstructor; split.
+  apply exec_straight_one. reflexivity. auto.
+  split; intros; Simpl.
++ econstructor; split.
+  apply exec_straight_one. reflexivity. auto.
+  split; intros; Simpl.
+- (* addrsymbol *)
+  destruct (Archi.pic_code tt && negb (Ptrofs.eq ofs Ptrofs.zero)).
++ set (rs1 := nextinstr (rs#x <- (Genv.symbol_address ge id Ptrofs.zero))).
+  exploit (addptrofs_correct x x ofs k rs1 m); eauto with asmgen.
+  intros (rs2 & A & B & C).
+  exists rs2; split.
+  apply exec_straight_step with rs1 m; auto.
+  split. replace ofs with (Ptrofs.add Ptrofs.zero ofs) by (apply Ptrofs.add_zero_l).
+  rewrite Genv.shift_symbol_address.
+  replace (rs1 x) with (Genv.symbol_address ge id Ptrofs.zero) in B by (unfold rs1; Simpl).
+  exact B.
+  intros. rewrite C by eauto with asmgen. unfold rs1; Simpl.
++ TranslOpSimpl.
+- (* stackoffset *)
+  exploit addptrofs_correct. instantiate (1 := X2); congruence. intros (rs' & A & B & C).
+  exists rs'; split; eauto. auto with asmgen.
+- (* cast8signed *)
+  econstructor; split.
+  eapply exec_straight_two. reflexivity. reflexivity. auto. auto.
+  split; intros; Simpl; simpl; Simpl.
+  assert (A: Int.ltu (Int.repr 24) Int.iwordsize = true) by auto.
+  destruct (rs x0); auto; simpl. rewrite A; simpl. rewrite A.
+  apply Val.lessdef_same. f_equal. apply Int.sign_ext_shr_shl. compute; intuition congruence.
+- (* cast16signed *)
+  econstructor; split.
+  eapply exec_straight_two. reflexivity. reflexivity. auto. auto.
+  split; intros; Simpl; simpl; Simpl.
+  assert (A: Int.ltu (Int.repr 16) Int.iwordsize = true) by auto.
+  destruct (rs x0); auto; simpl. rewrite A; simpl. rewrite A.
+  apply Val.lessdef_same. f_equal. apply Int.sign_ext_shr_shl. compute; intuition congruence.
+- (* addimm *)
+  exploit (opimm32_correct Paddw Paddiw Val.add); auto. instantiate (1 := x0); eauto with asmgen.
+  intros (rs' & A & B & C).
+  exists rs'; split; eauto. rewrite B; auto with asmgen.
+- (* andimm *)
+  exploit (opimm32_correct Pandw Pandiw Val.and); auto. instantiate (1 := x0); eauto with asmgen.
+  intros (rs' & A & B & C).
+  exists rs'; split; eauto. rewrite B; auto with asmgen.
+- (* orimm *)
+  exploit (opimm32_correct Porw Poriw Val.or); auto. instantiate (1 := x0); eauto with asmgen.
+  intros (rs' & A & B & C).
+  exists rs'; split; eauto. rewrite B; auto with asmgen.
+- (* xorimm *)
+  exploit (opimm32_correct Pxorw Pxoriw Val.xor); auto. instantiate (1 := x0); eauto with asmgen.
+  intros (rs' & A & B & C).
+  exists rs'; split; eauto. rewrite B; auto with asmgen.
+- (* shrximm *)
+  clear H. exploit Val.shrx_shr_2; eauto. intros E; subst v; clear EV.
+  destruct (Int.eq n Int.zero).
++ econstructor; split. apply exec_straight_one. reflexivity. auto.
+  split; intros; Simpl.
++ change (Int.repr 32) with Int.iwordsize. set (n' := Int.sub Int.iwordsize n).
+  econstructor; split.
+  eapply exec_straight_step. simpl; reflexivity. auto.
+  eapply exec_straight_step. simpl; reflexivity. auto.
+  eapply exec_straight_step. simpl; reflexivity. auto.
+  apply exec_straight_one. simpl; reflexivity. auto.
+  split; intros; Simpl.
+- (* longofintu *)
+  econstructor; split.
+  eapply exec_straight_three. reflexivity. reflexivity. reflexivity. auto. auto. auto.
+  split; intros; Simpl; simpl; Simpl. destruct (rs x0); auto. simpl.
+  assert (A: Int.ltu (Int.repr 32) Int64.iwordsize' = true) by auto.
+  rewrite A; simpl. rewrite A. apply Val.lessdef_same. f_equal.
+  rewrite cast32unsigned_from_cast32signed. apply Int64.zero_ext_shru_shl. compute; auto.
+- (* addlimm *)
+  exploit (opimm64_correct Paddl Paddil Val.addl); auto. instantiate (1 := x0); eauto with asmgen.
+  intros (rs' & A & B & C).
+  exists rs'; split; eauto. rewrite B; auto with asmgen.
+- (* andimm *)
+  exploit (opimm64_correct Pandl Pandil Val.andl); auto. instantiate (1 := x0); eauto with asmgen.
+  intros (rs' & A & B & C).
+  exists rs'; split; eauto. rewrite B; auto with asmgen.
+- (* orimm *)
+  exploit (opimm64_correct Porl Poril Val.orl); auto. instantiate (1 := x0); eauto with asmgen.
+  intros (rs' & A & B & C).
+  exists rs'; split; eauto. rewrite B; auto with asmgen.
+- (* xorimm *)
+  exploit (opimm64_correct Pxorl Pxoril Val.xorl); auto. instantiate (1 := x0); eauto with asmgen.
+  intros (rs' & A & B & C).
+  exists rs'; split; eauto. rewrite B; auto with asmgen.
+- (* shrxlimm *)
+  clear H. exploit Val.shrxl_shrl_2; eauto. intros E; subst v; clear EV.
+  destruct (Int.eq n Int.zero).
++ econstructor; split. apply exec_straight_one. reflexivity. auto.
+  split; intros; Simpl.
++ change (Int.repr 64) with Int64.iwordsize'. set (n' := Int.sub Int64.iwordsize' n).
+  econstructor; split.
+  eapply exec_straight_step. simpl; reflexivity. auto.
+  eapply exec_straight_step. simpl; reflexivity. auto.
+  eapply exec_straight_step. simpl; reflexivity. auto.
+  apply exec_straight_one. simpl; reflexivity. auto.
+  split; intros; Simpl.
+- (* cond *)
+  exploit transl_cond_op_correct; eauto. intros (rs' & A & B & C).
+  exists rs'; split. eexact A. eauto with asmgen.
+Qed.
+
+(** Memory accesses *)
+
+Lemma indexed_memory_access_correct:
+  forall mk_instr base ofs k rs m,
   base <> X31 ->
   exists base' ofs' rs',
      exec_straight_opt ge fn (indexed_memory_access mk_instr base ofs k) rs m
                        (mk_instr base' ofs' :: k) rs' m
-  /\ Val.offset_ptr rs'#base' (Asm.eval_offset ge ofs') = Val.offset_ptr rs#base ofs
+  /\ Val.offset_ptr rs'#base' (eval_offset ge ofs') = Val.offset_ptr rs#base ofs
   /\ forall r, r <> PC -> r <> X31 -> rs'#r = rs#r.
-FProofLemma.
-(*  unfold indexed_memory_access; intros.
+Proof.
+  unfold indexed_memory_access; intros.
   destruct Archi.ptr64 eqn:SF.
 - generalize (make_immed64_sound (Ptrofs.to_int64 ofs)); intros EQ.
   destruct (make_immed64 (Ptrofs.to_int64 ofs)).
 + econstructor; econstructor; econstructor; split.
-  apply exec_straight_opt_refl. 
+  apply exec_straight_opt_refl.
   split; auto. simpl. subst imm. rewrite Ptrofs.of_int64_to_int64 by auto. auto.
-+ econstructor; econstructor; econstructor; split. 
-  constructor. eapply exec_straight_two. 
-  simpl; eauto. simpl; eauto. auto. auto. 
-  split; intros; Simpl. destruct (rs base); auto; simpl. rewrite SF. simpl.
-  rewrite Ptrofs.add_assoc. f_equal. f_equal. 
-  rewrite <- (Ptrofs.of_int64_to_int64 SF ofs). rewrite EQ. 
++ econstructor; econstructor; econstructor; split.
+  constructor. eapply exec_straight_two.
+  reflexivity. reflexivity. auto. auto.
+  split; intros; Simpl; simpl; Simpl. destruct (rs base); auto; simpl. rewrite SF. simpl.
+  rewrite Ptrofs.add_assoc. f_equal. f_equal.
+  rewrite <- (Ptrofs.of_int64_to_int64 SF ofs). rewrite EQ.
   symmetry; auto with ptrofs.
-+ econstructor; econstructor; econstructor; split. 
-  constructor. eapply exec_straight_two. 
-  simpl; eauto. simpl; eauto. auto. auto. 
-  split; intros; Simpl. unfold eval_offset. destruct (rs base); auto; simpl. rewrite SF. simpl.
++ econstructor; econstructor; econstructor; split.
+  constructor. eapply exec_straight_two.
+  reflexivity. reflexivity. auto. auto.
+  split; intros; Simpl; simpl; Simpl. unfold eval_offset. destruct (rs base); auto; simpl. rewrite SF. simpl.
   rewrite Ptrofs.add_zero. subst imm. rewrite Ptrofs.of_int64_to_int64 by auto. auto.
 - generalize (make_immed32_sound (Ptrofs.to_int ofs)); intros EQ.
   destruct (make_immed32 (Ptrofs.to_int ofs)).
 + econstructor; econstructor; econstructor; split.
-  apply exec_straight_opt_refl. 
+  apply exec_straight_opt_refl.
   split; auto. simpl. subst imm. rewrite Ptrofs.of_int_to_int by auto. auto.
-+ econstructor; econstructor; econstructor; split. 
-  constructor. eapply exec_straight_two. 
-  simpl; eauto. simpl; eauto. auto. auto. 
-  split; intros; Simpl. destruct (rs base); auto; simpl. rewrite SF. simpl.
-  rewrite Ptrofs.add_assoc. f_equal. f_equal. 
-  rewrite <- (Ptrofs.of_int_to_int SF ofs). rewrite EQ. 
-  symmetry; auto with ptrofs.*)
-apply cheat.
-Qed. CloseFLemma.
++ econstructor; econstructor; econstructor; split.
+  constructor. eapply exec_straight_two.
+  reflexivity. reflexivity. auto. auto.
+  split; intros; Simpl; simpl; Simpl. destruct (rs base); auto; simpl. rewrite SF. simpl.
+  rewrite Ptrofs.add_assoc. f_equal. f_equal.
+  rewrite <- (Ptrofs.of_int_to_int SF ofs). rewrite EQ.
+  symmetry; auto with ptrofs.
+Qed.
 
-FLemma indexed_load_access_correct:
-  forall ge fn chunk (mk_instr: ireg -> Asm.offset -> Asm.instruction) rd m,
+Lemma indexed_load_access_correct:
+  forall chunk (mk_instr: ireg -> offset -> instruction) rd m,
   (forall base ofs rs,
-     Asm.exec_instr (mk_instr base ofs) ge fn rs m = Asm.exec_load ge chunk rs m rd base ofs) ->
-  forall (base: ireg) ofs k (rs: Asm.regset) v,
+     exec_instr (mk_instr base ofs) ge fn rs m = exec_load ge chunk rs m rd base ofs) ->
+  forall (base: ireg) ofs k (rs: regset) v,
   Mem.loadv chunk m (Val.offset_ptr rs#base ofs) = Some v ->
   base <> X31 -> rd <> PC ->
   exists rs',
      exec_straight ge fn (indexed_memory_access mk_instr base ofs k) rs m k rs' m
   /\ rs'#rd = v
   /\ forall r, r <> PC -> r <> X31 -> r <> rd -> rs'#r = rs#r.
-FProofLemma.
+Proof.
   intros until m; intros EXEC; intros until v; intros LOAD NOT31 NOTPC.
   exploit indexed_memory_access_correct; eauto.
   intros (base' & ofs' & rs' & A & B & C).
   econstructor; split.
   eapply exec_straight_opt_right. eexact A. apply exec_straight_one. rewrite EXEC.
-  unfold Asm.exec_load. rewrite B, LOAD. eauto. Simpl. 
+  unfold exec_load. rewrite B, LOAD. eauto. Simpl.
   split; intros; Simpl.
-Qed. CloseFLemma.
+Qed.
 
-FLemma loadind_correct:
-  forall ge fn (base: ireg) ofs ty dst k c (rs: Asm.regset) m v,
+Lemma indexed_store_access_correct:
+  forall chunk (mk_instr: ireg -> offset -> instruction) r1 m,
+  (forall base ofs rs,
+     exec_instr (mk_instr base ofs) ge fn rs m = exec_store ge chunk rs m r1 base ofs) ->
+  forall (base: ireg) ofs k (rs: regset) m',
+  Mem.storev chunk m (Val.offset_ptr rs#base ofs) (rs#r1) = Some m' ->
+  base <> X31 -> r1 <> X31 -> r1 <> PC ->
+  exists rs',
+     exec_straight ge fn (indexed_memory_access mk_instr base ofs k) rs m k rs' m'
+  /\ forall r, r <> PC -> r <> X31 -> rs'#r = rs#r.
+Proof.
+  intros until m; intros EXEC; intros until m'; intros STORE NOT31 NOT31' NOTPC.
+  exploit indexed_memory_access_correct; eauto.
+  intros (base' & ofs' & rs' & A & B & C).
+  econstructor; split.
+  eapply exec_straight_opt_right. eexact A. apply exec_straight_one. rewrite EXEC.
+  unfold exec_store. rewrite B, C, STORE by auto. eauto. auto.
+  intros; Simpl.
+Qed.
+
+Lemma loadind_correct:
+  forall (base: ireg) ofs ty dst k c (rs: regset) m v,
   loadind base ofs ty dst k = OK c ->
   Mem.loadv (chunk_of_type ty) m (Val.offset_ptr rs#base ofs) = Some v ->
   base <> X31 ->
@@ -3300,110 +4282,172 @@ FLemma loadind_correct:
      exec_straight ge fn c rs m k rs' m
   /\ rs'#(preg_of dst) = v
   /\ forall r, r <> PC -> r <> X31 -> r <> preg_of dst -> rs'#r = rs#r.
-FProofLemma.
-  intros until v; intros TR LOAD NOT31. 
+Proof.
+  intros until v; intros TR LOAD NOT31.
   assert (A: exists mk_instr,
                 c = indexed_memory_access mk_instr base ofs k
              /\ forall base' ofs' rs',
-                   Asm.exec_instr (mk_instr base' ofs') ge fn rs' m =
-                   Asm.exec_load ge (chunk_of_type ty) rs' m (preg_of dst) base' ofs').
+                   exec_instr (mk_instr base' ofs') ge fn rs' m =
+                   exec_load ge (chunk_of_type ty) rs' m (preg_of dst) base' ofs').
   { unfold loadind in TR. destruct ty, (preg_of dst); inv TR; econstructor; split; eauto. }
-  destruct A as (mk_instr & B & C). subst c. 
-  eapply indexed_load_access_correct; eauto with asmgen. 
-Qed. CloseFLemma.
+  destruct A as (mk_instr & B & C). subst c.
+  eapply indexed_load_access_correct; eauto with asmgen.
+Qed.
 
-FLemma indexed_store_access_correct:
-  forall ge fn chunk (mk_instr: ireg -> Asm.offset -> Asm.instruction) r1 m,
-  (forall base ofs rs,
-     Asm.exec_instr (mk_instr base ofs) ge fn rs m = Asm.exec_store ge chunk rs m r1 base ofs) ->
-  forall (base: ireg) ofs k (rs: Asm.regset) m',
-  Mem.storev chunk m (Val.offset_ptr rs#base ofs) (rs#r1) = Some m' ->
-  base <> X31 -> r1 <> X31 -> r1 <> PC ->
-  exists rs',
-     exec_straight ge fn (indexed_memory_access mk_instr base ofs k) rs m k rs' m'
-  /\ forall r, r <> PC -> r <> X31 -> rs'#r = rs#r.
-FProofLemma.
-  intros until m; intros EXEC; intros until m'; intros STORE NOT31 NOT31' NOTPC.
-  exploit indexed_memory_access_correct; eauto.
-  intros (base' & ofs' & rs' & A & B & C).
-  econstructor; split.
-  eapply exec_straight_opt_right. eexact A. apply exec_straight_one. rewrite EXEC.
-  unfold Asm.exec_store. rewrite B, C, STORE by auto. eauto. auto. 
-  intros; Simpl.
-Qed. CloseFLemma.
-
-FLemma storeind_correct:
-  forall ge fn (base: ireg) ofs ty src k c (rs: Asm.regset) m m',
+Lemma storeind_correct:
+  forall (base: ireg) ofs ty src k c (rs: regset) m m',
   storeind src base ofs ty k = OK c ->
   Mem.storev (chunk_of_type ty) m (Val.offset_ptr rs#base ofs) rs#(preg_of src) = Some m' ->
   base <> X31 ->
   exists rs',
      exec_straight ge fn c rs m k rs' m'
   /\ forall r, r <> PC -> r <> X31 -> rs'#r = rs#r.
-FProofLemma.
-  intros until m'; intros TR STORE NOT31. 
+Proof.
+  intros until m'; intros TR STORE NOT31.
   assert (A: exists mk_instr,
                 c = indexed_memory_access mk_instr base ofs k
              /\ forall base' ofs' rs',
-                   Asm.exec_instr (mk_instr base' ofs') ge fn rs' m =
-                   Asm.exec_store ge (chunk_of_type ty) rs' m (preg_of src) base' ofs').
+                   exec_instr (mk_instr base' ofs') ge fn rs' m =
+                   exec_store ge (chunk_of_type ty) rs' m (preg_of src) base' ofs').
   { unfold storeind in TR. destruct ty, (preg_of src); inv TR; econstructor; split; eauto. }
-  destruct A as (mk_instr & B & C). subst c. 
-  eapply indexed_store_access_correct; eauto with asmgen. 
-Qed. CloseFLemma.
+  destruct A as (mk_instr & B & C). subst c.
+  eapply indexed_store_access_correct; eauto with asmgen.
+Qed.
 
-FLemma parent_sp_def: forall ge s, match_stack ge s -> S.parent_sp s <> Vundef.
-FProofLemma.
-  induction 1; simpl.
-  unfold Vnullptr; destruct Archi.ptr64; congruence.
-  auto.
-Qed. CloseFLemma.
-
-FLemma lessdef_parent_sp:
-  forall ge s v,
-  match_stack ge s -> Val.lessdef (S.parent_sp s) v -> v = S.parent_sp s.
-FProofLemma.
-  intros. inv H0. auto. exploit parent_sp_def; eauto. tauto.
-Qed. CloseFLemma.
-
-FLemma loadind_ptr_correct:
-  forall ge fn (base: ireg) ofs (dst: ireg) k (rs: Asm.regset) m v,
+Lemma loadind_ptr_correct:
+  forall (base: ireg) ofs (dst: ireg) k (rs: regset) m v,
   Mem.loadv Mptr m (Val.offset_ptr rs#base ofs) = Some v ->
   base <> X31 ->
   exists rs',
      exec_straight ge fn (loadind_ptr base ofs dst k) rs m k rs' m
   /\ rs'#dst = v
   /\ forall r, r <> PC -> r <> X31 -> r <> dst -> rs'#r = rs#r.
-FProofLemma.
+Proof.
   intros. eapply indexed_load_access_correct; eauto with asmgen.
-  intros. unfold Mptr. destruct Archi.ptr64; auto. congruence.
-Qed. CloseFLemma.
+  intros. unfold Mptr. destruct Archi.ptr64; auto.
+Qed.
 
-FLemma parent_ra_def: forall ge s, match_stack ge s -> S.parent_ra s <> Vundef.
-FProofLemma.
-  induction 1; simpl.
-  unfold Vnullptr; destruct Archi.ptr64; congruence.
-  inv H0. congruence.
-Qed. CloseFLemma.
+Lemma storeind_ptr_correct:
+  forall (base: ireg) ofs (src: ireg) k (rs: regset) m m',
+  Mem.storev Mptr m (Val.offset_ptr rs#base ofs) rs#src = Some m' ->
+  base <> X31 -> src <> X31 ->
+  exists rs',
+     exec_straight ge fn (storeind_ptr src base ofs k) rs m k rs' m'
+  /\ forall r, r <> PC -> r <> X31 -> rs'#r = rs#r.
+Proof.
+  intros. eapply indexed_store_access_correct with (r1 := src); eauto with asmgen.
+  intros. unfold Mptr. destruct Archi.ptr64; auto.
+Qed.
 
-FLemma lessdef_parent_ra:
-  forall ge s v,
-  match_stack ge s -> Val.lessdef (S.parent_ra s) v -> v = S.parent_ra s.
-FProofLemma.
-  intros. inv H0. auto. exploit parent_ra_def; eauto. tauto.
-Qed. CloseFLemma.
+Lemma transl_memory_access_correct:
+  forall mk_instr addr args k c (rs: regset) m v,
+  transl_memory_access mk_instr addr args k = OK c ->
+  eval_addressing ge rs#SP addr (map rs (map preg_of args)) = Some v ->
+  exists base ofs rs',
+     exec_straight_opt ge fn c rs m (mk_instr base ofs :: k) rs' m
+  /\ Val.offset_ptr rs'#base (eval_offset ge ofs) = v
+  /\ forall r, r <> PC -> r <> X31 -> rs'#r = rs#r.
+Proof.
+  intros until v; intros TR EV.
+  unfold transl_memory_access in TR; destruct addr; ArgsInv.
+- (* indexed *)
+  inv EV. apply indexed_memory_access_correct; eauto with asmgen.
+- (* global *)
+  simpl in EV. inv EV. inv TR.  econstructor; econstructor; econstructor; split.
+  constructor. apply exec_straight_one. reflexivity. auto.
+  split; intros; Simpl. unfold eval_offset. apply low_high_half.
+- (* stack *)
+  inv TR. inv EV. apply indexed_memory_access_correct; eauto with asmgen.
+Qed.
 
-FLemma agree_change_sp:
-  forall ms sp rs sp',
-  agree ms sp rs -> sp' <> Vundef ->
-  agree ms sp' (rs#SP <- sp').
-FProofLemma.
-  intros. inv H. split; auto.
-  intros. rewrite Pregmap.gso; auto with asmgen. eauto using preg_of_not_SP.
-Qed. CloseFLemma.
+Lemma transl_load_access_correct:
+  forall chunk (mk_instr: ireg -> offset -> instruction) addr args k c rd (rs: regset) m v v',
+  (forall base ofs rs,
+     exec_instr (mk_instr base ofs) ge fn rs m = exec_load ge chunk rs m rd base ofs) ->
+  transl_memory_access mk_instr addr args k = OK c ->
+  eval_addressing ge rs#SP addr (map rs (map preg_of args)) = Some v ->
+  Mem.loadv chunk m v = Some v' ->
+  rd <> PC ->
+  exists rs',
+     exec_straight ge fn c rs m k rs' m
+  /\ rs'#rd = v'
+  /\ forall r, r <> PC -> r <> X31 -> r <> rd -> rs'#r = rs#r.
+Proof.
+  intros until v'; intros INSTR TR EV LOAD NOTPC.
+  exploit transl_memory_access_correct; eauto.
+  intros (base & ofs & rs' & A & B & C).
+  econstructor; split.
+  eapply exec_straight_opt_right. eexact A. apply exec_straight_one.
+  rewrite INSTR. unfold exec_load. rewrite B, LOAD. reflexivity. Simpl.
+  split; intros; Simpl.
+Qed.
 
-FLemma make_epilogue_correct:
-  forall ge fn ge0 f m stk soff cs m' ms rs k tm,
+Lemma transl_store_access_correct:
+  forall chunk (mk_instr: ireg -> offset -> instruction) addr args k c r1 (rs: regset) m v m',
+  (forall base ofs rs,
+     exec_instr (mk_instr base ofs) ge fn rs m = exec_store ge chunk rs m r1 base ofs) ->
+  transl_memory_access mk_instr addr args k = OK c ->
+  eval_addressing ge rs#SP addr (map rs (map preg_of args)) = Some v ->
+  Mem.storev chunk m v rs#r1 = Some m' ->
+  r1 <> PC -> r1 <> X31 ->
+  exists rs',
+     exec_straight ge fn c rs m k rs' m'
+  /\ forall r, r <> PC -> r <> X31 -> rs'#r = rs#r.
+Proof.
+  intros until m'; intros INSTR TR EV STORE NOTPC NOT31.
+  exploit transl_memory_access_correct; eauto.
+  intros (base & ofs & rs' & A & B & C).
+  econstructor; split.
+  eapply exec_straight_opt_right. eexact A. apply exec_straight_one.
+  rewrite INSTR. unfold exec_store. rewrite B, C, STORE by auto. reflexivity. auto.
+  intros; Simpl.
+Qed.
+
+Lemma transl_load_correct:
+  forall chunk addr args dst k c (rs: regset) m a v,
+  transl_load chunk addr args dst k = OK c ->
+  eval_addressing ge rs#SP addr (map rs (map preg_of args)) = Some a ->
+  Mem.loadv chunk m a = Some v ->
+  exists rs',
+     exec_straight ge fn c rs m k rs' m
+  /\ rs'#(preg_of dst) = v
+  /\ forall r, r <> PC -> r <> X31 -> r <> preg_of dst -> rs'#r = rs#r.
+Proof.
+  intros until v; intros TR EV LOAD.
+  assert (A: exists mk_instr,
+      transl_memory_access mk_instr addr args k = OK c
+   /\ forall base ofs rs,
+        exec_instr (mk_instr base ofs) ge fn rs m = exec_load ge chunk rs m (preg_of dst) base ofs).
+  { unfold transl_load in TR; destruct chunk; ArgsInv; econstructor; (split; [eassumption|auto]). }
+  destruct A as (mk_instr & B & C).
+  eapply transl_load_access_correct; eauto with asmgen.
+Qed.
+
+Lemma transl_store_correct:
+  forall chunk addr args src k c (rs: regset) m a m',
+  transl_store chunk addr args src k = OK c ->
+  eval_addressing ge rs#SP addr (map rs (map preg_of args)) = Some a ->
+  Mem.storev chunk m a rs#(preg_of src) = Some m' ->
+  exists rs',
+     exec_straight ge fn c rs m k rs' m'
+  /\ forall r, r <> PC -> r <> X31 -> rs'#r = rs#r.
+Proof.
+  intros until m'; intros TR EV STORE.
+  assert (A: exists mk_instr,
+      transl_memory_access mk_instr addr args k = OK c
+   /\ (forall base ofs rs,
+        exec_instr (mk_instr base ofs) ge fn rs m = exec_store ge chunk rs m (preg_of src) base ofs)).
+  { unfold transl_store in TR; destruct chunk; ArgsInv;
+    (econstructor; split; [eassumption | intros; simpl; reflexivity]).
+  }
+  destruct A as (mk_instr & B & C).
+  eapply transl_store_access_correct; eauto with asmgen.
+Qed.
+
+(** Function epilogues *)
+
+Lemma make_epilogue_correct:
+  forall ge0 f m stk soff cs m' ms rs k tm,
   S.load_stack m (Vptr stk soff) Tptr (S.fn_link_ofs f) = Some (S.parent_sp cs) ->
   S.load_stack m (Vptr stk soff) Tptr (S.fn_retaddr_ofs f) = Some (S.parent_ra cs) ->
   Mem.free m stk 0 (S.fn_stacksize f) = Some m' ->
@@ -3417,173 +4461,107 @@ FLemma make_epilogue_correct:
   /\ rs'#RA = S.parent_ra cs
   /\ rs'#SP = S.parent_sp cs
   /\ (forall r, r <> PC -> r <> RA -> r <> SP -> r <> X31 -> rs'#r = rs#r).
-FProofLemma.
+Proof.
   intros until tm; intros LP LRA FREE AG MEXT MCS.
   exploit Mem.loadv_extends. eauto. eexact LP. auto. simpl. intros (parent' & LP' & LDP').
   exploit Mem.loadv_extends. eauto. eexact LRA. auto. simpl. intros (ra' & LRA' & LDRA').
   exploit lessdef_parent_sp; eauto. intros EQ; subst parent'; clear LDP'.
   exploit lessdef_parent_ra; eauto. intros EQ; subst ra'; clear LDRA'.
   exploit Mem.free_parallel_extends; eauto. intros (tm' & FREE' & MEXT').
-  unfold make_epilogue. 
-  rewrite chunk_of_Tptr in *. 
-  exploit (loadind_ptr_correct ge fn SP (S.fn_retaddr_ofs f) RA (Asm.Pfreeframe (S.fn_stacksize f) (S.fn_link_ofs f) :: k) rs tm).
+  unfold make_epilogue.
+  rewrite chunk_of_Tptr in *.
+  exploit (loadind_ptr_correct SP (S.fn_retaddr_ofs f) RA (Pfreeframe (S.fn_stacksize f) (S.fn_link_ofs f) :: k) rs tm).
     rewrite <- (sp_val _ _ _ AG). simpl. eexact LRA'. congruence.
   intros (rs1 & A1 & B1 & C1).
   econstructor; econstructor; split.
-  eapply exec_straight_trans. eexact A1. apply exec_straight_one. simpl. unfold Asm.exec_instrPfreeframe.
-    rewrite (C1 X2) by auto with asmgen. rewrite <- (sp_val _ _ _ AG). simpl; rewrite LP'. 
-    rewrite FREE'. eauto. auto. 
-  split. apply agree_nextinstr. apply agree_set_other; auto with asmgen. 
+  eapply exec_straight_trans. eexact A1. apply exec_straight_one. simpl. unfold exec_instrPfreeframe.
+    rewrite (C1 X2) by auto with asmgen. rewrite <- (sp_val _ _ _ AG). simpl; rewrite LP'.
+    rewrite FREE'. eauto. auto.
+  split. apply agree_nextinstr. apply agree_set_other; auto with asmgen.
     apply agree_change_sp with (Vptr stk soff).
     apply agree_exten with rs; auto. intros; apply C1; auto with asmgen.
     eapply parent_sp_def; eauto.
   split. auto.
-  split. Simpl. auto. 
-  split. Simpl. 
-  intros. Simpl. 
+  split. Simpl.
+  split. Simpl.
+  intros. Simpl.
+Qed.
+
+End CONSTRUCTORS.
+FEnd CONSTRUCTORS.
+
+FLemma preg_of_not_X30: forall r, negb (mreg_eq r R30) = true -> IR X30 <> preg_of r.
+FProofLemma.
+  intros. change (IR X30) with (preg_of R30). red; intros.
+  exploit preg_of_injective; eauto. intros; subst r; discriminate.
 Qed. CloseFLemma.
 
-FLemma storeind_ptr_correct:
-  forall ge fn (base: ireg) ofs (src: ireg) k (rs: Asm.regset) m m',
-  Mem.storev Mptr m (Val.offset_ptr rs#base ofs) rs#src = Some m' ->
-  base <> X31 -> src <> X31 ->
-  exists rs',
-     exec_straight ge fn (storeind_ptr src base ofs k) rs m k rs' m'
-  /\ forall r, r <> PC -> r <> X31 -> rs'#r = rs#r.
+FLemma exec_straight_opt_steps_goto:
+  forall prog tprog ge tge,
+    match_prog prog tprog ->
+    ge = Genv.globalenv prog ->
+    tge = Genv.globalenv tprog ->
+  forall s fb f rs1 i c ep tf tc m1' m2 m2' sp ms2 lbl c',
+  match_stack ge s ->
+  Mem.extends m2 m2' ->
+  Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
+  S.find_label lbl (S.fn_code f) = Some c' ->
+  transl_code_at_pc ge (rs1 PC) fb f (i :: c) ep tf tc ->
+  it1_is_parent i ep = false ->
+  (forall k c (TR: transl_instr i f ep k = OK c),
+   exists jmp, exists k', exists rs2,
+       exec_straight_opt tge tf c rs1 m1' (jmp :: k') rs2 m2'
+    /\ agree ms2 sp rs2
+    /\ Asm.exec_instr jmp tge tf rs2 m2' = Asm.goto_label tf lbl rs2 m2') ->
+  exists st',
+  plus Asm.step tge (Asm.State rs1 m1') E0 st' /\
+  match_states ge (S.State s fb sp c' ms2 m2) st'.
 FProofLemma.
-  intros. eapply indexed_store_access_correct with (r1 := src); eauto with asmgen. 
-  intros. unfold Mptr. destruct Archi.ptr64; auto.  congruence. congruence.
-Qed. CloseFLemma.
-
-
-(* Heap *)
-(* axiom from CompCert *)
-MetaData low_high_half.
-Axiom low_high_half:
-  forall ge id ofs,
-    Val.offset_ptr (Asm.high_half ge id ofs) (Asm.low_half ge id ofs) = Genv.symbol_address ge id ofs.
-FEnd low_high_half.
-
-FLemma transl_memory_access_correct:
-  forall ge fn mk_instr addr args k c (rs: Asm.regset) m v,
-  transl_memory_access mk_instr addr args k = OK c ->
-  eval_addressing ge rs#SP addr (map rs (map preg_of args)) = Some v ->
-  exists base ofs rs',
-     exec_straight_opt ge fn c rs m (mk_instr base ofs :: k) rs' m
-  /\ Val.offset_ptr rs'#base (Asm.eval_offset ge ofs) = v
-  /\ forall r, r <> PC -> r <> X31 -> rs'#r = rs#r.
-FProofLemma.
-  intros until v; intros TR EV. 
-  unfold transl_memory_access in TR; destruct addr; ArgsInv.
-- (* indexed *)
-  inv EV. apply indexed_memory_access_correct; eauto with asmgen. apply cheat.
-- (* global *)
-  simpl in EV. inv EV. inv TR.  econstructor; econstructor; econstructor; split.
-  constructor. apply exec_straight_one. simpl; eauto. auto. 
-  split; intros; Simpl. unfold Asm.eval_offset. apply cheat. apply cheat. (* apply low_high_half.*)
-- (* stack *)
-  inv TR. inv EV. apply indexed_memory_access_correct; eauto with asmgen. apply cheat.
-Qed. CloseFLemma.
-
-FLemma transl_load_access_correct:
-  forall ge fn chunk (mk_instr: ireg -> Asm.offset -> Asm.instruction) addr args k c rd (rs: Asm.regset) m v v',
-  (forall base ofs rs,
-     Asm.exec_instr (mk_instr base ofs) ge fn rs m = Asm.exec_load ge chunk rs m rd base ofs) ->
-  transl_memory_access mk_instr addr args k = OK c ->
-  eval_addressing ge rs#SP addr (map rs (map preg_of args)) = Some v ->
-  Mem.loadv chunk m v = Some v' ->
-  rd <> PC ->
-  exists rs',
-     exec_straight ge fn c rs m k rs' m
-  /\ rs'#rd = v'
-  /\ forall r, r <> PC -> r <> X31 -> r <> rd -> rs'#r = rs#r.
-FProofLemma.
-  intros until v'; intros INSTR TR EV LOAD NOTPC. 
-  exploit transl_memory_access_correct; eauto.
-  intros (base & ofs & rs' & A & B & C).
-  econstructor; split.
-  eapply exec_straight_opt_right. eexact A. apply exec_straight_one. 
-  rewrite INSTR. unfold Asm.exec_load. rewrite B, LOAD. reflexivity. Simpl. 
-  split; intros; Simpl.
-Qed. CloseFLemma.
-
-FLemma transl_load_correct:
-  forall ge fn chunk addr args dst k c (rs: Asm.regset) m a v,
-  transl_load chunk addr args dst k = OK c ->
-  eval_addressing ge rs#SP addr (map rs (map preg_of args)) = Some a ->
-  Mem.loadv chunk m a = Some v ->
-  exists rs',
-     exec_straight ge fn c rs m k rs' m
-  /\ rs'#(preg_of dst) = v
-  /\ forall r, r <> PC -> r <> X31 -> r <> preg_of dst -> rs'#r = rs#r.
-FProofLemma.
-  intros until v; intros TR EV LOAD. 
-  assert (A: exists mk_instr,
-      transl_memory_access mk_instr addr args k = OK c
-   /\ forall base ofs rs,
-        Asm.exec_instr (mk_instr base ofs) ge fn rs m = Asm.exec_load ge chunk rs m (preg_of dst) base ofs).
-  { unfold transl_load in TR; destruct chunk; ArgsInv; econstructor; (split; [eassumption|auto]). }
-  destruct A as (mk_instr & B & C).
-  eapply transl_load_access_correct; eauto with asmgen.
-Qed. CloseFLemma.
-
-FLemma transl_store_access_correct:
-  forall ge fn chunk (mk_instr: ireg -> Asm.offset -> Asm.instruction) addr args k c r1 (rs: Asm.regset) m v m',
-  (forall base ofs rs,
-     Asm.exec_instr (mk_instr base ofs) ge fn rs m = Asm.exec_store ge chunk rs m r1 base ofs) ->
-  transl_memory_access mk_instr addr args k = OK c ->
-  eval_addressing ge rs#SP addr (map rs (map preg_of args)) = Some v ->
-  Mem.storev chunk m v rs#r1 = Some m' ->
-  r1 <> PC -> r1 <> X31 ->
-  exists rs',
-     exec_straight ge fn c rs m k rs' m'
-  /\ forall r, r <> PC -> r <> X31 -> rs'#r = rs#r.
-FProofLemma.
-  intros until m'; intros INSTR TR EV STORE NOTPC NOT31. 
-  exploit transl_memory_access_correct; eauto.
-  intros (base & ofs & rs' & A & B & C).
-  econstructor; split.
-  eapply exec_straight_opt_right. eexact A. apply exec_straight_one. 
-  rewrite INSTR. unfold Asm.exec_store. rewrite B, C, STORE by auto. reflexivity. auto.
-  intros; Simpl.
-Qed. CloseFLemma.
-
-FLemma transl_store_correct:
-  forall ge fn chunk addr args src k c (rs: Asm.regset) m a m',
-  transl_store chunk addr args src k = OK c ->
-  eval_addressing ge rs#SP addr (map rs (map preg_of args)) = Some a ->
-  Mem.storev chunk m a rs#(preg_of src) = Some m' ->
-  exists rs',
-     exec_straight ge fn c rs m k rs' m'
-  /\ forall r, r <> PC -> r <> X31 -> rs'#r = rs#r.
-FProofLemma.
-  intros until m'; intros TR EV STORE. 
-  assert (A: exists mk_instr,
-      transl_memory_access mk_instr addr args k = OK c
-   /\ (forall base ofs rs,
-        Asm.exec_instr (mk_instr base ofs) ge fn rs m = Asm.exec_store ge chunk rs m (preg_of src) base ofs)).
-  { unfold transl_store in TR; destruct chunk; ArgsInv;
-    (econstructor; split; [eassumption | intros; simpl; reflexivity]).
-  }
-  destruct A as (mk_instr & B & C).
-  eapply transl_store_access_correct; eauto with asmgen.
+  intros. inversion H6. subst. monadInv H12.
+  exploit H8; eauto. intros [jmp [k' [rs2 [A [B C]]]]].
+  generalize (functions_transl prog tprog H _ _ _ H10 H11); intro FN.
+  generalize (transf_function_no_overflow _ _ H11); intro NOOV.
+  inv A.
+- exploit find_label_goto_label; eauto.
+  intros [tc' [rs3 [GOTO [AT' OTH]]]].
+  exists (Asm.State rs3 m2'); split.
+  apply plus_one. econstructor; eauto.
+  eapply find_instr_tail. eauto.
+  rewrite C. eexact GOTO.
+  econstructor; eauto.
+  apply agree_exten with rs2; auto with asmgen.
+  congruence.
+- exploit exec_straight_steps_2; eauto.
+  intros [ofs' [PC2 CT2]].
+  exploit find_label_goto_label; eauto.
+  intros [tc' [rs3 [GOTO [AT' OTH]]]].
+  exists (Asm.State rs3 m2'); split.
+  eapply plus_right'.
+  eapply exec_straight_steps_1; eauto.
+  econstructor; eauto.
+  eapply find_instr_tail. eauto.
+  rewrite C. eexact GOTO.
+  traceEq.
+  econstructor; eauto.
+  apply agree_exten with rs2; auto with asmgen.
+  congruence.
 Qed. CloseFLemma.
 
 From Rocqet Require Import Mregisters.
 FInduction step_simulation about S.step
-  motive (fun ge  S1 t S2 (_ : S.step ge S1 t S2) =>
-    forall tge prog tprog,            
-    ge = Genv.globalenv prog -> tge = Genv.globalenv tprog ->            
-    forall (TRANSF: match_prog prog tprog) S1' (MS: match_states ge S1 S1'),    
+  motive (fun ge S1 t S2 (_ : S.step ge S1 t S2) =>
+    forall tge prog tprog (TRANSF: match_prog prog tprog),
+    ge = Genv.globalenv prog -> tge = Genv.globalenv tprog ->
+    forall S1' (MS: match_states ge S1 S1'),
     (exists S2', plus Asm.step tge S1' t S2' /\ match_states ge S2 S2')
     \/ (measure S2 < measure S1 /\ t = E0 /\ match_states ge S2 S1')%nat).
 FProof.
 all: intros; inv MS.
 (* Llabel *)
 + left; eapply exec_straight_steps; eauto.
-  intros. fsimpl in TR. monadInv TR. econstructor; split. apply exec_straight_one. simpl; eauto. unfold Asm.exec_instrPlabel. auto. auto.
+  intros. fsimpl in TR. monadInv TR. econstructor; split. apply exec_straight_one. reflexivity. unfold Asm.exec_instrPlabel. auto. auto.
   split. apply agree_nextinstr; auto. fsimpl; congruence.
-  
+
 (* Lgoto *)
 + intros. assert (f0 = f) by (unfold S.fundef in FIND; unfold S.fundef in e; congruence). subst f0.
   inv AT. monadInv H2.
@@ -3594,37 +4572,37 @@ all: intros; inv MS.
   eapply functions_transl; eauto.
   eapply find_instr_tail; eauto.
   simpl; eauto.
-  econstructor; eauto. 
+  econstructor; eauto.
   eapply agree_exten; eauto with asmgen.
   congruence.
-        
-(* Lop *)  
+
+(* Lop *)
 + assert (eval_operation (Genv.globalenv tprog) sp op (map rs args) m = Some v).
-    rewrite <- e. apply eval_operation_preserved. exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl).
+    rewrite <- e. apply eval_operation_preserved. apply (symbols_preserved prog tprog TRANSF).
   exploit eval_operation_lessdef. eapply preg_vals; eauto. eauto. eexact H.
   intros [v' [A B]]. rewrite (sp_val _ _ _ AG) in A.
   left; eapply exec_straight_steps; eauto; intros. fsimpl in TR.
   exploit transl_op_correct; eauto. intros [rs2 [P [Q R]]].
   exists rs2; split. eauto. split. auto.
-  apply agree_set_undef_mreg with rs0; auto. 
+  apply agree_set_undef_mreg with rs0; auto.
   apply Val.lessdef_trans with v'; auto.
   simpl; intros. fsimpl in H0. destruct (andb_prop _ _ H0); clear H1.
   rewrite R; auto. simple apply DXP. rewrite H2 in H0. destruct H0. rewrite andb_true_r. reflexivity. apply preg_of_not_X30; auto.
 Local Transparent destroyed_by_op.
 destruct op; simpl; auto; congruence.
 
-(* Lcond true *)  
+(* Lcond true *)
 + assert (f0 = f) by (unfold S.fundef in FIND; unfold S.fundef in e0; congruence). subst f0.
   exploit eval_condition_lessdef. eapply preg_vals; eauto. eauto. eauto. intros EC.
   left; eapply exec_straight_opt_steps_goto; eauto. fsimpl; reflexivity.
   intros. fsimpl in TR.
   exploit transl_cbranch_correct_true; eauto. intros (rs' & jmp & A & B & C).
   exists jmp; exists k; exists rs'.
-  split. eexact A. 
+  split. eexact A.
   split. apply agree_exten with rs0; auto with asmgen.
-  exact B. 
-  
-(* Lcond false *)  
+  exact B.
+
+(* Lcond false *)
 +  exploit eval_condition_lessdef. eapply preg_vals; eauto. eauto. eauto. intros EC.
   left; eapply exec_straight_steps; eauto. intros. simpl in TR.
   exploit transl_cbranch_correct_false; eauto. fsimpl in TR. apply TR. intros (rs' & A & B).
@@ -3632,35 +4610,35 @@ destruct op; simpl; auto; congruence.
   split. eexact A.
   split. apply agree_exten with rs0; auto with asmgen. fsimpl.
   simpl. congruence.
-  
+
 (* return *)
 + inv STACKS. simpl in *.
   right. split. lia. split. auto.
   rewrite <- ATPC in H5.
   econstructor; eauto. congruence.
-  
+
 (* Lgetstack *)
-+  unfold S.load_stack in e.
++ unfold S.load_stack in e.
   exploit Mem.loadv_extends; eauto. intros [v' [A B]].
   rewrite (sp_val _ _ _ AG) in A.
   left; eapply exec_straight_steps; eauto. intros. fsimpl in TR.
-  exploit loadind_correct; eauto with asmgen. congruence. intros [rs' [P [Q R]]].
+  exploit loadind_correct; eauto with asmgen. intros [rs' [P [Q R]]].
   exists rs'; split. eauto.
   split. eapply agree_set_mreg; eauto with asmgen. congruence.
   fsimpl; congruence.
-  
+
 (* Lsetstack *)
 + unfold S.store_stack in e.
   assert (Val.lessdef (rs src) (rs0 (preg_of src))). eapply preg_val; eauto.
   exploit Mem.storev_extends; eauto. intros [m2' [A B]].
   left; eapply exec_straight_steps; eauto.
   rewrite (sp_val _ _ _ AG) in A. intros. fsimpl in TR.
-  exploit storeind_correct; eauto with asmgen. congruence. intros [rs' [P Q]].
+  exploit storeind_correct; eauto with asmgen. intros [rs' [P Q]].
   exists rs'; split. eauto.
   split. eapply agree_undef_regs; eauto with asmgen.
   fsimpl; intros. rewrite Q; auto with asmgen.
-  
-(* Lgetparam *)  
+
+(* Lgetparam *)
 + assert (f0 = f) by (unfold S.fundef in FIND; unfold S.fundef in e; congruence). subst f0.
   unfold S.load_stack in *.
   exploit Mem.loadv_extends. eauto. eexact e0. auto.
@@ -3669,7 +4647,7 @@ destruct op; simpl; auto; congruence.
   exploit Mem.loadv_extends. eauto. eexact e1. auto.
   intros [v' [C D]].
 Opaque loadind.
-  left; eapply exec_straight_steps; eauto; intros. fsimpl in TR; monadInv TR. 
+  left; eapply exec_straight_steps; eauto; intros. fsimpl in TR; monadInv TR.
   destruct ep.
 (* X30 contains parent *)
 -  exploit loadind_correct. eexact EQ.
@@ -3680,10 +4658,10 @@ Opaque loadind.
   simpl; intros. rewrite R; auto with asmgen.
   apply preg_of_not_X30; auto. fsimpl in H. auto.
 (* GPR11 does not contain parent *)
--  rewrite chunk_of_Tptr in A. 
+-  rewrite chunk_of_Tptr in A.
   exploit loadind_ptr_correct. eexact A. congruence. intros [rs1 [P [Q R]]].
-  exploit loadind_correct. eexact EQ. instantiate (2 := rs1). rewrite Q. eauto. congruence. 
-  intros [rs2 [S [T U]]]. 
+  exploit loadind_correct. eexact EQ. instantiate (2 := rs1). rewrite Q. eauto. congruence.
+  intros [rs2 [S [T U]]].
   exists rs2; split. eapply exec_straight_trans; eauto.
   split. eapply agree_set_mreg. eapply agree_set_mreg. eauto. eauto.
   Open Scope asm.
@@ -3693,8 +4671,8 @@ Opaque loadind.
   intros. unfold Pregmap.set. destruct (PregEq.eq r' X30). congruence. auto with asmgen.
   fsimpl; intros. rewrite U; auto with asmgen.
   apply preg_of_not_X30; auto.
-  
-(* internal function *)  
+
+(* internal function *)
 + exploit functions_translated; eauto. intros [tf [A B]]. monadInv B.
   generalize EQ; intros EQ'. monadInv EQ'.
   destruct (zlt Ptrofs.max_unsigned (list_length_z (Asm.fn_code x0))); inversion EQ1. clear EQ1. subst x0.
@@ -3715,8 +4693,8 @@ Opaque loadind.
   set (sp := Vptr stk Ptrofs.zero).
   set (rs2 := Asm.nextinstr (rs0#X30 <- (S.parent_sp s) #SP <- sp #X31 <- Vundef)).
   exploit (storeind_ptr_correct (Genv.globalenv tprog) tf SP (S.fn_retaddr_ofs f) RA x1 rs2 m2').
-    rewrite chunk_of_Tptr in P. change (rs2 X1) with (rs0 X1). rewrite ATLR. 
-    change (rs2 X2) with sp. eexact P. 
+    rewrite chunk_of_Tptr in P. change (rs2 X1) with (rs0 X1). rewrite ATLR.
+    change (rs2 X2) with sp. eexact P.
     congruence. congruence.
   intros (rs3 & U & V).
   set (rs4 := Asm.nextinstr rs3).
@@ -3728,20 +4706,20 @@ Opaque loadind.
     apply exec_straight_step with rs2 m2'.
     unfold Asm.exec_instr. simpl. unfold Asm.exec_instrPallocframe. rewrite C. fold sp.
     rewrite <- (sp_val _ _ _ AG). rewrite chunk_of_Tptr in F. subst sp. rewrite F. reflexivity.
-    reflexivity.   
+    reflexivity.
     eapply exec_straight_trans with (rs2 := rs3) (m2 := m3').
     eexact U. eapply exec_straight_one; eauto.
   }
   exploit exec_straight_steps_2; eauto using functions_transl. lia. constructor.
-  intros (ofs' & X & Y).                    
+  intros (ofs' & X & Y).
   left; exists (Asm.State rs4 m3'); split.
   eapply exec_straight_steps_1; eauto. lia. constructor.
   econstructor; eauto.
-  rewrite X; econstructor; eauto. 
+  rewrite X; econstructor; eauto.
   apply agree_exten with rs2; eauto with asmgen.
-  unfold rs2. 
+  unfold rs2.
   apply agree_nextinstr. apply agree_set_other; auto with asmgen.
-  apply agree_change_sp with (S.parent_sp s). 
+  apply agree_change_sp with (S.parent_sp s).
   apply agree_undef_regs with rs0. auto.
 Local Transparent destroyed_at_function_entry.
   simpl; intros; Simpl.
@@ -3749,8 +4727,8 @@ Local Transparent destroyed_at_function_entry.
   intros. unfold rs4; Simpl. unfold rs4; intros.
   unfold rs4 in * ; intros.
   rewrite nextinstr_inv; try apply V; eauto with asmgen.
-     
-(* Lreturn *)  
+
+(* Lreturn *)
 + assert (f0 = f) by (unfold S.fundef in FIND; unfold S.fundef in e; congruence). subst f0.
   inversion AT; subst. simpl in H2; monadInv H2.
   assert (NOOV: list_length_z (Asm.fn_code tf) <= Ptrofs.max_unsigned).
@@ -3772,7 +4750,7 @@ Local Transparent destroyed_at_function_entry.
 
   (* Lload *)
 + assert (eval_addressing (Genv.globalenv tprog) sp addr (map rs args) = Some a).
-    rewrite <- e. apply eval_addressing_preserved. exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl). 
+    rewrite <- e. apply eval_addressing_preserved. apply (symbols_preserved prog tprog TRANSF).
   exploit eval_addressing_lessdef. eapply preg_vals; eauto. eexact H.
   intros [a' [A B]]. rewrite (sp_val _ _ _ AG) in A.
   exploit Mem.loadv_extends; eauto. intros [v' [C D]].
@@ -3785,7 +4763,7 @@ Local Transparent destroyed_at_function_entry.
 
   (* Lstore *)
 + assert (eval_addressing (Genv.globalenv tprog) sp addr (map rs args) = Some a).
-    rewrite <- e. apply eval_addressing_preserved. exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl).
+    rewrite <- e. apply eval_addressing_preserved. apply (symbols_preserved prog tprog TRANSF).
   exploit eval_addressing_lessdef. eapply preg_vals; eauto. eexact H.
   intros [a' [A B]]. rewrite (sp_val _ _ _ AG) in A.
   assert (Val.lessdef (rs src) (rs0 (preg_of src))). eapply preg_val; eauto.
@@ -3815,8 +4793,8 @@ FProofLemma.
   intros. rewrite Regmap.gi. auto.
   unfold Genv.symbol_address.
   rewrite (match_program_main H).
-  rewrite symbols_preserved with (prog:=prog) (tprog:=tprog) (ge:=(Genv.globalenv prog)).
-  unfold ge; rewrite H2. auto. exact H. reflexivity. reflexivity.
+  rewrite symbols_preserved with (prog:=prog) (tprog:=tprog) by auto.
+  unfold ge; rewrite H2. auto.
 Qed. CloseFLemma.
 
 FLemma transf_final_states:
@@ -3864,7 +4842,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       Mem.loadv chunk m a = Some v ->
       r_s' = (Regmap.set dst v (undef_regs (destroyed_by_load chunk addr) rs_)) ->
       step ge (State s f sp (Lload chunk addr args_ dst :: c) rs_ m)
-        E0 (State s f sp c r_s' m). 
+        E0 (State s f sp c r_s' m).
 (*| exec_Lstore:
       forall ge s f sp chunk addr args src c rs_ m m' a rs',
       eval_addressing ge sp addr rs_##args = Some a ->
@@ -3875,9 +4853,9 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
 
 (*| exec_Lload:
       forall ge s f sp chunk addr args dst_ c (rs_ : Mregisters.regset) m a v rs',
-      eval_addressing ge sp addr cheat (*List.map rs args*) = Some a -> 
+      eval_addressing ge sp addr cheat (*List.map rs args*) = Some a ->
       Mem.loadv chunk m a = Some v ->
-      rs' = (Regmap.set cheat (*dst_*) v (fff (ddd chunk addr) rs_ )) -> 
+      rs' = (Regmap.set cheat (*dst_*) v (fff (ddd chunk addr) rs_ )) ->
       step ge (State s f sp (Lload chunk addr args dst_ :: c) rs_ m)
         E0 (State s f sp c rs' m)
 | exec_Lstore:
@@ -3894,7 +4872,7 @@ From Rocqet Require Import Conventions1.
 (* just before semantics of asm *)
 From Rocqet Require Import Machregs.
 
-From Rocqet Require Import Registers.      
+From Rocqet Require Import Registers.
 
 From Rocqet Require Import Machregs.
 
@@ -3917,15 +4895,15 @@ FDefinition transl_memory_access
   | Aindexed ofs, a1 :: nil =>
       do rs <- ireg_of a1;
       OK (indexed_memory_access mk_instr rs ofs k)
-  | Aglobal id ofs, nil =>   
-    OK (Asm.Ploadsymbol_high X31 id ofs :: mk_instr X31 (Asm.Ofslow id ofs) :: k)      
+  | Aglobal id ofs, nil =>
+    OK (Asm.Ploadsymbol_high X31 id ofs :: mk_instr X31 (Asm.Ofslow id ofs) :: k)
   | Ainstack ofs, nil =>
       OK (indexed_memory_access mk_instr SP ofs k)
   | _, _ =>
       Error(msg "Asmgen.transl_memory_access")
   end.
 
-FDefinition transl_load := fun 
+FDefinition transl_load := fun
   (chunk: memory_chunk) (addr: addressing)
   (args: list mreg) (dst: mreg) (k: Asm.code) =>
   match chunk with
@@ -3983,7 +4961,7 @@ FDefinition transl_store := fun (chunk: memory_chunk) (addr: addressing)
   end.
 
 FRecursion transl_instr.
-Case Lload chunk addr args dst := 
+Case Lload chunk addr args dst :=
  (fun f ep k => transl_load chunk addr args dst k).
 Case Lstore chunk addr args src :=
  (fun f ep k => transl_store chunk addr args src k).
@@ -4025,7 +5003,7 @@ Qed. FEnd transl_instr_label'.
 FInduction is_mach_label_correct.
 FProof.
 + apply cheat. (* fdiscriminate *)
-+ apply cheat. (* fdiscriminate *)  
++ apply cheat. (* fdiscriminate *)
 Qed. FEnd is_mach_label_correct.
 
 
@@ -4065,7 +5043,7 @@ all: intros; inv MS.
   split. eapply agree_set_undef_mreg; eauto. congruence.
   intros; auto with asmgen.
   simpl; congruence.
-  
+
 (* Lstore *)
 + assert (eval_addressing tge sp addr (map rs args) = Some a).
     rewrite <- H. apply eval_addressing_preserved. exact symbols_preserved.
@@ -4078,7 +5056,7 @@ all: intros; inv MS.
   exists rs2; split. eauto.
   split. eapply agree_undef_regs; eauto with asmgen.
   simpl; congruence.
-Qed. FEnd step_simulation. 
+Qed. FEnd step_simulation.
 
 FEnd Asmgen.
 
@@ -4104,7 +5082,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       rs arg = Vint n ->
       list_nth_z tbl (Int.unsigned n) = Some lbl ->
       Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
-      find_label lbl (self__Mach.fn_code f) = Some c' ->
+      find_label lbl (fn_code f) = Some c' ->
       rs' = undef_regs destroyed_by_jumptable rs ->
       step ge (State s fb sp (Ljumptable arg tbl :: c) rs m)
         E0 (State s fb sp c' rs' m).
@@ -4146,7 +5124,6 @@ FProof.
 + apply cheat. (* fdiscriminate *)
 Qed. FEnd is_mach_label_correct.
 
-Inherit ireg_of_eq.
 FLemma ireg_val:
   forall ms sp rs r r',
   agree ms sp rs ->
@@ -4192,7 +5169,7 @@ FEnd Lfam.
 Family Mach extends Lfam.
 FInductive instruction : Type :=
 | Lbuiltin: external_function -> list (builtin_arg mreg) -> builtin_res mreg -> instruction.
-                                                                                  
+
 FRecursion is_label.
 Case _ := (fun lbl => false).
 FEnd is_label.
@@ -4214,7 +5191,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       rs' = set_res res vres (undef_regs (destroyed_by_builtin ef) rs) ->
       step ge (State s f sp (Lbuiltin ef args res :: b) rs m)
         t (State s f sp b rs' m').
-        
+
 FEnd Mach.
 
 Family Asmgen.
@@ -4303,7 +5280,7 @@ FLemma undef_regs_other_2:
 FProofLemma.
   intros. apply undef_regs_other. intros.
   exploit list_in_map_inv; eauto. intros [mr [A B]]. subst.
-  eapply preg_notin_charact. eauto. exact B.  
+  eapply preg_notin_charact. eauto. exact B.
 Qed. CloseFLemma.
 
 FLemma agree_set_res:
@@ -4335,24 +5312,24 @@ all: intros; inv MS.
   eapply Asm.exec_step_builtin. eauto. eauto. fsimpl in EQ.  fsimpl in EQ0. monadInv EQ0.
   eapply find_instr_tail; eauto.
   erewrite <- sp_val by eauto.
-  eapply eval_builtin_args_preserved with (ge1 := (Genv.globalenv prog)); eauto. exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl). 
+  eapply eval_builtin_args_preserved with (ge1 := (Genv.globalenv prog)); eauto. exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl).
   eapply external_call_symbols_preserved; eauto. eapply senv_preserved; eauto.
   eauto.
   econstructor; eauto.
   instantiate (2 := tf); instantiate (1 := x).
   unfold Asm.nextinstr. rewrite Pregmap.gss.
   rewrite set_res_other. rewrite undef_regs_other_2.
-  rewrite ! Pregmap.gso by congruence. 
+  rewrite ! Pregmap.gso by congruence.
   rewrite <- H. simpl. econstructor; eauto. fsimpl in EQ. fsimpl in EQ0. monadInv EQ0.
   eapply code_tail_next_int; eauto.  fsimpl in EQ. fsimpl in EQ0. monadInv EQ0.
   rewrite (preg_notin_charact PC (destroyed_by_builtin ef)). intros. simple apply not_eq_sym; trivial. auto with asmgen.
   reflexivity. (* auto with asmgen.*)
   apply agree_nextinstr. eapply agree_set_res; auto.
   eapply agree_undef_regs; eauto. intros. rewrite undef_regs_other_2; auto.
-  rewrite ! Pregmap.gso; auto with asmgen. rewrite it1_is_parent_Lbuiltin_eq. unfold it1_is_parentLbuiltin. 
+  rewrite ! Pregmap.gso; auto with asmgen. rewrite it1_is_parent_Lbuiltin_eq. unfold it1_is_parentLbuiltin.
   congruence.
 Qed. FEnd step_simulation.
-  
+
 (* ... *)
 FEnd Asmgen.
 
@@ -4391,7 +5368,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       Mem.loadv chunk m a = Some v ->
       rs' = ((undef_regs (destroyed_by_load chunk addr) rs_)#dst <- v) ->
       step ge (State s f sp (Lload chunk addr args_ dst :: c) rs_ m)
-        E0 (State s f sp c rs' m). 
+        E0 (State s f sp c rs' m).
 (*| exec_Lstore:
       forall ge s f sp chunk addr args src c rs_ m m' a rs',
       eval_addressing ge sp addr rs_##args = Some a ->
@@ -4402,9 +5379,9 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
 
 (*| exec_Lload:
       forall ge s f sp chunk addr args dst_ c (rs_ : Mregisters.regset) m a v rs',
-      eval_addressing ge sp addr cheat (*List.map rs args*) = Some a -> 
+      eval_addressing ge sp addr cheat (*List.map rs args*) = Some a ->
       Mem.loadv chunk m a = Some v ->
-      rs' = (Regmap.set cheat (*dst_*) v (fff (ddd chunk addr) rs_ )) -> 
+      rs' = (Regmap.set cheat (*dst_*) v (fff (ddd chunk addr) rs_ )) ->
       step ge (State s f sp (Lload chunk addr args dst_ :: c) rs_ m)
         E0 (State s f sp c rs' m)
 | exec_Lstore:
@@ -4421,7 +5398,7 @@ From Rocqet Require Import Conventions1.
 (* just before semantics of asm *)
 From Rocqet Require Import Machregs.
 
-From Rocqet Require Import Registers.      
+From Rocqet Require Import Registers.
 
 From Rocqet Require Import Machregs.
 
@@ -4444,15 +5421,15 @@ FDefinition transl_memory_access
   | Aindexed ofs, a1 :: nil =>
       do rs <- ireg_of a1;
       OK (indexed_memory_access mk_instr rs ofs k)
-  | Aglobal id ofs, nil =>   
-    OK (Asm.Ploadsymbol_high X31 id ofs :: mk_instr X31 (Asm.Ofslow id ofs) :: k)      
+  | Aglobal id ofs, nil =>
+    OK (Asm.Ploadsymbol_high X31 id ofs :: mk_instr X31 (Asm.Ofslow id ofs) :: k)
   | Ainstack ofs, nil =>
       OK (indexed_memory_access mk_instr SP ofs k)
   | _, _ =>
       Error(msg "Asmgen.transl_memory_access")
   end.
 
-FDefinition transl_load := fun 
+FDefinition transl_load := fun
   (chunk: memory_chunk) (addr: addressing)
   (args: list mreg) (dst: mreg) (k: Asm.code) =>
   match chunk with
@@ -4510,7 +5487,7 @@ FDefinition transl_store := fun (chunk: memory_chunk) (addr: addressing)
   end.
 
 FRecursion transl_instr.
-Case Lload chunk addr args dst := 
+Case Lload chunk addr args dst :=
  (fun f ep k => transl_load chunk addr args dst k).
 Case Lstore chunk addr args src :=
  (fun f ep k => transl_store chunk addr args src k).
@@ -4552,7 +5529,7 @@ Qed. FEnd transl_instr_label'.
 FInduction is_mach_label_correct.
 FProof.
 + apply cheat. (* fdiscriminate *)
-+ apply cheat. (* fdiscriminate *)  
++ apply cheat. (* fdiscriminate *)
 Qed. FEnd is_mach_label_correct.
 
 
@@ -4576,7 +5553,7 @@ all: intros; inv MS.
   split. eapply agree_set_undef_mreg; eauto. congruence.
   intros; auto with asmgen.
   simpl; congruence.
-  
+
 (* Lstore *)
 + assert (eval_addressing tge sp addr (map rs args) = Some a).
     rewrite <- H. apply eval_addressing_preserved. exact symbols_preserved.
@@ -4589,7 +5566,7 @@ all: intros; inv MS.
   exists rs2; split. eauto.
   split. eapply agree_undef_regs; eauto with asmgen.
   simpl; congruence.
-Qed. FEnd step_simulation. 
+Qed. FEnd step_simulation.
 
 FEnd Asmgen.
 
@@ -4686,9 +5663,9 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       forall ge s fb stk soff sig ros c rs m f f' m',
       find_function_ptr ge ros rs = Some f' ->
       Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
-      load_stack m (Vptr stk soff) Tptr (self__Mach.fn_link_ofs f) = Some (parent_sp s) ->
-      load_stack m (Vptr stk soff) Tptr (self__Mach.fn_retaddr_ofs f) = Some (parent_ra s) ->
-      Mem.free m stk 0 (self__Mach.fn_stacksize f) = Some m' ->
+      load_stack m (Vptr stk soff) Tptr (fn_link_ofs f) = Some (parent_sp s) ->
+      load_stack m (Vptr stk soff) Tptr (fn_retaddr_ofs f) = Some (parent_ra s) ->
+      Mem.free m stk 0 (fn_stacksize f) = Some m' ->
       step ge (State s fb (Vptr stk soff) (Ltailcall sig ros :: c) rs m)
         E0 (Callstate s f' rs m')
 | exec_function_external:
@@ -4699,7 +5676,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       rs' = set_pair (loc_result (ef_sig ef)) res (undef_caller_save_regs rs) ->
       step ge (Callstate s fb rs m)
          t (Returnstate s rs' m').
-        
+
 FEnd Mach.
 
 Family Asmgen.
@@ -4708,7 +5685,7 @@ From Rocqet Require Import Errors.
 Open Scope error_monad_scope.
 
 FRecursion transl_instr.
-Case Lcall sig reg_or_ident := 
+Case Lcall sig reg_or_ident :=
   (fun f ep k =>
      match reg_or_ident with
      | (inl r) =>
@@ -4717,14 +5694,14 @@ Case Lcall sig reg_or_ident :=
      | (inr symb) =>
          OK (Asm.Pjal_s symb sig :: k)
      end).
-Case Ltailcall sig reg_or_ident := 
+Case Ltailcall sig reg_or_ident :=
   (fun f ep k =>
-     match reg_or_ident with 
+     match reg_or_ident with
      | (inl r) =>
          do r1 <- ireg_of r;
          OK (make_epilogue f (Asm.Pj_r r1 sig :: k))
-     | (inr symb) => OK (make_epilogue f (Asm.Pj_s symb sig :: k))           
-     end).    
+     | (inr symb) => OK (make_epilogue f (Asm.Pj_s symb sig :: k))
+     end).
 FEnd transl_instr.
 
 FRecursion it1_is_parent.
@@ -4739,7 +5716,7 @@ FInduction transl_instr_label.
 FProof.
 all: fsimpl; intros; TailNoLabel; fsimpl; fsimpl in H.
 + destruct s0; monadInv H; TailNoLabel.
-+ destruct s0; monadInv H; (eapply tail_nolabel_trans; [eapply make_epilogue_label|TailNoLabel]).  
++ destruct s0; monadInv H; (eapply tail_nolabel_trans; [eapply make_epilogue_label|TailNoLabel]).
 Qed. FEnd transl_instr_label.
 
 FInduction transl_instr_label'.
@@ -4750,11 +5727,10 @@ Qed. FEnd transl_instr_label'.
 FInduction is_mach_label_correct.
 FProof.
 + apply cheat. (* fdiscriminate *)
-+ apply cheat. (* fdiscriminate *)  
++ apply cheat. (* fdiscriminate *)
 Qed. FEnd is_mach_label_correct.
 
 (* This is also in the loops extension, move to base to avoid duplication *)
-Inherit ireg_of_eq.
 FLemma ireg_val:
   forall ms sp rs r r',
   agree ms sp rs ->
@@ -4855,13 +5831,13 @@ FProofLemma.
   intros. destruct H. unfold S.undef_caller_save_regs, Asm.undef_caller_save_regs; split.
 - unfold proj_sumbool; rewrite dec_eq_true. auto.
 - auto.
-- intros. unfold proj_sumbool. rewrite dec_eq_false by (apply preg_of_not_SP). 
+- intros. unfold proj_sumbool. rewrite dec_eq_false by (apply preg_of_not_SP).
   destruct (in_dec preg_eq (preg_of r) (List.map preg_of (List.filter is_callee_save all_mregs))); simpl.
-+ apply list_in_map_inv in i. destruct i as (mr & A & B). 
++ apply list_in_map_inv in i. destruct i as (mr & A & B).
   assert (r = mr) by (apply preg_of_injective; auto). subst mr; clear A.
   apply List.filter_In in B. destruct B as [C D]. rewrite D. auto.
 + destruct (is_callee_save r) eqn:CS; auto.
-  elim n. apply List.in_map. apply List.filter_In. auto using all_mregs_complete. 
+  elim n. apply List.in_map. apply List.filter_In. auto using all_mregs_complete.
 Qed. CloseFLemma.
 
 FInduction step_simulation.
@@ -4869,13 +5845,13 @@ FProof.
 all: intros; inv MS.
 (* Lcall *)
 + assert (f0 = f) by (unfold S.fundef in FIND; unfold S.fundef in e0; congruence). subst f0.
-  inv AT.  
+  inv AT.
   assert (NOOV: ((Z.le (list_length_z (Asm.fn_code tf)) Ptrofs.max_unsigned))).
     eapply transf_function_no_overflow; eauto.
     destruct ros as [rf|fid]; simpl in e; monadInv H2.
 - (* Indirect call *)
   assert (rs rf = Vptr f' Ptrofs.zero).
-    destruct (rs rf); try discriminate. 
+    destruct (rs rf); try discriminate.
     revert e; predSpec Ptrofs.eq Ptrofs.eq_spec i Ptrofs.zero; intros; congruence.
   fsimpl in EQ. fsimpl in EQ0. monadInv EQ0.
   assert (rs0 x0 = Vptr f' Ptrofs.zero).
@@ -4908,7 +5884,7 @@ all: intros; inv MS.
   simpl. eapply agree_exten; eauto. intros. Simpl.
   Simpl. rewrite <- H. auto.
 
-(* Ltailcall *)  
+(* Ltailcall *)
 + assert (f0 = f) by (unfold S.fundef in FIND; unfold S.fundef in e0; congruence).  subst f0.
   inversion AT; subst.
   assert (NOOV: (list_length_z (Asm.fn_code tf) <= Ptrofs.max_unsigned)%Z).
@@ -4921,8 +5897,8 @@ all: intros; inv MS.
   fsimpl in EQ. fsimpl in EQ0. monadInv EQ0.
   assert (rs0 x0 = Vptr f' Ptrofs.zero).
     exploit ireg_val; eauto. rewrite H2; intros LD; inv LD; auto.
-  exploit make_epilogue_correct; eauto. intros (rs1 & m1 & U & V & W & X & Y & Z). 
-  exploit exec_straight_steps_2; eauto using functions_transl.                      
+  exploit make_epilogue_correct; eauto. intros (rs1 & m1 & U & V & W & X & Y & Z).
+  exploit exec_straight_steps_2; eauto using functions_transl.
   intros (ofs' & P & Q).
   left; econstructor; split.
   (* execution *)
@@ -4933,10 +5909,10 @@ all: intros; inv MS.
   (* match states *)
   econstructor; eauto.
   apply agree_set_other; auto with asmgen.
-  Simpl. rewrite Z by (rewrite <- (ireg_of_eq _ _ EQ1); eauto with asmgen; eauto using preg_of_not_SP). assumption. 
+  Simpl. rewrite Z by (rewrite <- (ireg_of_eq _ _ EQ1); eauto with asmgen; eauto using preg_of_not_SP). assumption.
 - (* Direct call *)
   exploit make_epilogue_correct; eauto. intros (rs1 & m1 & U & V & W & X & Y & Z). fsimpl in EQ. fsimpl in EQ0. monadInv EQ0.
-  exploit exec_straight_steps_2; eauto using functions_transl. 
+  exploit exec_straight_steps_2; eauto using functions_transl.
   intros (ofs' & P & Q).
   left; econstructor; split.
   (* execution *)
@@ -4950,7 +5926,7 @@ all: intros; inv MS.
   apply agree_set_other; auto with asmgen.
   Simpl. unfold Genv.symbol_address. rewrite (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl). rewrite e. auto.
 
-(* external function *)  
+(* external function *)
 + exploit functions_translated; eauto.
   intros [tf [A B]]. simpl in B. inv B.
   exploit extcall_arguments_match; eauto.
@@ -4962,9 +5938,9 @@ all: intros; inv MS.
   eapply external_call_symbols_preserved; eauto. eapply senv_preserved; eauto.
   econstructor; eauto.
   unfold Asm.loc_external_result. apply agree_set_other; auto. apply agree_set_pair; auto.
-  apply agree_undef_caller_save_regs; auto. 
+  apply agree_undef_caller_save_regs; auto.
 Qed. FEnd step_simulation.
-  
+
 FEnd Asmgen.
 
 FEnd Comp_Call.
@@ -4975,7 +5951,7 @@ Family Comp extends
   Comp_Heap,
   Base,
   Comp_Switch,
-  Comp_Loops,  
+  Comp_Loops,
   Comp_Field,
   Comp_Call,
   (* Comp_Float,*)
