@@ -335,6 +335,8 @@ let build_compilenv f =
 (** val transl_funbody :
     compilenv -> coq_Z -> coq_function -> Cminor.coq_function res **)
 
+let transl_stmt = _transl_stmt
+
 let transl_funbody cenv stacksize f =
   match _transl_stmt f.fn_body (cenv, [])  with
   | OK x ->
