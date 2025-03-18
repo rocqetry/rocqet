@@ -28,10 +28,13 @@ Local Open Scope string_scope.
 Local Open Scope list_scope.
 Open Scope asm.
 
+(*Require Import LfamBase.
+Require Import Linear.
+Require Import Mach.*)
+
 (* RISC-V *)
 
 Trait Base.
-
 
 Local Open Scope error_monad_scope.
 
