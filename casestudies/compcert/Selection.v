@@ -24,7 +24,7 @@ Require Import Coq.ZArith.ZArith.
 From Rocqet Require Import Prelude.
 From Rocqet Require Import Op.
 
-Require Import Cfam.
+Require Import CfamBase.
 Require Import Cminor.
 Require Import CminorSel.
 Require Import Cfamtransl.

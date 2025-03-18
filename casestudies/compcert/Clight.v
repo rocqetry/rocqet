@@ -636,7 +636,7 @@ FEnd Clight.
 
 FEnd Comp_Switch.
 
-Family Comp extends 
+(* Family Comp extends 
   Base,
   Comp_Switch,
   Comp_Loops,
@@ -651,4 +651,4 @@ FEnd Comp.
 Require Extraction.
 Cd "extraction".
 
-Separate Extraction Comp.Clight.
+Separate Extraction Comp.Clight.*)

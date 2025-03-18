@@ -28,7 +28,7 @@ Local Open Scope string_scope.
 Local Open Scope list_scope.
 Open Scope asm.
 
-Require Import Cfam.
+Require Import CfamBase.
 
 Trait Base.
 
@@ -285,7 +285,7 @@ FEnd Csharpminor.
 
 FEnd Comp_Call.
 
-Trait Comp_Heap extends Base.
+Trait Comp_Heap extends Base, Comp_Builtin.
 
 Trait Csharpminor_Eaddrof extends Csharpminor.
 

@@ -489,7 +489,7 @@ FEnd Cfam.
 
 FEnd Comp_Call.
 
-Trait Comp_Heap extends Base.
+Trait Comp_Heap extends Base, Comp_Builtin.
 
 Family Cfam.
 FEnd Cfam.
