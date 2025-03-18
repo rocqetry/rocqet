@@ -55,17 +55,18 @@
    lib/Op
    lib/BoolEqual
 
-   CfamBase   
-   Csharpminor
-   Cminor
+   ;CfamBase   
+   ;Csharpminor
+   ;Cminor
    ;CminorSel
    
-   ;Lfam
-   ;Linear
+   LfamBase
+   Linear
 
    ;LTL
    ;Clight
+   Mach
    
-   Cfamtransl
+   ;Cfamtransl
   ))
 

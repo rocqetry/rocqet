@@ -27,7 +27,7 @@ cp -f "$SOURCE_DIR"/* "$DEST_DIR" 2>/dev/null
 
 # Check if the copy operation was successful
 if [ $? -eq 0 ]; then
-    echo "All files copied successfully."
+    echo "All passes linked successfully."
 else
     echo "Warning: Some files may not have been linked. This could be due to:"
     echo "  - No files in the source directory"
