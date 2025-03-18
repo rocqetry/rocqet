@@ -1186,11 +1186,3 @@ Require Extraction.
 Cd "extraction".
 
 Separate Extraction Comp.SimplExpr.
-
-Separate Extraction X.C.
-Extraction Library X.
-
-Require Extraction.
-Extraction Language OCaml.
-Extraction "compcert.ml" Base.SimplExpr.transl_function.
-
