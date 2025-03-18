@@ -4,7 +4,7 @@ From Rocqet Require Import Coqlib.
 From Rocqet Require Import Errors.
 From Rocqet Require Import Values.
 From Rocqet Require Import AST.
-From Rocqet Require Import Integers. 
+From Rocqet Require Import Integers.
 From Rocqet Require Import Floats.
 From Rocqet Require Import Memory.
 From Rocqet Require Import Globalenvs.
@@ -68,7 +68,7 @@ FDefinition genv := Genv.t fundef unit.
 
 FRecursion is_label about instruction motive (fun (_ : instruction) => label -> bool) by _rect.
 Case Lop op arg dst := (fun lbl => false).
-Case Lcond c args l := (fun lbl => false). 
+Case Lcond c args l := (fun lbl => false).
 Case Llabel lbl' := (fun lbl => if peq lbl lbl' then true else false).
 Case Lgoto lbl' := (fun lbl => false).
 Case Lreturn := (fun lbl => false).
@@ -154,12 +154,12 @@ FEnd state.
 
 FRecursion is_label about instruction motive (fun (_ : instruction) => label -> bool) by _rect.
 Case Lop op arg dst := (fun lbl => false).
-(*Case Lgetstack s i t dst := (fun lbl => false). 
+(*Case Lgetstack s i t dst := (fun lbl => false).
 Case Lsetstack d s i t := (fun lbl => false). *)
-Case Lcond c args l := (fun lbl => false). 
+Case Lcond c args l := (fun lbl => false).
 Case Llabel lbl' := (fun lbl => if peq lbl lbl' then true else false).
 Case Lgoto lbl' := (fun lbl => false).
-Case Lreturn := (fun lbl => false). 
+Case Lreturn := (fun lbl => false).
 FEnd is_label.
 
 MetaData find_label.
@@ -170,7 +170,7 @@ Fixpoint find_label (lbl: self__Lfam.label) (c: self__Lfam.code) {struct c} : op
   end.
 FEnd find_label.
 
-(* FDefinition parent_locset : list stackframe -> locset := fun stack => 
+(* FDefinition parent_locset : list stackframe -> locset := fun stack =>
   match stack with
   | nil => Locmap.init Vundef
   | self__Lfam.Stackframe f sp ls c :: stack' => ls
@@ -179,16 +179,16 @@ FEnd find_label.
 FOpaque Definition reglist : storeset -> list mreg -> list val := cheat.
 FOpaque Definition undef_regs : list mreg -> storeset -> storeset := cheat.
 FOpaque Definition set_storeset : mreg -> val -> storeset -> storeset := cheat.
-FOpaque Definition find_func_ptr : genv -> func_ptr -> option fundef := cheat. 
+FOpaque Definition find_func_ptr : genv -> func_ptr -> option fundef := cheat.
 
-FInductive step: genv -> state -> trace -> state -> Prop :=          
+FInductive step: genv -> state -> trace -> state -> Prop :=
 | exec_Llabel:
     forall ge s f sp lbl b rs m,
     step ge (State s f sp (Llabel lbl :: b) rs m)
       E0 (State s f sp b rs m)
 | exec_Lgoto:
     forall ge s fb f sp lbl b rs m b',
-    find_func_ptr ge fb = Some (AST.Internal f) -> 
+    find_func_ptr ge fb = Some (AST.Internal f) ->
     find_label lbl (function_code f) = Some b' ->
     step ge (State s fb sp (Lgoto lbl :: b) rs m)
       E0 (State s fb sp b' rs m)
@@ -202,7 +202,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
     forall ge s (fb: func_ptr) (f: function) sp cond args lbl b rs m rs' b',
     eval_condition cond (reglist rs args) m = Some true ->
     rs' = undef_regs (destroyed_by_cond cond) rs ->
-    find_func_ptr ge fb = Some (AST.Internal f) -> 
+    find_func_ptr ge fb = Some (AST.Internal f) ->
     find_label lbl (function_code f) = Some b' ->
     step ge (State s fb sp (Lcond cond args lbl :: b) rs m)
       E0 (State s fb sp b' rs' m)
@@ -230,11 +230,12 @@ MetaData fn binds fn_sig, fn_code, fn_stacksize.
 Record fn: Type := mkfunction {
   fn_sig: signature;
   fn_stacksize: Z;
-  fn_code: self__Linear.code
+  fn_code: code
 }.
 FEnd fn.
 
 FOverride Definition function := fn.
+FOverride Definition function_sig := fn_sig.
 
 Inherit genv.
 FDefinition locset := Locmap.t.
@@ -277,7 +278,7 @@ Case Lgetstack s i t dst := (fun lbl => false).
 Case Lsetstack d s i t := (fun lbl => false).
 FEnd is_label.
 
-FDefinition undef_caller_save_regs : locset -> locset := fun ls => 
+FDefinition undef_caller_save_regs : locset -> locset := fun ls =>
   fun (l: loc) =>
     match l with
     | R r => if is_callee_save r then ls (R r) else Vundef
@@ -285,19 +286,19 @@ FDefinition undef_caller_save_regs : locset -> locset := fun ls =>
     | S sl ofs ty => ls (S sl ofs ty)
     end.
 
-FDefinition destroyed_by_getstack : slot -> list mreg := fun s => 
+FDefinition destroyed_by_getstack : slot -> list mreg := fun s =>
   match s with
   | Incoming => temp_for_parent_frame :: nil
   | _ => nil
   end.
 
-FDefinition parent_locset := fun stack => 
+FDefinition parent_locset := fun stack =>
   match stack with
   | nil => Locmap.init Vundef
   | self__Linear.Stackframe f sp ls c :: stack' => ls
   end.
 
-FDefinition call_regs : locset -> locset := fun caller => 
+FDefinition call_regs : locset -> locset := fun caller =>
   fun (l: loc) =>
     match l with
     | R r => caller (R r)
@@ -306,7 +307,7 @@ FDefinition call_regs : locset -> locset := fun caller =>
     | S Outgoing ofs ty => Vundef
     end.
 
-FDefinition return_regs : locset -> locset -> locset := fun caller callee => 
+FDefinition return_regs : locset -> locset -> locset := fun caller callee =>
   fun (l: loc) =>
     match l with
     | R r => if is_callee_save r then caller (R r) else callee (R r)
@@ -316,7 +317,7 @@ FDefinition return_regs : locset -> locset -> locset := fun caller callee =>
 
 Inherit find_label.
 
-FDefinition reglist : locset -> list mreg -> list val := fun rs rl => 
+FDefinition reglist : locset -> list mreg -> list val := fun rs rl =>
   List.map (fun r => rs (R r)) rl.
 
 MetaData undef_regs.
@@ -327,29 +328,29 @@ Fixpoint undef_regs (rl: list mreg) (rs: locset) : locset :=
   end.
 FEnd undef_regs.
 
-FInductive step: genv -> state -> trace -> state -> Prop :=          
+FInductive step: genv -> state -> trace -> state -> Prop :=
 | exec_Llabel:
     forall ge s f sp lbl b rs m,
     step ge (State s f sp (Llabel lbl :: b) rs m)
       E0 (State s f sp b rs m)
 | exec_Lgoto:
     forall ge s f sp lbl b rs m b',
-      find_label lbl (self__Linear.fn_code f) = Some b' ->
+      find_label lbl (fn_code f) = Some b' ->
       step ge (State s f sp (Lgoto lbl :: b) rs m)
-        E0 (State s f sp b' rs m)        
+        E0 (State s f sp b' rs m)
 | exec_Lop:
     forall ge s f sp op args res b rs m v rs',
       eval_operation ge sp op (reglist rs args) m = Some v ->
       rs' = Locmap.set (R res) v (undef_regs (destroyed_by_op op) rs) ->
       step ge (State s f sp (Lop op args res :: b) rs m)
-        E0 (State s f sp b rs' m)      
+        E0 (State s f sp b rs' m)
 | exec_Lcond_true:
     forall ge s f sp cond args lbl b rs m rs' b',
       eval_condition cond (reglist rs args) m = Some true ->
       rs' = undef_regs (destroyed_by_cond cond) rs ->
-      find_label lbl (self__Linear.fn_code f) = Some b' ->
+      find_label lbl (fn_code f) = Some b' ->
       step ge (State s f sp (Lcond cond args lbl :: b) rs m)
-        E0 (State s f sp b' rs' m)      
+        E0 (State s f sp b' rs' m)
 | exec_Lcond_false:
     forall ge s f sp cond args lbl b rs m rs',
       eval_condition cond (reglist rs args) m = Some false ->
@@ -372,13 +373,13 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
         E0 (State s f sp b rs' m)
 | exec_function_internal:
     forall ge s f rs m rs' m' stk,
-      Mem.alloc m 0 (self__Linear.fn_stacksize f) = (m', stk) ->
+      Mem.alloc m 0 (fn_stacksize f) = (m', stk) ->
       rs' = undef_regs destroyed_at_function_entry (call_regs rs) ->
       step ge (Callstate s (AST.Internal f) rs m)
-        E0 (State s f (Vptr stk Ptrofs.zero) (self__Linear.fn_code f) rs' m')
+        E0 (State s f (Vptr stk Ptrofs.zero) (fn_code f) rs' m')
 | exec_Lreturn:
       forall ge s f stk b rs m m',
-      Mem.free m stk 0 (self__Linear.fn_stacksize f) = Some m' ->
+      Mem.free m stk 0 (fn_stacksize f) = Some m' ->
       step ge (State s f (Vptr stk Ptrofs.zero) (Lreturn :: b) rs m)
         E0 (Returnstate s (return_regs (parent_locset s) rs) m').
 
@@ -389,7 +390,7 @@ Inductive initial_state (p: program): state -> Prop :=
     Genv.init_mem p = Some m0 ->
     Genv.find_symbol ge p.(AST.prog_main) = Some b ->
     Genv.find_funct_ptr ge b = Some f ->
-    self__Linear.funsig f = signature_main ->
+    funsig f = signature_main ->
     initial_state p (Callstate nil f (Locmap.init Vundef) m0).
 FEnd initial_state.
 
@@ -410,14 +411,14 @@ FInductive instruction: Type :=
 | Lsetstack: mreg -> ptrofs -> typ -> instruction.
 
 Inherit code.
-        
+
 MetaData fn binds fn_sig, fn_code, fn_stacksize, fn_link_ofs, fn_retaddr_ofs.
 Record fn: Type := mkfunction {
   fn_sig: signature;
-  fn_code: self__Mach.code;
+  fn_code: code;
   fn_stacksize: Z;
   fn_link_ofs: ptrofs;
-  fn_retaddr_ofs: ptrofs 
+  fn_retaddr_ofs: ptrofs
 }.
 FEnd fn.
 
@@ -476,12 +477,18 @@ FDefinition load_stack := fun (m: mem) (sp: val) (ty: typ) (ofs: ptrofs) =>
 FDefinition store_stack := fun (m: mem) (sp: val) (ty: typ) (ofs: ptrofs) (v: val) =>
   Mem.storev (chunk_of_type ty) m (Val.offset_ptr sp ofs) v.
 
-MetaData undef_regs.
+MetaData undef_regs binds undef_regs_other.
 Fixpoint undef_regs (rl: list mreg) (rs: regset) {struct rl} : regset :=
   match rl with
   | nil => rs
   | r1 :: rl' => Regmap.set r1 Vundef (undef_regs rl' rs)
   end.
+
+Lemma undef_regs_other:
+  forall r rl rs, ~In r rl -> undef_regs rl rs r = rs r.
+Proof.
+  induction rl; simpl; intros. auto. rewrite Regmap.gso. apply IHrl. intuition. intuition.
+Qed.
 FEnd undef_regs.
 
 FDefinition parent_sp := fun (s: list stackframe) =>
@@ -500,42 +507,42 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
 | exec_Llabel:
     forall ge s f sp lbl b rs m,
     step ge (State s f sp (Llabel lbl :: b) rs m)
-      E0 (State s f sp b rs m)      
+      E0 (State s f sp b rs m)
 | exec_Lgoto:
     forall ge s fb f sp lbl c rs m c',
       Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
-      find_label lbl (self__Mach.fn_code f) = Some c' ->
+      find_label lbl (fn_code f) = Some c' ->
       step ge (State s fb sp (Lgoto lbl :: c) rs m)
-        E0 (State s fb sp c' rs m)        
+        E0 (State s fb sp c' rs m)
 | exec_Lop:
     forall ge s f sp op args res c rs m v rs',
       eval_operation ge sp op rs##args m = Some v ->
       rs' = ((undef_regs (destroyed_by_op op) rs)#res <- v) ->
       step ge (State s f sp (Lop op args res :: c) rs m)
-        E0 (State s f sp c rs' m)        
+        E0 (State s f sp c rs' m)
 | exec_Lcond_true:
     forall ge s fb f sp cond args lbl c rs m c' rs',
       eval_condition cond rs##args m = Some true ->
       Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
-      find_label lbl (self__Mach.fn_code f) = Some c' ->
+      find_label lbl (fn_code f) = Some c' ->
       rs' = undef_regs (destroyed_by_cond cond) rs ->
       step ge (State s fb sp (Lcond cond args lbl :: c) rs m)
-        E0 (State s fb sp c' rs' m)        
+        E0 (State s fb sp c' rs' m)
 | exec_Lcond_false:
     forall ge s f sp cond args lbl c rs m rs',
       eval_condition cond rs##args m = Some false ->
       rs' = undef_regs (destroyed_by_cond cond) rs ->
       step ge (State s f sp (Lcond cond args lbl :: c) rs m)
-        E0 (State s f sp c rs' m)        
+        E0 (State s f sp c rs' m)
 | exec_return:
     forall ge s f sp ra c rs m,
       step ge (Returnstate (Stackframe f sp ra c :: s) rs m)
-        E0 (State s f sp c rs m)        
+        E0 (State s f sp c rs m)
 | exec_Lgetstack:
     forall ge s f sp ofs ty dst c rs m v,
       load_stack m sp ty ofs = Some v ->
       step ge (State s f sp (Lgetstack ofs ty dst :: c) rs m)
-        E0 (State s f sp c (rs#dst <- v) m)        
+        E0 (State s f sp c (rs#dst <- v) m)
 | exec_Lsetstack:
    forall ge s f sp src ofs ty c rs m m' rs',
       store_stack m sp ty ofs (rs src) = Some m' ->
@@ -549,7 +556,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       load_stack m (parent_sp s) ty ofs = Some v ->
       rs' = (rs # temp_for_parent_frame <- Vundef # dst <- v) ->
       step ge (State s fb sp (Lgetparam ofs ty dst :: c) rs m)
-        E0 (State s fb sp c rs' m)        
+        E0 (State s fb sp c rs' m)
 | exec_function_internal:
       forall ge s fb rs m f m1 m2 m3 stk rs',
       Genv.find_funct_ptr ge fb = Some (AST.Internal f) ->
@@ -570,24 +577,24 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
         E0 (Returnstate s rs m').
 
 MetaData initial_state.
-Inductive initial_state (p: self__Mach.program): self__Mach.state -> Prop :=
+Inductive initial_state (p: program): state -> Prop :=
   | initial_state_intro: forall fb m0,
       let ge := Genv.globalenv p in
       Genv.init_mem p = Some m0 ->
       Genv.find_symbol ge p.(AST.prog_main) = Some fb ->
-      initial_state p (self__Mach.Callstate nil fb (Regmap.init Vundef) m0).
+      initial_state p (Callstate nil fb (Regmap.init Vundef) m0).
 FEnd initial_state.
 
 MetaData final_state.
-Inductive final_state: self__Mach.state -> int -> Prop :=
+Inductive final_state: state -> int -> Prop :=
   | final_state_intro: forall rs m r retcode,
       loc_result signature_main = AST.One r ->
       rs r = Vint retcode ->
-      final_state (self__Mach.Returnstate nil rs m) retcode.
+      final_state (Returnstate nil rs m) retcode.
 FEnd final_state.
 
 FEnd Mach.
-   
+
 (* Linear -> Mach *)
 Family Stacking.
 Family S extends Linear. FEnd S.
@@ -611,7 +618,7 @@ FDefinition slot_writable := fun (sl: slot) =>
   | Incoming => false
   end.
 
-FDefinition loc_valid := fun funct l => 
+FDefinition loc_valid := fun funct l =>
   match l with
   | R r => true
   | S Local ofs ty => slot_valid funct Local ofs ty
@@ -763,7 +770,7 @@ FDefinition agree_outgoing_arguments := fun (sg: signature) (ls pls: S.locset) =
   In (Locations.S Outgoing ofs ty) (regs_of_rpairs (loc_arguments sg)) ->
   ls (Locations.S Outgoing ofs ty) = pls (Locations.S Outgoing ofs ty).
 
-FDefinition outgoing_undef : S.locset -> Prop := fun ls => 
+FDefinition outgoing_undef : S.locset -> Prop := fun ls =>
   forall ty ofs, ls (Locations.S Outgoing ofs ty) = Vundef.
 
 FDefinition wt_fundef := fun (fd: S.fundef) =>
@@ -864,9 +871,9 @@ Case Lreturn := (fun u => u).
 Case Lgetstack sl ofs ty r := (fun u => record_reg u r).
 Case Lsetstack r sl ofs ty := (fun u => record_reg u r).
 Case Lop op args res := (fun u => record_reg u res).
-Case Llabel lbl := (fun u => u). 
+Case Llabel lbl := (fun u => u).
 Case Lgoto lbl := (fun u => u).
-Case Lcond cond args lbl := (fun u => u). 
+Case Lcond cond args lbl := (fun u => u).
 FEnd record_regs_of_instr.
 
 FDefinition record_regs_of_function : S.function -> Bounds.RegSet.t := fun f =>
@@ -903,27 +910,99 @@ FDefinition max_over_slots_of_instr : (slot * Z * typ -> Z) -> S.instruction -> 
 FDefinition max_over_slots_of_funct : (slot * Z * typ -> Z) -> S.function -> Z := fun valu f =>
   max_over_instrs (max_over_slots_of_instr valu) f.
 
+FLemma max_over_list_pos:
+  forall (A: Type) (valu: A -> Z) (l: list A),
+  max_over_list valu l >= 0.
+FProofLemma.
+  intros until valu. unfold max_over_list.
+  assert (forall l z, fold_left (fun x y => Z.max x (valu y)) l z >= z).
+  induction l; simpl; intros.
+  lia. apply Zge_trans with (Z.max z (valu a)).
+  auto. apply Z.le_ge. apply Z.le_max_l. auto.
+Qed. CloseFLemma.
+
+FLemma max_over_slots_of_funct_pos:
+  forall (valu: slot * Z * typ -> Z) f, max_over_slots_of_funct valu f >= 0.
+FProofLemma.
+  intros. unfold max_over_slots_of_funct.
+  unfold max_over_instrs. apply max_over_list_pos.
+Qed. CloseFLemma.
+
+FLemma fold_left_preserves:
+  forall (A B: Type) (f: A -> B -> A) (P: A -> Prop),
+  (forall a b, P a -> P (f a b)) ->
+  forall l a, P a -> P (fold_left f l a).
+FProofLemma.
+  induction l; simpl; auto.
+Qed. CloseFLemma.
+
+FLemma fold_left_ensures:
+  forall (A B: Type) (f: A -> B -> A) (P: A -> Prop) b0,
+  (forall a b, P a -> P (f a b)) ->
+  (forall a, P (f a b0)) ->
+  forall l a, In b0 l -> P (fold_left f l a).
+FProofLemma.
+  induction l; simpl; intros. contradiction.
+  destruct H1. subst a. apply fold_left_preserves; auto. apply IHl; auto.
+Qed. CloseFLemma.
+
+FDefinition only_callee_saves : RegSet.t -> Prop :=
+  fun u => forall r, RegSet.In r u -> is_callee_save r = true.
+
+FLemma record_reg_only: forall u r, only_callee_saves u -> only_callee_saves (record_reg u r).
+FProofLemma.
+  unfold only_callee_saves, record_reg; intros.
+  destruct (is_callee_save r) eqn:CS; auto.
+  destruct (mreg_eq r r0). congruence. apply H; eapply RegSet.add_3; eauto.
+Qed. CloseFLemma.
+
+FLemma record_regs_only: forall rl u, only_callee_saves u -> only_callee_saves (record_regs u rl).
+FProofLemma.
+  intros. unfold record_regs. apply fold_left_preserves; auto using record_reg_only.
+Qed. CloseFLemma.
+
+FInduction record_regs_of_instr_only
+  about S.instruction
+  motive (fun (i : S.instruction) =>
+    forall u, only_callee_saves u -> only_callee_saves (record_regs_of_instr i u)).
+FProof.
+all: intros; fsimpl; auto using record_reg_only, record_regs_only.
+Qed. FEnd record_regs_of_instr_only.
+
+FLemma record_regs_of_function_only:
+  forall f, only_callee_saves (record_regs_of_function f).
+FProofLemma.
+  intros. unfold record_regs_of_function.
+  apply fold_left_preserves. intros. apply record_regs_of_instr_only. auto.
+  red; intros. eelim RegSet.empty_1; eauto.
+Qed. CloseFLemma.
+
 MetaData function_bounds.
-Program Definition function_bounds (f: self__Stacking.S.function) := {|
-  used_callee_save := RegSet.elements (self__Stacking.record_regs_of_function f);
-  bound_local := self__Stacking.max_over_slots_of_funct local_slot f;
-  bound_outgoing := Z.max (self__Stacking.max_over_instrs self__Stacking.outgoing_space f) (self__Stacking.max_over_slots_of_funct outgoing_slot f);
-  bound_stack_data := Z.max (self__Stacking.S.fn_stacksize f) 0
+Program Definition function_bounds (f: S.function) := {|
+  used_callee_save := RegSet.elements (record_regs_of_function f);
+  bound_local := max_over_slots_of_funct local_slot f;
+  bound_outgoing := Z.max (max_over_instrs outgoing_space f) (max_over_slots_of_funct outgoing_slot f);
+  bound_stack_data := Z.max (S.fn_stacksize f) 0
 |}.
 Next Obligation.
-  apply cheat.
+  apply max_over_slots_of_funct_pos.
 Qed.
 Next Obligation.
-  apply cheat.
+  apply Z.le_ge. eapply Z.le_trans. 2: apply Z.le_max_r.
+  apply Z.ge_le. apply max_over_slots_of_funct_pos.
 Qed.
 Next Obligation.
-  apply cheat.
+  apply Z.le_ge. apply Z.le_max_r.
 Qed.
 Next Obligation.
-  apply cheat.
+  generalize (RegSet.elements_3w (record_regs_of_function f)).
+  generalize (RegSet.elements (record_regs_of_function f)).
+  induction 1. constructor. constructor; auto.
+  red; intros; elim H. apply InA_alt. exists x; auto.
 Qed.
 Next Obligation.
-  apply cheat.
+  apply (record_regs_of_function_only f). apply RegSet.elements_2.
+  apply InA_alt. exists r; auto.
 Qed.
 FEnd function_bounds.
 
@@ -937,14 +1016,14 @@ FDefinition transl_op := fun (fe: frame_env) (op: Op.operation) =>
     Op.shift_stack_operation fe.(fe_stack_data) op.
 
 MetaData save_callee_save_rec.
-Fixpoint save_callee_save_rec (rl: list mreg) (ofs: Z) (k: self__Stacking.T.code) :=
+Fixpoint save_callee_save_rec (rl: list mreg) (ofs: Z) (k: T.code) :=
   match rl with
   | nil => k
   | r :: rl =>
       let ty := mreg_type r in
       let sz := AST.typesize ty in
       let ofs1 := align ofs sz in
-      self__Stacking.T.Lsetstack r (Ptrofs.repr ofs1) ty :: save_callee_save_rec rl (ofs1 + sz) k
+      T.Lsetstack r (Ptrofs.repr ofs1) ty :: save_callee_save_rec rl (ofs1 + sz) k
   end.
 FEnd save_callee_save_rec.
 
@@ -952,14 +1031,14 @@ FDefinition save_callee_save := fun (fe: frame_env) (k: T.code) =>
   save_callee_save_rec fe.(fe_used_callee_save) fe.(fe_ofs_callee_save) k.
 
 MetaData restore_callee_save_rec.
-Fixpoint restore_callee_save_rec (rl: list mreg) (ofs: Z) (k: self__Stacking.T.code) :=
+Fixpoint restore_callee_save_rec (rl: list mreg) (ofs: Z) (k: T.code) :=
   match rl with
   | nil => k
   | r :: rl =>
       let ty := mreg_type r in
       let sz := AST.typesize ty in
       let ofs1 := align ofs sz in
-      self__Stacking.T.Lgetstack (Ptrofs.repr ofs1) ty r :: restore_callee_save_rec rl (ofs1 + sz) k
+      T.Lgetstack (Ptrofs.repr ofs1) ty r :: restore_callee_save_rec rl (ofs1 + sz) k
   end.
 FEnd restore_callee_save_rec.
 
@@ -968,7 +1047,7 @@ FDefinition restore_callee_save := fun (fe: frame_env) (k: T.code) =>
 
 FRecursion transl_instr about S.instruction motive (fun (_ : S.instruction) => frame_env -> T.code -> T.code) by _rect.
 Case Lgetstack sl ofs ty r :=
-(fun fe k => 
+(fun fe k =>
 match sl with
 | Local =>
     T.Lgetstack (Ptrofs.repr (offset_local fe ofs)) ty r :: k
@@ -978,7 +1057,7 @@ match sl with
     T.Lgetstack (Ptrofs.repr (offset_arg ofs)) ty r :: k
 end).
 Case Lsetstack r sl ofs ty :=
-(fun fe k => 
+(fun fe k =>
   match sl with
   | Local =>
       T.Lsetstack r (Ptrofs.repr (offset_local fe ofs)) ty :: k
@@ -994,7 +1073,7 @@ Case Lcond cond args lbl := (fun fe k => T.Lcond cond args lbl :: k).
 Case Lreturn := (fun fe k =>  restore_callee_save fe (T.Lreturn :: k)).
 FEnd transl_instr.
 
-FDefinition transl_code : frame_env -> list S.instruction -> T.code := fun fe il =>     
+FDefinition transl_code : frame_env -> list S.instruction -> T.code := fun fe il =>
   list_fold_right (fun i k => transl_instr i fe k) il nil.
 
 FDefinition transl_body := fun (f: S.function) (fe: frame_env) =>
@@ -1003,7 +1082,7 @@ FDefinition transl_body := fun (f: S.function) (fe: frame_env) =>
 Local Open Scope string_scope.
 
 FDefinition transf_function : S.function -> res T.function := fun f =>
-  let fe := make_env (function_bounds f) in  
+  let fe := make_env (function_bounds f) in
   if negb (wt_function f) then
     Error (msg "Ill-formed Linear code")
   else if zlt Ptrofs.max_unsigned fe.(fe_size) then
@@ -1101,12 +1180,12 @@ Program Definition contains_locations (j: meminj) (sp: block) (pos bound: Z) (sl
     b = sp /\ pos <= ofs < pos + 4 * bound
 |}.
 Next Obligation.
-intuition auto.
+  intuition auto.
 - red; intros. eapply Mem.perm_unchanged_on; eauto. simpl; auto.
 - exploit H4; eauto. intros (v & A & B). exists v; split; auto.
   eapply Mem.load_unchanged_on; eauto.
   simpl; intros. rewrite size_type_chunk, typesize_typesize in H8.
-  split; auto. apply cheat. (*lia.  *)
+  split; auto. destruct bound, ofs; lia.
 Qed.
 Next Obligation.
   eauto with mem.
@@ -1131,7 +1210,7 @@ Let b := function_bounds f.
 Let fe := make_env b. *)
 FDefinition frame_contents_1 := fun (f: S.function) (j: meminj) (sp: block) (ls ls0: S.locset) (parent retaddr: val) =>
      let b := function_bounds f in
-     let fe := make_env b in 
+     let fe := make_env b in
     contains_locations j sp fe.(fe_ofs_local) b.(bound_local) Local ls
  ** contains_locations j sp fe_ofs_arg b.(bound_outgoing) Outgoing ls
  ** hasvalue Mptr sp fe.(fe_ofs_link) parent
@@ -1140,7 +1219,7 @@ FDefinition frame_contents_1 := fun (f: S.function) (j: meminj) (sp: block) (ls 
 
 FDefinition frame_contents := fun (f: S.function) (j: meminj) (sp: block) (ls ls0: S.locset) (parent retaddr: val) =>
   let b := function_bounds f in
-  let fe := make_env b in                                 
+  let fe := make_env b in
   mconj (frame_contents_1 f j sp ls ls0 parent retaddr)
         (range sp 0 fe.(fe_stack_data) **
          range sp (fe.(fe_stack_data) + b.(bound_stack_data)) fe.(fe_size)).
@@ -1201,18 +1280,6 @@ FProofLemma.
   unfold transl_code; intros. rewrite list_fold_right_eq. auto.
 Qed. CloseFLemma.
 
-(*Variable b: bounds.*)
-
-FDefinition mreg_within_bounds := fun (b: bounds) (r: mreg) =>
-  is_callee_save r = true -> In r (used_callee_save b).
-
-FDefinition slot_within_bounds := fun (b: bounds) (sl: slot) (ofs: Z) (ty: typ) =>
-  match sl with
-  | Local => ofs + typesize ty <= bound_local b
-  | Outgoing => ofs + typesize ty <= bound_outgoing b
-  | Incoming => True
-  end.
-
 FRecursion instr_within_bounds about S.instruction motive (fun (_ : S.instruction) =>  bounds -> Prop) by _rect.
 Case Lgetstack sl ofs ty r := (fun b => slot_within_bounds b sl ofs ty /\ mreg_within_bounds b r).
 Case Lsetstack r sl ofs ty := (fun b => slot_within_bounds b sl ofs ty).
@@ -1248,7 +1315,7 @@ FProofLemma.
   intros. unfold record_regs. apply fold_left_preserves; auto using record_reg_incr.
 Qed. CloseFLemma.
 
-FInduction record_regs_of_instr_incr about S.instruction 
+FInduction record_regs_of_instr_incr about S.instruction
   motive (fun (i: S.instruction) => forall r' u, RegSet.In r' u -> RegSet.In r' (record_regs_of_instr i u)).
 FProof.
 all: intros; fsimpl; auto using record_reg_incr, record_regs_incr.
@@ -1259,9 +1326,9 @@ FProofLemma.
   unfold record_reg; intros. rewrite H. apply RegSet.add_1; auto.
 Qed. CloseFLemma.
 
-FInduction record_regs_of_instr_ok about S.instruction 
-  motive (fun (i: S.instruction) => 
-    forall r' u, 
+FInduction record_regs_of_instr_ok about S.instruction
+  motive (fun (i: S.instruction) =>
+    forall r' u,
     defined_by_instr i r' -> is_callee_save r' = true -> RegSet.In r' (record_regs_of_instr i u)).
 FProof.
 all: intros; fsimpl in *; fsimpl in *; try contradiction; subst; auto using record_reg_ok.
@@ -1272,7 +1339,7 @@ FLemma record_regs_of_function_ok:
   forall f r i, In i (S.fn_code f) -> defined_by_instr i r -> is_callee_save r = true -> RegSet.In r (record_regs_of_function f).
 FProofLemma.
   intros. unfold record_regs_of_function.
-  eapply fold_left_ensures. 
+  eapply fold_left_ensures.
   + intros. simple apply record_regs_of_instr_incr. exact H2.
   + intro. simple apply record_regs_of_instr_ok. exact H0. exact H1.
   + exact H.
@@ -1358,8 +1425,8 @@ FProofLemma.
   eapply outgoing_slot_bound; eauto.
 Qed. CloseFLemma.
 
-FInduction instr_is_within_bounds about S.instruction motive 
-  (fun (i: S.instruction) => forall f, 
+FInduction instr_is_within_bounds about S.instruction motive
+  (fun (i: S.instruction) => forall f,
        In i (S.fn_code f) ->
        instr_within_bounds i (function_bounds f)).
 FProof.
@@ -1397,7 +1464,7 @@ FLemma find_label_save_callee_save:
   forall lbl l ofs k,
   T.find_label lbl (save_callee_save_rec l ofs k) = T.find_label lbl k.
 FProofLemma.
-  induction l; simpl. 
+  induction l; simpl.
   - auto.
   - intros. fsimpl. auto.
 Qed. CloseFLemma.
@@ -1406,10 +1473,25 @@ FLemma find_label_restore_callee_save:
   forall lbl l ofs k,
   T.find_label lbl (restore_callee_save_rec l ofs k) = T.find_label lbl k.
 FProofLemma.
-  induction l; simpl. 
+  induction l; simpl.
   - auto.
   - intros. fsimpl. auto.
 Qed. CloseFLemma.
+
+FInduction find_label_transl_code_instr
+  about S.instruction
+  motive (fun (a : S.instruction) =>
+    forall fe lbl c (IHc: T.find_label lbl (transl_code fe c) = option_map (transl_code fe) (S.find_label lbl c)),
+    T.find_label lbl (transl_code fe (a :: c)) =
+      option_map (transl_code fe)
+        (if S.is_label a lbl then Some c else S.find_label lbl c)).
+FProof.
+all: intros; rewrite transl_code_eq; do 2 fsimpl; simpl; fsimpl; auto.
+- destruct (peq lbl l). reflexivity. auto.
+- unfold restore_callee_save. rewrite find_label_restore_callee_save. simpl. fsimpl. auto.
+- destruct s; simpl; fsimpl; auto.
+- destruct s; simpl; fsimpl; auto.
+Qed. FEnd find_label_transl_code_instr.
 
 FLemma find_label_transl_code:
   forall fe lbl c,
@@ -1418,15 +1500,7 @@ FLemma find_label_transl_code:
 FProofLemma.
   induction c; simpl; intros.
 - auto.
-- rewrite transl_code_eq.  
-  apply cheat.
-  (* fdestruct *)
-  (*destruct a; unfold transl_instr; auto.
-  destruct s; simpl; auto.
-  destruct s; simpl; auto.
-  unfold restore_callee_save. rewrite find_label_restore_callee_save. auto.
-  simpl. destruct (peq lbl l). reflexivity. auto.
-  unfold restore_callee_save. rewrite find_label_restore_callee_save. auto. *)
+- apply find_label_transl_code_instr; auto.
 Qed. CloseFLemma.
 
 FLemma transl_find_label:
@@ -1491,15 +1565,24 @@ FProofLemma.
   apply agree_regs_set_reg; auto.
 Qed. CloseFLemma.
 
+FLemma agree_regs_call_regs:
+  forall j ls rs,
+  agree_regs j ls rs ->
+  agree_regs j (S.call_regs ls) rs.
+FProofLemma.
+  intros.
+  unfold S.call_regs; intros; red; intros; auto.
+Qed. CloseFLemma.
+
 FLemma agree_locs_set_reg:
   forall f ls ls0 r v,
   let b := function_bounds f in
-  agree_locs f ls ls0 ->  
+  agree_locs f ls ls0 ->
   mreg_within_bounds b r ->
   agree_locs f (Locmap.set (R r) v ls) ls0.
 FProofLemma.
-  intros. inv H; constructor; auto; intros.
-  rewrite Locmap.gso. auto. red. apply cheat. (* TODO: intuition congruence.*)
+  intros. inv H; constructor; auto; intros. subst b.
+  rewrite Locmap.gso. auto. red. simpl in H0. intuition congruence.
 Qed. CloseFLemma.
 
 FLemma agree_locs_undef_regs:
@@ -1512,6 +1595,13 @@ FProofLemma.
   induction regs; simpl; intros.
   auto.
   apply agree_locs_set_reg; auto.
+Qed. CloseFLemma.
+
+FLemma agree_regs_inject_incr:
+  forall j ls rs j',
+  agree_regs j ls rs -> inject_incr j j' -> agree_regs j' ls rs.
+FProofLemma.
+  intros; red; intros; eauto with stacking.
 Qed. CloseFLemma.
 
 FLemma caller_save_reg_within_bounds:
@@ -1553,6 +1643,13 @@ FLemma symbols_preserved:
 FProofLemma.
 intros until tge; intros TRANSL A B. rewrite A. rewrite B.
 apply (Genv.find_symbol_transf_partial TRANSL).
+Qed. CloseFLemma.
+
+FLemma destroyed_by_setstack_function_entry:
+  forall ty, incl (destroyed_by_setstack ty) destroyed_at_function_entry.
+FProofLemma.
+Local Transparent destroyed_by_setstack destroyed_at_function_entry.
+  unfold incl; destruct ty; simpl; tauto.
 Qed. CloseFLemma.
 
 FLemma transl_destroyed_by_op:
@@ -1620,10 +1717,8 @@ FLemma frame_contents_exten:
 FProofLemma.
   unfold frame_contents, frame_contents_1; intros.
   rewrite <- ! (contains_locations_exten ls ls') by auto.
-  apply cheat.
-  (* TODO *)
-  (*erewrite <- contains_callee_saves_exten by eauto.
-  assumption.*)
+  erewrite <- (contains_callee_saves_exten _ _ ls0 ls0') by eauto.
+  assumption.
 Qed. CloseFLemma.
 
 FLemma frame_set_reg:
@@ -1656,7 +1751,7 @@ FLemma get_location:
 FProofLemma.
   intros. destruct H as (D & E & F & G & H).
   exploit H; eauto. intros (v & U & V). exists v; split; auto.
-  unfold T.load_stack; simpl. rewrite Ptrofs.add_zero_l, Ptrofs.unsigned_repr; auto. 
+  unfold T.load_stack; simpl. rewrite Ptrofs.add_zero_l, Ptrofs.unsigned_repr; auto.
   unfold Ptrofs.max_unsigned. generalize (typesize_pos ty). lia.
 Qed. CloseFLemma.
 
@@ -1696,7 +1791,7 @@ FLemma agree_locs_return:
   agree_locs f ls' ls0.
 FProofLemma.
   intros. red in H0. inv H; constructor; auto; intros.
-- rewrite H0; auto. unfold mreg_within_bounds in H. apply cheat. (* tauto.*)
+- rewrite H0; auto. unfold mreg_within_bounds in H. tauto.
 - rewrite <- agree_incoming0 by auto. apply H0. congruence.
 Qed. CloseFLemma.
 
@@ -1731,13 +1826,14 @@ FProofLemma.
 Qed. CloseFLemma.
 
 FLemma frame_get_parent:
-  forall f fe j sp ls ls0 parent retaddr m P,
+  forall f j sp ls ls0 parent retaddr m P,
+  let fe := make_env (function_bounds f) in
   m |= frame_contents f j sp ls ls0 parent retaddr ** P ->
   T.load_stack m (Vptr sp Ptrofs.zero) Tptr (Ptrofs.repr fe.(fe_ofs_link)) = Some parent.
 FProofLemma.
   unfold frame_contents, frame_contents_1; intros.
   apply mconj_proj1 in H. apply sep_proj1 in H. apply sep_pick3 in H. rewrite <- chunk_of_Tptr in H.
-  eapply hasvalue_get_stack; eauto. apply cheat. (* fe is actually equal to (function_bounds f) *)
+  eapply hasvalue_get_stack; eauto.
 Qed. CloseFLemma.
 
 FLemma align_type_chunk:
@@ -1803,7 +1899,9 @@ FProofLemma.
 Qed. CloseFLemma.
 
 FLemma frame_set_local:
-  forall f fe b ofs ty v v' j sp ls ls0 parent retaddr m P,
+  forall f ofs ty v v' j sp ls ls0 parent retaddr m P,
+  let b := function_bounds f in
+  let fe := make_env b in
   m |= frame_contents f j sp ls ls0 parent retaddr ** P ->
   slot_within_bounds b Local ofs ty -> slot_valid f Local ofs ty = true ->
   Val.inject j v v' ->
@@ -1815,20 +1913,21 @@ FProofLemma.
   exploit mconj_proj1; eauto. unfold frame_contents_1.
   rewrite ! sep_assoc; intros SEP.
   unfold slot_valid in H1; InvBooleans. simpl in H0.
-  exploit set_location; eauto. (*why? *) apply cheat. intros (m' & A & B).
+  exploit set_location; eauto. intros (m' & A & B).
   exists m'; split; auto.
   assert (forall i k p, Mem.perm m sp i k p -> Mem.perm m' sp i k p).
-  { intros. unfold T.store_stack in A; simpl in A. eapply Mem.perm_store_1; eauto. } (* why? *) apply cheat.
+  { intros. unfold T.store_stack in A; simpl in A. eapply Mem.perm_store_1; eauto. }
   eapply frame_mconj. eauto.
   unfold frame_contents_1; rewrite ! sep_assoc; exact B.
   eapply sep_preserved.
   eapply sep_proj1. eapply mconj_proj2. eassumption.
   intros; eapply range_preserved; eauto.
-  intros; eapply range_preserved; eauto. (* why? *) apply cheat. apply cheat.
+  intros; eapply range_preserved; eauto.
 Qed. CloseFLemma.
 
 FLemma frame_set_outgoing:
-  forall f b ofs ty v v' j sp ls ls0 parent retaddr m P,
+  forall f ofs ty v v' j sp ls ls0 parent retaddr m P,
+  let b := function_bounds f in
   m |= frame_contents f j sp ls ls0 parent retaddr ** P ->
   slot_within_bounds b Outgoing ofs ty -> slot_valid f Outgoing ofs ty = true ->
   Val.inject j v v' ->
@@ -1840,7 +1939,7 @@ FProofLemma.
   exploit mconj_proj1; eauto. unfold frame_contents_1.
   rewrite ! sep_assoc, sep_swap. intros SEP.
   unfold slot_valid in H1; InvBooleans. simpl in H0.
-  exploit set_location; eauto. (* why? *) apply cheat. intros (m' & A & B).
+  exploit set_location; eauto. intros (m' & A & B).
   exists m'; split; auto.
   assert (forall i k p, Mem.perm m sp i k p -> Mem.perm m' sp i k p).
   { intros. unfold T.store_stack in A; simpl in A. eapply Mem.perm_store_1; eauto. }
@@ -1877,8 +1976,197 @@ FProofLemma.
   unfold no_callee_saves; destruct ty; reflexivity.
 Qed. CloseFLemma.
 
+FLemma contains_set_stack:
+  forall (spec: val -> Prop) v spec1 m ty sp ofs P,
+  m |= contains (chunk_of_type ty) sp ofs spec1 ** P ->
+  spec (Val.load_result (chunk_of_type ty) v) ->
+  exists m',
+      T.store_stack m (Vptr sp Ptrofs.zero) ty (Ptrofs.repr ofs) v = Some m'
+  /\ m' |= contains (chunk_of_type ty) sp ofs spec ** P.
+FProofLemma.
+  intros. unfold T.store_stack.
+  replace (Val.offset_ptr (Vptr sp Ptrofs.zero) (Ptrofs.repr ofs)) with (Vptr sp (Ptrofs.repr ofs)).
+  eapply storev_rule; eauto.
+  simpl. rewrite Ptrofs.add_zero_l; auto.
+Qed. CloseFLemma.
+
+FLemma load_result_inject:
+  forall j ty v v',
+  Val.inject j v v' -> Val.has_type v ty -> Val.inject j v (Val.load_result (chunk_of_type ty) v').
+FProofLemma.
+  intros until v'; unfold Val.has_type, Val.load_result; destruct Archi.ptr64;
+  destruct 1; intros; auto; destruct ty; simpl;
+  try contradiction; try discriminate; econstructor; eauto.
+Qed. CloseFLemma.
+
+FLemma save_callee_save_rec_correct:
+  forall tge j cs fb sp ls,
+  (forall ty r, In r (destroyed_by_setstack ty) -> ls (R r) = Vundef) ->
+  (forall r, Val.has_type (ls (R r)) (mreg_type r)) ->
+  forall k l pos rs m P,
+  (forall r, In r l -> is_callee_save r = true) ->
+  m |= range sp pos (size_callee_save_area_rec l pos) ** P ->
+  agree_regs j ls rs ->
+  exists rs', exists m',
+     star T.step tge
+        (T.State cs fb (Vptr sp Ptrofs.zero) (save_callee_save_rec l pos k) rs m)
+     E0 (T.State cs fb (Vptr sp Ptrofs.zero) k rs' m')
+  /\ m' |= contains_callee_saves j sp pos l ls ** P
+  /\ (forall ofs k p, Mem.perm m sp ofs k p -> Mem.perm m' sp ofs k p)
+  /\ agree_regs j ls rs'.
+FProofLemma.
+  intros * ls_temp_undef wt_ls.
+Local Opaque mreg_type.
+  induction l as [ | r l]; simpl contains_callee_saves; intros until P; intros CS SEP AG.
+- exists rs, m.
+  split. apply star_refl.
+  split. rewrite sep_pure; split; auto. eapply sep_drop; eauto.
+  split. auto.
+  auto.
+- simpl size_callee_save_area_rec in SEP.
+  set (ty := mreg_type r) in *.
+  set (sz := AST.typesize ty) in *.
+  set (pos1 := align pos sz) in *.
+  assert (SZPOS: sz > 0) by (apply AST.typesize_pos).
+  assert (SZREC: pos1 + sz <= size_callee_save_area_rec l (pos1 + sz)) by (apply size_callee_save_area_rec_incr).
+  assert (POS1: pos <= pos1) by (apply align_le; auto).
+  assert (AL1: (align_chunk (chunk_of_type ty) | pos1)).
+  { unfold pos1. apply Z.divide_trans with sz.
+    unfold sz; rewrite <- size_type_chunk. apply align_size_chunk_divides.
+    apply align_divides; auto. }
+  apply range_drop_left with (mid := pos1) in SEP; [ | lia ].
+  apply range_split with (mid := pos1 + sz) in SEP; [ | lia ].
+  unfold sz at 1 in SEP. rewrite <- size_type_chunk in SEP.
+  apply range_contains in SEP; auto.
+  exploit (contains_set_stack (fun v' => Val.inject j (ls (R r)) v') (rs r)).
+  eexact SEP.
+  apply load_result_inject; [auto|apply wt_ls].
+  clear SEP; intros (m1 & STORE & SEP).
+  set (rs1 := T.undef_regs (destroyed_by_setstack ty) rs).
+  assert (AG1: agree_regs j ls rs1).
+  { red; intros. unfold rs1. destruct (In_dec mreg_eq r0 (destroyed_by_setstack ty)).
+    erewrite ls_temp_undef by eauto. auto.
+    rewrite T.undef_regs_other by auto. apply AG. }
+  rewrite sep_swap in SEP.
+  simpl in CS. exploit (IHl (pos1 + sz) rs1 m1); eauto.
+  intros (rs2 & m2 & A & B & C & D).
+  exists rs2, m2.
+  split. eapply star_left; eauto. fconstructor. traceEq.
+  split. rewrite sep_assoc, sep_swap. exact B.
+  split. intros. apply C. unfold T.store_stack in STORE; simpl in STORE. eapply Mem.perm_store_1; eauto.
+  auto.
+Qed. CloseFLemma.
+
+FLemma LTL_undef_regs_same:
+  forall r rl ls, In r rl -> S.undef_regs rl ls (R r) = Vundef.
+FProofLemma.
+  induction rl; simpl; intros. contradiction.
+  unfold Locmap.set. destruct (Loc.eq (R a) (R r)). auto.
+  destruct (Loc.diff_dec (R a) (R r)); auto.
+  apply IHrl. intuition congruence.
+Qed. CloseFLemma.
+
+FLemma LTL_undef_regs_others:
+  forall r rl ls, ~In r rl -> S.undef_regs rl ls (R r) = ls (R r).
+FProofLemma.
+  induction rl; simpl; intros. auto.
+  rewrite Locmap.gso. apply IHrl. intuition. red. intuition.
+Qed. CloseFLemma.
+
+FLemma LTL_undef_regs_slot:
+  forall sl ofs ty rl ls, S.undef_regs rl ls (Locations.S sl ofs ty) = ls (Locations.S sl ofs ty).
+FProofLemma.
+  induction rl; simpl; intros. auto.
+  rewrite Locmap.gso. apply IHrl. red; auto.
+Qed. CloseFLemma.
+
+FLemma undef_regs_type:
+  forall ty l rl ls,
+  Val.has_type (ls l) ty -> Val.has_type (S.undef_regs rl ls l) ty.
+FProofLemma.
+  induction rl; simpl; intros.
+- auto.
+- unfold Locmap.set. destruct (Loc.eq (R a) l). red; auto.
+  destruct (Loc.diff_dec (R a) l); auto. red; auto.
+Qed. CloseFLemma.
+
+FLemma save_callee_save_correct:
+  forall f tge j ls ls0 rs sp cs fb k m P,
+  let b := function_bounds f in
+  let fe := make_env b in
+  m |= range sp fe.(fe_ofs_callee_save) (size_callee_save_area b fe.(fe_ofs_callee_save)) ** P ->
+  (forall r, Val.has_type (ls (R r)) (mreg_type r)) ->
+  agree_callee_save ls ls0 ->
+  agree_regs j ls rs ->
+  forall ls1 rs1,
+  ls1 = S.undef_regs destroyed_at_function_entry (S.call_regs ls) ->
+  rs1 = T.undef_regs destroyed_at_function_entry rs ->
+  exists rs', exists m',
+     star T.step tge
+        (T.State cs fb (Vptr sp Ptrofs.zero) (save_callee_save fe k) rs1 m)
+     E0 (T.State cs fb (Vptr sp Ptrofs.zero) k rs' m')
+  /\ m' |= contains_callee_saves j sp fe.(fe_ofs_callee_save) b.(used_callee_save) ls0 ** P
+  /\ (forall ofs k p, Mem.perm m sp ofs k p -> Mem.perm m' sp ofs k p)
+  /\ agree_regs j ls1 rs'.
+FProofLemma.
+  intros until P; intros SEP TY AGCS AG; intros ls1 rs1 Heqls1 Heqrs1.
+  set (b := function_bounds f) in *.
+  exploit (save_callee_save_rec_correct tge j cs fb sp ls1).
+- intros. rewrite Heqls1. apply LTL_undef_regs_same. eapply destroyed_by_setstack_function_entry; eauto.
+- intros. rewrite Heqls1. apply undef_regs_type. apply TY.
+- exact b.(used_callee_save_prop).
+- eexact SEP.
+- instantiate (1 := rs1). rewrite Heqls1, Heqrs1. apply agree_regs_undef_regs. apply agree_regs_call_regs. auto.
+- clear SEP. intros (rs' & m' & EXEC & SEP & PERMS & AG').
+  exists rs', m'.
+  split. eexact EXEC.
+  split. rewrite (contains_callee_saves_exten j sp ls0 ls1). exact SEP.
+  intros. apply b.(used_callee_save_prop) in H.
+    rewrite Heqls1. rewrite LTL_undef_regs_others. unfold S.call_regs.
+    apply AGCS; auto.
+    red; intros.
+    assert (existsb is_callee_save destroyed_at_function_entry = false).
+    { assert (no_callee_saves destroyed_at_function_entry) by (red; reflexivity); auto. }
+    assert (existsb is_callee_save destroyed_at_function_entry = true).
+    { apply existsb_exists. exists r; auto. }
+    congruence.
+  split. exact PERMS. exact AG'.
+Qed. CloseFLemma.
+
+FLemma size_no_overflow:
+  forall f tf,
+  transf_function f = OK tf ->
+  (make_env (function_bounds f)).(fe_size) <= Ptrofs.max_unsigned.
+FProofLemma.
+  intros f tf. unfold transf_function.
+  destruct (wt_function f); simpl negb.
+  destruct (zlt Ptrofs.max_unsigned (fe_size (make_env (function_bounds f)))).
+  intros; discriminate.
+  intros. lia.
+  intros; discriminate.
+Qed. CloseFLemma.
+
+FLemma initial_locations:
+  forall j sp pos bound P sl ls m,
+  m |= range sp pos (pos + 4 * bound) ** P ->
+  (8 | pos) ->
+  (forall ofs ty, ls (Locations.S sl ofs ty) = Vundef) ->
+  m |= contains_locations j sp pos bound sl ls ** P.
+FProofLemma.
+  intros. destruct H as (A & B & C). destruct A as (D & E & F). split.
+- simpl; intuition auto. red; intros; eauto with mem.
+  destruct (Mem.valid_access_load m (chunk_of_type ty) sp (pos + 4 * ofs)) as [v LOAD].
+  eapply valid_access_location; eauto.
+  red; intros; eauto with mem.
+  exists v; split; auto. rewrite H1; auto.
+- split; assumption.
+Qed. CloseFLemma.
+
 FLemma function_prologue_correct:
-  forall f tf fe (ge: S.genv) tge j ls ls0 ls1 rs rs1 m1 m1' m2 sp parent ra cs fb k P,
+  forall f tf (ge: S.genv) tge j ls ls0 ls1 rs rs1 m1 m1' m2 sp parent ra cs fb k P,
+  transf_function f = OK tf ->
+  let b := function_bounds f in
+  let fe := make_env b in
   agree_regs j ls rs ->
   agree_callee_save ls ls0 ->
   agree_outgoing_arguments (S.fn_sig f) ls ls0 ->
@@ -1901,12 +2189,183 @@ FLemma function_prologue_correct:
   /\ j' sp = Some(sp', fe.(fe_stack_data))
   /\ inject_incr j j'.
 FProofLemma.
-(* ...imagine we have it*)
-apply cheat.
+  intros until P; intros TRANSF_F AGREGS AGCS AGARGS WTREGS LS1 RS1 ALLOC TYPAR TYRA SEP.
+  rewrite (unfold_transf_function f tf).
+  unfold T.fn_stacksize, T.fn_link_ofs, T.fn_retaddr_ofs.
+  set (b := function_bounds f) in *.
+  set (fe := make_env b) in *.
+  (* Stack layout info *)
+  generalize (frame_env_range b) (frame_env_aligned b). replace (make_env b) with fe by auto.
+  intros LAYOUT1 LAYOUT2. hnf in LAYOUT1, LAYOUT2.
+  (* Allocation step *)
+  destruct (Mem.alloc m1' 0 (fe_size fe)) as [m2' sp'] eqn:ALLOC'.
+  exploit alloc_parallel_rule_2.
+  eexact SEP. eexact ALLOC. eexact ALLOC'.
+  instantiate (1 := fe_stack_data fe). tauto.
+  reflexivity.
+  instantiate (1 := fe_stack_data fe + bound_stack_data b). rewrite Z.max_comm. reflexivity.
+  generalize (bound_stack_data_pos b) (size_no_overflow f tf TRANSF_F). split; auto. lia.
+  tauto.
+  tauto.
+  clear SEP. intros (j' & SEP & INCR & SAME).
+  (* Remember the freeable permissions using a mconj *)
+  assert (SEPCONJ:
+    m2' |= mconj (range sp' 0 (fe_stack_data fe) ** range sp' (fe_stack_data fe + bound_stack_data b) (fe_size fe))
+                 (range sp' 0 (fe_stack_data fe) ** range sp' (fe_stack_data fe + bound_stack_data b) (fe_size fe))
+           ** minjection j' m2 ** globalenv_inject ge j' ** P).
+  { apply mconj_intro; rewrite sep_assoc; assumption. }
+  (* Dividing up the frame *)
+  apply (frame_env_separated b) in SEP. replace (make_env b) with fe in SEP by auto.
+  (* Store of parent *)
+  rewrite sep_swap3 in SEP.
+  apply (range_contains Mptr) in SEP; [|tauto].
+  exploit (contains_set_stack (fun v' => v' = parent) parent (fun _ => True) m2' Tptr).
+  rewrite chunk_of_Tptr; eexact SEP. apply Val.load_result_same; auto.
+  clear SEP; intros (m3' & STORE_PARENT & SEP).
+  rewrite sep_swap3 in SEP.
+  (* Store of return address *)
+  rewrite sep_swap4 in SEP.
+  apply (range_contains Mptr) in SEP; [|tauto].
+  exploit (contains_set_stack (fun v' => v' = ra) ra (fun _ => True) m3' Tptr).
+  rewrite chunk_of_Tptr; eexact SEP. apply Val.load_result_same; auto.
+  clear SEP; intros (m4' & STORE_RETADDR & SEP).
+  rewrite sep_swap4 in SEP.
+  (* Saving callee-save registers *)
+  rewrite sep_swap5 in SEP.
+  exploit (save_callee_save_correct f tge j' ls ls0 rs); eauto.
+  apply agree_regs_inject_incr with j; auto.
+  replace (S.undef_regs destroyed_at_function_entry (S.call_regs ls)) with ls1 by auto.
+  replace (T.undef_regs destroyed_at_function_entry rs) with rs1 by auto.
+  clear SEP; intros (rs2 & m5' & SAVE_CS & SEP & PERMS & AGREGS').
+  rewrite sep_swap5 in SEP.
+  (* Materializing the Local and Outgoing locations *)
+  exploit (initial_locations j'). eexact SEP. tauto.
+  instantiate (1 := Local). instantiate (1 := ls1).
+  intros; rewrite LS1. rewrite LTL_undef_regs_slot. reflexivity.
+  clear SEP; intros SEP.
+  rewrite sep_swap in SEP.
+  exploit (initial_locations j'). eexact SEP. tauto.
+  instantiate (1 := Outgoing). instantiate (1 := ls1).
+  intros; rewrite LS1. rewrite LTL_undef_regs_slot. reflexivity.
+  clear SEP; intros SEP.
+  rewrite sep_swap in SEP.
+  (* Now we frame this *)
+  assert (SEPFINAL: m5' |= frame_contents f j' sp' ls1 ls0 parent ra ** minjection j' m2 ** globalenv_inject ge j' ** P).
+  { eapply frame_mconj. eexact SEPCONJ.
+    rewrite chunk_of_Tptr in SEP.
+    unfold frame_contents_1; rewrite ! sep_assoc. exact SEP.
+    assert (forall ofs k p, Mem.perm m2' sp' ofs k p -> Mem.perm m5' sp' ofs k p).
+    { intros. apply PERMS.
+      unfold T.store_stack in STORE_PARENT, STORE_RETADDR.
+      simpl in STORE_PARENT, STORE_RETADDR.
+      eauto using Mem.perm_store_1. }
+    eapply sep_preserved. eapply sep_proj1. eapply mconj_proj2. eexact SEPCONJ.
+    intros; apply range_preserved with m2'; auto.
+    intros; apply range_preserved with m2'; auto.
+  }
+  clear SEP SEPCONJ.
+(* Conclusions *)
+  exists j', rs2, m2', sp', m3', m4', m5'.
+  split. auto.
+  split. exact STORE_PARENT.
+  split. exact STORE_RETADDR.
+  split. eexact SAVE_CS.
+  split. exact AGREGS'.
+  split. rewrite LS1. apply agree_locs_undef_locs; [|reflexivity].
+    constructor; intros. unfold S.call_regs. apply AGCS.
+    unfold mreg_within_bounds in H; tauto.
+    unfold S.call_regs. apply AGARGS. apply incoming_slot_in_parameters; auto.
+  split. exact SEPFINAL.
+  split. exact SAME. exact INCR.
+  exact TRANSF_F.
+Qed. CloseFLemma.
+
+FDefinition agree_unused : S.function -> meminj -> S.locset -> T.regset -> Prop :=
+  fun f j ls0 rs =>
+  forall r, ~(mreg_within_bounds (function_bounds f) r) -> Val.inject j (ls0 (R r)) (rs r).
+
+FLemma restore_callee_save_rec_correct:
+  forall f tge j cs fb sp ls0 m l ofs rs k,
+  let b := function_bounds f in
+  m |= contains_callee_saves j sp ofs l ls0 ->
+  agree_unused f j ls0 rs ->
+  (forall r, In r l -> mreg_within_bounds b r) ->
+  exists rs',
+    star T.step tge
+      (T.State cs fb (Vptr sp Ptrofs.zero) (restore_callee_save_rec l ofs k) rs m)
+   E0 (T.State cs fb (Vptr sp Ptrofs.zero) k rs' m)
+  /\ (forall r, In r l -> Val.inject j (ls0 (R r)) (rs' r))
+  /\ (forall r, ~(In r l) -> rs' r = rs r)
+  /\ agree_unused f j ls0 rs'.
+FProofLemma.
+Local Opaque mreg_type.
+  induction l as [ | r l]; simpl contains_callee_saves; intros.
+- (* base case *)
+  exists rs. intuition auto. apply star_refl.
+- (* inductive case *)
+  set (ty := mreg_type r) in *.
+  set (sz := AST.typesize ty) in *.
+  set (ofs1 := align ofs sz).
+  assert (SZPOS: sz > 0) by (apply AST.typesize_pos).
+  assert (OFSLE: ofs <= ofs1) by (apply align_le; auto).
+  remember (function_bounds f) as b. simpl in H1.
+  assert (BOUND: mreg_within_bounds b r) by eauto.
+  exploit contains_get_stack.
+    eapply sep_proj1; eassumption.
+  intros (v & LOAD & SPEC).
+  exploit (IHl (ofs1 + sz) (rs#r <- v)).
+    eapply sep_proj2; eassumption.
+    red; intros. rewrite Regmap.gso. auto. rewrite <- Heqb in H2. intuition congruence.
+    eauto.
+  intros (rs' & A & B & C & D).
+  exists rs'.
+  split. eapply star_step; eauto.
+    fconstructor. traceEq.
+  simpl.
+  split. intros.
+    destruct (In_dec mreg_eq r0 l). auto.
+    assert (r = r0) by tauto. subst r0.
+    rewrite C by auto. rewrite Regmap.gss. exact SPEC.
+  split. intros.
+    rewrite C by tauto. apply Regmap.gso. intuition auto.
+  exact D.
+Qed. CloseFLemma.
+
+FLemma restore_callee_save_correct:
+  forall f tge m j sp ls ls0 pa ra P rs k cs fb,
+  let b := function_bounds f in
+  let fe := make_env b in
+  m |= frame_contents f j sp ls ls0 pa ra ** P ->
+  agree_unused f j ls0 rs ->
+  exists rs',
+    star T.step tge
+       (T.State cs fb (Vptr sp Ptrofs.zero) (restore_callee_save fe k) rs m)
+    E0 (T.State cs fb (Vptr sp Ptrofs.zero) k rs' m)
+  /\ (forall r,
+        is_callee_save r = true -> Val.inject j (ls0 (R r)) (rs' r))
+  /\ (forall r,
+        is_callee_save r = false -> rs' r = rs r).
+FProofLemma.
+  intros.
+  unfold frame_contents, frame_contents_1 in H.
+  apply mconj_proj1 in H. rewrite ! sep_assoc in H. apply sep_pick5 in H.
+  exploit restore_callee_save_rec_correct; eauto.
+  intros; unfold mreg_within_bounds; auto.
+  intros (rs' & A & B & C & D).
+  exists rs'.
+  split. eexact A.
+  split; intros.
+  destruct (In_dec mreg_eq r (used_callee_save (function_bounds f))).
+  apply B; auto.
+  rewrite C by auto. apply H0. unfold mreg_within_bounds; tauto.
+  apply C. red; intros. apply (used_callee_save_prop (function_bounds f)) in H2. congruence.
 Qed. CloseFLemma.
 
 FLemma function_epilogue_correct:
-  forall f tf tge fe m' j sp' ls ls0 pa ra P m rs sp m1 k cs fb,
+  forall f tf tge m' j sp' ls ls0 pa ra P m rs sp m1 k cs fb,
+  transf_function f = OK tf ->
+  let b := function_bounds f in
+  let fe := make_env b in
   m' |= frame_contents f j sp' ls ls0 pa ra ** minjection j m ** P ->
   agree_regs j ls rs ->
   agree_locs f ls ls0 ->
@@ -1923,8 +2382,41 @@ FLemma function_epilogue_correct:
   /\ agree_callee_save (S.return_regs ls0 ls) ls0
   /\ m1' |= minjection j m1 ** P.
 FProofLemma.
-(* ...imagine we had it*)
-apply cheat.
+  intros until fb; intros TRANSF_F SEP AGR AGL INJ FREE.
+  (* Can free *)
+  exploit free_parallel_rule.
+    rewrite <- sep_assoc. eapply mconj_proj2. eexact SEP.
+    eexact FREE.
+    eexact INJ.
+    auto. rewrite Z.max_comm; reflexivity.
+  intros (m1' & FREE' & SEP').
+  (* Reloading the callee-save registers *)
+  exploit restore_callee_save_correct.
+    eexact SEP.
+    instantiate (1 := rs).
+    red; intros. destruct AGL. rewrite <- agree_unused_reg0 by auto. apply AGR.
+  intros (rs' & LOAD_CS & CS & NCS).
+  (* Reloading the back link and return address *)
+  unfold frame_contents in SEP; apply mconj_proj1 in SEP.
+  unfold frame_contents_1 in SEP; rewrite ! sep_assoc in SEP.
+  exploit (hasvalue_get_stack Tptr). rewrite chunk_of_Tptr. eapply sep_pick3; eexact SEP. intros LOAD_LINK.
+  exploit (hasvalue_get_stack Tptr). rewrite chunk_of_Tptr. eapply sep_pick4; eexact SEP. intros LOAD_RETADDR.
+  clear SEP.
+  (* Conclusions *)
+  rewrite (unfold_transf_function f tf); simpl.
+  exists rs', m1'.
+  split. assumption.
+  split. assumption.
+  split. assumption.
+  split. eassumption.
+  split. red; unfold S.return_regs; intros.
+    destruct (is_callee_save r) eqn:C.
+    apply CS; auto.
+    rewrite NCS by auto. apply AGR.
+  split. red; unfold S.return_regs; intros.
+    destruct l. rewrite H; auto. destruct sl; auto; contradiction.
+  assumption.
+  exact TRANSF_F.
 Qed. CloseFLemma.
 
 FLemma match_stacks_type_sp:
@@ -1934,7 +2426,7 @@ FLemma match_stacks_type_sp:
 FProofLemma.
   induction 1; unfold T.parent_sp. apply Val.Vnullptr_has_type. apply Val.Vptr_has_type.
 Qed. CloseFLemma.
- 
+
 FLemma match_stacks_type_retaddr:
   forall ge tge j cs cs' sg,
   match_stacks ge tge j cs cs' sg ->
@@ -1974,9 +2466,8 @@ FProofLemma.
   unfold frame_contents, frame_contents_1; intros.
   rewrite <- (contains_locations_incr j j') by auto.
   rewrite <- (contains_locations_incr j j') by auto.
-  apply cheat.
-  (* erewrite <- contains_callee_saves_incr by eauto.*)
-  (*assumption.*)
+  rewrite <- (contains_callee_saves_incr j j') by auto.
+  assumption.
 Qed. CloseFLemma.
 
 FLemma stack_contents_change_meminj:
@@ -2035,19 +2526,19 @@ all: intros;
   try inv MS;
   try rewrite transl_code_eq;
   try (generalize (function_is_within_bounds f _ (is_tail_in TAIL));
-       intro BOUND; simpl in BOUND); fsimpl in *. 
+       intro BOUND; simpl in BOUND); fsimpl in *.
 (* Llabel *)
 + econstructor; split.
   apply plus_one; apply T.exec_Llabel.
   econstructor; eauto with coqlib.
-  
+
 (* Lgoto *)
 + econstructor; split.
-  apply plus_one; eapply T.exec_Lgoto; eauto.  
+  apply plus_one; eapply T.exec_Lgoto; eauto.
   apply transl_find_label; eauto.
   econstructor; eauto.
-  eapply find_label_tail; eauto. 
-  
+  eapply find_label_tail; eauto.
+
 (* Lop *)
 +  assert (exists v',
           eval_operation (Genv.globalenv prog) (Vptr sp' Ptrofs.zero) (transl_op (make_env (function_bounds f)) op) rs0##args m' = Some v'
@@ -2064,11 +2555,11 @@ all: intros;
   econstructor; eauto with coqlib.
   apply agree_regs_set_reg; auto.
   rewrite transl_destroyed_by_op. apply agree_regs_undef_regs; auto.
-  apply agree_locs_set_reg. apply agree_locs_undef_locs. auto. apply destroyed_by_op_caller_save. 
+  apply agree_locs_set_reg. apply agree_locs_undef_locs. auto. apply destroyed_by_op_caller_save.
   fsimpl in BOUND. assumption.
   apply frame_set_reg. apply frame_undef_regs. exact SEP.
 
-(* Lcond true *)  
+(* Lcond true *)
 + econstructor; split.
   apply plus_one. eapply T.exec_Lcond_true; eauto.
   eapply eval_condition_inject with (m1 := m). eapply agree_reglist; eauto. apply sep_pick3 in SEP; exact SEP. auto.
@@ -2077,10 +2568,10 @@ all: intros;
   apply agree_regs_undef_regs; auto.
   apply agree_locs_undef_locs. auto. apply destroyed_by_cond_caller_save.
   auto.
-  eapply find_label_tail; eauto. 
+  eapply find_label_tail; eauto.
   apply frame_undef_regs; auto.
 
-(* Lcond false *)  
+(* Lcond false *)
 + econstructor; split.
   apply plus_one. eapply T.exec_Lcond_false; eauto.
   eapply eval_condition_inject with (m1 := m). eapply agree_reglist; eauto. apply sep_pick3 in SEP; exact SEP. auto.
@@ -2090,7 +2581,7 @@ all: intros;
   auto. eauto with coqlib.
   apply frame_undef_regs; auto.
 
-(* return *)  
+(* return *)
 + inv STACKS. exploit wt_returnstate_agree; eauto. intros [AGCS OUTU].
   simpl in AGCS. unfold stack_contents in SEP. fold stack_contents in SEP. (* simpl in SEP.*) rewrite sep_assoc in SEP.
   econstructor; split.
@@ -2101,7 +2592,7 @@ all: intros;
   intros; apply Val.lessdef_same; apply AGCS; red; congruence.
   intros; rewrite (OUTU ty ofs); auto.
 
-(* Lgetstack *)  
+(* Lgetstack *)
 + fsimpl in BOUND. destruct BOUND as [BOUND1 BOUND2].
   exploit wt_state_getstack; eauto. intros SV.
   unfold S.destroyed_by_getstack; destruct sl.
@@ -2140,14 +2631,15 @@ all: intros;
   apply agree_regs_set_reg; auto.
   apply agree_locs_set_reg; auto.
 
-(* Lsetstack *)  
+(* Lsetstack *)
 + exploit wt_state_setstack; eauto. intros (SV & SW).
   set (ofs' := match sl with
                | Local => offset_local (make_env (function_bounds f)) ofs
                | Incoming => 0 (* dummy *)
                | Outgoing => offset_arg ofs
                end).
-  eapply frame_undef_regs with (rl := destroyed_by_setstack ty) in SEP.
+  eapply frame_undef_regs in SEP.
+  instantiate (1 := destroyed_by_setstack ty) in SEP.
   assert (A: exists m'',
               T.store_stack m' (Vptr sp' Ptrofs.zero) ty (Ptrofs.repr ofs') (rs0 src) = Some m''
            /\ m'' |= frame_contents f j sp' (Locmap.set (S sl ofs ty) (rs (R src))
@@ -2155,8 +2647,8 @@ all: intros;
                                             (S.parent_locset s) (T.parent_sp cs') (T.parent_ra cs')
                   ** stack_contents j s cs' ** minjection j m ** globalenv_inject (Genv.globalenv prog) j).
   { unfold ofs'; destruct sl; try discriminate.
-    eapply frame_set_local; eauto. apply cheat. apply cheat. (* why? *)
-    eapply frame_set_outgoing; eauto. apply cheat. apply cheat. }
+    eapply frame_set_local; eauto. fsimpl in BOUND. exact BOUND.
+    eapply frame_set_outgoing; eauto. fsimpl in BOUND. exact BOUND. }
   clear SEP; destruct A as (m'' & STORE & SEP).
   econstructor; split.
   apply plus_one. destruct sl; try discriminate.
@@ -2167,13 +2659,13 @@ all: intros;
   apply agree_locs_set_slot. apply agree_locs_undef_locs. auto. apply destroyed_by_setstack_caller_save. auto.
   eauto. eauto with coqlib. eauto.
 
-(* internal function *)  
+(* internal function *)
 + revert TRANSL. unfold transf_fundef, transf_partial_fundef.
   destruct (transf_function f) as [tfn|] eqn:TRANSL; simpl; try congruence.
   intros EQ; inversion EQ; clear EQ; subst tf.
   rewrite sep_comm, sep_assoc in SEP.
   exploit wt_callstate_agree; eauto. intros [AGCS AGARGS].
-  exploit function_prologue_correct; eauto. apply cheat. (* why? *)
+  exploit function_prologue_correct; eauto.
   red; intros; eapply wt_callstate_wt_regs; eauto.
   eapply match_stacks_type_sp; eauto.
   eapply match_stacks_type_retaddr; eauto.
@@ -2186,12 +2678,10 @@ all: intros;
   rewrite (unfold_transf_function _ _ TRANSL). unfold T.fn_code. unfold transl_body.
   eexact D. traceEq.
   eapply match_states_intro with (j := j'); eauto with coqlib.
-  eapply match_stacks_change_meminj; eauto. apply cheat. (* why? *)
+  eapply match_stacks_change_meminj; eauto.
   rewrite sep_swap in SEP. rewrite sep_swap. eapply stack_contents_change_meminj; eauto.
-  (* becuase of cheat we have some evars? *)
-  Unshelve. apply cheat. apply cheat.
-  
-(* Lreturn *)  
+
+(* Lreturn *)
 + rewrite (sep_swap (stack_contents j s cs')) in SEP.
   exploit function_epilogue_correct; eauto.
   intros (rs' & m1' & A & B & C & D & E & F & G).
@@ -2204,7 +2694,7 @@ Qed. FEnd transf_step_correct.
 FLemma transf_initial_states:
   forall prog tprog ge tge, match_prog prog tprog ->
   ge = Genv.globalenv prog ->
-  tge = Genv.globalenv tprog ->                     
+  tge = Genv.globalenv tprog ->
   forall st1, S.initial_state prog st1 ->
   exists st2, T.initial_state tprog st2 /\ match_states ge tge st1 st2.
 FProofLemma.
@@ -2215,7 +2705,7 @@ FProofLemma.
   eapply (Genv.init_mem_transf_partial H); eauto.
   rewrite (match_program_main H).
   rewrite symbols_preserved with (prog:=prog) (tprog:=tprog) (ge:=(Genv.globalenv prog)). eauto. apply H. auto. auto.
-  set (j := Mem.flat_inj (Mem.nextblock m0)). 
+  set (j := Mem.flat_inj (Mem.nextblock m0)).
   eapply match_states_call with (j := j); eauto.
   constructor. red; intros. rewrite H6, loc_arguments_main in H0. contradiction.
   red; simpl; auto. unfold stack_contents.
@@ -2274,7 +2764,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       find_label lbl (fn_code f) = Some b' ->
       rs' = undef_regs (destroyed_by_jumptable) rs ->
       step ge (State s f sp (Ljumptable arg tbl :: b) rs m)
-        E0 (State s f sp b' rs' m).        
+        E0 (State s f sp b' rs' m).
 FEnd Linear.
 
 Family Mach extends Lfam.
@@ -2287,7 +2777,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       find_label lbl (fn_code f) = Some c' ->
       rs' = undef_regs destroyed_by_jumptable rs ->
       step ge (State s fb sp (Ljumptable arg tbl :: c) rs m)
-        E0 (State s fb sp c' rs' m).  
+        E0 (State s fb sp c' rs' m).
 FEnd Mach.
 
 Trait Stacking_jumptable extends Stacking.
@@ -2307,6 +2797,11 @@ FEnd slots_of_instr.
 FRecursion outgoing_space.
 Case _ := 0.
 FEnd outgoing_space.
+
+FInduction record_regs_of_instr_only.
+FProof.
+all: intros; fsimpl; auto using record_reg_only, record_regs_only.
+Qed. FEnd record_regs_of_instr_only.
 
 FRecursion transl_instr.
 Case Ljumptable arg tbl := (fun fe k => T.Ljumptable arg tbl :: k).
@@ -2350,7 +2845,7 @@ Qed. CloseFLemma.
 
 FInduction transf_step_correct.
 FProof.
-all: intros; try inv MS; try rewrite transl_code_eq; try (generalize (function_is_within_bounds f _ (is_tail_in TAIL)); intro BOUND; simpl in BOUND); fsimpl in *. 
+all: intros; try inv MS; try rewrite transl_code_eq; try (generalize (function_is_within_bounds f _ (is_tail_in TAIL)); intro BOUND; simpl in BOUND); fsimpl in *.
 (* Ljumptable *)
 +  assert (rs0 arg = Vint n).
   { generalize (AGREGS arg). rewrite e. intro IJ; inv IJ; auto. }
@@ -2413,7 +2908,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       rs' = set_res res vres (undef_regs (destroyed_by_builtin ef) rs) ->
       step ge (State s f sp (Lbuiltin ef args res :: b) rs m)
         t (State s f sp b rs' m').
-        
+
 FEnd Mach.
 
 Family Stacking.
@@ -2436,6 +2931,11 @@ FRecursion outgoing_space.
 Case _ := 0.
 FEnd outgoing_space.
 
+FInduction record_regs_of_instr_only.
+FProof.
+all: intros; fsimpl; auto using record_reg_only, record_regs_only.
+Qed. FEnd record_regs_of_instr_only.
+
 FDefinition offset_local := fun (fe: frame_env) (x: Z) => fe.(fe_ofs_local) + 4 * x.
 
 MetaData transl_builtin_arg.
@@ -2443,7 +2943,7 @@ Fixpoint transl_builtin_arg (fe: frame_env) (a: builtin_arg loc) : builtin_arg m
   match a with
   | BA (R r) => BA r
   | BA (S Local ofs ty) =>
-      BA_loadstack (chunk_of_type ty) (Ptrofs.repr (self__Stacking.offset_local fe ofs))
+      BA_loadstack (chunk_of_type ty) (Ptrofs.repr (offset_local fe ofs))
   | BA (S _ _ _) => BA_int Int.zero(* never happens *)
   | BA_int n => BA_int n
   | BA_long n => BA_long n
@@ -2467,7 +2967,7 @@ Case Lbuiltin ef args dst := (fun fe k => T.Lbuiltin ef (map (transl_builtin_arg
 FEnd transl_instr.
 
 FRecursion instr_within_bounds.
-Case Lbuiltin ef args res := (fun b => 
+Case Lbuiltin ef args res := (fun b =>
        (forall r, In r (params_of_builtin_res res) \/ In r (destroyed_by_builtin ef) -> mreg_within_bounds b r)
        /\ (forall sl ofs ty, In (Locations.S sl ofs ty) (params_of_builtin_args args) -> slot_within_bounds b sl ofs ty)).
 FEnd instr_within_bounds.
@@ -2521,7 +3021,7 @@ FProof.
 all: intros; generalize (mreg_is_within_bounds _ _ H); generalize (slot_is_within_bounds _ _ H);
   simpl; do 4 fsimpl; simpl; intros; auto.
  split; intros.
-  apply H1; auto. 
+  apply H1; auto.
   (* apply H0. rewrite slots_of_locs_charact; auto.*)
   (* TODO: this shouldn't be too hard *)
   apply cheat.
@@ -2602,7 +3102,7 @@ FLemma transl_builtin_args_correct:
   (parent retaddr: val)
   (INJ: j sp = Some(sp', fe.(fe_stack_data)))
   (AGR: agree_regs j ls rs)
-  (SEP: m' |= frame_contents f j sp' ls ls0 parent retaddr ** minjection j m ** globalenv_inject ge j) al vl,  
+  (SEP: m' |= frame_contents f j sp' ls ls0 parent retaddr ** minjection j m ** globalenv_inject ge j) al vl,
   eval_builtin_args ge ls (Vptr sp Ptrofs.zero) m al vl ->
   (forall l, In l (params_of_builtin_args al) -> loc_valid f l = true) ->
   (forall sl ofs ty, In (Locations.S sl ofs ty) (params_of_builtin_args al) -> slot_within_bounds b sl ofs ty) ->
@@ -2648,15 +3148,8 @@ FProofLemma.
   apply Val.loword_inject; auto.
 Qed. CloseFLemma.
 
-FLemma agree_regs_inject_incr:
-  forall j ls rs j',
-  agree_regs j ls rs -> inject_incr j j' -> agree_regs j' ls rs.
-FProofLemma.
-  intros; red; intros; eauto with stacking.
-Qed. CloseFLemma.
-
 FLemma agree_locs_set_res:
-  forall f ls0 res v ls,  
+  forall f ls0 res v ls,
   let b := function_bounds f in
   let fe := make_env b in
   agree_locs f ls ls0 ->
@@ -2667,7 +3160,7 @@ FProofLemma.
 - eapply agree_locs_set_reg; eauto.
 - auto.
 - apply IHres2; auto using in_or_app.
-Qed. CloseFLemma. 
+Qed. CloseFLemma.
 
 FLemma frame_set_res:
   forall f j sp ls0 parent retaddr m P res v ls,
@@ -2692,7 +3185,7 @@ all: intros;
   exploit transl_builtin_args_correct.
     eauto. eauto. exact AGREGS. rewrite sep_swap in SEP; apply sep_proj2 in SEP; eexact SEP.
     eauto. rewrite <- forallb_forall. eapply wt_state_builtin; eauto.
-    exact BND2. 
+    exact BND2.
   intros [vargs' [P Q]].
   rewrite <- sep_assoc, sep_comm, sep_assoc in SEP.
   exploit external_call_parallel_rule; eauto.
@@ -2700,7 +3193,7 @@ all: intros;
   rewrite <- sep_assoc, sep_comm, sep_assoc in SEP.
   econstructor; split.
   apply plus_one. fconstructor; eauto.
-  eapply eval_builtin_args_preserved with (ge1 := (Genv.globalenv prog)); eauto. exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl). 
+  eapply eval_builtin_args_preserved with (ge1 := (Genv.globalenv prog)); eauto. exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl).
   eapply external_call_symbols_preserved; eauto. apply (senv_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl).
   eapply match_states_intro with (j := j'); eauto with coqlib.
   eapply match_stacks_change_meminj; eauto.
@@ -2762,7 +3255,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       Mem.storev chunk m a (rs src) = Some m' ->
       rs' = undef_regs (destroyed_by_store chunk addr) rs ->
       step ge (State s f sp (Lstore chunk addr args src :: c) rs m)
-        E0 (State s f sp c rs' m').        
+        E0 (State s f sp c rs' m').
 FEnd Mach.
 
 Family Stacking.
@@ -2786,6 +3279,11 @@ FRecursion outgoing_space.
 Case _ := 0.
 FEnd outgoing_space.
 
+FInduction record_regs_of_instr_only.
+FProof.
+all: intros; fsimpl; auto using record_reg_only, record_regs_only.
+Qed. FEnd record_regs_of_instr_only.
+
 FDefinition transl_addr := fun (fe: frame_env) (addr: addressing) =>
   shift_stack_addressing fe.(fe_stack_data) addr.
 
@@ -2806,7 +3304,7 @@ FDefinition simplify_store := fun chunk =>
 FRecursion transl_instr.
 Case Lload chunk addr args dst :=
  (fun fe k => T.Lload (simplify_load chunk) (transl_addr fe addr) args dst :: k).
-Case Lstore chunk addr args src := 
+Case Lstore chunk addr args src :=
  (fun fe k => T.Lstore (simplify_store chunk) (transl_addr fe addr) args src :: k).
 FEnd transl_instr.
 
@@ -2920,13 +3418,13 @@ all: intros; try inv MS; try rewrite transl_code_eq; try (generalize (function_i
   { inv F; auto. inv D; auto. }
   econstructor; split.
   apply plus_one. eapply T.exec_Lload. (* fconstructor. *)
-  instantiate (1 := a'). rewrite <- A. apply eval_addressing_preserved. exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl). 
+  instantiate (1 := a'). rewrite <- A. apply eval_addressing_preserved. exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl).
   eexact E. eauto.
   econstructor; eauto with coqlib.
   apply agree_regs_set_reg. rewrite transl_destroyed_by_load, simplify_load_destroyed. apply agree_regs_undef_regs; auto. auto.
   apply agree_locs_set_reg. apply agree_locs_undef_locs. auto. apply destroyed_by_load_caller_save. fsimpl in BOUND. auto.
-  
-(* Lstore *)  
+
+(* Lstore *)
 + assert (exists a',
           eval_addressing (Genv.globalenv prog) (Vptr sp' Ptrofs.zero) (transl_addr (make_env (function_bounds f)) addr) rs0##args = Some a'
        /\ Val.inject j a a').
@@ -2939,7 +3437,7 @@ all: intros; try inv MS; try rewrite transl_code_eq; try (generalize (function_i
   clear SEP; intros (m1' & C & SEP).
   rewrite sep_swap3 in SEP.
   econstructor; split.
-  apply plus_one. eapply T.exec_Lstore. 
+  apply plus_one. eapply T.exec_Lstore.
   instantiate (1 := a'). rewrite <- A. apply eval_addressing_preserved. exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl).
   apply simplify_store_correct. eexact C. eauto.
   econstructor. eauto. eauto. eauto.
@@ -3036,7 +3534,7 @@ FInductive step: genv -> state -> trace -> state -> Prop :=
       load_stack m (Vptr stk soff) Tptr (fn_retaddr_ofs f) = Some (parent_ra s) ->
       Mem.free m stk 0 (fn_stacksize f) = Some m' ->
       step ge (State s fb (Vptr stk soff) (Ltailcall sig ros :: c) rs m)
-        E0 (Callstate s f' rs m').  
+        E0 (Callstate s f' rs m').
 FEnd Mach.
 
 Family Stacking.
@@ -3058,6 +3556,11 @@ FEnd slots_of_instr.
 FRecursion outgoing_space.
 Case _ := 0.
 FEnd outgoing_space.
+
+FInduction record_regs_of_instr_only.
+FProof.
+all: intros; fsimpl; auto using record_reg_only, record_regs_only.
+Qed. FEnd record_regs_of_instr_only.
 
 FRecursion transl_instr.
 Case Lcall sig ros :=
@@ -3110,7 +3613,7 @@ FLemma find_function_translated:
   forall prog tprog ge tge, match_prog prog tprog ->
   ge = Genv.globalenv prog ->
   tge = Genv.globalenv tprog ->
-  forall j ls rs m ros f,    
+  forall j ls rs m ros f,
   agree_regs j ls rs ->
   m |= globalenv_inject ge j ->
   S.find_function ge ros ls = Some f ->
@@ -3125,7 +3628,7 @@ FProofLemma.
   rewrite Genv.find_funct_find_funct_ptr in FF.
   exploit function_ptr_translated; eauto. intros [tf [A B]].
   exists b; exists tf; split; auto. simpl.
-  generalize (AG m0). rewrite EQ. intro INJ. inv INJ. 
+  generalize (AG m0). rewrite EQ. intro INJ. inv INJ.
   rewrite DOMAIN in H5. inv H5. simpl. auto. eapply FUNCTIONS; eauto.
 - destruct (Genv.find_symbol ge i) as [b|] eqn:?; try discriminate.
   exploit function_ptr_translated; eauto. intros [tf [A B]].
@@ -3163,7 +3666,7 @@ all: intros; fsimpl; auto with coqlib.
 + unfold restore_callee_save. eapply is_tail_trans. 2: apply is_tail_restore_callee_save. auto with coqlib.
 + destruct s; auto with coqlib.
 + destruct s; auto with coqlib.
-Qed. FEnd is_tail_transl_instr.  
+Qed. FEnd is_tail_transl_instr.
 
 FLemma is_tail_transl_code:
   forall fe c1 c2, is_tail c1 c2 -> is_tail (transl_code fe c1) (transl_code fe c2).
@@ -3217,7 +3720,7 @@ Qed. CloseFLemma.
 
 FInduction transf_step_correct.
 FProof.
-all: intros; try inv MS; try rewrite transl_code_eq; try (generalize (function_is_within_bounds f _ (is_tail_in TAIL)); intro BOUND; simpl in BOUND); fsimpl in *. 
+all: intros; try inv MS; try rewrite transl_code_eq; try (generalize (function_is_within_bounds f _ (is_tail_in TAIL)); intro BOUND; simpl in BOUND); fsimpl in *.
 (* Lcall *)
 + exploit find_function_translated; eauto.
     eapply sep_proj2. eapply sep_proj2. eapply sep_proj2. eexact SEP.
@@ -3233,10 +3736,10 @@ all: intros; try inv MS; try rewrite transl_code_eq; try (generalize (function_i
   do 2 fsimpl in IST. fsimpl in BOUND.
   intros; red.
     apply Z.le_trans with (size_arguments (S.funsig f')). auto.
-    apply loc_arguments_bounded; auto. auto. 
-    unfold stack_contents. fold stack_contents. 
+    apply loc_arguments_bounded; auto. auto.
+    unfold stack_contents. fold stack_contents.
   rewrite sep_assoc. exact SEP.
-  
+
 (* Ltailcall*)
 + rewrite (sep_swap (stack_contents j s cs')) in SEP.
   exploit function_epilogue_correct; eauto.
@@ -3260,11 +3763,11 @@ FEnd Comp_Call.
 Trait Comp_Switch extends Comp_Loops. FEnd Comp_Switch.
 
 Family Comp extends
-  Comp_Heap,             
+  Comp_Heap,
   Base,
   Comp_Switch,
-  Comp_Loops,  
-  Comp_Field, 
+  Comp_Loops,
+  Comp_Field,
   Comp_Call,
   (* Comp_Float,*)
   Comp_Builtin.
