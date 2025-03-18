@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Extract the required passes 
+# Extract the required passes
 
 coqc SimplExpr_extraction.v -R ../../_build/default/theories Rocqet -I ../../_build/default/src -R ../../_build/default/casestudies/compcert/lib Rocqet.CompCert.lib -R ../../_build/default/casestudies/compcert Rocqet.CompCert
 
@@ -17,14 +17,14 @@ coqc Stacking_extraction.v -R ../../_build/default/theories Rocqet -I ../../_bui
 
 # Strip out pass from Rocqet composition
 
-cd extraction
+echo "Stripping Rocqet Internal Info"
 
-./strip_rocqet_internal.sh SimplExpr_extraction.ml SimplExpr SimplExpr.ml
-./strip_rocqet_internal.sh Cshmgen_extraction.ml Cshmgen Cshmgen.ml
-./strip_rocqet_internal.sh Cminorgen_extraction.ml Cminorgen Cminorgen.ml
-./strip_rocqet_internal.sh RTLgen_extraction.ml RTLgen RTLgen.ml
-./strip_rocqet_internal.sh Linearize_extraction.ml Linearize Linearize.ml
-./strip_rocqet_internal.sh Stacking_extraction.ml Stacking Stacking.ml
+./strip_rocqet_internal.sh ./extraction/SimplExpr_extraction.ml SimplExpr ./extraction/SimplExpr.ml
+./strip_rocqet_internal.sh ./extraction/Cshmgen_extraction.ml Cshmgen ./extraction/Cshmgen.ml
+./strip_rocqet_internal.sh ./extraction/Cminorgen_extraction.ml Cminorgen ./extraction/Cminorgen.ml
+./strip_rocqet_internal.sh ./extraction/RTLgen_extraction.ml RTLgen ./extraction/RTLgen.ml
+./strip_rocqet_internal.sh ./extraction/Linearize_extraction.ml Linearize ./extraction/Linearize.ml
+./strip_rocqet_internal.sh ./extraction/Stacking_extraction.ml Stacking ./extraction/Stacking.ml
 
 
 # Link extracted passes to CompCert
