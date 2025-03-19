@@ -1615,6 +1615,20 @@ FEnd Cminorgen.
 
 FEnd Base.
 
+(* moved to base *)
+(*Trait Comp_Float extends Base.
+
+Family Cminorgen.
+
+FRecursion transl_constant.
+Case Ofloatconst n := (T.Ofloatconst n).
+Case Osingleconst n := (T.Osingleconst n).
+FEnd transl_constant.
+
+FEnd Cminorgen.
+
+FEnd Comp_Float. *)                 
+
 Trait Comp_Loops extends Base.
 
 Family Cminorgen extends Cfamtransl.

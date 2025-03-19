@@ -147,6 +147,22 @@ FEnd Csharpminor.
 
 FEnd Base.
 
+(* very small, merge into base *)
+(* Trait Comp_Float extends Base.
+
+Family Csharpminor extends Cfam.
+
+FInductive constant : Type :=
+| Ofloatconst: float -> constant (* double-precision floating-point constant *)
+| Osingleconst: float32 -> constant (* single-precision floating-point constant *)
+
+FRecursion eval_constant.
+Case Ofloatconst := (fun n => Some (Vfloat n)).
+Case Osingleconst := (fun n => Some (Vsingle n)).
+FEnd eval_constant.
+
+FEnd Comp_Float. *)
+
 Trait Comp_Loops extends Base.
 
 Family Csharpminor extends Cfam. FEnd Csharpminor.

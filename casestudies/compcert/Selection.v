@@ -524,6 +524,19 @@ FEnd Selection.
 
 FEnd Base.
 
+(* moved to base *)
+(*
+Trait Comp_Float extends Base.
+
+Family Selection.
+(* Select operator from RISV-V operation *)
+FRecursion sel_constant.
+Case Ofloatconst f := (T.Eop (Ofloatconst f) T.Enil).
+Case Osingleconst f := (T.Eop (Osingleconst f) T.Enil).
+FEnd Selection.
+
+FEnd Comp_Float. *)
+
 Trait Comp_Loops extends Base.
 
 Family Selection extends Cfamtransl.

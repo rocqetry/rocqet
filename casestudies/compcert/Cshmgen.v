@@ -34,6 +34,101 @@ Require Import Clight.
 Require Import Cfam.
 Require Import Csharpminor.
 
+(* merge Comp_Float into Base for simplicity *)
+(* 
+Trait Comp_Float.
+
+(* ------------------------------------------------ *)
+(*             Cshmgen (Clight -> Csharpminor)      *)
+(* ------------------------------------------------ *)
+Family Cshmgen.
+Family S extends Clight. FEnd S.
+Family T extends Csharpminor. FEnd T.
+
+FDefinition make_singleoffloat := fun (e: T.expr) => T.Eunop Osingleoffloat e.
+FDefinition make_floatofsingle := fun (e: T.expr) => T.Eunop Ofloatofsingle e.
+
+FDefinition make_floatofint := fun (e: T.expr) (sg: signedness) =>
+  match sg with
+  | Signed => T.Eunop Ofloatofint e
+  | Unsigned => T.Eunop Ofloatofintu e
+  end.
+
+FDefinition make_singleofint := fun (e: T.expr) (sg: signedness) =>
+  match sg with
+  | Signed => T.Eunop Osingleofint e
+  | Unsigned => T.Eunop Osingleofintu e
+  end.
+
+FDefinition make_intoffloat := fun (e: T.expr) (sg: signedness) =>
+  match sg with
+  | Signed => T.Eunop Ointoffloat e
+  | Unsigned => T.Eunop Ointuoffloat e
+  end.
+
+FDefinition make_intofsingle := fun (e: T.expr) (sg: signedness) =>
+  match sg with
+  | Signed => T.Eunop Ointofsingle e
+  | Unsigned => T.Eunop Ointuofsingle e
+  end.
+
+FDefinition make_floatoflong := fun (e: T.expr) (sg: signedness) =>
+  match sg with
+  | Signed => T.Eunop Ofloatoflong e
+  | Unsigned => T.Eunop Ofloatoflongu e
+  end.
+
+FDefinition make_singleoflong := fun (e: T.expr) (sg: signedness) =>
+  match sg with
+  | Signed => T.Eunop Osingleoflong e
+  | Unsigned => T.Eunop Osingleoflongu e
+  end.
+
+FDefinition make_longoffloat := fun (e: T.expr) (sg: signedness) =>
+  match sg with
+  | Signed => T.Eunop Olongoffloat e
+  | Unsigned => T.Eunop Olonguoffloat e
+  end.
+
+FDefinition make_longofsingle := fun (e: T.expr) (sg: signedness) =>
+  match sg with
+  | Signed => T.Eunop Olongofsingle e
+  | Unsigned => T.Eunop Olonguofsingle e
+  end.
+
+FDefinition make_cast := fun (from to: type) (e: T.expr) =>
+  match classify_cast from to with
+  | cast_case_pointer => OK e
+  | cast_case_i2i sz2 si2 => OK (make_cast_int e sz2 si2)
+  | cast_case_f2f => OK e
+  | cast_case_s2s => OK e
+  | cast_case_f2s => OK (make_singleoffloat e)
+  | cast_case_s2f => OK (make_floatofsingle e)
+  | cast_case_i2f si1 => OK (make_floatofint e si1)
+  | cast_case_i2s si1 => OK (make_singleofint e si1)
+  | cast_case_f2i sz2 si2 => OK (make_cast_int (make_intoffloat e si2) sz2 si2)
+  | cast_case_s2i sz2 si2 => OK (make_cast_int (make_intofsingle e si2) sz2 si2)
+  | cast_case_l2l => OK e
+  | cast_case_i2l si1 => OK (make_longofint e si1)
+  | cast_case_l2i sz2 si2 => OK (make_cast_int (T.Eunop Ointoflong e) sz2 si2)
+  | cast_case_l2f si1 => OK (make_floatoflong e si1)
+  | cast_case_l2s si1 => OK (make_singleoflong e si1)
+  | cast_case_f2l si2 => OK (make_longoffloat e si2)
+  | cast_case_s2l si2 => OK (make_longofsingle e si2)
+  | cast_case_i2bool => OK (make_cmpu_ne_zero e)
+  | cast_case_f2bool => OK (T.Ebinop (Ocmpf Cne) e (make_floatconst Float.zero))
+  | cast_case_s2bool => OK (T.Ebinop (Ocmpfs Cne) e (make_singleconst Float32.zero))
+  | cast_case_l2bool => OK (T.Ebinop (Ocmplu Cne) e (make_longconst Int64.zero))
+  | cast_case_struct id1 id2 => OK e
+  | cast_case_union id1 id2 => OK e
+  | cast_case_void => OK e
+  | cast_case_default => Error (msg "Cshmgen.make_cast")
+  end.
+
+FEnd Cshmgen.
+
+FEnd Comp_Float. *)
+
 Trait Base. 
 
 (* ------------------------------------------------ *)

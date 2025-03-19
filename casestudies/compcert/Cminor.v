@@ -124,6 +124,24 @@ FEnd Cminor.
 
 FEnd Base.
 
+(* very small, just merge into base compiler *)
+(* Trait Comp_Float extends Base.
+
+Family Cminor.
+
+FInductive constant : Type :=
+| Ofloatconst: float -> constant (* double-precision floating-point constant *)
+| Osingleconst: float32 -> constant. (* single-precision floating-point constant *)       
+
+FRecursion eval_constant.
+Case Ofloatconst n := (fun ge sp => Some (Vfloat n)).
+Case Osingleconst n := (fun ge sp => Some (Vsingle n)).
+FEnd eval_constant.
+
+FEnd Cminor.
+
+FEnd Comp_Float. *)
+
 Trait Comp_Loops extends Base.
 
 Family Cminor extends Cfam. FEnd Cminor.
