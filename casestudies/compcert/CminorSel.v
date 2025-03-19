@@ -28,7 +28,7 @@ Local Open Scope string_scope.
 Local Open Scope list_scope.
 Open Scope asm.
 
-Require Import Cfam.
+Require Import CfamBase.
 
 Trait Base.
 
