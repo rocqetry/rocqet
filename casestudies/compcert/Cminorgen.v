@@ -24,7 +24,7 @@ Require Import Coq.ZArith.ZArith.
 From Rocqet Require Import Prelude.
 From Rocqet Require Import Op.
 
-Require Import Cfam.
+Require Import CfamBase.
 Require Import Csharpminor.
 Require Import Cminor.
 Require Import Cfamtransl.
@@ -1608,8 +1608,7 @@ FLemma transl_final_states:
   forall ge S' R r,
   match_states ge S' R -> S.final_state S' r -> T.final_state R r.
 FProofLemma.
-intros. inv H0. inv H. inv MK; (* apply match_Kstop_inv in MK; destruct MK; subst.*) inv RESINJ. constructor.
-apply cheat. apply cheat. (* fdiscriminate *)
+intros. inv H0. inv H. (*inv MK;*) apply match_Kstop_inv in MK; destruct MK; subst. inv RESINJ. constructor.
 Qed. CloseFLemma.
 
 FEnd Cminorgen.
