@@ -55,9 +55,12 @@ paper, which we make comparison to.
 
 The `./rocqet` directory contains our implementation of Rocqet and our CompCert casestudy. 
 
-We package `FPOP` with Nix as well. So both the `./FPOP` and `./rocqet` directory contain a `flake.nix` file 
-which provides a reproducible environment. 
+The `Rocq_CompCert` directory contains a copy of CompCert. 
 
+The `Rocqet_CompCert` directory contains a copy of CompCert which we will link our extracted passes into.
+
+Each of these directories contain a `flake.nix` file which provides all dependencies in a Nix shell
+for reproducible builds.
 
 ### Building Rocqet
 
@@ -214,7 +217,7 @@ See for the above nanopasses:
 ### Lfam: A Common Family for Linear and Mach
 
 As mentioned in the paper, `Linear` and `Mach` languages share common 
-constructs. The file `Lfam.v` contains the abstracted common functionality 
+constructs. The file `LfamBase.v` contains the abstracted common functionality 
 of these languages. Check the `Linear.v` and `Mach.v` files to see that 
 both `Linear` and `Mach` share common functionality from `Lfam`.
 
@@ -222,7 +225,7 @@ both `Linear` and `Mach` share common functionality from `Lfam`.
 
 As mentioned in the paper, `Csharpminor`, `Cminor`, and `CminorSel` share 
 a common IR and semantics constructs. 
-The file `Cfam.v` contains the abstracted common functionality 
+The file `CfamBase.v` contains the abstracted common functionality 
 of these languages. Check the `Csharpminor.v`, `Cminor.v`, and `CminorSel.v` 
 files to see that they all reuse functionality from `Cfam`.
 
@@ -253,8 +256,8 @@ We them combine all extensions to yeild the CompCert RISC-V backend as `Asm`
 ### Base Compiler and Compiler Extension 
 
 The Base compiler and extension are defined across multiple files, 
-Look at any file to see that files contribution to the base compiler 
-or an extension.
+Look at any file to see that file's contribution to the base compiler 
+or an extension. 
 
 ### Compiler Passes and Correctness Proofs
 
@@ -298,20 +301,20 @@ the Rocqet implementation of CompCert interactively.
 ### Performance Evaluation: Rocqet/CompCert vs Rocq/CompCert
 
 We extract passes written in Rocqet into OCaml and "link" with 
-CompCert to check that nanopasses or family polymorphism don't 
+CompCert to check that nanopasses or family polymorphism doesn't 
 affect the performance of the compiler. We don't extract Selection and 
 Asmgen to link with CompCert because these passes are machine dependent 
 and we only support RISC-V, thus we reuse Rocq/CompCert's Selection 
-and Asmgen in in our Rocqet/CompCert.
+and Asmgen in in our Rocqet/CompCert compiler.
 
-To reproduce the Table 1
+To reproduce the Table 1.
 
 #### To Get Rocq/CompCert Numbers 
 
 The `Rocq_CompCert` directory contains the base `CompCert` compiler. 
-We also provide a `flake.nix` to
+We provide a `flake.nix` for easy reproducability. 
 
-Navigate to `Rocq_CompCert`: 
+Navigate to `Rocq_CompCert`:
 ```
 $ cd Rocq_CompCert
 $ nix --experimental-features 'nix-command flakes' develop -i
@@ -342,7 +345,7 @@ Navigate into `raytracer`, `regression`, `compression`, `c`, `spass`, and `abi` 
 $ cd raytracer
 ```
 
-Run make and time the output: 
+Run make and time the output (do for each): 
 ```
 $ time make 
 ```
@@ -352,21 +355,20 @@ Check time output with Table 1.
 
 #### To Get Rocqet/CompCert Numbers 
 
-First we need to build `Rocqet_CompCert`. This is located in the 
+First we need to build `Rocqet_CompCert`. It is located in the 
 toplevel directory. This is just the vanilla CompCert but we keep it 
 separate becuase we want to "link" our extracted compiler with it. 
 
 Repeat the steps above to build `Rocqet_CompCert`, but don't run the tests yet.
 
-Now, navigate back into `rocqet` and enter the Nix shell there. 
+Now, navigate back into `rocqet` and enter the Nix shell there.
 
 Navigate into the case study: 
 ```
 cd casestudies/compcert
 ```
 
-Next, we need to extract our Rocqet passes into OCaml, and link 
-with `Rocqet_CompCert`. 
+Next, we need to extract our Rocqet passes into OCaml, and link with `Rocqet_CompCert`. 
 
 We provide a script which does this extraction automatically. You can run:
 ```
@@ -378,9 +380,9 @@ directory and link with `Rocqet_CompCert`. Check the extracted passes
 are fully generated.
 
 We provide "already extracted" passes in `./extracted` and 
-link these passes with `Rocqet_CompCert` because it required 
-additional manual setup. You can check that the extracted passes in 
-`extracted` match those in `extraction` modulo the mangled name difference.
+link these passes with `Rocqet_CompCert` instead, because the extracted passes require 
+some additional manual setup. You can check that the extracted passes in 
+`extracted` match those in `extraction` (modulo the mangled names).
 
 We have now linked our extracted code with `Rocqet_CompCert`. You should 
 leave the Nix shell for Rocqet and go back into the Nix shell for `Rocqet_CompCert`. 
@@ -390,4 +392,4 @@ Rebuild the Compiler:
 $ make
 ```
 
-Run the tests as shown for `Rocq_CompCert` and compare with Table 1.
+Run the tests as shown above for `Rocq_CompCert` and compare with Table 1.

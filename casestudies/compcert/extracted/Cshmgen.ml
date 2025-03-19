@@ -896,9 +896,6 @@ let _transl_lbl_stmt =
     transl_lbl_stmt_transl_stmtSswitch transl_lbl_stmt_transl_stmtLSnil
     transl_lbl_stmt_transl_stmtLScons
 
-let transl_statement ce ty n1 n2 stmt = _transl_stmt stmt ce ty n1 n2
-let transl_lbl_stmt  ce ty n1 n2 stmt = _transl_lbl_stmt stmt ce ty n1 n2
-
 let transl_var ce v =
   match sizeof ce (snd v) with
   | OK x -> OK ((fst v), x)

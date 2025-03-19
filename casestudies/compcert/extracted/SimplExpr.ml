@@ -428,6 +428,375 @@ let temp_for_sd ty sd =
     list * Clight.expr) mon **)
 
 
+let transl_expr ce =
+  let rec transl_expr0 dst = function
+  | Eval (v, ty) ->
+    (fun g ->
+      match v with
+      | Vint n -> Res ((finish dst [] (Econst_int (n, ty))), g)
+      | Vlong n -> Res ((finish dst [] (Econst_long (n, ty))), g)
+      | Vfloat n -> Res ((finish dst [] (Econst_float (n, ty))), g)
+      | Vsingle n -> Res ((finish dst [] (Econst_single (n, ty))), g)
+      | _ ->
+        Err
+          (msg
+            ('S'::('i'::('m'::('p'::('l'::('E'::('x'::('p'::('r'::('.'::('t'::('r'::('a'::('n'::('s'::('l'::('_'::('e'::('x'::('p'::('r'::(':'::(' '::('E'::('v'::('a'::('l'::[])))))))))))))))))))))))))))))
+  | Evar (x, ty) -> (fun g -> Res ((finish dst [] (Clight.Evar (x, ty))), g))
+  | Efield (r, f, ty) ->
+    (fun g ->
+      match transl_expr0 For_val r g with
+      | Err msg0 -> Err msg0
+      | Res (a0, g') ->
+        Res ((finish dst (fst a0) (Clight.Efield ((snd a0), f, ty))), g'))
+  | Evalof (l, _) ->
+    (fun g ->
+      match transl_expr0 For_val l g with
+      | Err msg0 -> Err msg0
+      | Res (a0, g') ->
+        (match transl_valof ce (typeof l) (snd a0) g' with
+         | Err msg0 -> Err msg0
+         | Res (a1, g'0) ->
+           Res ((finish dst (app (fst a0) (fst a1)) (snd a1)), g'0)))
+  | Ederef (r, ty) ->
+    (fun g ->
+      match transl_expr0 For_val r g with
+      | Err msg0 -> Err msg0
+      | Res (a0, g') ->
+        Res ((finish dst (fst a0) (coq_Ederef' (snd a0) ty)), g'))
+  | Eaddrof (l, ty) ->
+    (fun g ->
+      match transl_expr0 For_val l g with
+      | Err msg0 -> Err msg0
+      | Res (a0, g') ->
+        Res ((finish dst (fst a0) (coq_Eaddrof' (snd a0) ty)), g'))
+  | Eunop (op, r1, ty) ->
+    (fun g ->
+      match transl_expr0 For_val r1 g with
+      | Err msg0 -> Err msg0
+      | Res (a0, g') ->
+        Res ((finish dst (fst a0) (Clight.Eunop (op, (snd a0), ty))), g'))
+  | Ebinop (op, r1, r2, ty) ->
+    (fun g ->
+      match transl_expr0 For_val r1 g with
+      | Err msg0 -> Err msg0
+      | Res (a0, g') ->
+        (match transl_expr0 For_val r2 g' with
+         | Err msg0 -> Err msg0
+         | Res (a1, g'0) ->
+           Res
+             ((finish dst (app (fst a0) (fst a1)) (Clight.Ebinop (op,
+                (snd a0), (snd a1), ty))), g'0)))
+  | Ecast (r1, ty) ->
+    (match dst with
+     | For_effects -> transl_expr0 For_effects r1
+     | _ ->
+       (fun g ->
+         match transl_expr0 For_val r1 g with
+         | Err msg0 -> Err msg0
+         | Res (a0, g') ->
+           Res ((finish dst (fst a0) (Clight.Ecast ((snd a0), ty))), g')))
+  | Eseqand (r1, r2, ty) ->
+    (fun g ->
+      match transl_expr0 For_val r1 g with
+      | Err msg0 -> Err msg0
+      | Res (a0, g') ->
+        (match dst with
+         | For_val ->
+           (match gensym ty g' with
+            | Err msg0 -> Err msg0
+            | Res (a1, g'0) ->
+              let sd = SDbase (type_bool, ty, a1) in
+              (match transl_expr0 (For_set sd) r2 g'0 with
+               | Err msg0 -> Err msg0
+               | Res (a2, g'1) ->
+                 Res
+                   (((app (fst a0)
+                       ((makeif (snd a0) (makeseq (fst a2)) (Sset (a1,
+                          (Econst_int (Int.zero, ty))))) :: [])), (Etempvar
+                   (a1, ty))), g'1)))
+         | For_effects ->
+           (match transl_expr0 For_effects r2 g' with
+            | Err msg0 -> Err msg0
+            | Res (a1, g'0) ->
+              Res
+                (((app (fst a0)
+                    ((makeif (snd a0) (makeseq (fst a1)) Clight.Sskip) :: [])),
+                dummy_expr), g'0))
+         | For_set sd ->
+           (match temp_for_sd ty sd g' with
+            | Err msg0 -> Err msg0
+            | Res (a1, g'0) ->
+              let sd' = SDcons (type_bool, ty, a1, sd) in
+              (match transl_expr0 (For_set sd') r2 g'0 with
+               | Err msg0 -> Err msg0
+               | Res (a2, g'1) ->
+                 Res
+                   (((app (fst a0)
+                       ((makeif (snd a0) (makeseq (fst a2))
+                          (makeseq (do_set sd (Econst_int (Int.zero, ty))))) :: [])),
+                   dummy_expr), g'1)))))
+  | Eseqor (r1, r2, ty) ->
+    (fun g ->
+      match transl_expr0 For_val r1 g with
+      | Err msg0 -> Err msg0
+      | Res (a0, g') ->
+        (match dst with
+         | For_val ->
+           (match gensym ty g' with
+            | Err msg0 -> Err msg0
+            | Res (a1, g'0) ->
+              let sd = SDbase (type_bool, ty, a1) in
+              (match transl_expr0 (For_set sd) r2 g'0 with
+               | Err msg0 -> Err msg0
+               | Res (a2, g'1) ->
+                 Res
+                   (((app (fst a0)
+                       ((makeif (snd a0) (Sset (a1, (Econst_int (Int.one,
+                          ty)))) (makeseq (fst a2))) :: [])), (Etempvar (a1,
+                   ty))), g'1)))
+         | For_effects ->
+           (match transl_expr0 For_effects r2 g' with
+            | Err msg0 -> Err msg0
+            | Res (a1, g'0) ->
+              Res
+                (((app (fst a0)
+                    ((makeif (snd a0) Clight.Sskip (makeseq (fst a1))) :: [])),
+                dummy_expr), g'0))
+         | For_set sd ->
+           (match temp_for_sd ty sd g' with
+            | Err msg0 -> Err msg0
+            | Res (a1, g'0) ->
+              let sd' = SDcons (type_bool, ty, a1, sd) in
+              (match transl_expr0 (For_set sd') r2 g'0 with
+               | Err msg0 -> Err msg0
+               | Res (a2, g'1) ->
+                 Res
+                   (((app (fst a0)
+                       ((makeif (snd a0)
+                          (makeseq (do_set sd (Econst_int (Int.one, ty))))
+                          (makeseq (fst a2))) :: [])), dummy_expr), g'1)))))
+  | Econdition (r1, r2, r3, ty) ->
+    (fun g ->
+      match transl_expr0 For_val r1 g with
+      | Err msg0 -> Err msg0
+      | Res (a0, g') ->
+        (match dst with
+         | For_val ->
+           (match gensym ty g' with
+            | Err msg0 -> Err msg0
+            | Res (a1, g'0) ->
+              let sd = SDbase (ty, ty, a1) in
+              (match transl_expr0 (For_set sd) r2 g'0 with
+               | Err msg0 -> Err msg0
+               | Res (a2, g'1) ->
+                 (match transl_expr0 (For_set sd) r3 g'1 with
+                  | Err msg0 -> Err msg0
+                  | Res (a3, g'2) ->
+                    Res
+                      (((app (fst a0)
+                          ((makeif (snd a0) (makeseq (fst a2))
+                             (makeseq (fst a3))) :: [])), (Etempvar (a1,
+                      ty))), g'2))))
+         | For_effects ->
+           (match transl_expr0 For_effects r2 g' with
+            | Err msg0 -> Err msg0
+            | Res (a1, g'0) ->
+              (match transl_expr0 For_effects r3 g'0 with
+               | Err msg0 -> Err msg0
+               | Res (a2, g'1) ->
+                 Res
+                   (((app (fst a0)
+                       ((makeif (snd a0) (makeseq (fst a1))
+                          (makeseq (fst a2))) :: [])), dummy_expr), g'1)))
+         | For_set sd ->
+           (match temp_for_sd ty sd g' with
+            | Err msg0 -> Err msg0
+            | Res (a1, g'0) ->
+              let sd' = SDcons (ty, ty, a1, sd) in
+              (match transl_expr0 (For_set sd') r2 g'0 with
+               | Err msg0 -> Err msg0
+               | Res (a2, g'1) ->
+                 (match transl_expr0 (For_set sd') r3 g'1 with
+                  | Err msg0 -> Err msg0
+                  | Res (a3, g'2) ->
+                    Res
+                      (((app (fst a0)
+                          ((makeif (snd a0) (makeseq (fst a2))
+                             (makeseq (fst a3))) :: [])), dummy_expr), g'2))))))
+  | Esizeof (ty', ty) ->
+    (fun g -> Res ((finish dst [] (Clight.Esizeof (ty', ty))), g))
+  | Ealignof (ty', ty) ->
+    (fun g -> Res ((finish dst [] (Clight.Ealignof (ty', ty))), g))
+  | Eassign (l1, r2, _) ->
+    (fun g ->
+      match transl_expr0 For_val l1 g with
+      | Err msg0 -> Err msg0
+      | Res (a0, g') ->
+        let a1 = snd a0 in
+        (match transl_expr0 For_val r2 g' with
+         | Err msg0 -> Err msg0
+         | Res (a2, g'0) ->
+           (match is_bitfield_access ce a1 g'0 with
+            | Err msg0 -> Err msg0
+            | Res (a3, g'1) ->
+              let ty1 = typeof l1 in
+              (match dst with
+               | For_effects ->
+                 Res
+                   (((app (fst a0)
+                       (app (fst a2) ((make_assign a3 a1 (snd a2)) :: []))),
+                   dummy_expr), g'1)
+               | _ ->
+                 (match gensym ty1 g'1 with
+                  | Err msg0 -> Err msg0
+                  | Res (a4, g'2) ->
+                    Res
+                      ((finish dst
+                         (app (fst a0)
+                           (app (fst a2) ((Sset (a4, (Clight.Ecast ((snd a2),
+                             ty1)))) :: ((make_assign a3 a1 (Etempvar (a4,
+                                           ty1))) :: []))))
+                         (make_assign_value a3 (Etempvar (a4, ty1)))), g'2))))))
+  | Eassignop (op, l1, r2, tyres, _) ->
+    let ty1 = typeof l1 in
+    (fun g ->
+    match transl_expr0 For_val l1 g with
+    | Err msg0 -> Err msg0
+    | Res (a0, g') ->
+      let a1 = snd a0 in
+      (match transl_expr0 For_val r2 g' with
+       | Err msg0 -> Err msg0
+       | Res (a2, g'0) ->
+         (match transl_valof ce ty1 a1 g'0 with
+          | Err msg0 -> Err msg0
+          | Res (a3, g'1) ->
+            (match is_bitfield_access ce a1 g'1 with
+             | Err msg0 -> Err msg0
+             | Res (a4, g'2) ->
+               (match dst with
+                | For_effects ->
+                  Res
+                    (((app (fst a0)
+                        (app (fst a2)
+                          (app (fst a3)
+                            ((make_assign a4 a1 (Clight.Ebinop (op, (snd a3),
+                               (snd a2), tyres))) :: [])))), dummy_expr), g'2)
+                | _ ->
+                  (match gensym ty1 g'2 with
+                   | Err msg0 -> Err msg0
+                   | Res (a5, g'3) ->
+                     Res
+                       ((finish dst
+                          (app (fst a0)
+                            (app (fst a2)
+                              (app (fst a3) ((Sset (a5, (Clight.Ecast
+                                ((Clight.Ebinop (op, (snd a3), (snd a2),
+                                tyres)),
+                                ty1)))) :: ((make_assign a4 a1 (Etempvar (a5,
+                                              ty1))) :: [])))))
+                          (make_assign_value a4 (Etempvar (a5, ty1)))), g'3)))))))
+  | Epostincr (id, l1, _) ->
+    let ty1 = typeof l1 in
+    (fun g ->
+    match transl_expr0 For_val l1 g with
+    | Err msg0 -> Err msg0
+    | Res (a0, g') ->
+      let a1 = snd a0 in
+      (match is_bitfield_access ce a1 g' with
+       | Err msg0 -> Err msg0
+       | Res (a2, g'0) ->
+         (match dst with
+          | For_effects ->
+            (match transl_valof ce ty1 a1 g'0 with
+             | Err msg0 -> Err msg0
+             | Res (a3, g'1) ->
+               Res
+                 (((app (fst a0)
+                     (app (fst a3)
+                       ((make_assign a2 a1 (transl_incrdecr id (snd a3) ty1)) :: []))),
+                 dummy_expr), g'1))
+          | _ ->
+            (match gensym ty1 g'0 with
+             | Err msg0 -> Err msg0
+             | Res (a3, g'1) ->
+               Res
+                 ((finish dst
+                    (app (fst a0)
+                      ((make_set a2 a3 a1) :: ((make_assign a2 a1
+                                                 (transl_incrdecr id
+                                                   (Etempvar (a3, ty1)) ty1)) :: [])))
+                    (Etempvar (a3, ty1))), g'1)))))
+  | Ecomma (r1, r2, _) ->
+    (fun g ->
+      match transl_expr0 For_effects r1 g with
+      | Err msg0 -> Err msg0
+      | Res (a0, g') ->
+        (match transl_expr0 dst r2 g' with
+         | Err msg0 -> Err msg0
+         | Res (a1, g'0) -> Res (((app (fst a0) (fst a1)), (snd a1)), g'0)))
+  | Ecall (r1, rl2, ty) ->
+    (fun g ->
+      match transl_expr0 For_val r1 g with
+      | Err msg0 -> Err msg0
+      | Res (a0, g') ->
+        (match transl_exprlist rl2 g' with
+         | Err msg0 -> Err msg0
+         | Res (a1, g'0) ->
+           (match dst with
+            | For_effects ->
+              Res
+                (((app (fst a0)
+                    (app (fst a1) ((Scall (None, (snd a0), (snd a1))) :: []))),
+                dummy_expr), g'0)
+            | _ ->
+              (match gensym ty g'0 with
+               | Err msg0 -> Err msg0
+               | Res (a2, g'1) ->
+                 Res
+                   ((finish dst
+                      (app (fst a0)
+                        (app (fst a1) ((Scall ((Some a2), (snd a0),
+                          (snd a1))) :: []))) (Etempvar (a2, ty))), g'1)))))
+  | Ebuiltin (ef, tyargs, rl, ty) ->
+    (fun g ->
+      match transl_exprlist rl g with
+      | Err msg0 -> Err msg0
+      | Res (a0, g') ->
+        (match dst with
+         | For_effects ->
+           Res
+             (((app (fst a0) ((Sbuiltin (None, ef, tyargs, (snd a0))) :: [])),
+             dummy_expr), g')
+         | _ ->
+           (match gensym ty g' with
+            | Err msg0 -> Err msg0
+            | Res (a1, g'0) ->
+              Res
+                ((finish dst
+                   (app (fst a0) ((Sbuiltin ((Some a1), ef, tyargs,
+                     (snd a0))) :: [])) (Etempvar (a1, ty))), g'0))))
+  | Eloc (_, _, _, _) ->
+    (fun _ -> Err
+      (msg
+        ('S'::('i'::('m'::('p'::('l'::('E'::('x'::('p'::('r'::('.'::('t'::('r'::('a'::('n'::('s'::('l'::('_'::('e'::('x'::('p'::('r'::(':'::(' '::('E'::('l'::('o'::('c'::[])))))))))))))))))))))))))))))
+  | Eparen (_, _, _) ->
+    (fun _ -> Err
+      (msg
+        ('S'::('i'::('m'::('p'::('l'::('E'::('x'::('p'::('r'::('.'::('t'::('r'::('a'::('n'::('s'::('l'::('_'::('e'::('x'::('p'::('r'::(':'::(' '::('p'::('a'::('r'::('e'::('n'::[]))))))))))))))))))))))))))))))
+  and transl_exprlist rl g =
+    match rl with
+    | Enil -> Res (([], []), g)
+    | Econs (r1, rl2) ->
+      (match transl_expr0 For_val r1 g with
+       | Err msg0 -> Err msg0
+       | Res (a, g') ->
+         (match transl_exprlist rl2 g' with
+          | Err msg0 -> Err msg0
+          | Res (a0, g'0) ->
+            Res (((app (fst a) (fst a0)), ((snd a) :: (snd a0))), g'0)))
+  in transl_expr0
+
+
 let transl_expr_transl_exprlistEvar id ty _ dst =
       ret (finish dst [] (T.Etempvar (id, ty)))
 
@@ -644,14 +1013,14 @@ let transl_expr_transl_exprlistEvar id ty _ dst =
 
     (** val transl_expr : S.__internal_expr -> __motiveTtransl_expr **)
 
-    let transl_expr =
+    let _transl_expr =
       S.expr_expr_exprlist_rect transl_expr_transl_exprlistEval transl_expr_transl_exprlistEvar transl_expr_transl_exprlistEcast transl_expr_transl_exprlistEseqand
         transl_expr_transl_exprlistEseqor transl_expr_transl_exprlistEcondition transl_expr_transl_exprlistEsizeof transl_expr_transl_exprlistEalignof
         transl_expr_transl_exprlistEcomma transl_expr_transl_exprlistEparen transl_expr_transl_exprlistEunop transl_expr_transl_exprlistEbinop
         transl_expr_transl_exprlistEbuiltin transl_expr_transl_exprlistEcall transl_expr_transl_exprlistEloc transl_expr_transl_exprlistEpostincr
         transl_expr_transl_exprlistEassignop transl_expr_transl_exprlistEaddrof transl_expr_transl_exprlistEderef transl_expr_transl_exprlistEvalof
         transl_expr_transl_exprlistEassign transl_expr_transl_exprlistEfield transl_expr_transl_exprlistEnil transl_expr_transl_exprlistEcons
-    let transl_expr ce dst e = transl_expr e ce dst
+    (*let transl_expr ce dst e = transl_expr e ce dst*)
 
 
 
@@ -687,6 +1056,10 @@ let transl_if ce r s1 s2 g =
 let is_Sskip = function
 | Sskip -> true
 | _ -> false
+
+(** val transl_stmt : composite_env -> statement -> Clight.statement mon **)
+
+
 
 let transl_lblstmt_transl_stmtSskip _ =
       ret T.Sskip
