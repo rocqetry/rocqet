@@ -31,4 +31,4 @@ echo "Stripping Rocqet Internal Info"
 
 echo "Linking Passes to CompCert"
 
-./link_passes.sh ./extracted ../../../Rocqet_CompCert/extraction
+./link_passes.sh ./extracted ../../../Rocqet_CompCert/extraction/
