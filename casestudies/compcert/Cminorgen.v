@@ -1442,6 +1442,25 @@ intros.
   eapply bind_parameters_agree; eauto.
 Qed. CloseFLemma.
 
+FLemma match_is_call_cont:
+  forall tge tfn te sp tm k tk cenv xenv cs,
+  match_cont k tk cenv xenv cs ->
+  S.is_call_cont k ->
+  exists tk',
+    star T.step tge (T.State tfn T.Sskip tk sp te tm)
+               E0 (T.State tfn T.Sskip tk' sp te tm)
+    /\ T.is_call_cont tk'
+    /\ match_cont k tk' cenv nil cs.
+FProofLemma.
+  induction 1; simpl; intros; try contradiction.
+  econstructor; split. apply star_refl. split. fsimpl. exact I. econstructor; eauto.
+  exploit IHmatch_cont; eauto. fsimpl in H1. contradiction.
+  intros [tk' [A B]]. exists tk'; split.
+  eapply star_left; eauto. apply cheat. (* constructor.*) traceEq. fsimpl in H1. contradiction. (* auto.*)
+  econstructor; split. apply star_refl. split. fsimpl. fsimpl in H1. contradiction. (*exact I.*) econstructor; eauto.
+  apply cheat. apply cheat.
+Qed. CloseFLemma.
+
 Require Import Coq.Program.Equality.
 
 FInduction transl_step_correct about S.step motive
@@ -1457,8 +1476,24 @@ all: intros until tge; intros TRANSL A B.
 (* Both require dependent induction on MK which Rocqet doesn't support *)
 (* skip seq *)
 + apply cheat.
+  (* monadInv TR. left.
+  dependent induction MK.
+  econstructor; split.
+  apply plus_one. constructor.
+  econstructor; eauto.
+  econstructor; split.
+  apply plus_one. constructor.
+  eapply match_state_seq; eauto.
+  exploit IHMK; eauto. intros [T2 [A B]].
+  exists T2; split. eapply plus_left. constructor. apply plus_star; eauto. traceEq.*)
 (* skip call *)  
-+ apply cheat.
++ intros T1 MSTATE. inv MSTATE. fsimpl in TR. monadInv TR. left.
+  exploit match_is_call_cont; eauto. intros [tk' [A [B C]]].
+  exploit match_callstack_freelist; eauto. intros [tm' [P [Q R]]].
+  econstructor; split.
+  eapply plus_right. eexact A. apply T.step_skip_call. auto. eauto. traceEq.
+  econstructor; eauto.
+  apply cheat. (* fdiscriminate *)
   
 (* assign *)  
 + intros T1 MSTATE. inv MSTATE. fsimpl in TR. monadInv TR.
