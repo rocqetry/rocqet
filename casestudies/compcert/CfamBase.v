@@ -460,7 +460,7 @@ FEnd Cfam.
 
 FEnd Comp_External.
 
-Trait Comp_Call extends Base, Comp_Builtin.
+Trait Comp_Call extends Base, Comp_Builtin, Comp_External.
 
 Family Cfam.
 

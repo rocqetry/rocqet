@@ -505,7 +505,9 @@ all: intros until cunit; intros LINK TRANSL A B; intros T1 ME; inv ME; fsimpl in
 + exploit transl_expr_correct; eauto. intros [v' [A B]].
   assert (Val.bool_of_val v' b). inv B. auto. inv b0.
   left; exists (T.State f' (if b then x else x0) k' sp e' m'); split.
-  apply plus_one; fconstructor; eauto. eapply eval_condexpr_of_expr; eauto. apply cheat. (* lenv = nil here actually *)
+  apply plus_one; fconstructor; eauto. eapply eval_condexpr_of_expr; eauto.
+  assert (G: lenv = nil) by (apply cheat). (* We know lenv = nil from CompCert, our transl_expr_correct theorem statement needs to be adjusted *)
+  subst. assumption.
   constructor; eauto. destruct b; eauto.
   (* internal function *)
 + red in TF. fsimpl in TF. simpl in TF. monadInv TF. generalize EQ; intros TF; monadInv TF.
@@ -522,245 +524,7 @@ FEnd Selection.
 
 FEnd Base.
 
-Trait Comp_Heap extends Base.
-
-Trait Csharpminor_Eaddrof extends Csharpminor.
-FInductive expr : Type :=
-| Eaddrof : ident -> expr. (* taking the address of a variable *)
-
-Inherit letenv.
-
-MetaData eval_var_addr.
-Inductive eval_var_addr: genv -> fenv -> ident -> block -> Prop :=
-  | eval_var_addr_local:
-      forall ge e id b sz,
-      PTree.get id e = Some (b, sz) ->
-      eval_var_addr ge e id b
-  | eval_var_addr_global:
-      forall ge e id b,
-      PTree.get id e = None ->
-      Genv.find_symbol ge id = Some b ->
-      eval_var_addr ge e id b.
-FEnd eval_var_addr.
-
-FInductive eval_expr :  genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
-| eval_Eaddrof: forall ge le e lenv m id b,
-      eval_var_addr ge le id b ->
-      eval_expr ge le e m lenv (Eaddrof id) (Vptr b Ptrofs.zero).
-
-FEnd Csharpminor_Eaddrof.
-
-Trait Csharpminor_Eload extends Csharpminor.
-FInductive expr : Type :=
-| Eload : memory_chunk -> expr -> expr. (* memory read *)
-
-FInductive eval_expr :  genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
-| eval_Eload: forall ge le e lenv m chunk a v1 v,
-      eval_expr ge le e m lenv a v1 ->
-      Mem.loadv chunk m v1 = Some v ->
-      eval_expr ge le e m lenv (Eload chunk a) v.
-
-FEnd Csharpminor_Eload.
-
-Trait Csharpminor_Sstore extends Csharpminor.
-FInductive stmt : Type :=
-| Sstore : memory_chunk -> expr -> expr -> stmt.
-
-FRecursion find_label.
-Case _ := (fun lbl k => None).
-FEnd find_label.
-
-FInductive step : genv -> state -> trace -> state -> Prop :=
-| step_store: forall ge f chunk addr a k e le m vaddr v m' lenv,
-      eval_expr ge e le m lenv addr vaddr ->
-      eval_expr ge e le m lenv a v ->
-      Mem.storev chunk m vaddr v = Some m' ->
-      step ge (State f (Sstore chunk addr a) k e le m)
-        E0 (State f Sskip k e le m').
-
-FEnd Csharpminor_Sstore.
-
-Family Csharpminor extends
-  Csharpminor_Sstore,
-  Csharpminor_Eload,
-  Csharpminor_Eaddrof.
-FEnd Csharpminor.
-
-Family Cminor.
-FInductive expr : Type :=
- | Eload : memory_chunk -> expr -> expr.
-
-FInductive stmt : Type :=
-| Sstore : memory_chunk -> expr -> expr -> stmt.
-
-FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
-| eval_Eload: forall ge sp e m chunk addr vaddr v lenv,
-   eval_expr ge sp e m lenv addr vaddr ->
-   Mem.loadv chunk m vaddr = Some v ->
-   eval_expr ge sp e m lenv (Eload chunk addr) v.
-
-FRecursion find_label.
-Case _ := (fun lbl k => None).
-FEnd find_label.
-
-FInductive step : genv -> state -> trace -> state -> Prop :=
-| step_store: forall ge f chunk addr a k e le m vaddr v m' lenv,
-      eval_expr ge e le m lenv addr vaddr ->
-      eval_expr ge e le m lenv a v ->
-      Mem.storev chunk m vaddr v = Some m' ->
-      step ge (State f (Sstore chunk addr a) k e le m)
-        E0 (State f Sskip k e le m').
-FEnd Cminor.
-
-Family CminorSel.
-FInductive expr : Type :=
-| Eload : memory_chunk -> addressing -> exprlist -> expr.
-
-FInductive stmt : Type :=
-| Sstore : memory_chunk -> addressing -> exprlist -> expr -> stmt.
-
-FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
-| eval_Eload: forall ge sp e m le chunk addr al vl vaddr v,
-   eval_exprlist ge sp e m le al vl ->
-   eval_addressing ge (Vptr sp Ptrofs.zero) addr vl = Some vaddr ->
-   Mem.loadv chunk m vaddr = Some v ->
-   eval_expr ge sp e m le (Eload chunk addr al) v.
-
-FRecursion find_label.
-Case Sstore chunk addr al a := (fun lbl k => None).
-FEnd find_label.
-
-FInductive step : genv -> state -> trace -> state -> Prop :=
-| step_store: forall ge f chunk addr al b k sp e m vl v vaddr m',
-   eval_exprlist ge sp e m nil al vl ->
-   eval_expr ge sp e m nil b v ->
-   eval_addressing ge (Vptr sp Ptrofs.zero) addr vl = Some vaddr ->
-   Mem.storev chunk m vaddr v = Some m' ->
-   step ge (State f (Sstore chunk addr al b) k sp e m)
-     E0 (State f Sskip k sp e m').
-
-FEnd CminorSel.
-
-Inherit Cfamtransl.
-
-Family Cminorgen extends Cfamtransl.
-
-
-FEnd Comp_Heap.
-
-Trait Comp_Field extends Base, Comp_Heap.
-FEnd Comp_Field.
-
-
 Trait Comp_Loops extends Base.
-
-Family Cfam.
-
-FInductive stmt : Type :=
-| Sloop: stmt -> stmt
-| Sblock: stmt -> stmt
-| Sexit: nat -> stmt.
-
-FInductive cont: Type :=
-| Kblock: cont -> cont.
-
-FRecursion call_cont.
-Case Kblock k := (Kblock k).
-FEnd call_cont.
-
-FRecursion is_call_cont.
-Case _ := False.
-FEnd is_call_cont.
-
-FRecursion find_label.
-Case Sloop s1 :=
-   (fun lbl k => find_label s1 lbl (Kseq (Sloop s1) k)).
-Case Sblock s1 :=
-  (fun lbl k => find_label s1 lbl (Kblock k)).
-Case _ := (fun lbl k => None).
-FEnd find_label.
-
-FInductive step : genv -> state -> trace -> state -> Prop :=
-| step_skip_block: forall ge f k sp e m,
-      step ge (State f Sskip (Kblock k) sp e m)
-        E0 (State f Sskip k sp e m)
-| step_loop: forall ge f s k sp e m,
-      step ge (State f (Sloop s) k sp e m)
-        E0 (State f s (Kseq (Sloop s) k) sp e m)
-| step_block: forall ge f s k e le m,
-      step ge (State f (Sblock s) k e le m)
-        E0 (State f s (Kblock k) e le m)
-| step_exit_seq: forall ge f n s k e le m,
-      step ge (State f (Sexit n) (Kseq s k) e le m)
-        E0 (State f (Sexit n) k e le m)
-| step_exit_block_0: forall ge f k e le m,
-      step ge (State f (Sexit O) (Kblock k) e le m)
-        E0 (State f Sskip k e le m)
-| step_exit_block_S: forall ge f n k e le m,
-      step ge (State f (Sexit (S n)) (Kblock k) e le m)
-        E0 (State f (Sexit n) k e le m).
-
-FEnd Cfam.
-
-Family Csharpminor extends Cfam. FEnd Csharpminor.
-Family Cminor extends Cfam. FEnd Cminor.
-Family CminorSel extends Cfam. FEnd CminorSel.
-
-Inherit Cfamtransl.
-
-Family Cminorgen extends Cfamtransl.
-Family S extends Csharpminor. FEnd S.
-Family T extends Cminor. FEnd T.
-
-Inherit exit_env.
-
-MetaData shift_exit.
-Fixpoint shift_exit (e: exit_env) (n: nat) {struct e} : nat :=
-  match e, n with
-  | nil, _ => n
-  | false :: e', _ => Datatypes.S (shift_exit e' n)
-  | true :: e', O => O
-  | true :: e', Datatypes.S m => Datatypes.S (shift_exit e' m)
-  end.
-FEnd shift_exit.
-
-FRecursion transl_stmt.
-Case Sloop s :=
-  (fun cenv xenv =>
-    do ts <- transl_stmt s cenv xenv;
-    OK (T.Sloop ts)).
-Case Sblock s :=
-  (fun cenv xenv =>
-      do ts <- transl_stmt s cenv (true :: xenv);
-      OK (T.Sblock ts)).
-Case Sexit n :=
-  (fun cenv xenv =>
-      OK (T.Sexit (shift_exit xenv n))).
-FEnd transl_stmt.
-
-FInductive match_cont: S.cont -> T.cont -> compilenv -> exit_env -> callstack -> Prop :=
-| match_Kblock: forall k tk cenv xenv cs,
-    match_cont k tk cenv xenv cs ->
-    match_cont (S.Kblock k) (T.Kblock tk) cenv (true :: xenv) cs
-| match_Kblock2: forall k tk cenv xenv cs,
-    match_cont k tk cenv xenv cs ->
-    match_cont k (T.Kblock tk) cenv (false :: xenv) cs.
-
-FRecursion seq_left_depth.
-Case _ := O.
-FEnd seq_left_depth.
-
-FInduction transl_step_correct.
-FProof.
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
-Qed. FEnd transl_step_correct.
-
-FEnd Cminorgen.
 
 Family Selection extends Cfamtransl.
 Family S extends Cminor. FEnd S.
@@ -781,6 +545,23 @@ FInductive match_cont: S.program -> S.cont -> T.cont -> Prop :=
    match_cont cunit k k' ->
    match_cont cunit (S.Kblock k) (T.Kblock k').
 
+FInduction call_cont_commut.
+FProof.
++ apply cheat.
+Qed. FEnd call_cont_commut.
+
+FInduction match_is_call_cont.
+FProof.
++ apply cheat.
+Qed. FEnd match_is_call_cont.
+
+FInduction find_label_commut.
+FProof.
++ apply cheat.
++ apply cheat.
++ apply cheat.
+Qed. FEnd find_label_commut. 
+
 FInduction transl_step_correct.
 FProof.
 + apply cheat.
@@ -795,187 +576,9 @@ FEnd Selection.
 
 FEnd Comp_Loops.
 
-Trait Comp_Switch extends Base, Comp_Loops.
-
-Family Csharpminor.
-
-FInductive stmt : Type :=
-| Sswitch: bool -> expr -> lbl_stmts -> stmt
-with lbl_stmts : Type :=
-  | LSnil: lbl_stmts
-  | LScons: option Z -> stmt -> lbl_stmts -> lbl_stmts.
-
 From Rocqet Require Import Switch.
 
-FRecursion select_switch_default about lbl_stmts motive (fun (_ : lbl_stmts) => lbl_stmts) by _rect.
-Case LSnil := LSnil.
-Case LScons opt s sl' :=
-  (match opt with
-   | None => LScons opt s sl'
-   | Some i => select_switch_default sl'
-  end).
-FEnd select_switch_default.
-
-FRecursion select_switch_case about lbl_stmts motive (fun (_ : lbl_stmts) => Z -> option lbl_stmts) by _rect.
-Case LSnil := (fun n => None).
-Case LScons opt s sl' :=
-  (fun n =>
-     match opt with
-     | None => select_switch_case sl' n
-     | Some c => if zeq c n then Some (LScons opt s sl')  else select_switch_case sl' n
-     end).
-FEnd select_switch_case.
-
-FDefinition select_switch := fun (n: Z) (sl: lbl_stmts) =>
-  match select_switch_case sl n with
-  | Some sl' => sl'
-  | None => select_switch_default sl
-  end.
-
-FRecursion seq_of_lbl_stmt about lbl_stmts motive (fun (_: lbl_stmts) => stmt) by _rect.
-Case LSnil := Sskip.
-Case LScons c s sl' := (Sseq s (seq_of_lbl_stmt sl')).
-FEnd seq_of_lbl_stmt.
-
-FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont))
-  with find_label_ls about lbl_stmts motive (fun (_ : lbl_stmts) => label -> cont -> option (stmt * cont)) by _rect.
-Case Sswitch long a sl :=
-  (fun lbl k => find_label_ls sl lbl k).
-
-Case LSnil := (fun lbl k => None).
-Case LScons x s sl' :=
-  (fun lbl k =>
-     match find_label s lbl (Kseq (seq_of_lbl_stmt sl') k) with
-     | Some sk => Some sk
-     | None => find_label_ls sl' lbl k
-     end).
-FEnd find_label with find_label_ls.
-
-FInductive step : genv -> state -> trace -> state -> Prop :=
-| step_switch: forall ge f islong a cases k e le m v n lenv,
-      eval_expr ge e le m lenv a v ->
-      switch_argument islong v n ->
-      step ge (State f (Sswitch islong a cases) k e le m)
-        E0 (State f (seq_of_lbl_stmt (select_switch n cases)) k e le m).
-
-FEnd Csharpminor.
-
-Family Cminor.
-
-FInductive stmt : Type :=
-  | Sswitch: bool -> expr -> list (Z * nat) -> nat -> stmt.
-
-FRecursion find_label.
-Case _ := (fun lbl k => None).
-FEnd find_label.
-
-FInductive step : genv -> state -> trace -> state -> Prop :=
-| step_switch: forall ge f islong a cases default k sp e m v n lenv,
-   eval_expr ge sp e m lenv a v ->
-   switch_argument islong v n ->
-   step ge (State f (Sswitch islong a cases default) k sp e m)
-     E0 (State f (Sexit (switch_target n default cases)) k sp e m).
-
-FEnd Cminor.
-
-Family CminorSel.
-
-Inherit expr.
-
-MetaData exitexpr.
-Inductive exitexpr : Type :=
-  | XEexit: nat -> exitexpr
-  | XEjumptable: expr -> list nat -> exitexpr
-  | XEcondition: condexpr -> exitexpr -> exitexpr -> exitexpr
-  | XElet: expr -> exitexpr -> exitexpr.
-FEnd exitexpr.
-
-FInductive stmt : Type :=
-  | Sswitch: exitexpr -> stmt.
-
-Inherit eval_expr.
-
-MetaData eval_exitexpr.
-Inductive eval_exitexpr: genv -> fenv -> env -> mem -> letenv -> exitexpr -> nat -> Prop :=
-  | eval_XEexit: forall ge sp e m le x,
-      eval_exitexpr ge sp e m le (XEexit x) x
-  | eval_XEjumptable: forall ge sp e m le a tbl n x,
-      eval_expr ge sp e m le a (Vint n) ->
-      list_nth_z tbl (Int.unsigned n) = Some x ->
-      eval_exitexpr ge sp e m le (XEjumptable a tbl) x
-  | eval_XEcondition: forall ge sp e m le a b c va x,
-      eval_condexpr ge sp e m le a va ->
-      eval_exitexpr ge sp e m le (if va then b else c) x ->
-      eval_exitexpr ge sp e m le (XEcondition a b c) x
-  | eval_XElet: forall ge sp e m le a b v x,
-      eval_expr ge sp e m le a v ->
-      eval_exitexpr ge sp e m (v :: le) b x ->
-      eval_exitexpr ge sp e m le (XElet a b) x.
-FEnd eval_exitexpr.
-
-FRecursion find_label.
-Case _ := (fun lbl k => None).
-FEnd find_label.
-
-FInductive step : genv -> state -> trace -> state -> Prop :=
-| step_switch: forall ge f a k sp e m n,
-   eval_exitexpr ge sp e m nil a n ->
-   step ge (State f (Sswitch a) k sp e m)
-     E0 (State f (Sexit n) k sp e m).
-
-FEnd CminorSel.
-
-Inherit Cfamtransl.
-
-Family Cminorgen extends Cfamtransl.
-Family S extends Csharpminor. FEnd S.
-Family T extends Cminor. FEnd T.
-
-FRecursion switch_table about S.lbl_stmts motive (fun (_ : S.lbl_stmts) => nat -> list (Z * nat) * nat) by _rect.
-Case LSnil := (fun k => (nil, k)).
-Case LScons lbl stmt rem :=
-(fun k =>
-   match lbl with
-   | None => let (tbl, dfl) := switch_table rem ((1 + k)%nat) in (tbl, k)
-   | Some ni => let (tbl, dfl) := switch_table rem ((1 + k)%nat) in ((ni, k) :: tbl, dfl)
-   end).
-FEnd switch_table.
-
-Inherit exit_env.
-
-FRecursion switch_env about S.lbl_stmts motive (fun (_ : S.lbl_stmts) => exit_env -> exit_env) by _rect.
-Case LSnil := (fun e => e).
-Case LScons a b ls' := (fun e => false :: switch_env ls' e).
-FEnd switch_env.
-
-(* Extending non mutual induction to be mutual *)
-FRecursion transl_stmt about S.stmt motive (fun (_ : S.stmt) => earg -> sarg -> res T.stmt)
-  with transl_lbl_stmt about S.lbl_stmts motive (fun (_ : S.lbl_stmts) => earg -> sarg -> T.stmt -> res T.stmt) by _rect.
-
-Case Sswitch long e ls :=
-  (fun cenv xenv =>
-     let (tbl, dfl) := switch_table ls O in
-     do te <- transl_expr e cenv;
-     transl_lbl_stmt ls cenv (switch_env ls xenv) (T.Sswitch long te tbl dfl)).
-
-Case LSnil
-  := (fun cenv xenv body => OK (T.Sseq (T.Sblock body) T.Sskip)).
-Case LScons a s ls' :=
-  (fun cenv xenv body =>
-     do ts <- transl_stmt s cenv xenv;
-     transl_lbl_stmt ls' cenv (List.tail xenv) (T.Sseq (T.Sblock body) ts)).
-FEnd transl_stmt with transl_lbl_stmt.
-
-FRecursion seq_left_depth.
-Case _ := O.
-FEnd seq_left_depth.
-
-FInduction transl_step_correct.
-FProof.
-+ apply cheat.
-Qed. FEnd transl_step_correct.
-
-FEnd Cminorgen.
+Trait Comp_Switch extends Base, Comp_Loops.
 
 Family Selection extends Cfamtransl.
 Family S extends Cminor. FEnd S.
@@ -1013,6 +616,11 @@ Case Sswitch b e cases dfl :=
   ).
 FEnd transl_stmt.
 
+FInduction find_label_commut.
+FProof.
++ apply cheat.
+Qed. FEnd find_label_commut. 
+
 FInduction transl_step_correct.
 FProof.
 + apply cheat.
@@ -1022,233 +630,80 @@ FEnd Selection.
 
 FEnd Comp_Switch.
 
-Trait Comp_Call extends Base.
-
-Family Cfam.
-
-FInductive cont: Type :=
-| Kcall: option ident -> function -> env -> fenv -> cont -> cont.
-
-FRecursion call_cont.
-Case Kcall a b c d e := (Kcall a b c d e).
-FEnd call_cont.
-
-FRecursion is_call_cont.
-Case Kcall a b c d e := True.
-FEnd is_call_cont.
-
-FDefinition set_optvar := fun (optid: option ident) (v: val) (e: env) =>
-  match optid with
-  | None => e
-  | Some id => PTree.set id v e
-  end.
-
-FInductive step : genv -> state -> trace -> state -> Prop :=
-| step_return: forall ge v optid f sp e k m,
-      step ge (Returnstate v (Kcall optid f e sp k) m)
-        E0 (State f Sskip k sp (set_optvar optid v e) m).
-FEnd Cfam.
-
-Family Csharpminor extends Cfam.
-FInductive stmt : Type :=
-| Scall : option ident -> signature -> expr -> list expr -> stmt.
-
-FRecursion find_label.
-Case _ := (fun lbl k => None).
-FEnd find_label.
-
-MetaData eval_exprlist binds eval_Enil, eval_Econs.
-Inductive eval_exprlist: genv -> fenv -> env -> mem -> letenv -> list expr -> list val -> Prop :=
-  | eval_Enil: forall ge lenv e le m,
-      eval_exprlist ge le e m lenv nil nil
-  | eval_Econs: forall ge le e m lenv a1 al v1 vl,
-      eval_expr ge le e m lenv a1 v1 -> eval_exprlist ge le e m lenv al vl ->
-      eval_exprlist ge le e m lenv (a1 :: al) (v1 :: vl).
-FEnd eval_exprlist.
-
-FInductive step : genv -> state -> trace -> state -> Prop :=
-| step_call: forall ge lenv f optid sig a bl k e le m vf vargs fd,
-      eval_expr ge e le m lenv a vf ->
-      eval_exprlist ge e le m lenv bl vargs ->
-      Genv.find_funct ge vf = Some fd ->
-      funsig fd = sig ->
-      step ge (State f (Scall optid sig a bl) k e le m)
-        E0 (Callstate fd vargs (Kcall optid f le e k) m).
-FEnd Csharpminor.
-
-Family Cminor extends Cfam.
-
-FInductive stmt : Type :=
-| Scall : option ident -> signature -> expr -> list expr -> stmt
-| Stailcall: signature -> expr -> list expr -> stmt.
-
-FRecursion find_label.
-Case _ := (fun lbl k => None).
-FEnd find_label.
-
-MetaData eval_exprlist binds eval_Enil, eval_Econs.
-Inductive eval_exprlist: genv -> fenv -> env -> mem -> letenv -> list expr -> list val -> Prop :=
-  | eval_Enil: forall ge lenv e le m,
-      eval_exprlist ge le e m lenv nil nil
-  | eval_Econs: forall ge le e m lenv a1 al v1 vl,
-      eval_expr ge le e m lenv a1 v1 -> eval_exprlist ge le e m lenv al vl ->
-      eval_exprlist ge le e m lenv (a1 :: al) (v1 :: vl).
-FEnd eval_exprlist.
-
-FInductive step : genv -> state -> trace -> state -> Prop :=
-| step_call: forall ge lenv f optid sig a bl k e le m vf vargs fd,
-      eval_expr ge le e m lenv a vf ->
-      eval_exprlist ge le e m lenv bl vargs ->
-      Genv.find_funct ge vf = Some fd ->
-      funsig fd = sig ->
-      step ge (State f (Scall optid sig a bl) k le e m)
-        E0 (Callstate fd vargs (Kcall optid f e le k) m)
-| step_tailcall: forall ge lenv f optid sig a bl k e le m m' vf vargs fd,
-      eval_expr ge le e m lenv a vf ->
-      eval_exprlist ge le e m lenv bl vargs ->
-      Genv.find_funct ge vf = Some fd ->
-      funsig fd = sig ->
-      Mem.free m le 0 (self__Cminor.fn_stackspace f) = Some m' ->
-      step ge (State f (Scall optid sig a bl) k le e m)
-        E0 (Callstate fd vargs (call_cont k) m').
-
-FEnd Cminor.
-
-
-Family CminorSel extends Cfam.
-FInductive expr : Type :=
-| Eexternal : ident -> signature -> exprlist -> expr.
-
-FInductive stmt : Type :=
-| Scall : option ident -> signature -> expr + ident -> exprlist -> stmt
-| Stailcall: signature -> expr + ident -> exprlist -> stmt.
-
-FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
-| eval_Eexternal: forall ge sp e m le id sg al b ef vl v,
-   Genv.find_symbol ge id = Some b ->
-   Genv.find_funct_ptr ge b = Some (AST.External ef) ->
-   ef_sig ef = sg ->
-   eval_exprlist ge sp e m le al vl ->
-   external_call ef ge vl m E0 v m ->
-   eval_expr ge sp e m le (Eexternal id sg al) v.
-
-FRecursion find_label.
-Case _ := (fun lbl k => None).
-FEnd find_label.
-
-MetaData eval_expr_or_symbol.
-Inductive eval_expr_or_symbol: genv -> fenv -> env -> mem -> letenv -> expr + ident -> val -> Prop :=
-  | eval_eos_e: forall ge sp e m le a v,
-      eval_expr ge sp e m le a v ->
-      eval_expr_or_symbol ge sp e m le (inl _ a) v
-  | eval_eos_s: forall ge sp e m le id b,
-      Genv.find_symbol ge id = Some b ->
-      eval_expr_or_symbol ge sp e m le (inr _ id) (Vptr b Ptrofs.zero).
-FEnd eval_expr_or_symbol.
-
-FInductive step : genv -> state -> trace -> state -> Prop :=
-| step_call: forall ge f optid sig a bl k sp e m vf vargs fd,
-   eval_expr_or_symbol ge sp e m nil a vf ->
-   eval_exprlist ge sp e m nil bl vargs ->
-   Genv.find_funct ge vf = Some fd ->
-   funsig fd = sig ->
-   step ge (State f (Scall optid sig a bl) k sp e m)
-     E0 (Callstate fd vargs (Kcall optid f e sp k) m)
-| step_tailcall: forall ge f sig a bl k sp e m vf vargs fd m',
-   eval_expr_or_symbol ge sp e m nil a vf ->
-   eval_exprlist ge sp e m nil bl vargs ->
-   Genv.find_funct ge vf = Some fd ->
-   funsig fd = sig ->
-   Mem.free m sp 0 (fn_stackspace f) = Some m' ->
-   step ge (State f (Stailcall sig a bl) k sp e m)
-     E0 (Callstate fd vargs (call_cont k) m').
-FEnd CminorSel.
-
-Inherit Cfamtransl.
-
-Family Cminorgen extends Cfamtransl.
-Family S extends Csharpminor. FEnd S.
-Family T extends Cminor. FEnd T.
-
-Inherit transl_expr.
-MetaData transl_exprlist.
-Fixpoint transl_exprlist
-  (cenv: compilenv) (el: list S.expr)
-                     {struct el}: res (list T.expr) :=
-  match el with
-  | nil =>
-      OK nil
-  | e1 :: e2 =>
-      do te1 <- transl_expr e1 cenv;
-      do te2 <- transl_exprlist cenv e2;
-      OK (te1 :: te2)
-  end.
-FEnd transl_exprlist.
-
-FRecursion transl_stmt.
-Case Scall optid sig e el :=
-  (fun cenv xenv =>
-     do te <- transl_expr e cenv;
-     do tel <- transl_exprlist cenv el;
-   OK (T.Scall optid sig te tel)).
-FEnd transl_stmt.
-
-
-Inherit transl_expr_correct.
-
-FInductive match_cont: S.cont -> T.cont -> compilenv -> exit_env -> callstack -> Prop :=
-| match_Kcall: forall optid fn e le k tfn sp te tk cenv xenv lo hi cs sz cenv',
-   transl_funbody cenv sz fn = OK tfn ->
-   match_cont k tk cenv xenv cs ->
-   match_cont (S.Kcall optid fn e le k)
-      (T.Kcall optid tfn te sp tk)
-      cenv' nil
-      (Frame cenv tfn le e te sp lo hi :: cs).
-
-FRecursion seq_left_depth.
-Case _ := O.
-FEnd seq_left_depth.
-
-FInduction transl_step_correct.
-FProof.
-+ apply cheat.
-+ apply cheat.
-Qed. FEnd transl_step_correct.
-
-FEnd Cminorgen.
+Trait Comp_Builtin extends Base.
 
 Family Selection extends Cfamtransl.
 Family S extends Cminor. FEnd S.
 Family T extends CminorSel. FEnd T.
 
-MetaData call_kind binds Call_default, Call_imm, Call_builtin.
-Inductive call_kind : Type :=
-  | Call_default
-  | Call_imm (id: ident).
-  (* | Call_builtin (ef: external_function).*)
-FEnd call_kind.
-
-FRecursion expr_is_addrof_ident_cst about S.constant motive (fun (_ : S.constant) => option ident) by _rect.
-Case Oaddrsymbol id ofs := (if Ptrofs.eq ofs Ptrofs.zero then Some id else None).
-Case _ := None.
-FEnd expr_is_addrof_ident_cst.
-
-FRecursion expr_is_addrof_ident about S.expr motive (fun (_ : S.expr) => option ident) by _rect.
-Case Econst cst := (expr_is_addrof_ident_cst cst).
-Case _ := None.
-FEnd expr_is_addrof_ident.
-
-FDefinition classify_call := fun (e: S.expr) =>
-  match expr_is_addrof_ident e with
-  | None => Call_default
-  | Some id => Call_imm id
-      (*match defmap!id with
-      | Some(Gfun(External ef)) => if ef_inline ef then Call_builtin ef else Call_imm id
-      | _ => Call_imm id
-      end*)
-  end.
+FDefinition Sno_op := T.Sseq T.Sskip T.Sskip.
 
 Inherit transl_expr.
+
+MetaData builtin_arg.
+Axiom builtin_arg : T.expr ->  AST.builtin_arg T.expr.
+FEnd builtin_arg.
+
+FDefinition sel_builtin_arg
+       := fun (e: S.expr) (c: builtin_arg_constraint) (* : res (AST.builtin_arg expr) :=*) =>
+  do e' <- transl_expr e tt;
+  OK (let ba := builtin_arg e' in
+  if builtin_arg_ok ba c then ba else BA e').
+
+MetaData sel_builtin_args.
+Fixpoint sel_builtin_args
+       (el: list S.expr)
+       (cl: list builtin_arg_constraint): res (list (AST.builtin_arg T.expr)) :=
+  match el with
+  | nil => OK nil
+  | e :: el =>
+      do e' <- sel_builtin_arg e (List.hd OK_default cl);
+      do el' <- sel_builtin_args el (List.tl cl); 
+      OK (e' :: el')
+  end.
+FEnd sel_builtin_args.
+
+FDefinition sel_builtin_res := fun (optid: option ident) (* : builtin_res ident :=*) =>
+  match optid with
+  | None => BR_none
+  | Some id => BR id
+  end.
+
+FDefinition platform_builtin := fun (b: Builtins1.platform_builtin) (args: T.exprlist) => (None : option T.expr). 
+
+MetaData sel_known_builtin.
+Function sel_known_builtin (bf: Builtins.builtin_function) (args: T.exprlist) :=
+  match bf, args with
+  | Builtins.BI_platform b, _ =>
+      platform_builtin b args
+  (*| Builtins.BI_standard (Builtins0.BI_select ty), a1 ::: a2 ::: a3 ::: Enil =>
+      Some (sel_select ty a1 a2 a3)
+  | BI_standard BI_fabs, a1 ::: Enil =>
+      Some (SelectOp.absf a1)
+  | BI_standard BI_fabsf, a1 ::: Enil =>
+      Some (SelectOp.absfs a1)*)
+  | _, _ =>
+      None
+  end.
+FEnd sel_known_builtin.
+
+(* Should be in Machregs *)
+Definition builtin_constraints (ef: external_function) :
+                                       list builtin_arg_constraint :=
+  match ef with
+  | EF_builtin id sg => nil
+  | EF_vload _ => OK_addressing :: nil
+  | EF_vstore _ => OK_addressing :: OK_default :: nil
+  | EF_memcpy _ _ => OK_addrstack :: OK_addrstack :: nil
+  | EF_annot kind txt targs => map (fun _ => OK_all) targs
+  | EF_debug kind txt targs => map (fun _ => OK_all) targs
+  | _ => nil
+  end.
+
+FDefinition sel_builtin_default := fun (optid: option ident) (ef: external_function)
+                                       (args: list S.expr) =>
+  do args <- (sel_builtin_args args (builtin_constraints ef));                                     
+  OK (T.Sbuiltin (sel_builtin_res optid) ef args).
 
 MetaData transl_exprlist.
 Fixpoint transl_exprlist (al: list S.expr) : res T.exprlist :=
@@ -1261,147 +716,218 @@ Fixpoint transl_exprlist (al: list S.expr) : res T.exprlist :=
   end.
 FEnd transl_exprlist.
 
-(* use default call *)
-FRecursion transl_stmt.
-Case Scall optid sg fn args :=
-  (fun
-      OK (match classify_call fn with
-      | Call_default => Scall optid sg (inl _ (sel_expr fn)) (sel_exprlist args)
-      | Call_imm id => Scall optid sg (inr _ id) (sel_exprlist args)
-      (* | Call_builtin ef => sel_builtin optid ef args*)
-          end).
-| Cminor.Stailcall sg fn args =>
-      OK (match classify_call fn with
-      | Call_imm id => Stailcall sg (inr _ id) (sel_exprlist args)
-      | _ => Stailcall sg (inl _ (sel_expr fn)) (sel_exprlist args)
-      end)
-FEnd transl_stmt.
-
-FEnd Selection.
-
-FEnd Comp_Call.
-
-Trait Comp_Builtin extends Base, Comp_Call.
-
-Family Cfam. FEnd Cfam.
-
-Family Csharpminor extends Cfam.
-FInductive stmt : Type :=
-| Sbuiltin : option ident -> external_function -> list expr -> stmt.
-
-FRecursion find_label.
-Case _ := (fun lbl k => None).
-FEnd find_label.
-
-FInductive step : genv -> state -> trace -> state -> Prop :=
-| step_builtin: forall ge f lenv optid ef bl k e le m vargs t vres m',
-   eval_exprlist ge e le m lenv bl vargs ->
-   external_call ef ge vargs m t vres m' ->
-   step ge (State f (Sbuiltin optid ef bl) k e le m)
-     t (State f Sskip k e (set_optvar optid vres le) m').
-FEnd Csharpminor.
-
-Family Cminor extends Cfam.
-
-FInductive stmt : Type :=
-| Sbuiltin : option ident -> external_function -> list expr -> stmt.
-
-FRecursion find_label.
-Case _ := (fun lbl k => None).
-FEnd find_label.
-
-FInductive step : genv -> state -> trace -> state -> Prop :=
-| step_builtin: forall ge f lenv optid ef bl k e le m vargs t vres m',
-   eval_exprlist ge e le m lenv bl vargs ->
-   external_call ef ge vargs m t vres m' ->
-   step ge (State f (Sbuiltin optid ef bl) k e le m)
-     t (State f Sskip k e (set_optvar optid vres le) m').
-
-FEnd Cminor.
-
-Family CminorSel.
-FInductive expr : Type :=
-| Ebuiltin : external_function -> exprlist -> expr.
-
-FInductive stmt : Type :=
-| Sbuiltin : builtin_res ident -> external_function -> list (builtin_arg expr) -> stmt.
-
-FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
-| eval_Ebuiltin: forall ge sp e m le ef al vl v,
-   eval_exprlist ge sp e m le al vl ->
-   external_call ef ge vl m E0 v m ->
-   eval_expr ge sp e m le (Ebuiltin ef al) v.
-
-MetaData eval_builtin_arg.
-Inductive eval_builtin_arg: genv -> fenv -> env -> mem -> builtin_arg expr -> val -> Prop :=
-  | eval_BA: forall ge sp e m a v,
-      eval_expr ge sp e m nil a v ->
-      eval_builtin_arg ge sp e m (BA a) v
-  | eval_BA_int: forall ge sp e m n,
-      eval_builtin_arg ge sp e m (BA_int n) (Vint n)
-  | eval_BA_long: forall ge sp e m n,
-      eval_builtin_arg ge sp e m (BA_long n) (Vlong n)
-  | eval_BA_float: forall ge sp e m n,
-      eval_builtin_arg ge sp e m (BA_float n) (Vfloat n)
-  | eval_BA_single: forall ge sp e m n,
-      eval_builtin_arg ge sp e m (BA_single n) (Vsingle n)
-  | eval_BA_loadstack: forall ge sp e m chunk ofs v,
-      Mem.loadv chunk m (Val.offset_ptr (Vptr sp Ptrofs.zero) ofs) = Some v ->
-      eval_builtin_arg ge sp e m (BA_loadstack chunk ofs) v
-  | eval_BA_addrstack: forall ge sp e m ofs,
-      eval_builtin_arg ge sp e m (BA_addrstack ofs) (Val.offset_ptr (Vptr sp Ptrofs.zero) ofs)
-  | eval_BA_loadglobal: forall ge sp e m chunk id ofs v,
-      Mem.loadv chunk m (Genv.symbol_address ge id ofs) = Some v ->
-      eval_builtin_arg ge sp e m (BA_loadglobal chunk id ofs) v
-  | eval_BA_addrglobal: forall ge sp e m id ofs,
-      eval_builtin_arg ge sp e m (BA_addrglobal id ofs) (Genv.symbol_address ge id ofs)
-  | eval_BA_splitlong: forall ge sp e m a1 a2 v1 v2,
-      eval_expr ge sp e m nil a1 v1 -> eval_expr ge sp e m nil a2 v2 ->
-      eval_builtin_arg ge sp e m (BA_splitlong (BA a1) (BA a2)) (Val.longofwords v1 v2)
-  | eval_BA_addptr: forall ge sp e m a1 v1 a2 v2,
-      eval_builtin_arg ge sp e m a1 v1 -> eval_builtin_arg ge sp e m a2 v2 ->
-      eval_builtin_arg ge sp e m (BA_addptr a1 a2)
-                       (if Archi.ptr64 then Val.addl v1 v2 else Val.add v1 v2).
-FEnd eval_builtin_arg.
-
-FRecursion find_label.
-Case _ := (fun lbl k => None).
-FEnd find_label.
-
-FDefinition set_builtin_res := fun (res: builtin_res ident) (v: val) (e: env) =>
-  match res with
-  | BR id => PTree.set id v e
-  | _ => e
+FDefinition sel_builtin := fun (optid: option ident) (ef: external_function)
+                               (args: list S.expr) =>
+  match ef with
+  | EF_builtin name sg =>
+      match Builtins.lookup_builtin_function name sg with
+      | Some bf =>
+          match optid with
+          | Some id =>
+              do args' <- (transl_exprlist args);
+              match sel_known_builtin bf args' with
+              | Some a => OK (T.Sassign id a)
+              | None => sel_builtin_default optid ef args
+              end
+          | None =>
+              OK Sno_op(* builtins with semantics are pure *)
+          end
+      | None => (sel_builtin_default optid ef args)
+      end
+  | _ =>
+      (sel_builtin_default optid ef args)
   end.
 
-FInductive step : genv -> state -> trace -> state -> Prop :=
-| step_builtin: forall ge f res ef al k sp e m vl t v m',
-   list_forall2 (eval_builtin_arg ge sp e m) al vl ->
-   external_call ef ge vl m t v m' ->
-   step ge (State f (Sbuiltin res ef al) k sp e m)
-      t (State f Sskip k sp (set_builtin_res res v e) m').
-FEnd CminorSel.
+FRecursion condexpr_of_expr.
+Case Ebuiltin ef args := (T.CEcond (Ccompuimm Cne Int.zero) (T.Econs (T.Ebuiltin ef args) T.Enil)).
+FEnd condexpr_of_expr.
 
+FRecursion transl_stmt.
+Case Sbuiltin optid ef args := 
+  (fun eargs sargs =>
+     (sel_builtin optid ef args)).
+FEnd transl_stmt.
 
+FInduction find_label_commut.
+FProof.
++ apply cheat.
+Qed. FEnd find_label_commut. 
+
+FInduction transl_step_correct.
+FProof.
++ apply cheat.
+Qed. FEnd transl_step_correct.
+
+FEnd Selection.
 
 FEnd Comp_Builtin.
 
 Trait Comp_External extends Base.
 
-Family Cfam.
-FInductive step : genv -> state -> trace -> state -> Prop :=
-| step_external_function: forall ge ef vargs k m t vres m',
-   external_call ef (Genv.to_senv ge) vargs m t vres m' ->
-   step ge (Callstate (AST.External ef) vargs k m)
-      t (Returnstate vres k m').
-FEnd Cfam.
+Family Selection extends Cfamtransl.
+Family S extends Cminor. FEnd S.
+Family T extends CminorSel. FEnd T.
 
-Family Csharpminor extends Cfam. FEnd Csharpminor.
-Family Cminor extends Cfam. FEnd Cminor.
-Family CminorSel extends Cfam. FEnd CminorSel.
+FInduction transl_step_correct.
+FProof.
++ apply cheat.
+Qed. FEnd transl_step_correct.
+
+FEnd Selection.
 
 FEnd Comp_External.
 
+Trait Comp_Call extends Base, Comp_Builtin, Comp_External.
+
+Family Selection extends Cfamtransl.
+Family S extends Cminor. FEnd S.
+Family T extends CminorSel. FEnd T.
+
+MetaData call_kind binds Call_default, Call_imm, Call_builtin.
+Inductive call_kind : Type :=
+  | Call_default
+  | Call_imm (id: ident)
+  | Call_builtin (ef: external_function).
+FEnd call_kind.
+
+FRecursion expr_is_addrof_ident_cst about S.constant motive (fun (_ : S.constant) => option ident) by _rect.
+Case Oaddrsymbol id ofs := (if Ptrofs.eq ofs Ptrofs.zero then Some id else None).
+Case _ := None.
+FEnd expr_is_addrof_ident_cst.
+
+FRecursion expr_is_addrof_ident about S.expr motive (fun (_ : S.expr) => option ident) by _rect.
+Case Econst cst := (expr_is_addrof_ident_cst cst).
+Case _ := None.                      
+FEnd expr_is_addrof_ident.
+
+MetaData _env_ binds globdef, defmap.
+Definition globdef := AST.globdef S.fundef unit.
+Variable defmap: PTree.t globdef.
+FEnd _env_.
+
+FDefinition classify_call := fun (e: S.expr) =>
+  match expr_is_addrof_ident e with
+  | None => Call_default
+  | Some id =>
+      match defmap!id with
+      | Some(Gfun(AST.External ef)) => if ef_inline ef then Call_builtin ef else Call_imm id
+      | _ => Call_imm id
+      end
+  end.
+
+FRecursion condexpr_of_expr.
+Case Eexternal i sig args := (T.CEcond (Ccompuimm Cne Int.zero) (T.Econs (T.Eexternal i sig args) T.Enil)).
+FEnd condexpr_of_expr.
+
+(* use default call *)
+FRecursion transl_stmt.
+Case Scall optid sg fn args :=
+  (fun eargs sargs =>  
+      (match classify_call fn with
+       | self__Selection.Call_default =>
+              do fn' <- transl_expr fn eargs;
+              do args' <- transl_exprlist args;
+              OK (T.Scall optid sg (inl _ fn') args')
+       | self__Selection.Call_imm id =>
+           do args' <- transl_exprlist args;
+           OK (T.Scall optid sg (inr _ id) args')
+       | self__Selection.Call_builtin ef => sel_builtin optid ef args
+      end)).
+Case Stailcall sg fn args :=
+   (fun eargs sargs =>     
+      (match classify_call fn with
+       | self__Selection.Call_imm id =>
+           do args' <- transl_exprlist args;
+           OK (T.Stailcall sg (inr _ id) args')
+       | _ =>
+           do fn' <- transl_expr fn eargs;
+           do args' <- transl_exprlist args;
+           OK (T.Stailcall sg (inl _ fn') args')
+      end)).
+FEnd transl_stmt.
+
+FInduction find_label_commut.
+FProof.
++ apply cheat.
++ apply cheat.  
+Qed. FEnd find_label_commut.
+
+FInduction transl_step_correct.
+FProof.
++ apply cheat.
++ apply cheat.
++ apply cheat.
+Qed. FEnd transl_step_correct.
+
+FEnd Selection.
+
+FEnd Comp_Call.
+
+Trait Comp_Heap extends Base, Comp_Builtin.
+
+Family Selection extends Cfamtransl.
+Family S extends Cminor. FEnd S.
+Family T extends CminorSel. FEnd T.
+
+(* Not defined in Gallina*)
+MetaData addressing'.
+Axiom addressing' : memory_chunk -> T.expr -> Op.addressing * T.exprlist.
+FEnd addressing'.
+
+FDefinition load := fun (chunk: memory_chunk) (e1: T.expr) =>
+  match addressing' chunk e1 with
+  | (mode, args) => T.Eload chunk mode args
+  end.
+
+FDefinition store := fun (chunk: memory_chunk) (e1 e2: T.expr) =>
+  match addressing' chunk e1 with
+  | (mode, args) => T.Sstore chunk mode args e2
+  end.
+
+FRecursion transl_expr.
+Case Eload chunk addr :=
+  (fun arg =>
+     do addr' <- transl_expr addr arg; 
+     OK (load chunk addr')).
+FEnd transl_expr.
+
+FRecursion condexpr_of_expr.
+Case Eload chunk addr args := (T.CEcond (Ccompuimm Cne Int.zero) (T.Econs (T.Eload chunk addr args) T.Enil)).
+FEnd condexpr_of_expr.
+
+FRecursion transl_stmt.
+Case Sstore chunk addr rhs :=
+  (fun earg sarg =>
+     do addr' <- transl_expr addr earg;
+     do rhs' <- transl_expr rhs earg; 
+     OK (store chunk addr' rhs')).
+FEnd transl_stmt.
+
+FInduction transl_expr_correct.
+FProof.
++ apply cheat.
+Qed. FEnd transl_expr_correct.
+
+FInduction find_label_commut.
+FProof.
++ apply cheat.
+Qed. FEnd find_label_commut.
+
+FInduction transl_step_correct.
+FProof.
++ apply cheat.
+Qed. FEnd transl_step_correct.
+
+FEnd Selection.
+
+FEnd Comp_Heap.
+
+Trait Comp_Field extends Base, Comp_Heap.
+
+Family Selection.
+FEnd Selection.
+
+FEnd Comp_Field.
 
 (*Family Comp extends
   Base,
