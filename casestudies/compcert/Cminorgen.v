@@ -1453,32 +1453,10 @@ FInduction transl_step_correct about S.step motive
      \/ (measure S2 < measure S1 /\ t = E0 /\ match_states ge S2 T1)%nat).
 FProof.
 all: intros until tge; intros TRANSL A B.
+
+(* Both require dependent induction on MK which Rocqet doesn't support *)
 (* skip seq *)
-+ (*intros T1 MSTATE. inv MSTATE. fsimpl in TR. monadInv TR. left.
-  dependent induction MK. 
-  econstructor; split.
-  apply plus_one; fconstructor;
-  apply kstop_not_kseq in x; exfalso; eauto.
-  apply kstop_not_kseq in x; exfalso; eauto.  
-  apply kseq_injective in x; destruct x; subst.
-  econstructor; split.
-  apply plus_one. fconstructor.
-  (*econstructor; eauto. *) apply cheat.
-  econstructor; split.
-  apply plus_one. fconstructor.  
-  eapply match_state_seq; eauto.
-  exploit IHMK; eauto. intros [T2 [A B]].
-  exists T2; split. eapply plus_left. constructor. apply plus_star; eauto. traceEq.
-  auto.
-  
-  apply kseq_injective in x; destruct x; subst.*)
-  (*apply plus_one. fconstructor.
-    apply kseq_injective in x; destruct x; subst.
-    eapply match_state_seq; eauto. *)
-  (* other cases of the induction *)
-  (*exploit IHMK; eauto. intros [T2 [A B]].
-  exists T2; split. eapply plus_left. constructor. apply plus_star; eauto. traceEq.*) 
-  apply cheat.
++ apply cheat.
 (* skip call *)  
 + apply cheat.
   
