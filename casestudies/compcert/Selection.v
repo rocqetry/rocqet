@@ -4,7 +4,7 @@ From Rocqet Require Import Coqlib.
 From Rocqet Require Import Errors.
 From Rocqet Require Import Values.
 From Rocqet Require Import AST.
-From Rocqet Require Import Integers. 
+From Rocqet Require Import Integers.
 From Rocqet Require Import Floats.
 From Rocqet Require Import Memory.
 From Rocqet Require Import Globalenvs.
@@ -56,7 +56,7 @@ Case Oaddrsymbol id ofs := (addrsymbol id ofs).
 Case Oaddrstack ofs := (addrstack ofs).
 FEnd sel_constant.
 
-(* These are implemented as "Nondetfunction" in CompCert, which is not Gallina, but 
+(* These are implemented as "Nondetfunction" in CompCert, which is not Gallina, but
    rather a meta language which is compiled in to Gallina
    we axiomatize the functions here for simplicity *)
 MetaData nondet_selection binds sel_unop, sel_binop.
@@ -69,10 +69,10 @@ Case Econst cst := (fun _ => OK ((sel_constant cst))).
 Case Eunop op arg := (fun earg => do result <- (transl_expr arg earg); OK (sel_unop op result)).
 Case Ebinop op arg1 arg2 := (fun earg =>
     do r1 <- transl_expr arg1 earg;
-    do r2 <- transl_expr arg2 earg;                            
+    do r2 <- transl_expr arg2 earg;
     OK (sel_binop op r1 r2)).
 FEnd transl_expr.
-       
+
 FRecursion condexpr_of_expr about T.expr motive (fun (_ : T.expr) => T.condexpr) by _rect.
 Case Eop op el :=
   (match op with
@@ -92,7 +92,7 @@ FRecursion transl_stmt.
 Case Sifthenelse e ifso ifnot :=
   (fun earg sarg =>
      do ifso' <- transl_stmt ifso earg sarg; do ifnot' <- transl_stmt ifnot earg sarg;
-     do e' <- (transl_expr e earg) ;                                 
+     do e' <- (transl_expr e earg) ;
      OK (T.Sifthenelse (condexpr_of_expr e') ifso' ifnot')).
 FEnd transl_stmt.
 
@@ -126,8 +126,37 @@ Let ge := Genv.globalenv prog.
 Let tge := Genv.globalenv tprog.
 Hypothesis TRANSF: match_prog prog tprog. *)
 
-FDefinition env_lessdef := fun (e1 e2: S.env) =>
+MetaData env_lessdef.
+Definition env_lessdef (e1 e2: S.env) : Prop :=
   forall id v1, e1!id = Some v1 -> exists v2, e2!id = Some v2 /\ Val.lessdef v1 v2.
+
+Lemma set_var_lessdef:
+  forall e1 e2 id v1 v2,
+  env_lessdef e1 e2 -> Val.lessdef v1 v2 ->
+  env_lessdef (PTree.set id v1 e1) (PTree.set id v2 e2).
+Proof.
+  intros; red; intros. rewrite PTree.gsspec in *. destruct (peq id0 id).
+  exists v2; split; congruence.
+  auto.
+Qed.
+
+Lemma set_params_lessdef:
+  forall il vl1 vl2,
+  Val.lessdef_list vl1 vl2 ->
+  env_lessdef (S.set_params vl1 il) (S.set_params vl2 il).
+Proof.
+  induction il; simpl; intros.
+  red; intros. rewrite PTree.gempty in H0; congruence.
+  inv H; apply set_var_lessdef; auto.
+Qed.
+
+Lemma set_locals_lessdef:
+  forall e1 e2, env_lessdef e1 e2 ->
+  forall il, env_lessdef (S.set_locals il e1) (S.set_locals il e2).
+Proof.
+  induction il; simpl. auto. apply set_var_lessdef; auto.
+Qed.
+FEnd env_lessdef.
 
 (* We Aximatize these because those selection functions are not defined direclty in Gallina *)
 MetaData nondet_selection_proof binds eval_sel_unop, eval_sel_binop.
@@ -187,7 +216,7 @@ all: intros; fsimpl in H1; inv H1; fsimpl.
 + exists (Vfloat f); split; auto. fconstructor. fconstructor. auto.
 + exists (Vsingle f); split; auto. fconstructor. fconstructor. auto.
 + exists (Vlong i); split; auto. fconstructor. fconstructor. auto.
-+ unfold Genv.symbol_address; rewrite <- (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSL eq_refl eq_refl); fold (Genv.symbol_address (Genv.globalenv tprog) i i0). apply eval_addrsymbol.  
++ unfold Genv.symbol_address; rewrite <- (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSL eq_refl eq_refl); fold (Genv.symbol_address (Genv.globalenv tprog) i i0). apply eval_addrsymbol.
 + apply eval_addrstack.
 Qed. FEnd transl_constant_correct.
 
@@ -204,7 +233,7 @@ FLemma eval_unop_lessdef:
 FProofLemma.
   intros until v; intros EV LD. inv LD.
   exists v; auto.
-  destruct op; simpl; inv EV; TrivialExists2. 
+  destruct op; simpl; inv EV; TrivialExists2.
 Qed. CloseFLemma.
 
 FLemma eval_binop_lessdef:
@@ -242,29 +271,29 @@ FInduction transl_expr_correct about S.eval_expr motive
      Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
      forall e' m' ta (TR: transl_expr a tt = OK ta),
      env_lessdef e e' -> Mem.extends m m' ->
-     exists v', T.eval_expr tge sp e' m' lenv ta v' /\ Val.lessdef v v'). 
+     exists v', T.eval_expr tge sp e' m' lenv ta v' /\ Val.lessdef v v').
 FProof.
 all: intros; simpl; fsimpl.
 (* Evar *)
-+ exploit H1; eauto. intros [v' [A B]]. exists v'; split; auto. fsimpl in TR. monadInv TR. fconstructor; auto.  
++ exploit H1; eauto. intros [v' [A B]]. exists v'; split; auto. fsimpl in TR. monadInv TR. fconstructor; auto.
 (* Econst *)
 + exploit transl_constant_correct; eauto.
   fsimpl in TR. monadInv TR.
   intros [tv [A B]]. exists tv; split; eauto.
-(* Eunop *)  
+(* Eunop *)
 + fsimpl in TR. monadInv TR.
   exploit H; eauto. intros [v1' [A B]].
   exploit eval_unop_lessdef; eauto. intros [v' [C D]].
   exploit eval_sel_unop; eauto. intros [v'' [E F]].
   exists v''; split; eauto. eapply Val.lessdef_trans; eauto.
-(* Binop *)  
+(* Binop *)
 + fsimpl in TR. monadInv TR. exploit H0; eauto. intros [v1' [A B]].
   exploit H; eauto. intros [v2' [C D]].
   exploit eval_binop_lessdef; eauto. intros [v' [E F]].
   assert (G: exists v'', T.eval_expr (Genv.globalenv tprog) e e' m' lenv (sel_binop op x x0) v'' /\ Val.lessdef v' v'')
-    by (eapply eval_sel_binop; eauto).  
+    by (eapply eval_sel_binop; eauto).
   destruct G as [v'' [P Q]].
-   exists v''; split; eauto. eapply Val.lessdef_trans; eauto.  
+   exists v''; split; eauto. eapply Val.lessdef_trans; eauto.
 Qed. FEnd transl_expr_correct.
 
 (*FInduction eval_condexpr_of_expr about T.expr
@@ -289,7 +318,7 @@ FInductive match_cont: S.program -> S.cont -> T.cont -> Prop :=
 | match_cont_seq: forall cunit s s' k k',
     transl_stmt s tt tt = OK s' ->
     match_cont cunit k k' ->
-    match_cont cunit (S.Kseq s k) (T.Kseq s' k')  
+    match_cont cunit (S.Kseq s k) (T.Kseq s' k')
 | match_cont_other: forall cunit k k',
     match_call_cont k k' ->
     match_cont cunit k k'
@@ -303,7 +332,7 @@ Closing Fact match_cont_seq_inv : forall cunit s k tk,
       tk = (T.Kseq s' k') /\
       transl_stmt s tt tt = OK s' /\
       match_cont cunit k k'
-by plain { intros until tk; intros H; inv H; eauto }.    
+by plain { intros until tk; intros H; inv H; eauto }.
 
 MetaData match_states.
 Inductive match_states (cunit: S.program) (prog: S.program): S.state -> T.state -> Prop :=
@@ -352,20 +381,26 @@ Qed. CloseFLemma.
 
 FInduction call_cont_commut about match_cont motive
   (fun cunit k k' (_ : match_cont cunit k k') =>
-     match_call_cont (S.call_cont k) (T.call_cont k')).
+     match_call_cont (S.call_cont k) (T.call_cont k'))
+with call_cont_commut' about match_call_cont motive
+  (fun k k' (_ : match_call_cont k k') =>
+    match_call_cont (S.call_cont k) (T.call_cont k')).
 FProof.
-+ apply cheat.
-+ apply cheat. (* proved by inversion on match_call_cont *)
-Qed. FEnd call_cont_commut.
+all: intros; do 2 fsimpl; auto; fconstructor.
+Qed. FEnd call_cont_commut with call_cont_commut'.
 
 FInduction match_is_call_cont about match_cont motive
   (fun cunit k k' (_ : match_cont cunit k k') =>
     S.is_call_cont k ->
-    match_call_cont k k' /\ T.is_call_cont k').
+    match_call_cont k k' /\ T.is_call_cont k')
+with match_is_call_cont' about match_call_cont motive
+  (fun k k' (_ : match_call_cont k k') =>
+    S.is_call_cont k ->
+    T.is_call_cont k').
 FProof.
-all: intros; fsimpl in H0; try contradiction.
-+ split. auto. apply cheat. (* TODO *) 
-Qed. FEnd match_is_call_cont.
+- intros. fsimpl in H0. contradiction.
+- intros. fsimpl. exact I.
+Qed. FEnd match_is_call_cont with match_is_call_cont'.
 
 FLemma match_states_skip: forall cunit prog f f' k k' sp e m e' m'
         (LINK: linkorder cunit prog)
@@ -378,16 +413,6 @@ FLemma match_states_skip: forall cunit prog f f' k k' sp e m e' m'
   match_states cunit prog (S.State f S.Sskip k sp e m) (T.State f' T.Sskip k' sp e' m').
 FProofLemma.
   intros. eapply match_state; eauto. fsimpl. reflexivity.
-Qed. CloseFLemma.
-
-FLemma set_var_lessdef:
-  forall e1 e2 id v1 v2,
-  env_lessdef e1 e2 -> Val.lessdef v1 v2 ->
-  env_lessdef (PTree.set id v1 e1) (PTree.set id v2 e2).
-FProofLemma.
-  intros; red; intros. rewrite PTree.gsspec in *. destruct (peq id0 id).
-  exists v2; split; congruence.
-  auto.
 Qed. CloseFLemma.
 
 FInduction find_label_commut about S.stmt motive
@@ -409,18 +434,17 @@ all: intros until k'; simpl; fsimpl; intros MC SE; fsimpl in SE; try (monadInv S
   destruct (T.find_label x lbl (T.Kseq x0 k')) as [[sy ky] | ];
   intuition. apply H0; eauto.
 + destruct o; inv SE; simpl. monadInv H0; fsimpl; auto. fsimpl; auto.
-+  fsimpl. destruct (ident_eq lbl l).
++ fsimpl. destruct (ident_eq lbl l).
   - eauto.
   -  apply H; eauto.
 + fsimpl; auto.
-+ (*fsimpl. 
-  exploit H; eauto.
++ fsimpl.
+  exploit H; eauto. instantiate (1 := lbl).
   destruct (S.find_label __i lbl k) as [[sx kx] | ];
-  destruct (T.find_label x0 lbl k') as [[sy ky] | ];
-  intuition. *)
-  apply cheat.
+  destruct (T.find_label x lbl k') as [[sy ky] | ];
+  intuition. apply H0; auto.
 Qed. FEnd find_label_commut.
-  
+
 Require Import Rocqet.LibTactics.
 
 FInduction transl_step_correct about S.step motive
@@ -435,56 +459,63 @@ FProof.
 all: intros until cunit; intros LINK TRANSL A B; intros T1 ME; inv ME; fsimpl in TS; try (monadInv TS).
 (* skip seq *)
 + apply match_cont_seq_inv in MC; unpack MC; subst. left; econstructor; split. apply plus_one; fconstructor. econstructor; eauto. (* inv H*)
-(* skip call *)  
+(* skip call *)
 + exploit Mem.free_parallel_extends; eauto. intros [m2' [A B]].
   left; econstructor; split.
   apply plus_one; fconstructor. eapply match_is_call_cont; eauto.
   unfold T.free_fenv. erewrite stackspace_function_translated; eauto.
   econstructor; eauto. eapply match_is_call_cont; eauto.
-(* assign *)  
+(* assign *)
 + exploit transl_expr_correct; eauto. intros [v' [A B]].
   left; econstructor; split.
   apply plus_one; fconstructor; eauto.
   eapply match_states_skip; eauto. apply set_var_lessdef; auto.
-(* seq *)  
+(* seq *)
 + left; econstructor; split.
   apply plus_one; fconstructor.
   econstructor; eauto. fconstructor; eauto.
-(* return none *)  
+(* return none *)
 + exploit Mem.free_parallel_extends; eauto. intros [m2' [P Q]].
   erewrite <- stackspace_function_translated in P by eauto.
-  left; econstructor; split. 
-  apply plus_one; fconstructor. simpl; eauto.
-  econstructor; eauto. eapply call_cont_commut; eauto. Unshelve. exact prog. apply cheat.
+  left; econstructor; split.
+  apply plus_one; fconstructor.
+  econstructor; eauto. eapply (call_cont_commut cunit k k' MC); eauto.
 (* return some *)
 + exploit Mem.free_parallel_extends; eauto. intros [m2' [P Q]].
   erewrite <- stackspace_function_translated in P by eauto.
   exploit transl_expr_correct; eauto. intros [v' [A B]].
   left; econstructor; split.
   apply plus_one; fconstructor; eauto.
-  econstructor; eauto. eapply call_cont_commut; eauto. Unshelve. exact prog. apply cheat.
-(* label *)  
+  econstructor; eauto. eapply (call_cont_commut cunit k k' MC); eauto.
+(* label *)
 + left; econstructor; split. apply plus_one; fconstructor. econstructor; eauto.
-(* goto *)  
+(* goto *)
 + assert (transl_stmt (S.fn_body f) tt tt = OK (T.fn_body f')).
   { monadInv TF; simpl. congruence. }
-  exploit (find_label_commut (S.fn_body f) cunit lbl (S.call_cont k)).
-    apply match_cont_other. eapply call_cont_commut; eauto. eauto.
-  unfold S.function_body in e0. rewrite e0. instantiate (1 := k'0).
+  exploit (find_label_commut (S.fn_body f) cunit lbl (S.call_cont k)); eauto.
+    apply match_cont_other. eapply (call_cont_commut cunit k k'0 MC); eauto.
+  unfold S.function_body in e0. rewrite e0.
   destruct (T.find_label (T.fn_body f') lbl (T.call_cont k'0))
   as [[s'' k'']|] eqn:?; intros; try contradiction.
   destruct H0 as (P & Q).
   left; econstructor; split.
   apply plus_one; fconstructor; eauto.
-  econstructor; eauto. Unshelve. exact prog. apply cheat. (* same thing for all of them *)
-(* ifthenelse *)  
+  econstructor; eauto.
+(* ifthenelse *)
 + exploit transl_expr_correct; eauto. intros [v' [A B]].
   assert (Val.bool_of_val v' b). inv B. auto. inv b0.
   left; exists (T.State f' (if b then x else x0) k' sp e' m'); split.
   apply plus_one; fconstructor; eauto. eapply eval_condexpr_of_expr; eauto. apply cheat. (* lenv = nil here actually *)
   constructor; eauto. destruct b; eauto.
   (* internal function *)
-+ apply cheat.  
++ red in TF. fsimpl in TF. simpl in TF. monadInv TF. generalize EQ; intros TF; monadInv TF.
+  exploit Mem.alloc_extends. eauto. eauto. apply Z.le_refl. apply Z.le_refl.
+  intros [m2' [A B]].
+  left; econstructor; split.
+  apply plus_one; fconstructor; simpl; eauto using Val.has_argtype_list_lessdef.
+  econstructor; simpl; eauto.
+  apply match_cont_other; auto.
+  apply set_locals_lessdef. apply set_params_lessdef; auto.
 Qed. FEnd transl_step_correct.
 
 FEnd Selection.
@@ -516,7 +547,7 @@ FInductive eval_expr :  genv -> fenv -> env -> mem -> letenv -> expr -> val -> P
 | eval_Eaddrof: forall ge le e lenv m id b,
       eval_var_addr ge le id b ->
       eval_expr ge le e m lenv (Eaddrof id) (Vptr b Ptrofs.zero).
-                
+
 FEnd Csharpminor_Eaddrof.
 
 Trait Csharpminor_Eload extends Csharpminor.
@@ -528,7 +559,7 @@ FInductive eval_expr :  genv -> fenv -> env -> mem -> letenv -> expr -> val -> P
       eval_expr ge le e m lenv a v1 ->
       Mem.loadv chunk m v1 = Some v ->
       eval_expr ge le e m lenv (Eload chunk a) v.
-  
+
 FEnd Csharpminor_Eload.
 
 Trait Csharpminor_Sstore extends Csharpminor.
@@ -546,12 +577,12 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
       Mem.storev chunk m vaddr v = Some m' ->
       step ge (State f (Sstore chunk addr a) k e le m)
         E0 (State f Sskip k e le m').
-  
+
 FEnd Csharpminor_Sstore.
 
-Family Csharpminor extends 
-  Csharpminor_Sstore, 
-  Csharpminor_Eload, 
+Family Csharpminor extends
+  Csharpminor_Sstore,
+  Csharpminor_Eload,
   Csharpminor_Eaddrof.
 FEnd Csharpminor.
 
@@ -559,7 +590,7 @@ Family Cminor.
 FInductive expr : Type :=
  | Eload : memory_chunk -> expr -> expr.
 
-FInductive stmt : Type :=                                                        
+FInductive stmt : Type :=
 | Sstore : memory_chunk -> expr -> expr -> stmt.
 
 FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
@@ -567,8 +598,8 @@ FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Pro
    eval_expr ge sp e m lenv addr vaddr ->
    Mem.loadv chunk m vaddr = Some v ->
    eval_expr ge sp e m lenv (Eload chunk addr) v.
-           
-FRecursion find_label.  
+
+FRecursion find_label.
 Case _ := (fun lbl k => None).
 FEnd find_label.
 
@@ -585,7 +616,7 @@ Family CminorSel.
 FInductive expr : Type :=
 | Eload : memory_chunk -> addressing -> exprlist -> expr.
 
-FInductive stmt : Type :=                                                        
+FInductive stmt : Type :=
 | Sstore : memory_chunk -> addressing -> exprlist -> expr -> stmt.
 
 FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
@@ -594,8 +625,8 @@ FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Pro
    eval_addressing ge (Vptr sp Ptrofs.zero) addr vl = Some vaddr ->
    Mem.loadv chunk m vaddr = Some v ->
    eval_expr ge sp e m le (Eload chunk addr al) v.
-           
-FRecursion find_label.  
+
+FRecursion find_label.
 Case Sstore chunk addr al a := (fun lbl k => None).
 FEnd find_label.
 
@@ -631,12 +662,12 @@ FInductive stmt : Type :=
 | Sexit: nat -> stmt.
 
 FInductive cont: Type :=
-| Kblock: cont -> cont.  
+| Kblock: cont -> cont.
 
 FRecursion call_cont.
 Case Kblock k := (Kblock k).
 FEnd call_cont.
-               
+
 FRecursion is_call_cont.
 Case _ := False.
 FEnd is_call_cont.
@@ -644,7 +675,7 @@ FEnd is_call_cont.
 FRecursion find_label.
 Case Sloop s1 :=
    (fun lbl k => find_label s1 lbl (Kseq (Sloop s1) k)).
-Case Sblock s1 := 
+Case Sblock s1 :=
   (fun lbl k => find_label s1 lbl (Kblock k)).
 Case _ := (fun lbl k => None).
 FEnd find_label.
@@ -652,7 +683,7 @@ FEnd find_label.
 FInductive step : genv -> state -> trace -> state -> Prop :=
 | step_skip_block: forall ge f k sp e m,
       step ge (State f Sskip (Kblock k) sp e m)
-        E0 (State f Sskip k sp e m)  
+        E0 (State f Sskip k sp e m)
 | step_loop: forall ge f s k sp e m,
       step ge (State f (Sloop s) k sp e m)
         E0 (State f s (Kseq (Sloop s) k) sp e m)
@@ -695,7 +726,7 @@ FEnd shift_exit.
 
 FRecursion transl_stmt.
 Case Sloop s :=
-  (fun cenv xenv => 
+  (fun cenv xenv =>
     do ts <- transl_stmt s cenv xenv;
     OK (T.Sloop ts)).
 Case Sblock s :=
@@ -703,7 +734,7 @@ Case Sblock s :=
       do ts <- transl_stmt s cenv (true :: xenv);
       OK (T.Sblock ts)).
 Case Sexit n :=
-  (fun cenv xenv =>    
+  (fun cenv xenv =>
       OK (T.Sexit (shift_exit xenv n))).
 FEnd transl_stmt.
 
@@ -726,7 +757,7 @@ FProof.
 + apply cheat.
 + apply cheat.
 + apply cheat.
-+ apply cheat.  
++ apply cheat.
 Qed. FEnd transl_step_correct.
 
 FEnd Cminorgen.
@@ -736,10 +767,10 @@ Family S extends Cminor. FEnd S.
 Family T extends CminorSel. FEnd T.
 
 FRecursion transl_stmt.
-Case Sloop body := 
+Case Sloop body :=
   (fun eargs sargs =>
      do body' <- transl_stmt body eargs sargs; OK (T.Sloop body')).
-Case Sblock body := 
+Case Sblock body :=
   (fun eargs sargs =>
      do body' <- transl_stmt body eargs sargs; OK (T.Sblock body')).
 Case Sexit n := (fun eargs sargs => OK (T.Sexit n)).
@@ -750,16 +781,16 @@ FInductive match_cont: S.program -> S.cont -> T.cont -> Prop :=
    match_cont cunit k k' ->
    match_cont cunit (S.Kblock k) (T.Kblock k').
 
-FInduction transl_step_correct. 
+FInduction transl_step_correct.
 FProof.
 + apply cheat.
 + apply cheat.
 + apply cheat.
 + apply cheat.
 + apply cheat.
-+ apply cheat.   
++ apply cheat.
 Qed. FEnd transl_step_correct.
-         
+
 FEnd Selection.
 
 FEnd Comp_Loops.
@@ -806,9 +837,9 @@ Case LSnil := Sskip.
 Case LScons c s sl' := (Sseq s (seq_of_lbl_stmt sl')).
 FEnd seq_of_lbl_stmt.
 
-FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) 
+FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont))
   with find_label_ls about lbl_stmts motive (fun (_ : lbl_stmts) => label -> cont -> option (stmt * cont)) by _rect.
-Case Sswitch long a sl := 
+Case Sswitch long a sl :=
   (fun lbl k => find_label_ls sl lbl k).
 
 Case LSnil := (fun lbl k => None).
@@ -819,7 +850,7 @@ Case LScons x s sl' :=
      | None => find_label_ls sl' lbl k
      end).
 FEnd find_label with find_label_ls.
-      
+
 FInductive step : genv -> state -> trace -> state -> Prop :=
 | step_switch: forall ge f islong a cases k e le m v n lenv,
       eval_expr ge e le m lenv a v ->
@@ -843,7 +874,7 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
    eval_expr ge sp e m lenv a v ->
    switch_argument islong v n ->
    step ge (State f (Sswitch islong a cases default) k sp e m)
-     E0 (State f (Sexit (switch_target n default cases)) k sp e m).  
+     E0 (State f (Sexit (switch_target n default cases)) k sp e m).
 
 FEnd Cminor.
 
@@ -859,7 +890,7 @@ Inductive exitexpr : Type :=
   | XElet: expr -> exitexpr -> exitexpr.
 FEnd exitexpr.
 
-FInductive stmt : Type := 
+FInductive stmt : Type :=
   | Sswitch: exitexpr -> stmt.
 
 Inherit eval_expr.
@@ -922,12 +953,12 @@ FRecursion transl_stmt about S.stmt motive (fun (_ : S.stmt) => earg -> sarg -> 
   with transl_lbl_stmt about S.lbl_stmts motive (fun (_ : S.lbl_stmts) => earg -> sarg -> T.stmt -> res T.stmt) by _rect.
 
 Case Sswitch long e ls :=
-  (fun cenv xenv => 
+  (fun cenv xenv =>
      let (tbl, dfl) := switch_table ls O in
      do te <- transl_expr e cenv;
      transl_lbl_stmt ls cenv (switch_env ls xenv) (T.Sswitch long te tbl dfl)).
 
-Case LSnil 
+Case LSnil
   := (fun cenv xenv body => OK (T.Sseq (T.Sblock body) T.Sskip)).
 Case LScons a s ls' :=
   (fun cenv xenv body =>
@@ -957,7 +988,7 @@ FEnd compile_switch.
 
 MetaData sel_switch.
 (* We axiomatize becuase it is defined using "Nondet" functions  *)
-Axiom sel_switch : nat -> comptree -> T.exitexpr. 
+Axiom sel_switch : nat -> comptree -> T.exitexpr.
 FEnd sel_switch.
 FDefinition sel_switch_int := sel_switch.
 FDefinition sel_switch_long := sel_switch.
@@ -965,7 +996,7 @@ FDefinition sel_switch_long := sel_switch.
 FRecursion transl_stmt.
 Case Sswitch b e cases dfl :=
   (fun _ _ =>
-      if b then 
+      if b then
         (let t := compile_switch Int64.modulus dfl cases in
         if validate_switch Int64.modulus dfl cases t
         then
@@ -979,7 +1010,7 @@ Case Sswitch b e cases dfl :=
           do e' <- transl_expr e tt;
           OK (T.Sswitch (T.XElet e' (sel_switch_int O t)))
         else Error (msg "Selection: bad switch (int)"))
-  ).     
+  ).
 FEnd transl_stmt.
 
 FInduction transl_step_correct.
@@ -1001,11 +1032,11 @@ FInductive cont: Type :=
 FRecursion call_cont.
 Case Kcall a b c d e := (Kcall a b c d e).
 FEnd call_cont.
-               
+
 FRecursion is_call_cont.
 Case Kcall a b c d e := True.
 FEnd is_call_cont.
-  
+
 FDefinition set_optvar := fun (optid: option ident) (v: val) (e: env) =>
   match optid with
   | None => e
@@ -1079,7 +1110,7 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
       funsig fd = sig ->
       Mem.free m le 0 (self__Cminor.fn_stackspace f) = Some m' ->
       step ge (State f (Scall optid sig a bl) k le e m)
-        E0 (Callstate fd vargs (call_cont k) m'). 
+        E0 (Callstate fd vargs (call_cont k) m').
 
 FEnd Cminor.
 
@@ -1104,7 +1135,7 @@ FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Pro
 FRecursion find_label.
 Case _ := (fun lbl k => None).
 FEnd find_label.
-  
+
 MetaData eval_expr_or_symbol.
 Inductive eval_expr_or_symbol: genv -> fenv -> env -> mem -> letenv -> expr + ident -> val -> Prop :=
   | eval_eos_e: forall ge sp e m le a v,
@@ -1122,7 +1153,7 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
    Genv.find_funct ge vf = Some fd ->
    funsig fd = sig ->
    step ge (State f (Scall optid sig a bl) k sp e m)
-     E0 (Callstate fd vargs (Kcall optid f e sp k) m)    
+     E0 (Callstate fd vargs (Kcall optid f e sp k) m)
 | step_tailcall: forall ge f sig a bl k sp e m vf vargs fd m',
    eval_expr_or_symbol ge sp e m nil a vf ->
    eval_exprlist ge sp e m nil bl vargs ->
@@ -1141,7 +1172,7 @@ Family T extends Cminor. FEnd T.
 
 Inherit transl_expr.
 MetaData transl_exprlist.
-Fixpoint transl_exprlist 
+Fixpoint transl_exprlist
   (cenv: compilenv) (el: list S.expr)
                      {struct el}: res (list T.expr) :=
   match el with
@@ -1156,7 +1187,7 @@ FEnd transl_exprlist.
 
 FRecursion transl_stmt.
 Case Scall optid sig e el :=
-  (fun cenv xenv => 
+  (fun cenv xenv =>
      do te <- transl_expr e cenv;
      do tel <- transl_exprlist cenv el;
    OK (T.Scall optid sig te tel)).
@@ -1172,7 +1203,7 @@ FInductive match_cont: S.cont -> T.cont -> compilenv -> exit_env -> callstack ->
    match_cont (S.Kcall optid fn e le k)
       (T.Kcall optid tfn te sp tk)
       cenv' nil
-      (Frame cenv tfn le e te sp lo hi :: cs). 
+      (Frame cenv tfn le e te sp lo hi :: cs).
 
 FRecursion seq_left_depth.
 Case _ := O.
@@ -1181,8 +1212,8 @@ FEnd seq_left_depth.
 FInduction transl_step_correct.
 FProof.
 + apply cheat.
-+ apply cheat.  
-Qed. FEnd transl_step_correct. 
++ apply cheat.
+Qed. FEnd transl_step_correct.
 
 FEnd Cminorgen.
 
@@ -1204,7 +1235,7 @@ FEnd expr_is_addrof_ident_cst.
 
 FRecursion expr_is_addrof_ident about S.expr motive (fun (_ : S.expr) => option ident) by _rect.
 Case Econst cst := (expr_is_addrof_ident_cst cst).
-Case _ := None.                      
+Case _ := None.
 FEnd expr_is_addrof_ident.
 
 FDefinition classify_call := fun (e: S.expr) =>
@@ -1233,7 +1264,7 @@ FEnd transl_exprlist.
 (* use default call *)
 FRecursion transl_stmt.
 Case Scall optid sg fn args :=
-  (fun 
+  (fun
       OK (match classify_call fn with
       | Call_default => Scall optid sg (inl _ (sel_expr fn)) (sel_exprlist args)
       | Call_imm id => Scall optid sg (inr _ id) (sel_exprlist args)
@@ -1372,12 +1403,12 @@ Family CminorSel extends Cfam. FEnd CminorSel.
 FEnd Comp_External.
 
 
-(*Family Comp extends 
+(*Family Comp extends
   Base,
   Comp_Switch,
   Comp_Loops,
-  Comp_Heap, 
-  Comp_Field, 
+  Comp_Heap,
+  Comp_Field,
   Comp_Call,
   Comp_External,
   Comp_Builtin.
