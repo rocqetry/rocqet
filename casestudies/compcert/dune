@@ -61,11 +61,11 @@
    CminorSel
    
    LfamBase
-   ;Linear
+   Linear
 
-   ;LTL
-   ;Clight
-   ;Mach
+   LTL
+   Clight
+   Mach
    
    Cfamtransl
   ))
