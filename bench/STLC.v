@@ -98,14 +98,19 @@ FInductive value : self__STLC.tm -> Prop :=
 
 
 (* This is the only inversion lemma that we will prove manually
-*)
+ *)
+Closing Fact tm_var_not_tm_abs : forall i x body, tm_var i = tm_abs x body -> False
+    by { intros until body; intros H; discriminate; eauto }.
+
+Closing Fact tm_var_not_tm_unit : forall i, tm_var i = tm_unit -> False
+    by { intros until i; intros H; discriminate; eauto }.
 
 FInduction _value_not_tm_var 
   about value
   motive (fun z (h : self__STLC.value z) => forall i,  (self__STLC.tm_var i) = z -> False).
 FProof.
-+ intros. apply cheat. (*prec_discriminate self__STLC.tm_prec H. *)
-+ intros. apply cheat. (*prec_discriminate self__STLC.tm_prec H. *)
++ intros. eauto using tm_var_not_tm_abs.
++ intros. eauto using tm_var_not_tm_unit. 
 Qed. FEnd _value_not_tm_var .
 
 FDefinition value_not_tm_var : forall i,  ~ self__STLC.value (self__STLC.tm_var i) :=
