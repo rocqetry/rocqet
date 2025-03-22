@@ -50,6 +50,12 @@ Ltac __frewrite_in f H := try (rewrite f in H).
 
 Ltac __fconstructor H := (eapply H; eauto).
 
+Ltac __apply H := (eapply H).
+
+Axiom _cheat_ : forall {A : Type}, A.
+
+Ltac __cheat := eapply _cheat_; eauto.
+
 Ltac split_cases_into_goals :=
   match goal with
   | [ |- ?a /\ ?b ] => 

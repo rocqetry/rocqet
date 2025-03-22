@@ -163,7 +163,10 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
   { Entry.closing_fact ~name ~ty ~script ~plain:false }
 
 | [ "Closing" "Fact" ident(name) ":" llconstr_ip(ty) "by" "plain" "{" tactic(script) "}" ] -> 
-  { Entry.closing_fact ~name ~ty ~script ~plain:true }
+   { Entry.closing_fact ~name ~ty ~script ~plain:true }
+
+| [ "FHint" reference_ip(inductive) ident(left) ident(right) ] -> 
+  { failwith "" }
 
 (*| [ "Prect" reference_ip(inductive_path) ] -> { 
     Partial_recursor.add ~inductive_path
@@ -184,4 +187,8 @@ END
 
 TACTIC EXTEND fconstructor
 | [ "fconstructor" ] -> { Ftactics.fconstructor () }
+END
+
+TACTIC EXTEND fdiscriminate
+| [ "fdiscriminate" ] -> { Ftactics.fdiscriminate () }
 END

@@ -347,5 +347,99 @@ let fconstructor () =
       let constructors = names |> extract_constructors |> List.concat in
       generate_apply constructors)
 
-(* finjection *)
-(* fdiscriminate *)
+let fdiscriminate () =
+  Proofview.Goal.enter (fun _gl ->
+      let open Ltac_plugin in
+      let tactic =
+      (* let discriminate = Tacexpr.TacCall (CAst.make (Libnames.qualid_of_ident (Names.Id.of_string "cheat"), [])) in*)
+      (* let g = Tacexpr.TacApply (false, true, failwith "", failwith "") in   *)
+      CAst.make
+        (Tacexpr.TacArg
+           (Tacexpr.TacCall
+              (CAst.make
+                 ( Libnames.qualid_of_ident (Names.Id.of_string "__cheat"),
+                   [ ] ))))
+      in            
+      Tacinterp.interp tactic)
+
+(*
+let fhint ~(c1:  Libnames.qualid) ~(c2 : Libnames.qualid) =
+  (* if c1 = c2 then fail *)
+  let module B = Backend.Vernac in
+  let open Env in 
+  let module_name = Naming.fresh_name ~prefix:"FHint" in
+  let field_name = Naming.extract_path_base c1 in
+  let context = Context.get () in
+  let compiled_context, parameters = Codegen.compile_linkage_context ~field_name context in
+  let name =
+     let (^^) l r = Names.Id.of_string (Names.Id.to_string l ^ Names.Id.to_string r) in
+     Naming.extract_path_base c1 ^^ Names.Id.of_string "_not_" ^^ Naming.extract_path_base c2
+  in 
+  let closing_fact_params: Names.Id.t list ref = ref [] in
+  let compiled_signature =
+    B.run @@
+    B.define_module
+      ~module_name
+      ~parameters
+      ~body:(fun _ ->
+        let open Constrexpr_ops in
+         let constructor_params_c1, fully_applied_constr_c1 =
+           Termutils.extract_variables_and_apply (mkRefC c1)
+         in
+         let constructor_params_c2, fully_applied_constr_c2 =
+           Termutils.extract_variables_and_apply (mkRefC c2)
+         in                       
+         let arguments = constructor_params_c1 @ constructor_params_c2 in
+
+         let extract_name ({ CAst.v = n; _ } : Names.lname) : Names.Id.t =
+           match n with
+           | Names.Name n -> n
+           | _ -> Errors.fail ~info:"Expected non anonymous argument"
+         in
+         closing_fact_params :=
+           arguments
+           |> List.concat_map (fun ((ns, _, _), _) -> ns |> List.map extract_name);
+       
+         let eq_cstr = mkRefC @@ Libnames.qualid_of_ident @@ Names.Id.of_string "eq" in
+         let equation = mkAppC (eq_cstr, [ fully_applied_constr_c1; fully_applied_constr_c2 ]) in
+         (* TODO fix this: wrong type *)
+         let closed_equation =
+           List.fold_right
+             (fun (a, b, c) body -> mkProdC (a, b, c, body))
+             (List.map fst arguments) equation
+         in
+         B.postulate_axiom ~name ~ty:closed_equation
+      )
+  in
+  let plain = true in
+  let default_ctx_params =
+    context |> Context.family_linkage |> function
+    | { default_ctx_params; _ } -> default_ctx_params
+  in
+  let type_name = module_name in (* dummy *)
+  let (script : Ltac_plugin.Tacexpr.raw_tactic_expr) = failwith "" in
+  let f = Ltac_plugin.Tacexpr.
+  let elem =
+    LinkageElem.ClosingFact
+      {
+        type_name;
+        compiled_context;
+        compiled_signature;
+        default_ctx_params;
+        script;
+        plain;
+      }
+  in
+  Context.add_field ~name ~elem
+
+*)  
+
+(*Closing Fact tm_var_not_tm_abs : forall i x body, tm_var i = tm_abs x body -> False
+    by { discriminate }. *)
+
+(*
+Closing Fact tm_var_not_tm_abs : forall i x body, tm_var i = tm_abs x body -> False
+    by { intros until body; intros H; discriminate; eauto }.
+*)
+
+
