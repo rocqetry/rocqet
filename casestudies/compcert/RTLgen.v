@@ -4729,8 +4729,7 @@ Family Comp extends
   Comp_Loops,
   Comp_Heap,
   Comp_Field,
-  Comp_Call,
-  (* Comp_Float,*)
+  Comp_Call,  
   Comp_Builtin.
 
 Family RTLgen.
@@ -4740,12 +4739,4 @@ FEnd RTLgen.
 
 FEnd Comp.
 
-Require Extraction.
-Cd "extraction".
-Separate Extraction Comp.RTLgen.
 
-Extraction Library X.
-
-Require Extraction.
-Extraction Language OCaml.
-Extraction "compcert.ml" Base.SimplExpr.transl_function.
