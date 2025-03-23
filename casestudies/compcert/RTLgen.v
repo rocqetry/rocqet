@@ -1632,13 +1632,13 @@ all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
   fconstructor.
   inv OK. apply evar_injective in H0; unpack; subst.
    - left; split; congruence.
-   - apply cheat. (* fdiscriminate: Eletvar x0 = Evar x1 *)
+   - fdiscriminate.
    - right; eauto with rtlg.
    - eapply add_move_charact; eauto.
 (* Econdition *)
 + inv OK.
-  - apply cheat. (* fdiscriminate: S.Evar id = S.Econdition __i __i0 __i1 *)
-  - apply cheat. (* fdiscriminate: S.Eletvar idx = S.Econdition __i __i0 __i1 *)
+  - fdiscriminate. 
+  - fdiscriminate. 
   - fconstructor.
     eauto with rtlg.
     eapply tr_expr_incr with (s1 := s1); eauto.
@@ -1647,14 +1647,14 @@ all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
     eapply H1; eauto 2 with rtlg. constructor; auto.
 (* Eop *)
 + inv OK.
-  - apply cheat. (* fdiscriminate: S.Evar id = S.Eop __i __i0 __i1 *)
-  - apply cheat. (* fdiscriminate: S.Eletvar idx = S.Eop __i __i0 __i1 *)
+  - fdiscriminate. 
+  - fdiscriminate. 
   - fconstructor; eauto with rtlg.
     eapply H; eauto with rtlg.
 (* Elet *)
 +  inv OK.
-   - apply cheat. (* fdiscriminate. *)
-   - apply cheat. (* fdiscriminate. *)
+   - fdiscriminate.
+   - fdiscriminate.
    - eapply tr_Elet. eapply new_reg_not_in_map; eauto with rtlg.
   eapply H; eauto 3 with rtlg.
   eapply tr_expr_incr with (s1 := s1); auto.
@@ -1671,7 +1671,7 @@ all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
   monadInv EQ1.
   fconstructor; eauto with rtlg.
   inv OK.
-    - apply cheat. (* discriminate S.Evar id = S.Eletvar n *)
+    - fdiscriminate. 
     - apply Eletvar_injective in H0; subst.
       left; split; congruence.
     - right; eauto with rtlg.
@@ -1835,68 +1835,6 @@ Inductive tr_fun (tf: T.function) (map: mapping)
       tr_fun tf map f ngoto nret rret.
 FEnd tr_fun.
 
-FInductive tr_cont: T.code -> mapping ->
-                   S.cont -> T.node -> list T.node -> labelmap -> T.node -> option reg ->
-                   list T.stackframe -> Prop :=
-  | tr_Kseq: forall c map s k nd nexits ngoto nret rret cs n,
-      tr_stmt c map s nd n nexits ngoto nret rret ->
-      tr_cont c map k n nexits ngoto nret rret cs ->
-      tr_cont c map (S.Kseq s k) nd nexits ngoto nret rret cs
-  | tr_Kstop: forall c map ngoto nret rret cs,
-      c!nret = Some(T.Ireturn rret) ->
-      match_stacks S.Kstop cs ->
-      tr_cont c map S.Kstop nret nil ngoto nret rret cs
-with match_stacks: S.cont -> list T.stackframe -> Prop :=
-  | match_stacks_stop:
-    match_stacks S.Kstop nil.
-
-Closing Fact match_stacks_stop_inv : forall l,
-    match_stacks S.Kstop l ->
-    l = nil
-    by { intros l H; inv H; eauto }.
-
-Closing Fact tr_cont_tr_kseq_inv :
-  forall c map s k nd nexits ngoto nret rret cs,
-    tr_cont c map (S.Kseq s k) nd nexits ngoto nret rret cs ->
-    exists n,
-      tr_stmt c map s nd n nexits ngoto nret rret /\
-      tr_cont c map k n nexits ngoto nret rret cs
-      by plain { intros until cs; intros H; inv H; eauto }.
-
-FInduction tr_cont_ret_match_stacks about tr_cont
-  motive (fun c map k n nexits ngoto nret rret cs
-    (_ : tr_cont c map k n nexits ngoto nret rret cs) =>
-    forall tf, c = T.fn_code tf ->
-    S.is_call_cont k ->
-    c ! n = Some (T.Ireturn rret) /\ match_stacks k cs).
-FProof.
-all: intros; fsimpl in *; try contradiction; auto.
-Qed. FEnd tr_cont_ret_match_stacks.
-  
-FInduction match_stacks_ret_tr_cont about match_stacks
-  motive (fun k cs (_ : match_stacks k cs) =>
-    forall c map nret ngoto orret,
-    c ! nret = Some (T.Ireturn orret) ->
-    tr_cont c map k nret nil ngoto nret orret cs).
-FProof.
-intros. fconstructor. fconstructor.
-Qed. FEnd match_stacks_ret_tr_cont.
-
-FLemma tr_move_correct:
-  forall tge r1 ns r2 nd cs f sp rs m,
-  tr_move (T.fn_code f) ns r1 nd r2 ->
-  exists rs',
-  star T.step tge (T.State cs f sp ns rs m) E0 (T.State cs f sp nd rs' m) /\
-  rs'#r2 = rs#r1 /\
-  (forall r, r <> r2 -> rs'#r = rs#r).
-FProofLemma.
-  intros. inv H.
-  exists rs; split. constructor. auto.
-  exists (rs#r2 <- (rs#r1)); split.
-  apply star_one. eapply T.exec_Iop. eauto. auto.
-  split. apply Regmap.gss. intros; apply Regmap.gso; auto.
-Qed. CloseFLemma.
-
 MetaData map_wf.
 Record map_wf (m: mapping) : Prop :=
   mk_map_wf {
@@ -1965,6 +1903,68 @@ Proof.
   eauto.
 Qed.
 FEnd map_wf.
+
+FInductive tr_cont: T.code -> mapping ->
+                   S.cont -> T.node -> list T.node -> labelmap -> T.node -> option reg ->
+                   list T.stackframe -> Prop :=
+  | tr_Kseq: forall c map s k nd nexits ngoto nret rret cs n,
+      tr_stmt c map s nd n nexits ngoto nret rret ->
+      tr_cont c map k n nexits ngoto nret rret cs ->
+      tr_cont c map (S.Kseq s k) nd nexits ngoto nret rret cs
+  | tr_Kstop: forall c map ngoto nret rret cs,
+      c!nret = Some(T.Ireturn rret) ->
+      match_stacks S.Kstop cs ->
+      tr_cont c map S.Kstop nret nil ngoto nret rret cs
+with match_stacks: S.cont -> list T.stackframe -> Prop :=
+  | match_stacks_stop:
+    match_stacks S.Kstop nil.
+
+Closing Fact match_stacks_stop_inv : forall l,
+    match_stacks S.Kstop l ->
+    l = nil
+    by { intros l H; inv H; eauto }.
+
+Closing Fact tr_cont_tr_kseq_inv :
+  forall c map s k nd nexits ngoto nret rret cs,
+    tr_cont c map (S.Kseq s k) nd nexits ngoto nret rret cs ->
+    exists n,
+      tr_stmt c map s nd n nexits ngoto nret rret /\
+      tr_cont c map k n nexits ngoto nret rret cs
+      by plain { intros until cs; intros H; inv H; eauto }.
+
+FInduction tr_cont_ret_match_stacks about tr_cont
+  motive (fun c map k n nexits ngoto nret rret cs
+    (_ : tr_cont c map k n nexits ngoto nret rret cs) =>
+    forall tf, c = T.fn_code tf ->
+    S.is_call_cont k ->
+    c ! n = Some (T.Ireturn rret) /\ match_stacks k cs).
+FProof.
+all: intros; fsimpl in *; try contradiction; auto.
+Qed. FEnd tr_cont_ret_match_stacks.
+  
+FInduction match_stacks_ret_tr_cont about match_stacks
+  motive (fun k cs (_ : match_stacks k cs) =>
+    forall c map nret ngoto orret,
+    c ! nret = Some (T.Ireturn orret) ->
+    tr_cont c map k nret nil ngoto nret orret cs).
+FProof.
+intros. fconstructor. fconstructor.
+Qed. FEnd match_stacks_ret_tr_cont.
+
+FLemma tr_move_correct:
+  forall tge r1 ns r2 nd cs f sp rs m,
+  tr_move (T.fn_code f) ns r1 nd r2 ->
+  exists rs',
+  star T.step tge (T.State cs f sp ns rs m) E0 (T.State cs f sp nd rs' m) /\
+  rs'#r2 = rs#r1 /\
+  (forall r, r <> r2 -> rs'#r = rs#r).
+FProofLemma.
+  intros. inv H.
+  exists rs; split. constructor. auto.
+  exists (rs#r2 <- (rs#r1)); split.
+  apply star_one. eapply T.exec_Iop. eauto. auto.
+  split. apply Regmap.gss. intros; apply Regmap.gso; auto.
+Qed. CloseFLemma.
 
 MetaData match_env.
 (** An RTL register environment matches a CminorSel local environment and
@@ -3357,17 +3357,21 @@ FInductive tr_stmt : T.code -> mapping -> S.stmt -> T.node -> T.node -> list T.n
    tr_builtin_res map res res' ->
    tr_stmt c map (S.Sbuiltin res ef args) ns nd nexits ngoto nret rret.
 
+FInduction tr_expr_incr with tr_condition_incr with tr_exprlist_incr.
+FProof.
+all: intros until s1; intros s2 EXT;
+  pose (AT := fun pc i => instr_at_incr s1 s2 pc i EXT); intros ->;
+  fconstructor.
+Qed. FEnd tr_expr_incr with tr_condition_incr with tr_exprlist_incr.
+
 FInduction transl_expr_charact with transl_exprlist_charact with transl_condexpr_charact.
 FProof.
 all : intros; fsimpl in TR; try (monadInv TR); saturateTrans.
 (* Ebuiltin *)
 + inv OK.
-  - apply cheat. - apply cheat.
+  - fdiscriminate. - fdiscriminate.
   - fconstructor; eauto with rtlg.
-    eapply H; eauto with rtlg.
-    eapply alloc_regs_target_ok; eauto with rtlg.
-    simple eapply regs_valid_incr. exact INCR2.
-    simple eapply alloc_regs_valid. exact WF. exact EQ.
+    eapply H; eauto with rtlg.    
 Qed. FEnd transl_expr_charact with transl_exprlist_charact with transl_condexpr_charact.
 
 FInduction transl_expr_assign_charact.
@@ -3375,10 +3379,7 @@ FProof.
 all : intros; fsimpl in TR; monadInv TR; saturateTrans.
 (* Ebuiltin *)
 + fconstructor; eauto with rtlg.
-  eapply transl_exprlist_charact; eauto with rtlg.
-  eapply alloc_regs_target_ok; eauto with rtlg.
-  simple eapply regs_valid_incr. exact INCR2.
-  simple eapply alloc_regs_valid. exact WF. exact EQ.
+  eapply transl_exprlist_charact; eauto with rtlg.  
 Qed. FEnd transl_expr_assign_charact.
 
 FLemma convert_builtin_res_charact:
@@ -3389,26 +3390,26 @@ FLemma convert_builtin_res_charact:
 FProofLemma.
   destruct res0; simpl; intros.
 - monadInv TR. constructor. unfold find_var in EQ. destruct (map_vars map)!x; inv EQ; auto.
-- destruct (rettype_eq oty AST.Tvoid); monadInv TR.
+- destruct (xtype_eq oty AST.Xvoid); monadInv TR.
 + constructor.
 + constructor. eauto with rtlg.
 - monadInv TR.
 Qed. CloseFLemma.
 
+FInduction tr_stmt_incr.
+FProof.
+all: intros until s1; intros s2 EXT ->;
+  pose (AT := fun pc i => instr_at_incr s1 s2 pc i EXT);
+  fconstructor.
+- eapply tr_exprlist_incr; eauto.
+Qed. FEnd tr_stmt_incr.
+  
 FInduction transl_stmt_charact.
 FProof.
 all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
 (* Sbuiltin *)
 + fconstructor; eauto 4 with rtlg.
-  eapply transl_exprlist_charact.
-  eauto with rtlg. eauto with rtlg.
-  simple eapply alloc_regs_target_ok. exact WF.
-  simple apply regs_valid_nil. exact EQ.
-  simple apply regs_valid_nil.
-  simple eapply regs_valid_incr. exact INCR6.
-  simple eapply regs_valid_incr.
-  simple apply (state_incr_refl T.instruction).
-  simple eapply alloc_regs_valid. exact WF. exact EQ.
+  eapply transl_exprlist_charact; eauto with rtlg. 
   eapply convert_builtin_res_charact; eauto with rtlg.
 Qed. FEnd transl_stmt_charact.
 
@@ -3764,16 +3765,20 @@ FInductive tr_stmt : T.code -> mapping -> S.stmt -> T.node -> T.node -> list T.n
      c!n2 = Some (T.Istore chunk addr rl rd nd) ->
      tr_stmt c map (S.Sstore chunk addr al b) ns nd nexits ngoto nret rret.
 
+FInduction tr_expr_incr with tr_condition_incr with tr_exprlist_incr.
+FProof.
+all: intros until s1; intros s2 EXT;
+  pose (AT := fun pc i => instr_at_incr s1 s2 pc i EXT); intros ->;
+  fconstructor.
+Qed. FEnd tr_expr_incr with tr_condition_incr with tr_exprlist_incr.
+
 FInduction transl_expr_charact with transl_exprlist_charact with transl_condexpr_charact.
 FProof.
 all : intros; fsimpl in TR; try (monadInv TR); saturateTrans.
 (* Eload *)
-+ inv OK. - apply cheat. - apply cheat.
++ inv OK. fdiscriminate. - fdiscriminate. 
   - fconstructor; eauto with rtlg.
     eapply H; eauto with rtlg.
-    eapply alloc_regs_target_ok; eauto with rtlg.
-    simple eapply regs_valid_incr. exact INCR2.
-    simple eapply alloc_regs_valid. exact WF. exact EQ.
 Qed. FEnd transl_expr_charact with transl_exprlist_charact with transl_condexpr_charact.
 
 FInduction transl_expr_assign_charact.
@@ -3781,11 +3786,17 @@ FProof.
 all : intros; fsimpl in TR; monadInv TR; saturateTrans.
 (* Eload *)
 + fconstructor; eauto with rtlg.
-  eapply transl_exprlist_charact; eauto with rtlg.
-  eapply alloc_regs_target_ok; eauto with rtlg.
-  simple eapply regs_valid_incr. exact INCR2.
-  simple eapply alloc_regs_valid. exact WF. exact EQ.
+  eapply transl_exprlist_charact; eauto with rtlg.  
 Qed. FEnd transl_expr_assign_charact.
+
+FInduction tr_stmt_incr.
+FProof.
+all: intros until s1; intros s2 EXT ->;
+  pose (AT := fun pc i => instr_at_incr s1 s2 pc i EXT);
+  fconstructor.
+- eapply tr_exprlist_incr; eauto.
+- eapply tr_expr_incr; eauto.
+Qed. FEnd tr_stmt_incr.
 
 FInduction transl_stmt_charact.
 FProof.
@@ -3793,41 +3804,8 @@ all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
 (* Sstore *)
 + fconstructor; eauto with rtlg.
   eapply transl_exprlist_charact; eauto 3 with rtlg.
-  eapply alloc_regs_target_ok; eauto with rtlg.
-  simple eapply regs_valid_incr. exact INCR9.
-  simple eapply alloc_regs_valid. exact WF. exact EQ.
-  apply tr_expr_incr with s3; auto.
-  eapply transl_expr_charact. exact EQ2.
-  simple eapply map_valid_incr. exact INCR12. exact WF.
-  simple eapply alloc_reg_target_ok.
-  simple eapply map_valid_incr.
-  exact INCR0.
-  exact WF.
-  simple eapply regs_valid_incr.
-  simple apply (state_incr_refl T.instruction).
-  simple eapply alloc_regs_valid.
-    exact WF.
-    exact EQ.
-    exact EQ1.
- simple eapply regs_valid_incr.
- exact INCR11.
- simple eapply regs_valid_incr.
-  simple apply (state_incr_refl T.instruction).
-  simple eapply regs_valid_incr.
-   simple apply (state_incr_refl T.instruction).
-   simple eapply alloc_regs_valid.
-    exact WF.
-    exact EQ.
-
- simple eapply reg_valid_incr.
- exact INCR4.
- simple eapply reg_valid_incr.
-  simple apply (state_incr_refl T.instruction).
-  simple eapply alloc_reg_valid.
-   simple eapply map_valid_incr.
-    exact INCR0.
-    exact WF.
-    exact EQ1.
+  eapply tr_expr_incr (*with s3*); eauto.
+  eapply transl_expr_charact; eauto 4 with rtlg.    
 Qed. FEnd transl_stmt_charact.
 
 Closing Fact tr_expr_tr_eload : forall c map pr chunk addr al ns nd rd dst,
@@ -4129,17 +4107,21 @@ FInductive tr_stmt : T.code -> mapping -> S.stmt -> T.node -> T.node -> list T.n
      c!n2 = Some (T.Itailcall sig (inr _ id) rargs) ->
      tr_stmt c map (S.Stailcall sig (inr _ id) cl) ns nd nexits ngoto nret rret.
 
+FInduction tr_expr_incr with tr_condition_incr with tr_exprlist_incr.
+FProof.
+all: intros until s1; intros s2 EXT;
+  pose (AT := fun pc i => instr_at_incr s1 s2 pc i EXT); intros ->;
+  fconstructor.
+Qed. FEnd tr_expr_incr with tr_condition_incr with tr_exprlist_incr.
+
 FInduction transl_expr_charact with transl_exprlist_charact with transl_condexpr_charact.
 FProof.
 all : intros; fsimpl in TR; (monadInv TR); saturateTrans.
 + inv OK.
-  - apply cheat.
-  - apply cheat.
+  - fdiscriminate.
+  - fdiscriminate.
   - fconstructor; eauto with rtlg.
-    eapply H; eauto with rtlg.
-    eapply alloc_regs_target_ok; eauto with rtlg.
-  simple eapply regs_valid_incr. exact INCR2.
-  simple eapply alloc_regs_valid. exact WF. exact EQ.
+    eapply H; eauto with rtlg.    
 Qed. FEnd transl_expr_charact with transl_exprlist_charact with transl_condexpr_charact.
 
 FInduction transl_expr_assign_charact.
@@ -4147,10 +4129,7 @@ FProof.
 all : intros; fsimpl in TR; monadInv TR; saturateTrans.
 (* Eexternal *)
 + fconstructor; eauto with rtlg.
-  eapply transl_exprlist_charact; eauto with rtlg.
-  eapply alloc_regs_target_ok; eauto with rtlg.
-  simple eapply regs_valid_incr. exact INCR2.
-  simple eapply alloc_regs_valid. exact WF. exact EQ.
+  eapply transl_exprlist_charact; eauto with rtlg.  
 Qed. FEnd transl_expr_assign_charact.
 
 FLemma alloc_optreg_map_ok:
@@ -4164,6 +4143,16 @@ FProofLemma.
   constructor. eapply new_reg_not_in_map; eauto.
 Qed. CloseFLemma.
 
+FInduction tr_stmt_incr.
+FProof.
+all: intros until s1; intros s2 EXT ->;
+  pose (AT := fun pc i => instr_at_incr s1 s2 pc i EXT);
+  fconstructor.
+- eapply tr_expr_incr; eauto. - eapply tr_exprlist_incr; eauto.
+- eapply tr_exprlist_incr; eauto. - eapply tr_expr_incr; eauto.
+- eapply tr_exprlist_incr; eauto. - eapply tr_exprlist_incr; eauto. 
+Qed. FEnd tr_stmt_incr.
+
 FInduction transl_stmt_charact.
 FProof.
 all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
@@ -4171,36 +4160,33 @@ all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
 + destruct s0 as [b | id]; monadInv TR; saturateTrans.
   (* indirect *)
   fconstructor; eauto 4 with rtlg.
-  eapply transl_expr_charact; eauto 3 with rtlg.
-  apply cheat. apply cheat.
-  apply tr_exprlist_incr with s5. auto.
-  eapply transl_exprlist_charact; eauto 3 with rtlg.
+  eapply transl_expr_charact; eauto 3 with rtlg.  
+  eapply tr_exprlist_incr (*with s5*); eauto with rtlg.
+  eapply transl_exprlist_charact; eauto 3 with rtlg. eauto with rtlg.
   eapply alloc_regs_target_ok with (s1 := s0); eauto 3 with rtlg.
-  apply regs_valid_cons; eauto 3 with rtlg. apply cheat.
-  apply regs_valid_incr with s0; eauto 3 with rtlg.
-  apply regs_valid_cons; eauto 3 with rtlg. apply cheat.
-  apply regs_valid_incr with s2; eauto 3 with rtlg. apply cheat.
-  eapply alloc_optreg_map_ok with (s1 := s2); eauto 3 with rtlg.
+  apply regs_valid_cons; eauto 3 with rtlg.
+  apply regs_valid_incr with s0; eauto 3 with rtlg. 
+  apply regs_valid_cons; eauto 3 with rtlg. eauto 3 with rtlg.
+  apply regs_valid_incr with s2; eauto 3 with rtlg. 
+  eapply alloc_optreg_map_ok with (s1 := s2); eauto 3 with rtlg. 
   (* direct *)
   fconstructor; eauto 4 with rtlg.
-  eapply transl_exprlist_charact; eauto 3 with rtlg. apply cheat. apply cheat.
+  eapply transl_exprlist_charact; eauto 3 with rtlg. 
   eapply alloc_optreg_map_ok with (s1 := s0); eauto 3 with rtlg.
 
 (* Stailcall *)
 + destruct s0 as [b | id]; monadInv TR; saturateTrans.
   (* indirect *)
   assert (RV: regs_valid (x :: nil) s0).
-    apply regs_valid_cons; eauto 3 with rtlg. apply cheat.
+    apply regs_valid_cons; eauto 3 with rtlg. 
   fconstructor; eauto 3 with rtlg.
-  eapply transl_expr_charact; eauto 3 with rtlg. apply cheat. apply cheat.
-  apply tr_exprlist_incr with s4; auto.
-  eapply transl_exprlist_charact; eauto 4 with rtlg. apply cheat. apply cheat.
+  eapply transl_expr_charact; eauto 3 with rtlg. 
+  eapply tr_exprlist_incr (*with s4*); auto.
+  eapply transl_exprlist_charact; eauto 4 with rtlg. eauto 4 with rtlg. 
   (* direct *)
   fconstructor; eauto 3 with rtlg.
-  eapply transl_exprlist_charact; eauto 4 with rtlg. apply cheat. apply cheat.
+  eapply transl_exprlist_charact; eauto 4 with rtlg. 
 Qed. FEnd transl_stmt_charact.
-
-Inherit map_wf.
 
 FInductive tr_cont: T.code -> mapping ->
                    S.cont -> T.node -> list T.node -> labelmap -> T.node -> option reg ->
@@ -4217,6 +4203,8 @@ with match_stacks: S.cont -> list T.stackframe -> Prop :=
       reg_map_ok map r optid ->
       tr_cont (T.fn_code tf) map k n nexits ngoto nret rret cs ->
       match_stacks (S.Kcall optid f sp e k) (T.Stackframe r tf sp n rs :: cs).
+
+(* Inherit map_wf.*)
 
 Closing Fact tr_external_inv : forall c map pr id sg al ns nd rd dst,
     tr_expr c map pr (S.Eexternal id sg al) ns nd rd dst ->

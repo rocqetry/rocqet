@@ -87,141 +87,6 @@ FEnd find_label.
 
 FEnd Lfam.
 
-(*Family Lfam.
-FDefinition label := positive.
-
-FInductive instruction: Type :=
-| Lop : Op.operation -> list mreg -> mreg -> instruction
-| Lcond : Op.condition -> list mreg -> label -> instruction
-| Llabel: label -> instruction
-| Lgoto: label -> instruction
-| Lreturn : instruction.
-
-FDefinition code: Type := list instruction.
-
-FOpaque Definition function : Type := cheat.
-FOpaque Definition function_sig: function -> signature := cheat.
-FOpaque Definition function_stacksize: function -> Z := cheat.
-FOpaque Definition function_code: function -> code := cheat.
-
-FDefinition fundef := AST.fundef function.
-FDefinition program := AST.program fundef unit.
-
-FDefinition funsig := fun (fd: fundef) =>
-  match fd with
-  | AST.Internal f => function_sig f
-  | AST.External ef => ef_sig ef
-  end.
-
-FDefinition genv := Genv.t fundef unit.
-(* regset/locset *)
-FOpaque Definition storeset : Type := cheat.
-(* function/block *)
-FOpaque Definition func_ptr : Type := cheat.
-FOpaque Definition call_func_ptr : Type := cheat.
-(* return address / locset *)
-FOpaque Definition stack_state : Type := cheat.
-
-MetaData stackframe binds Stackframe.
-Inductive stackframe : Type :=
-| Stackframe:
-    forall (f: self__Lfam.func_ptr)(* calling function *)
-           (sp: val)(* stack pointer in calling function *)
-           (ls: self__Lfam.stack_state)(* location state in calling function *)
-           (bb: self__Lfam.code), (* program point in calling function *)
-      stackframe.
-FEnd stackframe.
-
-MetaData state binds State, Callstate, Returnstate.
-Inductive state: Type :=
-| State:
-    forall (stack: list self__Lfam.stackframe)(* call stack *)
-           (f: self__Lfam.func_ptr)(* function currently executing *)
-           (sp: val)(* stack pointer *)
-           (c: self__Lfam.code)(* current program point *)
-           (rs: self__Lfam.storeset)(* location state *)
-           (m: mem),(* memory state *)
-    state
-| Callstate:
-    forall (stack: list self__Lfam.stackframe)(* call stack *)
-           (f: self__Lfam.call_func_ptr)(* function to call *)
-           (rs: self__Lfam.storeset)(* location state at point of call *)
-           (m: mem),(* memory state *)
-    state
-| Returnstate:
-    forall (stack: list self__Lfam.stackframe)(* call stack *)
-           (rs: self__Lfam.storeset)(* location state at point of return *)
-           (m: mem),(* memory state *)
-    state.
-FEnd state.
-
-FRecursion is_label about instruction motive (fun (_ : instruction) => label -> bool) by _rect.
-Case Lop op arg dst := (fun lbl => false).
-(*Case Lgetstack s i t dst := (fun lbl => false).
-Case Lsetstack d s i t := (fun lbl => false). *)
-Case Lcond c args l := (fun lbl => false).
-Case Llabel lbl' := (fun lbl => if peq lbl lbl' then true else false).
-Case Lgoto lbl' := (fun lbl => false).
-Case Lreturn := (fun lbl => false).
-FEnd is_label.
-
-MetaData find_label.
-Fixpoint find_label (lbl: self__Lfam.label) (c: self__Lfam.code) {struct c} : option self__Lfam.code :=
-  match c with
-  | nil => None
-  | i1 :: il => if self__Lfam.is_label i1 lbl then Some il else find_label lbl il
-  end.
-FEnd find_label.
-
-(* FDefinition parent_locset : list stackframe -> locset := fun stack =>
-  match stack with
-  | nil => Locmap.init Vundef
-  | self__Lfam.Stackframe f sp ls c :: stack' => ls
-  end. *)
-
-FOpaque Definition reglist : storeset -> list mreg -> list val := cheat.
-FOpaque Definition undef_regs : list mreg -> storeset -> storeset := cheat.
-FOpaque Definition set_storeset : mreg -> val -> storeset -> storeset := cheat.
-FOpaque Definition find_func_ptr : genv -> func_ptr -> option fundef := cheat.
-
-FInductive step: genv -> state -> trace -> state -> Prop :=
-| exec_Llabel:
-    forall ge s f sp lbl b rs m,
-    step ge (State s f sp (Llabel lbl :: b) rs m)
-      E0 (State s f sp b rs m)
-| exec_Lgoto:
-    forall ge s fb f sp lbl b rs m b',
-    find_func_ptr ge fb = Some (AST.Internal f) ->
-    find_label lbl (function_code f) = Some b' ->
-    step ge (State s fb sp (Lgoto lbl :: b) rs m)
-      E0 (State s fb sp b' rs m)
-| exec_Lop:
-    forall ge s f sp op args res b rs m v rs',
-    eval_operation ge sp op (reglist rs args) m = Some v ->
-    rs' = set_storeset res v (undef_regs (destroyed_by_op op) rs) ->
-    step ge (State s f sp (Lop op args res :: b) rs m)
-      E0 (State s f sp b rs' m)
-| exec_Lcond_true:
-    forall ge s (fb: func_ptr) (f: function) sp cond args lbl b rs m rs' b',
-    eval_condition cond (reglist rs args) m = Some true ->
-    rs' = undef_regs (destroyed_by_cond cond) rs ->
-    find_func_ptr ge fb = Some (AST.Internal f) ->
-    find_label lbl (function_code f) = Some b' ->
-    step ge (State s fb sp (Lcond cond args lbl :: b) rs m)
-      E0 (State s fb sp b' rs' m)
-| exec_Lcond_false:
-    forall ge s f sp cond args lbl b rs m rs',
-    eval_condition cond (reglist rs args) m = Some false ->
-    rs' = undef_regs (destroyed_by_cond cond) rs ->
-    step ge (State s f sp (Lcond cond args lbl :: b) rs m)
-      E0 (State s f sp b rs' m)
-| exec_return:
-      forall ge s f sp rs0 c rs m,
-      step ge (Returnstate (Stackframe f sp rs0 c :: s) rs m)
-        E0 (State s f sp c rs m).
-
-FEnd Lfam.*)
-
 Family Linear extends Lfam.
 FInductive instruction: Type :=
 | Lgetstack: slot -> Z -> typ -> mreg -> instruction
@@ -3771,8 +3636,7 @@ Family Comp extends
   Comp_Switch,
   Comp_Loops,
   Comp_Field,
-  Comp_Call,
-  (* Comp_Float,*)
+  Comp_Call,  
   Comp_Builtin.
 
 Family Stacking.
@@ -3781,12 +3645,3 @@ Final Family T := Mach.
 FEnd Stacking.
 
 FEnd Comp.
-
-Require Extraction.
-Cd "extraction".
-Separate Extraction Comp.Stacking.
-Extraction Library X.
-
-Require Extraction.
-Extraction Language OCaml.
-Extraction "compcert.ml" Base.SimplExpr.transl_function.
