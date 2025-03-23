@@ -2703,6 +2703,11 @@ all: intros; generalize (mreg_is_within_bounds _ _ H); generalize (slot_is_withi
 simpl; do 4 fsimpl; simpl; intros; auto.
 Qed. FEnd instr_is_within_bounds.
 
+FInduction find_label_transl_code_instr.
+FProof.
+all: intros; rewrite transl_code_eq; do 2 fsimpl; simpl; fsimpl; auto.
+Qed. FEnd find_label_transl_code_instr.
+
 Inherit no_callee_saves.
 
 FLemma destroyed_by_jumptable_caller_save:
@@ -2788,11 +2793,20 @@ Case Lbuiltin ef args res := (fun funct =>
 FEnd wt_instr.
 
 FRecursion record_regs_of_instr.
-Case _ := (fun u => u).
+Case Lbuiltin ef args res := (fun u =>  record_regs (record_regs u (params_of_builtin_res res)) (destroyed_by_builtin ef)).
 FEnd record_regs_of_instr.
 
+MetaData slots_of_locs.
+Fixpoint slots_of_locs (l: list loc) : list (slot * Z * typ) :=                                                          
+  match l with                                                                                                           
+  | nil => nil                                                                                                           
+  | S sl ofs ty :: l' => (sl, ofs, ty) :: slots_of_locs l'                                                               
+  | R r :: l' => slots_of_locs l'                                                                                        
+  end.     
+FEnd slots_of_locs.
+
 FRecursion slots_of_instr.
-Case _ := nil.
+Case Lbuiltin ef args res := (slots_of_locs (params_of_builtin_args args)).
 FEnd slots_of_instr.
 
 FRecursion outgoing_space.
@@ -2859,22 +2873,8 @@ Qed. CloseFLemma.
 FInduction record_regs_of_instr_ok.
 FProof.
 all: intros; fsimpl in *; fsimpl in *; try contradiction; subst; auto using record_reg_ok.
-(* TODO: I think this is easy *)
-apply cheat.
-(* + destruct H; auto using record_regs_incr, record_regs_ok.*)
-(*+ destruct H. eapply record_regs_ok in H0.
-  assert (A : RegSet.In r' u).
-  apply record_regs_incr. auto using record_regs_incr, record_regs_ok.   *)
+destruct H; eauto using record_regs_incr, record_regs_ok.
 Qed. FEnd record_regs_of_instr_ok.
-
-MetaData slots_of_locs.
-Fixpoint slots_of_locs (l: list loc) : list (slot * Z * typ) :=
-  match l with
-  | nil => nil
-  | S sl ofs ty :: l' => (sl, ofs, ty) :: slots_of_locs l'
-  | R r :: l' => slots_of_locs l'
-  end.
-FEnd slots_of_locs.
 
 FLemma slots_of_locs_charact:
   forall sl ofs ty l, In (sl, ofs, ty) (slots_of_locs l) <-> In (Locations.S sl ofs ty) l.
@@ -2889,11 +2889,14 @@ FProof.
 all: intros; generalize (mreg_is_within_bounds _ _ H); generalize (slot_is_within_bounds _ _ H);
   simpl; do 4 fsimpl; simpl; intros; auto.
  split; intros.
-  apply H1; auto.
-  (* apply H0. rewrite slots_of_locs_charact; auto.*)
-  (* TODO: this shouldn't be too hard *)
-  apply cheat.
+ apply H1; auto.
+ apply H0. rewrite (slots_of_locs_charact sl ofs ty _); auto.
 Qed. FEnd instr_is_within_bounds.
+
+FInduction find_label_transl_code_instr.
+FProof.
+all: intros; rewrite transl_code_eq; do 2 fsimpl; simpl; fsimpl; auto.
+Qed. FEnd find_label_transl_code_instr.
 
 Inherit frame_get_local.
 
@@ -3236,6 +3239,11 @@ FProofLemma.
   intros; destruct chunk; reflexivity.
 Qed. CloseFLemma.
 
+FInduction find_label_transl_code_instr.
+FProof.
+all: intros; rewrite transl_code_eq; do 2 fsimpl; simpl; fsimpl; auto.
+Qed. FEnd find_label_transl_code_instr.
+
 Inherit no_callee_saves.
 Inherit ByCases.
 
@@ -3408,9 +3416,9 @@ FEnd Mach.
 Family Stacking.
 
 FRecursion wt_instr.
+Case Ltailcall sg ros                                                                                                   
+  := (fun funct => zeq (size_arguments sg) 0).
 Case _ := (fun funct => true).
-(*Case Lcall sig ros := (fun funct => ).
-Case Ltailcall sig ros := (fun funct => ).*)
 FEnd wt_instr.
 
 FRecursion record_regs_of_instr.
@@ -3422,6 +3430,7 @@ Case _ := nil.
 FEnd slots_of_instr.
 
 FRecursion outgoing_space.
+Case Lcall sig x := (size_arguments sig).
 Case _ := 0.
 FEnd outgoing_space.
 
@@ -3456,16 +3465,17 @@ FProof.
 all: intros; fsimpl in *; fsimpl in *; try contradiction; subst; auto using record_reg_ok.
 Qed. FEnd record_regs_of_instr_ok.
 
+Inherit max_over_instrs_bound.
+
 FLemma size_arguments_bound:
   forall f sig ros,
   In (S.Lcall sig ros) (S.fn_code f) ->
   size_arguments sig <= bound_outgoing (function_bounds f).
 FProofLemma.
-(* TODO *)
-apply cheat.
-(* intros. change (size_arguments sig) with (outgoing_space (S.Lcall sig ros)).
+intros. assert ((outgoing_space (S.Lcall sig ros)) = (size_arguments sig)) by (fsimpl; reflexivity). rewrite <- H0.
+  (*change (size_arguments sig) with (outgoing_space (S.Lcall sig ros)).*)
   unfold function_bounds, bound_outgoing.
-  apply Zmax_bound_l. apply max_over_instrs_bound; auto.*)
+  apply Zmax_bound_l. apply max_over_instrs_bound; auto.
 Qed. CloseFLemma.
 
 FInduction instr_is_within_bounds.
@@ -3475,6 +3485,12 @@ all: intros; generalize (mreg_is_within_bounds _ _ H); generalize (slot_is_withi
 eapply size_arguments_bound; eauto.
 Qed. FEnd instr_is_within_bounds.
 
+FInduction find_label_transl_code_instr.
+FProof.
+all: intros; rewrite transl_code_eq; do 2 fsimpl; simpl; fsimpl; auto.
+- unfold restore_callee_save. rewrite find_label_restore_callee_save. simpl. fsimpl. auto.
+Qed. FEnd find_label_transl_code_instr.
+  
 Inherit function_ptr_translated.
 
 FLemma find_function_translated:
@@ -3501,7 +3517,7 @@ FProofLemma.
 - destruct (Genv.find_symbol ge i) as [b|] eqn:?; try discriminate.
   exploit function_ptr_translated; eauto. intros [tf [A B]].
   exists b; exists tf; split; auto. simpl. subst. (* rewrite H1.*)
-  rewrite (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) H eq_refl eq_refl).  auto.
+  rewrite (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) H eq_refl eq_refl). auto.
 Qed. CloseFLemma.
 
 FOpaque Definition return_address_offset_exists:
@@ -3583,7 +3599,7 @@ FLemma wt_state_tailcall:
   wt_state (S.State s f sp (S.Ltailcall sg ros :: c) rs m) ->
   size_arguments sg = 0.
 FProofLemma.
-  intros. inv H. simpl in WTC. fsimpl in WTC. apply cheat. (* why? InvBooleans. auto.*)
+  intros. inv H. simpl in WTC. fsimpl in WTC; InvBooleans. auto.
 Qed. CloseFLemma.
 
 FInduction transf_step_correct.
@@ -3627,7 +3643,6 @@ FEnd Stacking.
 
 FEnd Comp_Call.
 
-(* small extension *)
 Trait Comp_Switch extends Comp_Loops. FEnd Comp_Switch.
 
 Family Comp extends

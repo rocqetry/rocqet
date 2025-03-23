@@ -45,6 +45,7 @@ FInductive stmt : Type :=
 | Slabel: label -> stmt -> stmt
 | Sgoto: label -> stmt.
 
+(* Abstract functionality to be overriden *)
 FOpaque Definition function : Type := cheat.
 FOpaque Definition function_body : function -> stmt := cheat.
 FOpaque Definition function_locals : function -> list ident := cheat.
