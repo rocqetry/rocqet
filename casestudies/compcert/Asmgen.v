@@ -742,8 +742,6 @@ FEnd Asm.
 
 Trait Base.
 
-(* C family languages: Csharpminor, Cminor, CminorSel *)
-
 From Rocqet Require Import Registers.
 
 From Rocqet Require Import Machregs.
@@ -1228,33 +1226,6 @@ FDefinition transl_cond_op
       Error(msg "Asmgen.transl_cond_op")
   end.
 
-(*FRecursion transl_cond_op about Op.condition motive (fun (_ : Op.condition) => ireg -> list mreg -> Asm.code -> res Asm.code) by _rect.
-Case Ccomp c :=
-(fun rd args k =>
-  match args with
-  | a1 :: a2 :: nil =>
-      do r1 <- ireg_of a1; do r2 <- ireg_of a2;
-      OK (transl_cond_int32s c rd r1 r2 k)
-  | _ =>  Error(msg "Asmgen.transl_cond_op")
-  end).
-Case Ccompimm c n :=
-(fun rd args k =>
-  match args with
-  | a1 :: a2 :: nil =>
-       do r1 <- ireg_of a1;
-      OK (transl_condimm_int32s c rd r1 n k)
-  | _ =>  Error(msg "Asmgen.transl_cond_op")
-  end).
-Case Ccompuimm c n :=
-(fun rd args k =>
-  match args with
-  | a1 :: a2 :: nil =>
-      do r1 <- ireg_of a1;
-      OK (transl_condimm_int32u c rd r1 n k)
-  | _ =>  Error(msg "Asmgen.transl_cond_op")
-  end).
-FEnd transl_cond_op. *)
-
 (*From Rocqet Require Import Prelude.*)
 
 (** Translation of the arithmetic operation [r <- op(args)].
@@ -1573,61 +1544,6 @@ FDefinition transl_op
       Error(msg "Asmgen.transl_op")
   end.
 
-(*FRecursion transl_op about Op.operation motive (fun (_ : Op.operation) => list mreg -> mreg -> Asm.code -> res Asm.code) by _rect.
-Case Omove :=
-(fun args res k =>
-  match args with
-  | a1 :: nil =>
-      match preg_of res, preg_of a1 with
-      | IR r, IR a => OK (Asm.Pmv r a :: k)
-      | FR r, FR a => OK (Asm.Pfmv r a :: k)
-      |  _  ,  _   => Error(msg "Asmgen.Omove")
-      end
-  | _ =>  Error(msg "Asmgen.transl_op")
-  end).
-Case Ointconst n :=
-(fun args res k =>
-  match args with
-  | nil => do rd <- ireg_of res; OK (loadimm32 rd n k)
-  | _ => Error(msg "Asmgen.transl_op")
-  end).
-Case Olongconst n :=
-(fun args res k =>
-  match args with
-  | nil => do rd <- ireg_of res; OK (loadimm64 rd n k)
-  | _ => Error(msg "Asmgen.transl_op")
-  end).
-Case Ofloatconst f :=
-(fun args res k =>
-  match args with
-  | nil =>
-      do rd <- freg_of res;
-      OK (if Float.eq_dec f Float.zero
-          then Asm.Pfcvtdw rd X0 :: k
-          else cheat Asm.Ploadfi rd f :: k)
-  | _ => Error(msg "Asmgen.transl_op")
-  end).
-Case Osingleconst f :=
-(fun args res k =>
-  match args with
-  | nil =>
-       do rd <- freg_of res;
-      OK (if Float32.eq_dec f Float32.zero
-          then Asm.Pfcvtsw rd X0 :: k
-          else Asm.Ploadsi rd f :: k)
-  | _ => Error(msg "Asmgen.transl_op")
-  end).
-Case Oaddrstack n :=
-(fun args res k =>
-  match args with
-  | nil =>  do rd <- ireg_of res; OK (addptrofs rd SP n k)
-  | _ => Error(msg "Asmgen.transl_op")
-  end).
-Case Ocmp cmp := (fun args res k => do rd <- ireg_of res; transl_cond_op cmp rd args k).
-(* [Omakelong], [Ohighlong]  should not occur *)
-Case Omakelong := (fun args res k =>  Error(msg "Asmgen.transl_op")).
-FEnd transl_op.*)
-
 FDefinition transl_cbranch_int32s := fun (cmp: comparison) (r1 r2: ireg0) (lbl: Asm.label) =>
   match cmp with
   | Ceq => Asm.Pbeqw r1 r2 lbl
@@ -1726,39 +1642,6 @@ FDefinition transl_cbranch
   | _, _ =>
       Error(msg "Asmgen.transl_cond_branch")
   end.
-
-(*FRecursion transl_cbranch about Op.condition motive (fun (_ : Op.condition) => list mreg -> Asm.label -> Asm.code -> res Asm.code) by _rect.
-Case Ccomp c :=
-(fun args lbl k =>
-  match args with
-  | a1 :: a2 :: nil =>
-      do r1 <- ireg_of a1; do r2 <- ireg_of a2;
-      OK (transl_cbranch_int32s c r1 r2 lbl :: k)
-  | _ =>  Error(msg "Asmgen.transl_cond_branch")
-  end).
-Case Ccompimm c n :=
-(fun args lbl k =>
-  match args with
-  | a1 :: nil =>
-      do r1 <- ireg_of a1;
-      OK (if Int.eq n Int.zero then
-            transl_cbranch_int32s c r1 X0 lbl :: k
-          else
-            loadimm32 X31 n (transl_cbranch_int32s c r1 X31 lbl :: k))
-  | _ => Error(msg "Asmgen.transl_cond_branch")
-  end).
-Case Ccompuimm c n :=
-(fun args lbl k =>
-  match args with
-  | a1 :: nil =>
-      do r1 <- ireg_of a1;
-      OK (if Int.eq n Int.zero then
-            transl_cbranch_int32u c r1 X0 lbl :: k
-          else
-            loadimm32 X31 n (transl_cbranch_int32u c r1 X31 lbl :: k))
-  | _ => Error(msg "Asmgen.transl_cond_branch")
-  end).
-FEnd transl_cbranch.*)
 
 FDefinition indexed_memory_access :=
   fun (mk_instr: ireg -> Asm.offset -> Asm.instruction)
@@ -3048,13 +2931,12 @@ FInduction is_mach_label_correct about S.instruction
   motive (fun (instr : S.instruction) => forall lbl,
   if S.is_label instr lbl then instr = S.Llabel lbl else instr <> S.Llabel lbl).
 FProof.
-(* To be proved with fdiscriminate *)
 all: intros; fsimpl.
-+ apply cheat.
-+ apply cheat. + destruct (peq lbl l); subst. auto. apply cheat. + apply cheat. + apply cheat.
-+ apply cheat. + apply cheat. + apply cheat.
++ fdiscriminate.
++ fdiscriminate. + destruct (peq lbl l); subst. auto. fdiscriminate. + fdiscriminate. + fdiscriminate.
++ fdiscriminate. + fdiscriminate. + fdiscriminate.
 (* Heap *)
-+ apply cheat. + apply cheat.
++ fdiscriminate. + fdiscriminate.
 Qed. FEnd is_mach_label_correct.
 
 FLemma transl_code_label:
@@ -4869,17 +4751,17 @@ Qed. FEnd transl_instr_label'.
 
 FInduction is_mach_label_correct.
 FProof.
-+ apply cheat. (* fdiscriminate *)
++ intros. fsimpl. fdiscriminate.
 Qed. FEnd is_mach_label_correct.
 
-FLemma ireg_val:
+(*FLemma ireg_val:
   forall ms sp rs r r',
   agree ms sp rs ->
   ireg_of r = OK r' ->
   Val.lessdef (ms r) rs#r'.
 FProofLemma.
   intros. rewrite <- (ireg_of_eq _ _ H0). eapply preg_val; eauto.
-Qed. CloseFLemma.
+Qed. CloseFLemma.*)
 
 FInduction step_simulation.
 FProof.
@@ -4970,10 +4852,8 @@ Qed. FEnd transl_instr_label'.
 
 FInduction is_mach_label_correct.
 FProof.
-+ apply cheat. (* fdiscriminate *)
++ intros. fsimpl. fdiscriminate.
 Qed. FEnd is_mach_label_correct.
-
-Inherit preg_val.
 
 From Rocqet Require Import Machregs.
 FLemma builtin_arg_match:
@@ -5010,26 +4890,7 @@ FProofLemma.
 - rewrite IHres2, IHres1; auto.
 Qed. CloseFLemma.
 
-Inherit preg_notin.
-FLemma undef_regs_other:
-  forall r rl rs,
-  (forall r', In r' rl -> r <> r') ->
-  Asm.undef_regs rl rs r = rs r.
-FProofLemma.
-  induction rl; simpl; intros. auto.
-  rewrite IHrl by auto. rewrite Pregmap.gso; auto.
-Qed. CloseFLemma.
-
-Inherit preg_notin_charact.
-FLemma undef_regs_other_2:
-  forall r rl rs,
-  preg_notin r rl ->
-  Asm.undef_regs (map preg_of rl) rs r = rs r.
-FProofLemma.
-  intros. apply undef_regs_other. intros.
-  exploit list_in_map_inv; eauto. intros [mr [A B]]. subst.
-  eapply preg_notin_charact. eauto. exact B.
-Qed. CloseFLemma.
+Inherit match_stack. 
 
 FLemma agree_set_res:
   forall res ms sp rs v v',
@@ -5060,7 +4921,8 @@ all: intros; inv MS.
   eapply Asm.exec_step_builtin. eauto. eauto. fsimpl in EQ.  fsimpl in EQ0. monadInv EQ0.
   eapply find_instr_tail; eauto.
   erewrite <- sp_val by eauto.
-  eapply eval_builtin_args_preserved with (ge1 := (Genv.globalenv prog)); eauto. exact (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl).
+  eapply eval_builtin_args_preserved with (ge1 := (Genv.globalenv prog)); eauto.  
+  exact (symbols_preserved prog tprog TRANSF).
   eapply external_call_symbols_preserved; eauto. eapply senv_preserved; eauto.
   eauto.
   econstructor; eauto.
@@ -5320,7 +5182,8 @@ FEnd Asmgen.
 
 FEnd Comp_Heap.*)
 
-Trait Comp_Field extends Base (* ,Comp_Heap*). FEnd Comp_Field.
+Trait Comp_Field extends Base (* ,Comp_Heap*).
+FEnd Comp_Field.
 
 Trait Comp_Call extends Base.
 
@@ -5474,19 +5337,9 @@ Qed. FEnd transl_instr_label'.
 
 FInduction is_mach_label_correct.
 FProof.
-+ apply cheat. (* fdiscriminate *)
-+ apply cheat. (* fdiscriminate *)
++ intros. fsimpl. fdiscriminate.
++ intros. fsimpl. fdiscriminate.
 Qed. FEnd is_mach_label_correct.
-
-(* This is also in the loops extension, move to base to avoid duplication *)
-FLemma ireg_val:
-  forall ms sp rs r r',
-  agree ms sp rs ->
-  ireg_of r = OK r' ->
-  Val.lessdef (ms r) rs#r'.
-FProofLemma.
-  intros. rewrite <- (ireg_of_eq _ _ H0). eapply preg_val; eauto.
-Qed. CloseFLemma.
 
 (* return_address_offset is an Axiom *)
 MetaData return_address_offset_correct.
@@ -5548,15 +5401,6 @@ FLemma extcall_arguments_match:
 FProofLemma.
   unfold S.extcall_arguments, Asm.extcall_arguments; intros.
   eapply extcall_args_match; eauto.
-Qed. CloseFLemma.
-
-FLemma agree_set_mreg_parallel:
-  forall ms sp rs r v v',
-  agree ms sp rs ->
-  Val.lessdef v v' ->
-  agree (Regmap.set r v ms) sp (Pregmap.set (preg_of r) v' rs).
-FProofLemma.
-  intros. eapply agree_set_mreg; eauto. rewrite Pregmap.gss; auto. intros; apply Pregmap.gso; auto.
 Qed. CloseFLemma.
 
 FLemma agree_set_pair:
@@ -5625,7 +5469,8 @@ all: intros; inv MS.
   left; econstructor; split.
   apply plus_one. eapply Asm.exec_step_internal. eauto.
   eapply functions_transl; eauto. eapply find_instr_tail; eauto.
-  simpl. unfold Asm.exec_instrPjal_s. unfold Genv.symbol_address. rewrite (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl). rewrite e. eauto.
+  simpl. unfold Asm.exec_instrPjal_s. unfold Genv.symbol_address.
+  rewrite (symbols_preserved prog tprog TRANSF). rewrite e. eauto.
   econstructor; eauto.
   econstructor; eauto.
   eapply agree_sp_def; eauto.
@@ -5672,7 +5517,8 @@ all: intros; inv MS.
   econstructor; eauto.
   apply agree_set_other; auto with asmgen.
   apply agree_set_other; auto with asmgen.
-  Simpl. unfold Genv.symbol_address. rewrite (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSF eq_refl eq_refl). rewrite e. auto.
+  Simpl. unfold Genv.symbol_address.
+  rewrite (symbols_preserved prog tprog TRANSF). rewrite e. auto.
 
 (* external function *)
 + exploit functions_translated; eauto.
@@ -5709,13 +5555,3 @@ Final Family S := Mach.
 FEnd Asmgen.
 
 FEnd Comp.
-
-Require Extraction.
-Cd "extraction".
-Separate Extraction Comp.Asmgen.
-
-Extraction Library X.
-
-Require Extraction.
-Extraction Language OCaml.
-Extraction "compcert.ml" Base.SimplExpr.transl_function.
