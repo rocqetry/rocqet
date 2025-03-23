@@ -381,8 +381,8 @@ Qed. CloseFLemma.
 
 FInduction call_cont_commut about match_cont motive
   (fun cunit k k' (_ : match_cont cunit k k') =>
-     match_call_cont (S.call_cont k) (T.call_cont k'))
-with call_cont_commut' about match_call_cont motive
+     match_call_cont (S.call_cont k) (T.call_cont k'))  
+ with call_cont_commut' about match_call_cont motive
   (fun k k' (_ : match_call_cont k k') =>
     match_call_cont (S.call_cont k) (T.call_cont k')).
 FProof.
@@ -558,31 +558,64 @@ FInductive match_cont: S.program -> S.cont -> T.cont -> Prop :=
    match_cont cunit k k' ->
    match_cont cunit (S.Kblock k) (T.Kblock k').
 
-FInduction call_cont_commut.
-FProof.
-+ apply cheat.
-Qed. FEnd call_cont_commut.
+Closing Fact match_cont_block_inv :
+  forall cunit k k', match_cont cunit (S.Kblock k) k' ->
+   exists k'',
+     (k' = T.Kblock k'') /\ match_cont cunit k k''
+by plain { apply cheat }.
 
-FInduction match_is_call_cont.
+FInduction call_cont_commut with call_cont_commut'.
 FProof.
-+ apply cheat.
-Qed. FEnd match_is_call_cont.
++ intros. do 2 fsimpl; auto; fconstructor. 
+Qed. FEnd call_cont_commut with call_cont_commut'.
+
+FInduction match_is_call_cont with match_is_call_cont'.
+FProof.
++ intros. fsimpl in H0. contradiction.
+Qed. FEnd match_is_call_cont with match_is_call_cont'.
 
 FInduction find_label_commut.
 FProof.
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
+all: intros until k'; simpl; fsimpl; intros MC SE; fsimpl in SE; try (monadInv SE); simpl; fsimpl; auto.
+(* loop *)
++ apply H.
+  (* apply match_cont_seq; auto.*) apply cheat. 
+  simpl; rewrite EQ; auto. (* auto.*) apply cheat.
+  
+(* block *)  
++ apply H. fconstructor; auto. apply cheat.
+  rewrite EQ. apply cheat.
+(* exit *)  
++ fsimpl. exact I.
 Qed. FEnd find_label_commut. 
 
 FInduction transl_step_correct.
 FProof.
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
+all: intros until cunit; intros LINK TRANSL A B; intros T1 ME; inv ME; fsimpl in TS; try (monadInv TS).
+(* skip block *)
++ apply match_cont_block_inv in MC; unpack MC; subst.
+  left; econstructor; split. apply plus_one; fconstructor. apply cheat. apply cheat. (* something wrong with the semantics probably *)
+  eauto using match_states_skip. apply cheat.
+
+(* Sloop *)  
++ left; econstructor; split. apply plus_one; fconstructor. econstructor; eauto.
+  apply match_cont_seq; auto. fsimpl; rewrite EQ; auto.
+
+(* Sblock *)  
++ left; econstructor; split. apply plus_one; fconstructor. econstructor; eauto. fconstructor; auto.
+  apply cheat. (* wrong semantics *)
+
+(* Sexit seq *)
++ apply match_cont_seq_inv in MC; unpack MC; subst. left; econstructor; split. apply plus_one; fconstructor.
+  eapply match_state; eauto. fsimpl. reflexivity.  
+  
+(** Sexit0 block *)
++ apply match_cont_block_inv in MC; unpack MC; subst. left; econstructor; split. apply plus_one; fconstructor. eauto using match_states_skip.
+
++ (* SexitS block *)
+  apply match_cont_block_inv in MC; unpack MC; subst. left; econstructor; split. apply plus_one; fconstructor.
+  eapply match_state; eauto. fsimpl; reflexivity.
+  Unshelve. apply cheat. (* from something above *)
 Qed. FEnd transl_step_correct.
 
 FEnd Selection.
@@ -632,11 +665,35 @@ FEnd transl_stmt.
 FInduction find_label_commut.
 FProof.
 + apply cheat.
-Qed. FEnd find_label_commut. 
+Qed. FEnd find_label_commut.
+
+MetaData sel_switch_int_correct.
+Axiom sel_switch_int_correct:
+  forall tge dfl cases arg sp e m i t le,
+  validate_switch Int.modulus dfl cases t = true ->
+  T.eval_expr tge sp e m le arg (Vint i) ->
+  T.eval_exitexpr tge sp e m le (T.XElet arg (sel_switch_int O t)) (switch_target (Int.unsigned i) dfl cases).
+FEnd sel_switch_int_correct.
+
+MetaData sel_switch_long_correct.
+Axiom sel_switch_long_correct:
+  forall tge dfl cases arg sp e m i t le,
+  validate_switch Int64.modulus dfl cases t = true ->
+  T.eval_expr tge sp e m le arg (Vlong i) ->
+  T.eval_exitexpr tge sp e m le (T.XElet arg (sel_switch_long O t)) (switch_target (Int64.unsigned i) dfl cases).
+FEnd sel_switch_long_correct.
 
 FInduction transl_step_correct.
 FProof.
-+ apply cheat.
+all: intros until cunit; intros LINK TRANSL A B; intros T1 ME; inv ME; fsimpl in TS; try (monadInv TS).
+(* Sswitch *)
++ fsimpl in TS. destruct islong.
+  - set (ct := compile_switch Int64.modulus default cases) in *.
+    destruct (validate_switch Int64.modulus default cases ct) eqn:VALID; monadInv TS.    
+       exploit transl_expr_correct; eauto. intros [v' [A B]]. inv B.
+       left; econstructor; split.
+       apply plus_one; fconstructor. eapply sel_switch_long_correct; eauto. apply cheat.
+       eapply match_state; eauto. fsimpl. 
 Qed. FEnd transl_step_correct.
 
 FEnd Selection.
@@ -942,7 +999,7 @@ FEnd Selection.
 
 FEnd Comp_Field.
 
-(*Family Comp extends
+Family Comp extends
   Base,
   Comp_Switch,
   Comp_Loops,
@@ -952,4 +1009,4 @@ FEnd Comp_Field.
   Comp_External,
   Comp_Builtin.
 
-FEnd Comp.*)
+FEnd Comp.

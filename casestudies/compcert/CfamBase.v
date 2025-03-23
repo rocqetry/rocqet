@@ -394,7 +394,7 @@ FInductive cont: Type :=
 | Kblock: cont -> cont.  
 
 FRecursion call_cont.
-Case Kblock k := (Kblock k).
+Case Kblock k := (call_cont k).
 FEnd call_cont.
                
 FRecursion is_call_cont.

@@ -1671,7 +1671,7 @@ all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
   monadInv EQ1.
   fconstructor; eauto with rtlg.
   inv OK.
-    - apply cheat. (* discriminate *)
+    - apply cheat. (* discriminate S.Evar id = S.Eletvar n *)
     - apply Eletvar_injective in H0; subst.
       left; split; congruence.
     - right; eauto with rtlg.
@@ -3000,6 +3000,14 @@ FProofLemma.
   destruct (nth_error nexits n); intro; monadInv H. auto.
 Qed. CloseFLemma.
 
+FInduction tr_stmt_incr.
+FProof.
+(* 3: intros until s1; rename s1 into st1; intros st2.*)
+all: intros until s1; intros s2 EXT ->;
+  pose (AT := fun pc i => instr_at_incr s1 s2 pc i EXT);
+  fconstructor.
+Qed. FEnd tr_stmt_incr.
+
 FInduction transl_stmt_charact.
 FProof.
 all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
@@ -3010,9 +3018,9 @@ all: intros; fsimpl in TR; try (monadInv TR); saturateTrans.
   fconstructor.
 (* Sloop *)
 + fconstructor.
-  apply tr_stmt_incr with s1; auto.
+  eapply tr_stmt_incr; auto. (* with (s1 :=s1); auto.*)
   eapply H; eauto with rtlg.
-  eauto with rtlg. eauto with rtlg.
+  eauto with rtlg. eauto with rtlg. eauto with rtlg.
 Qed. FEnd transl_stmt_charact.
 
 FInductive tr_cont: T.code -> mapping ->
@@ -3021,6 +3029,11 @@ FInductive tr_cont: T.code -> mapping ->
 | tr_Kblock: forall c map k nd nexits ngoto nret rret cs,
       tr_cont c map k nd nexits ngoto nret rret cs ->
       tr_cont c map (S.Kblock k) nd (nd :: nexits) ngoto nret rret cs.
+
+FInduction tr_cont_ret_match_stacks.
+FProof.
+all: intros; fsimpl in *; try contradiction; auto.
+Qed. FEnd tr_cont_ret_match_stacks.
 
 FRecursion size_stmt.
 Local Open Scope nat_scope.
@@ -3280,11 +3293,11 @@ FEnd transl_expr with transl_exprlist with transl_condexpr.
 
 Inherit labelmap.
 
-FDefinition convert_builtin_res : mapping -> rettype -> builtin_res ident -> mon (builtin_res reg)
+FDefinition convert_builtin_res : mapping -> xtype -> builtin_res ident -> mon (builtin_res reg)
  := fun map ty r =>
   match r with
   | BR id => do r <- find_var map id; ret (BR r)
-  | BR_none => if rettype_eq ty AST.Tvoid then ret BR_none else (do r <- new_reg; ret (BR r))
+  | BR_none => if xtype_eq ty AST.Xvoid then ret BR_none else (do r <- new_reg; ret (BR r))
   | _ => error (Errors.msg "RTLgen: bad builtin_res")
   end.
 

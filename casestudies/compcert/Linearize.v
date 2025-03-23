@@ -30,7 +30,7 @@ Local Open Scope list_scope.
 Open Scope asm.
 
 Require Import LTL.
-Require Import Lfam.
+Require Import LfamBase.
 Require Import Linear.
 
 From Rocqet Require Import Registers.     
@@ -1050,15 +1050,27 @@ FEnd Comp_Call.
 (* small extension *)
 Trait Comp_Switch extends Comp_Loops. FEnd Comp_Switch.
 
+(*Family Comp extends
+  Base, Comp_Builtin, Comp_Loops, Comp_Field,
+  Comp_Heap, Comp_Switch, Comp_Call.
+
+Inherit LTL.
+
+FDefinition g := LTL.Lstore.*)
+
 Family Comp extends
-  Comp_Heap,            
-  Base,
-  Comp_Switch,
-  Comp_Loops,  
-  Comp_Field, 
+   Base, Comp_Builtin, Comp_Loops, Comp_Field,
+  Comp_Heap, Comp_Switch, Comp_Call.
+
+  (*Base,            
+  Comp_Loops,
+  Comp_Builtin,
+  Comp_Heap,
+  Comp_Field,    
   Comp_Call,
-  (* Comp_Float,*)
-  Comp_Builtin. 
+  Comp_Switch.*)
+
+Inherit LTL.
 
 Family Linearize.
 Final Family S := LTL.
@@ -1067,11 +1079,4 @@ FEnd Linearize.
 
 FEnd Comp.
 
-Require Extraction.
-Cd "extraction".
-Separate Extraction X.C.
-Extraction Library X.
 
-Require Extraction.
-Extraction Language OCaml.
-Extraction "compcert.ml" Base.SimplExpr.transl_function.

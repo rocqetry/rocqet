@@ -1,30 +1,12 @@
-(*only  Clight Cshminor*)
 From Rocqet Require Import Loader.
 From Rocqet Require Import LibTactics.
 
-From Rocqet Require Import Coqlib.
-From Rocqet Require Import Errors.
-From Rocqet Require Import Values.
-From Rocqet Require Import AST.
-From Rocqet Require Import Integers. 
-From Rocqet Require Import Floats.
-From Rocqet Require Import Memory.
-From Rocqet Require Import Globalenvs.
-From Rocqet Require Import Smallstep.
-From Rocqet Require Import Events.
-From Rocqet Require Import Maps.
-From Rocqet Require Import Linking.
-Require Import Rocqet.CompCert.lib.Ctypes.
-From Rocqet Require Import Cop.
-From Rocqet Require Import Mon.
-Require Import FSets.
-Require Import FSetAVL.
-Require Import Orders.
-Require Import Mergesort.
-Require Import Ordered.
+Require Import Coqlib Errors Values AST Integers.
+Require Import Floats Memory Globalenvs Smallstep.
+Require Import Events Maps Linking Ctypes Cop Mon.
+Require Import FSets FSetAVL Orders Mergesort Ordered.
 Require Import Coq.ZArith.ZArith.
-From Rocqet Require Import Prelude.
-From Rocqet Require Import Op.
+Require Import Prelude Op.
 
 Local Open Scope string_scope.
 Local Open Scope list_scope.

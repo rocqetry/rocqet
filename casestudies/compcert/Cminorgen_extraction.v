@@ -302,7 +302,7 @@ FEnd Cminorgen.
 
 FEnd Comp.
 
-
+Print Comp.Cminorgen.Ctx.
 Cd "extraction".
 
 (* Go! *)
