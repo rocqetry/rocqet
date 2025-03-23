@@ -437,10 +437,10 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
               FamilyDefinition { family with linkage; compiled_signature; compiled_context; }, []
            end *)
         | FamilyDefinition family ->
-            let compiled_context, parameters =
-              compile_context family.compiled_context
-            in
             let f () =
+              let compiled_context, parameters =
+                compile_context family.compiled_context
+              in
               match family.linkage.base with
               | None ->
                   let linkage =
