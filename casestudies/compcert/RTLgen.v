@@ -1904,68 +1904,6 @@ Proof.
 Qed.
 FEnd map_wf.
 
-FInductive tr_cont: T.code -> mapping ->
-                   S.cont -> T.node -> list T.node -> labelmap -> T.node -> option reg ->
-                   list T.stackframe -> Prop :=
-  | tr_Kseq: forall c map s k nd nexits ngoto nret rret cs n,
-      tr_stmt c map s nd n nexits ngoto nret rret ->
-      tr_cont c map k n nexits ngoto nret rret cs ->
-      tr_cont c map (S.Kseq s k) nd nexits ngoto nret rret cs
-  | tr_Kstop: forall c map ngoto nret rret cs,
-      c!nret = Some(T.Ireturn rret) ->
-      match_stacks S.Kstop cs ->
-      tr_cont c map S.Kstop nret nil ngoto nret rret cs
-with match_stacks: S.cont -> list T.stackframe -> Prop :=
-  | match_stacks_stop:
-    match_stacks S.Kstop nil.
-
-Closing Fact match_stacks_stop_inv : forall l,
-    match_stacks S.Kstop l ->
-    l = nil
-    by { intros l H; inv H; eauto }.
-
-Closing Fact tr_cont_tr_kseq_inv :
-  forall c map s k nd nexits ngoto nret rret cs,
-    tr_cont c map (S.Kseq s k) nd nexits ngoto nret rret cs ->
-    exists n,
-      tr_stmt c map s nd n nexits ngoto nret rret /\
-      tr_cont c map k n nexits ngoto nret rret cs
-      by plain { intros until cs; intros H; inv H; eauto }.
-
-FInduction tr_cont_ret_match_stacks about tr_cont
-  motive (fun c map k n nexits ngoto nret rret cs
-    (_ : tr_cont c map k n nexits ngoto nret rret cs) =>
-    forall tf, c = T.fn_code tf ->
-    S.is_call_cont k ->
-    c ! n = Some (T.Ireturn rret) /\ match_stacks k cs).
-FProof.
-all: intros; fsimpl in *; try contradiction; auto.
-Qed. FEnd tr_cont_ret_match_stacks.
-  
-FInduction match_stacks_ret_tr_cont about match_stacks
-  motive (fun k cs (_ : match_stacks k cs) =>
-    forall c map nret ngoto orret,
-    c ! nret = Some (T.Ireturn orret) ->
-    tr_cont c map k nret nil ngoto nret orret cs).
-FProof.
-intros. fconstructor. fconstructor.
-Qed. FEnd match_stacks_ret_tr_cont.
-
-FLemma tr_move_correct:
-  forall tge r1 ns r2 nd cs f sp rs m,
-  tr_move (T.fn_code f) ns r1 nd r2 ->
-  exists rs',
-  star T.step tge (T.State cs f sp ns rs m) E0 (T.State cs f sp nd rs' m) /\
-  rs'#r2 = rs#r1 /\
-  (forall r, r <> r2 -> rs'#r = rs#r).
-FProofLemma.
-  intros. inv H.
-  exists rs; split. constructor. auto.
-  exists (rs#r2 <- (rs#r1)); split.
-  apply star_one. eapply T.exec_Iop. eauto. auto.
-  split. apply Regmap.gss. intros; apply Regmap.gso; auto.
-Qed. CloseFLemma.
-
 MetaData match_env.
 (** An RTL register environment matches a CminorSel local environment and
   let-environment if the value of every local or let-bound variable in
@@ -2201,6 +2139,68 @@ Proof.
   apply init_mapping_valid.
 Qed.
 FEnd match_env.
+
+FInductive tr_cont: T.code -> mapping ->
+                   S.cont -> T.node -> list T.node -> labelmap -> T.node -> option reg ->
+                   list T.stackframe -> Prop :=
+  | tr_Kseq: forall c map s k nd nexits ngoto nret rret cs n,
+      tr_stmt c map s nd n nexits ngoto nret rret ->
+      tr_cont c map k n nexits ngoto nret rret cs ->
+      tr_cont c map (S.Kseq s k) nd nexits ngoto nret rret cs
+  | tr_Kstop: forall c map ngoto nret rret cs,
+      c!nret = Some(T.Ireturn rret) ->
+      match_stacks S.Kstop cs ->
+      tr_cont c map S.Kstop nret nil ngoto nret rret cs
+with match_stacks: S.cont -> list T.stackframe -> Prop :=
+  | match_stacks_stop:
+    match_stacks S.Kstop nil.
+
+Closing Fact match_stacks_stop_inv : forall l,
+    match_stacks S.Kstop l ->
+    l = nil
+    by { intros l H; inv H; eauto }.
+
+Closing Fact tr_cont_tr_kseq_inv :
+  forall c map s k nd nexits ngoto nret rret cs,
+    tr_cont c map (S.Kseq s k) nd nexits ngoto nret rret cs ->
+    exists n,
+      tr_stmt c map s nd n nexits ngoto nret rret /\
+      tr_cont c map k n nexits ngoto nret rret cs
+      by plain { intros until cs; intros H; inv H; eauto }.
+
+FInduction tr_cont_ret_match_stacks about tr_cont
+  motive (fun c map k n nexits ngoto nret rret cs
+    (_ : tr_cont c map k n nexits ngoto nret rret cs) =>
+    forall tf, c = T.fn_code tf ->
+    S.is_call_cont k ->
+    c ! n = Some (T.Ireturn rret) /\ match_stacks k cs).
+FProof.
+all: intros; fsimpl in *; try contradiction; auto.
+Qed. FEnd tr_cont_ret_match_stacks.
+  
+FInduction match_stacks_ret_tr_cont about match_stacks
+  motive (fun k cs (_ : match_stacks k cs) =>
+    forall c map nret ngoto orret,
+    c ! nret = Some (T.Ireturn orret) ->
+    tr_cont c map k nret nil ngoto nret orret cs).
+FProof.
+intros. fconstructor. fconstructor.
+Qed. FEnd match_stacks_ret_tr_cont.
+
+FLemma tr_move_correct:
+  forall tge r1 ns r2 nd cs f sp rs m,
+  tr_move (T.fn_code f) ns r1 nd r2 ->
+  exists rs',
+  star T.step tge (T.State cs f sp ns rs m) E0 (T.State cs f sp nd rs' m) /\
+  rs'#r2 = rs#r1 /\
+  (forall r, r <> r2 -> rs'#r = rs#r).
+FProofLemma.
+  intros. inv H.
+  exists rs; split. constructor. auto.
+  exists (rs#r2 <- (rs#r1)); split.
+  apply star_one. eapply T.exec_Iop. eauto. auto.
+  split. apply Regmap.gss. intros; apply Regmap.gso; auto.
+Qed. CloseFLemma.
 
 FDefinition match_prog := fun (p: S.program) (tp: T.program) =>
   match_program (fun cu f tf => transl_fundef f = Errors.OK tf) eq p tp.
@@ -4213,7 +4213,17 @@ Closing Fact tr_external_inv : forall c map pr id sg al ns nd rd dst,
       c!n1 = Some (T.Icall sg (inr _ id) rl rd nd) /\
       reg_map_ok map rd dst /\
       ~In rd pr
-    by plain { intros dst; intros H; inv H; eauto }.
+      by plain { intros dst; intros H; inv H; eauto }.
+
+FInduction tr_cont_ret_match_stacks.
+FProof.
+all: intros; fsimpl in *; try contradiction; auto.
+Qed. FEnd tr_cont_ret_match_stacks.
+
+FInduction match_stacks_ret_tr_cont. 
+FProof.
+intros. fconstructor. fconstructor.
+Qed. FEnd match_stacks_ret_tr_cont.
 
 FInduction transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
 FProof.
@@ -4563,7 +4573,11 @@ FLemma tr_exitexpr_incr:
 FProofLemma.
   intros s1 s2 EXT.
   generalize tr_expr_incr tr_condition_incr; intros I1 I2.
-  induction 1; econstructor; eauto with rtlg.
+  induction 1; econstructor. (*eauto with rtlg.  *)
+  eauto with rtlg. exact H. simple eapply I1. eauto with rtlg. eauto with rtlg.
+  eauto with rtlg. eauto with rtlg. simple eapply I2. eauto with rtlg. eauto with rtlg. eauto with rtlg.
+  exact IHtr_exitexpr1. exact IHtr_exitexpr2.  eauto with rtlg. simple eapply I1. eauto with rtlg. eauto with rtlg. eauto with rtlg.
+  exact IHtr_exitexpr.
 Qed. CloseFLemma.
 
 FLemma transl_jumptable_charact:
@@ -4592,8 +4606,7 @@ FProofLemma.
 - (* XEjumptable *)
   exploit transl_jumptable_charact; eauto. intros [A B].
   econstructor; eauto.
-  eapply transl_expr_charact; eauto with rtlg.
-  apply cheat. apply cheat. apply cheat.
+  eapply transl_expr_charact; eauto with rtlg. eauto with rtlg.   
   (* eauto with rtlg.*)
 - (* XEcondition *)
   econstructor.
@@ -4606,6 +4619,14 @@ FProofLemma.
   apply tr_exitexpr_incr with s1; auto. eapply IHa; eauto with rtlg.
   apply add_letvar_valid; eauto with rtlg.
 Qed. CloseFLemma.
+
+FInduction tr_stmt_incr.
+FProof.
+all: intros until s1; intros s2 EXT ->;
+  pose (AT := fun pc i => instr_at_incr s1 s2 pc i EXT);
+  fconstructor.
+- eapply tr_exitexpr_incr; eauto.
+Qed. FEnd tr_stmt_incr.
 
 FInduction transl_stmt_charact.
 FProof.
@@ -4686,6 +4707,7 @@ Qed. FEnd tr_find_label.
 FInduction transl_step_correct.
 FProof.
 all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
+(* switch *)
 + apply tr_expr_tr_sswitch in TS; unpack TS; subst.
   exploit transl_exitexpr_correct; eauto.
   intros (nd & rs' & tm' & A & B & C & D).
