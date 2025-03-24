@@ -1736,9 +1736,27 @@ all: intros until tge; intros TRANSL A B.
   simpl. constructor. apply plus_star; eauto. traceEq.
   
 (* exit block 0 *)  
-+ apply cheat.
++ intros T1 MSTATE. inv MSTATE. fsimpl in TR. monadInv TR. left.
+  dependent induction MK.
+  econstructor; split.
+  apply plus_one. constructor.
+  econstructor; eauto. simpl. auto.
+  exploit IHMK; eauto. intros [T2 [A B]].
+  exists T2; split; auto. eapply plus_left. constructor. apply plus_star; eauto. traceEq.
+  exploit IHMK; eauto. intros [T2 [A B]].
+  exists T2; split; auto. eapply plus_left.
+  simpl. constructor. apply plus_star; eauto. traceEq.
 (* exit block n+1 *)  
-+ apply cheat.
++ intros T1 MSTATE. inv MSTATE. fsimpl in TR. monadInv TR. left.
+  dependent induction MK.
+  econstructor; split.
+  apply plus_one. constructor.
+  econstructor; eauto. simpl. auto.
+  exploit IHMK; eauto. intros [T2 [A B]].
+  exists T2; split; auto. eapply plus_left. constructor. apply plus_star; eauto. traceEq.
+  exploit IHMK; eauto. intros [T2 [A B]].
+  exists T2; split; auto. eapply plus_left.
+  simpl. constructor. apply plus_star; eauto. traceEq.
 Qed. FEnd transl_step_correct.
 
 FEnd Cminorgen.
@@ -1866,14 +1884,14 @@ FEnd transl_stmt.
 
 Inherit transl_expr_correct.
 
-(*FInductive match_cont: S.cont -> T.cont -> compilenv -> exit_env -> callstack -> Prop :=
+FInductive match_cont: S.cont -> T.cont -> compilenv -> exit_env -> callstack -> Prop :=
 | match_Kcall: forall optid fn e le k tfn sp te tk cenv xenv lo hi cs sz cenv',
    transl_funbody cenv sz fn = OK tfn ->
    match_cont k tk cenv xenv cs ->
    match_cont (S.Kcall optid fn e le k)
       (T.Kcall optid tfn te sp tk)
       cenv' nil
-      (Frame cenv tfn le e te sp lo hi :: cs). *)
+      (Frame cenv tfn le e te sp lo hi :: cs).
 
 FRecursion seq_left_depth.
 Case _ := O.
@@ -1891,9 +1909,37 @@ Qed. FEnd transl_find_label.
 
 FInduction transl_step_correct.
 FProof.
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.  
++ (* external call *)
+  monadInv TR.
+  exploit match_callstack_match_globalenvs; eauto. intros [hi MG].
+  exploit external_call_mem_inject; eauto.
+  eapply inj_preserves_globals; eauto.
+  intros [f' [vres' [tm' [EC [VINJ [MINJ' [UNMAPPED [OUTOFREACH [INCR SEPARATED]]]]]]]]].
+  left; econstructor; split.
+  apply plus_one. econstructor.
+  eapply external_call_symbols_preserved; eauto. apply senv_preserved.
+  econstructor; eauto.
+  apply match_callstack_incr_bound with (Mem.nextblock m) (Mem.nextblock tm).
+  eapply match_callstack_external_call; eauto.
+  intros. eapply external_call_max_perm; eauto.
+  extlia. extlia.
+  eapply external_call_nextblock; eauto.
+  eapply external_call_nextblock; eauto.
++ simpl in H1. exploit functions_translated; eauto. intros [tfd [FIND TRANS]].
+  monadInv TR.
+  exploit transl_expr_correct; eauto. intros [tvf [EVAL1 VINJ1]].
+  assert (tvf = vf).
+    exploit match_callstack_match_globalenvs; eauto. intros [bnd MG].
+    eapply val_inject_function_pointer; eauto.
+  subst tvf.
+  exploit transl_exprlist_correct; eauto.
+  intros [tvargs [EVAL2 VINJ2]].
+  left; econstructor; split.
+  apply plus_one. eapply step_call; eauto.
+  apply sig_preserved; eauto.
+  econstructor; eauto.
+  eapply match_Kcall with (cenv' := cenv); eauto.
+  red; auto.
 Qed. FEnd transl_step_correct. 
 
 FEnd Cminorgen.
@@ -1946,15 +1992,214 @@ FRecursion seq_left_depth.
 Case _ := O.
 FEnd seq_left_depth.
 
+Lemma transl_lblstmt_find_label_context:
+  forall xenv ls body ts tk1 tk2 ts' tk',
+  transl_lblstmt cenv (switch_env ls xenv) ls body = OK ts ->
+  transl_lblstmt_cont cenv xenv ls tk1 tk2 ->
+  find_label lbl body tk2 = Some (ts', tk') ->
+  find_label lbl ts tk1 = Some (ts', tk').
+Proof.
+  induction ls; intros.
+- monadInv H. inv H0. simpl. rewrite H1. auto.
+- monadInv H. inv H0. simpl in H6. eapply IHls; eauto.
+  replace x with ts0 by congruence. simpl. rewrite H1. auto.
+Qed.
+
 (* Will be mutual, I think *)
 FInduction transl_find_label.
 FProof.
-+ apply cheat.
++ simpl in H. destruct (switch_table l O) as [tbl dfl]. monadInv H.
+  exploit switch_descent; eauto. intros [k' [A B]].
+  eapply transl_lblstmt_find_label. eauto. eauto. eauto. reflexivity.
+
+  (* nil *)
++  inv H1. rewrite H2. auto.
+  (* cons *)
++  inv H1. simpl in H7.
+  exploit (transl_find_label s). eauto. eapply switch_match_cont; eauto.
+  destruct (Csharpminor.find_label lbl s (Csharpminor.Kseq (seq_of_lbl_stmt ls) k)) as [[s' k''] | ].
+  intros [ts' [tk' [xenv' [A [B C]]]]].
+  exists ts'; exists tk'; exists xenv'; intuition.
+  eapply transl_lblstmt_find_label_context; eauto.
+  simpl. replace x with ts0 by congruence. rewrite H2. auto.
+  intro. eapply transl_lblstmt_find_label. eauto. auto. eauto.
+  simpl. replace x with ts0 by congruence. rewrite H2. auto.  
 Qed. FEnd transl_find_label.
+
+MetaData switch_prop.
+Inductive lbl_stmt_tail: lbl_stmt -> nat -> lbl_stmt -> Prop :=
+  | lstail_O: forall sl,
+      lbl_stmt_tail sl O sl
+  | lstail_S: forall c s sl n sl',
+      lbl_stmt_tail sl n sl' ->
+      lbl_stmt_tail (LScons c s sl) (S n) sl'.
+
+Lemma switch_table_default:
+  forall sl base,
+  exists n,
+     lbl_stmt_tail sl n (select_switch_default sl)
+  /\ snd (switch_table sl base) = (n + base)%nat.
+Proof.
+  induction sl; simpl; intros.
+- exists O; split. constructor. lia.
+- destruct o.
+  + destruct (IHsl (S base)) as (n & P & Q). exists (S n); split.
+    constructor; auto.
+    destruct (switch_table sl (S base)) as [tbl dfl]; simpl in *. lia.
+  + exists O; split. constructor.
+    destruct (switch_table sl (S base)) as [tbl dfl]; simpl in *. auto.
+Qed.
+
+Lemma switch_table_case:
+  forall i sl base dfl,
+  match select_switch_case i sl with
+  | None =>
+      switch_target i dfl (fst (switch_table sl base)) = dfl
+  | Some sl' =>
+      exists n,
+         lbl_stmt_tail sl n sl'
+      /\ switch_target i dfl (fst (switch_table sl base)) = (n + base)%nat
+  end.
+Proof.
+  induction sl; simpl; intros.
+- auto.
+- destruct (switch_table sl (S base)) as [tbl1 dfl1] eqn:ST.
+  destruct o; simpl.
+  rewrite dec_eq_sym. destruct (zeq i z).
+  exists O; split; auto. constructor.
+  specialize (IHsl (S base) dfl). rewrite ST in IHsl. simpl in *.
+  destruct (select_switch_case i sl).
+  destruct IHsl as (x & P & Q). exists (S x); split. constructor; auto. lia.
+  auto.
+  specialize (IHsl (S base) dfl). rewrite ST in IHsl. simpl in *.
+  destruct (select_switch_case i sl).
+  destruct IHsl as (x & P & Q). exists (S x); split. constructor; auto. lia.
+  auto.
+Qed.
+
+Lemma switch_table_select:
+  forall i sl,
+  lbl_stmt_tail sl
+                (switch_target i (snd (switch_table sl O)) (fst (switch_table sl O)))
+                (select_switch i sl).
+Proof.
+  unfold select_switch; intros.
+  generalize (switch_table_case i sl O (snd (switch_table sl O))).
+  destruct (select_switch_case i sl) as [sl'|].
+  intros (n & P & Q). replace (n + O)%nat with n in Q by lia. congruence.
+  intros E; rewrite E.
+  destruct (switch_table_default sl O) as (n & P & Q).
+  replace (n + O)%nat with n in Q by lia. congruence.
+Qed.
+
+Inductive transl_lblstmt_cont(cenv: compilenv) (xenv: exit_env): lbl_stmt -> cont -> cont -> Prop :=
+  | tlsc_default: forall k,
+      transl_lblstmt_cont cenv xenv LSnil k (Kblock (Kseq Sskip k))
+  | tlsc_case: forall i s ls k ts k',
+      transl_stmt cenv (switch_env (LScons i s ls) xenv) s = OK ts ->
+      transl_lblstmt_cont cenv xenv ls k k' ->
+      transl_lblstmt_cont cenv xenv (LScons i s ls) k (Kblock (Kseq ts k')).
+
+Lemma switch_descent:
+  forall cenv xenv k ls body s,
+  transl_lblstmt cenv (switch_env ls xenv) ls body = OK s ->
+  exists k',
+  transl_lblstmt_cont cenv xenv ls k k'
+  /\ (forall f sp e m,
+      plus step tge (State f s k sp e m) E0 (State f body k' sp e m)).
+Proof.
+  induction ls; intros.
+- monadInv H. econstructor; split.
+  econstructor.
+  intros. eapply plus_two. constructor. constructor. auto.
+- monadInv H. exploit IHls; eauto. intros [k' [A B]].
+  econstructor; split.
+  econstructor; eauto.
+  intros. eapply plus_star_trans. eauto.
+  eapply star_left. constructor. apply star_one. constructor.
+  reflexivity. traceEq.
+Qed.
+
+Lemma switch_ascent:
+  forall f sp e m cenv xenv ls n ls',
+  lbl_stmt_tail ls n ls' ->
+  forall k k1,
+  transl_lblstmt_cont cenv xenv ls k k1 ->
+  exists k2,
+  star step tge (State f (Sexit n) k1 sp e m)
+             E0 (State f (Sexit O) k2 sp e m)
+  /\ transl_lblstmt_cont cenv xenv ls' k k2.
+Proof.
+  induction 1; intros.
+- exists k1; split; auto. apply star_refl.
+- inv H0. exploit IHlbl_stmt_tail; eauto. intros (k2 & P & Q).
+  exists k2; split; auto.
+  eapply star_left. constructor. eapply star_left. constructor. eexact P.
+  eauto. auto.
+Qed.
+
+Lemma switch_match_cont:
+  forall cenv xenv k cs tk ls tk',
+  match_cont k tk cenv xenv cs ->
+  transl_lblstmt_cont cenv xenv ls tk tk' ->
+  match_cont (Csharpminor.Kseq (seq_of_lbl_stmt ls) k) tk' cenv (false :: switch_env ls xenv) cs.
+Proof.
+  induction ls; intros; simpl.
+  inv H0. apply match_Kblock2. econstructor; eauto.
+  inv H0. apply match_Kblock2. eapply match_Kseq2. auto. eauto.
+Qed.
+
+Lemma switch_match_states:
+  forall fn k e le m tfn ts tk sp te tm cenv xenv f lo hi cs sz ls body tk'
+    (TRF: transl_funbody cenv sz fn = OK tfn)
+    (TR: transl_lblstmt cenv (switch_env ls xenv) ls body = OK ts)
+    (MINJ: Mem.inject f m tm)
+    (MCS: match_callstack f m tm
+               (Frame cenv tfn e le te sp lo hi :: cs)
+               (Mem.nextblock m) (Mem.nextblock tm))
+    (MK: match_cont k tk cenv xenv cs)
+    (TK: transl_lblstmt_cont cenv xenv ls tk tk'),
+  exists S,
+  plus step tge (State tfn (Sexit O) tk' (Vptr sp Ptrofs.zero) te tm) E0 S
+  /\ match_states (Csharpminor.State fn (seq_of_lbl_stmt ls) k e le m) S.
+Proof.
+  intros. inv TK.
+- econstructor; split. eapply plus_two. constructor. constructor. auto.
+  eapply match_state; eauto.
+- econstructor; split. eapply plus_left. constructor. apply star_one. constructor. auto.
+  simpl. eapply match_state_seq; eauto. simpl. eapply switch_match_cont; eauto.
+Qed.
+
+Lemma transl_lblstmt_suffix:
+  forall cenv xenv ls n ls',
+  lbl_stmt_tail ls n ls' ->
+  forall body ts, transl_lblstmt cenv (switch_env ls xenv) ls body = OK ts ->
+  exists body', exists ts', transl_lblstmt cenv (switch_env ls' xenv) ls' body' = OK ts'.
+Proof.
+  induction 1; intros.
+- exists body, ts; auto.
+- monadInv H0. eauto.
+Qed.
+FEnd switch_prop.
 
 FInduction transl_step_correct.
 FProof.
-+ apply cheat.
++  simpl in TR. destruct (switch_table cases O) as [tbl dfl] eqn:STBL. monadInv TR.
+  exploit transl_expr_correct; eauto. intros [tv [EVAL VINJ]].
+  assert (SA: switch_argument islong tv n).
+  { inv H0; inv VINJ; constructor. }
+  exploit switch_descent; eauto. intros [k1 [A B]].
+  exploit switch_ascent; eauto. eapply (switch_table_select n).
+  rewrite STBL; simpl. intros [k2 [C D]].
+  exploit transl_lblstmt_suffix; eauto. eapply (switch_table_select n).
+  simpl. intros [body' [ts' E]].
+  exploit switch_match_states; eauto. intros [T2 [F G]].
+  left; exists T2; split.
+  eapply plus_star_trans. eapply B.
+  eapply star_left. econstructor; eauto.
+  eapply star_trans. eexact C.
+  apply plus_star. eexact F.
+  reflexivity. reflexivity. traceEq.
 Qed. FEnd transl_step_correct.
 
 FEnd Cminorgen.

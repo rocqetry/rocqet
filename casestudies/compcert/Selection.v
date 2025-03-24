@@ -917,15 +917,67 @@ FEnd transl_stmt.
 
 FInduction find_label_commut.
 FProof.
-+ apply cheat.
-+ apply cheat.  
+- (* call *)
+  destruct (classify_call (prog_defmap cunit) e); simpl; auto.
+  rewrite sel_builtin_nolabel; auto.
+- (* tailcall *)
+  destruct (classify_call (prog_defmap cunit) e); simpl; auto.
 Qed. FEnd find_label_commut.
 
 FInduction transl_step_correct.
 FProof.
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
++ - (* external call *)
+  destruct TF as (hf & HF & TF).
+  monadInv TF.
+  exploit external_call_mem_extends; eauto.
+  intros [vres' [m2 [A [B [C D]]]]].
+  left; econstructor; split.
+  apply plus_one; econstructor. eapply external_call_symbols_preserved; eauto. apply senv_preserved.
+  econstructor; eauto.
+- (* external call turned into a Sbuiltin *)
+  exploit sel_builtin_correct; eauto. intros (e2' & m2' & P & Q & R).
+  left; econstructor; split. eexact P. econstructor; eauto.
+- (* Scall *)
+  exploit classify_call_correct; eauto.
+  destruct (classify_call (prog_defmap cunit) a) as [ | id | ef].
++ (* indirect *)
+  exploit sel_expr_correct; eauto. intros [vf' [A B]].
+  exploit sel_exprlist_correct; eauto. intros [vargs' [C D]].
+  exploit functions_translated; eauto. intros (cunit' & fd' & U & V & W).
+  left; econstructor; split.
+  apply plus_one; econstructor; eauto. econstructor; eauto.
+  eapply sig_function_translated; eauto.
+  eapply match_callstate with (cunit := cunit'); eauto.
+  eapply match_cont_call with (cunit := cunit) (hf := hf); eauto.
++ (* direct *)
+  intros [b [U V]].
+  exploit sel_exprlist_correct; eauto. intros [vargs' [C D]].
+  exploit functions_translated; eauto. intros (cunit' & fd' & X & Y & Z).
+  left; econstructor; split.
+  apply plus_one; econstructor; eauto.
+  subst vf. econstructor; eauto. rewrite symbols_preserved; eauto.
+  eapply sig_function_translated; eauto.
+  eapply match_callstate with (cunit := cunit'); eauto.
+  eapply match_cont_call with (cunit := cunit) (hf := hf); eauto.
++ (* turned into Sbuiltin *)
+  intros EQ. subst fd.
+  right; left; split. simpl; lia. split; auto. econstructor; eauto.
+- (* Stailcall *)
+  exploit Mem.free_parallel_extends; eauto. intros [m2' [P Q]].
+  erewrite <- stackspace_function_translated in P by eauto.
+  exploit sel_expr_correct; eauto. intros [vf' [A B]].
+  exploit sel_exprlist_correct; eauto. intros [vargs' [C D]].
+  exploit functions_translated; eauto. intros (cunit' & fd' & E & F & G).
+  left; econstructor; split.
+  apply plus_one.
+  exploit classify_call_correct. eexact LINK. eauto. eauto.
+  destruct (classify_call (prog_defmap cunit)) as [ | id | ef]; intros.
+  econstructor; eauto. econstructor; eauto. eapply sig_function_translated; eauto.
+  destruct H2 as [b [U V]]. subst vf. inv B.
+  econstructor; eauto. econstructor; eauto. rewrite symbols_preserved; eauto. eapply sig_function_translated; eauto.
+  econstructor; eauto. econstructor; eauto. eapply sig_function_translated; eauto.
+  eapply match_callstate with (cunit := cunit'); eauto.
+  eapply call_cont_commut; eauto.
 Qed. FEnd transl_step_correct.
 
 FEnd Selection.
