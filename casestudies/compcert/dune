@@ -55,8 +55,8 @@
    lib/Op
    lib/BoolEqual
 
-   ;CfamBase
-   ;Csharpminor
+   CfamBase
+   Csharpminor
    ;Cminor
    ;CminorSel
    
@@ -64,7 +64,7 @@
    ;Linear
 
    ;LTL
-   ;Clight
+   Clight
    ;Mach
    ;Linearize
    

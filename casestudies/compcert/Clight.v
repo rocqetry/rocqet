@@ -108,14 +108,14 @@ FDefinition empty_env: env := (PTree.empty (block * type)).
 FDefinition temp_env := PTree.t val.
 
 MetaData alloc_variables.
-Inductive alloc_variables: self__Clight.genv -> self__Clight.env -> mem ->
+Inductive alloc_variables (ge : genv): self__Clight.env -> mem ->
                            list (ident * type) ->
                            self__Clight.env -> mem -> Prop :=
 | alloc_variables_nil:
-  forall ge e m,
+  forall e m,
     alloc_variables ge e m nil e m
 | alloc_variables_cons:
-  forall (ge:genv) e m id ty vars m1 b1 m2 e2,
+  forall e m id ty vars m1 b1 m2 e2,
     Mem.alloc m 0 (sizeof ge ty) = (m1, b1) ->
     alloc_variables ge (PTree.set id (b1, ty) e) m1 vars e2 m2 ->
     alloc_variables ge e m ((id, ty) :: vars) e2 m2.
