@@ -57,17 +57,17 @@
 
    CfamBase
    Csharpminor
-   ;Cminor
-   ;CminorSel
+   Cminor
+   CminorSel
    
    ;LfamBase
    ;Linear
 
    ;LTL
-   Clight
+   ;Clight
    ;Mach
    ;Linearize
    
-   ;Cfamtransl
+   Cfamtransl
   ))
 

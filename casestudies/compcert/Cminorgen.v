@@ -426,7 +426,13 @@ all: intros; fsimpl in TR; try (monadInv TR).
   exists tv; split. fconstructor; eauto. auto.
 Qed. FEnd transl_expr_correct.
 
-MetaData match_cont.
+FOpaque Definition SKblock : S.cont -> S.cont := cheat.
+FOpaque Definition TKblock : T.cont -> T.cont := cheat.
+
+FOpaque Definition SKcall : option ident -> S.function -> S.env -> S.fenv -> S.cont -> S.cont := cheat.
+FOpaque Definition TKcall : option ident -> T.function -> T.env -> T.fenv -> T.cont -> T.cont := cheat.
+
+(*MetaData match_cont.
 Inductive match_cont: S.cont -> T.cont -> compilenv -> exit_env -> callstack -> Prop :=
 | match_Kstop: forall cenv xenv,
    match_cont S.Kstop T.Kstop cenv xenv nil
@@ -438,8 +444,33 @@ Inductive match_cont: S.cont -> T.cont -> compilenv -> exit_env -> callstack -> 
    transl_stmt s1 cenv xenv = OK ts1 ->
    match_cont (S.Kseq s2 k) tk cenv xenv cs ->
    match_cont (S.Kseq (S.Sseq s1 s2) k)
+     (T.Kseq ts1 tk) cenv xenv cs
+| match_Kblock: forall k tk cenv xenv cs,
+      match_cont k tk cenv xenv cs ->
+      match_cont (SKblock k) (TKblock tk) cenv (true :: xenv) cs
+| match_Kblock2: forall k tk cenv xenv cs,
+      match_cont k tk cenv xenv cs ->
+      match_cont k (TKblock tk) cenv (false :: xenv) cs
+| match_Kcall: forall optid fn e le k tfn sp te tk cenv xenv lo hi cs sz cenv',
+      transl_funbody cenv sz fn = OK tfn ->
+      match_cont k tk cenv xenv cs ->
+      match_cont (SKcall optid fn e le k)
+                 (TKcall optid tfn te sp tk)
+                 cenv' nil
+                 (Frame cenv tfn le e te sp lo hi :: cs).     
+FEnd match_cont.*)
+FInductive match_cont: S.cont -> T.cont -> compilenv -> exit_env -> callstack -> Prop :=
+| match_Kstop: forall cenv xenv,
+   match_cont S.Kstop T.Kstop cenv xenv nil
+| match_Kseq: forall s k ts tk cenv xenv cs,
+   transl_stmt s cenv xenv = OK ts ->
+   match_cont k tk cenv xenv cs ->
+   match_cont (S.Kseq s k) (T.Kseq ts tk) cenv xenv cs
+| match_Kseq2: forall s1 s2 k ts1 tk cenv xenv cs,
+   transl_stmt s1 cenv xenv = OK ts1 ->
+   match_cont (S.Kseq s2 k) tk cenv xenv cs ->
+   match_cont (S.Kseq (S.Sseq s1 s2) k)
      (T.Kseq ts1 tk) cenv xenv cs.
-FEnd match_cont.
 
 Closing Fact match_Kstop_inv : forall tk cenv xenv cs,
     match_cont S.Kstop tk cenv xenv cs ->
@@ -714,18 +745,13 @@ FProofLemma.
   eapply BOUND0; eauto. eapply Mem.perm_max. eauto.
 Qed. CloseFLemma.
 
-(*FInduction match_call_cont about match_cont motive
+FInduction match_call_cont about match_cont motive
   (fun k tk cenv xenv cs (_ : match_cont k tk cenv xenv cs) =>    
     match_cont k tk cenv xenv cs ->
     match_cont (S.call_cont k) (T.call_cont tk) cenv nil cs).
 FProof.
 all: intros; do 2 fsimpl; auto; fconstructor.
-Qed. FEnd match_call_cont.*)
-Closing Fact match_call_cont:
-  forall k tk cenv xenv cs,
-  match_cont k tk cenv xenv cs ->
-  match_cont (S.call_cont k) (T.call_cont tk) cenv nil cs
-by plain { induction 1; simpl; auto; econstructor; eauto }.
+Qed. FEnd match_call_cont.
 
 FInduction transl_find_label about S.stmt motive
   (fun (s : S.stmt) =>
@@ -778,7 +804,7 @@ FLemma transl_find_label_body:
   /\ match_cont k' tk' cenv xenv' cs.
 FProofLemma.
   intros. monadInv H. simpl. fsimpl.
-  exploit transl_find_label. eexact EQ. eapply match_call_cont. eexact H0. 
+  exploit transl_find_label. eexact EQ. eapply match_call_cont. eexact H0. exact H0.
   instantiate (1 := lbl). rewrite H1. auto.
 Qed. CloseFLemma.
 
@@ -1442,7 +1468,8 @@ intros.
   eapply bind_parameters_agree; eauto.
 Qed. CloseFLemma.
 
-FLemma match_is_call_cont:
+MetaData match_is_call_cont.
+Axiom match_is_call_cont:
   forall tge tfn te sp tm k tk cenv xenv cs,
   match_cont k tk cenv xenv cs ->
   S.is_call_cont k ->
@@ -1451,15 +1478,7 @@ FLemma match_is_call_cont:
                E0 (T.State tfn T.Sskip tk' sp te tm)
     /\ T.is_call_cont tk'
     /\ match_cont k tk' cenv nil cs.
-FProofLemma.
-  induction 1; simpl; intros; try contradiction.
-  econstructor; split. apply star_refl. split. fsimpl. exact I. econstructor; eauto.
-  exploit IHmatch_cont; eauto. fsimpl in H1. contradiction.
-  intros [tk' [A B]]. exists tk'; split.
-  eapply star_left; eauto. apply cheat. (* constructor.*) traceEq. fsimpl in H1. contradiction. (* auto.*)
-  econstructor; split. apply star_refl. split. fsimpl. fsimpl in H1. contradiction. (*exact I.*) econstructor; eauto.
-  apply cheat. apply cheat.
-Qed. CloseFLemma.
+FEnd match_is_call_cont.
 
 Require Import Coq.Program.Equality.
 
@@ -1475,15 +1494,16 @@ all: intros until tge; intros TRANSL A B.
 
 (* skip seq *)
 + intros T1 MSTATE. inv MSTATE. fsimpl in TR. monadInv TR. left.
-  dependent induction MK. apply cheat. (* fdiscriminate *)
+  dependent induction MK. fdiscriminate.
   econstructor; split. apply kseq_injective in x; destruct x; subst.
   apply plus_one. fconstructor.
   apply kseq_injective in x; destruct x; subst.
   econstructor; eauto. 
   econstructor; split.
-  apply plus_one. fconstructor. apply cheat. (* fdiscriminate *)  
-  econstructor; split. apply cheat. (*fdiscriminate*)
-  split; apply cheat. (* fdiscriminate *)  
+  apply plus_one. fconstructor. fdiscriminate.
+  econstructor; split. fdiscriminate.
+  split; fdiscriminate.
+  
 (* skip call *)  
 + intros T1 MSTATE. inv MSTATE. fsimpl in TR. monadInv TR. left.
   exploit match_is_call_cont; eauto. intros [tk' [A [B C]]].
@@ -1491,7 +1511,7 @@ all: intros until tge; intros TRANSL A B.
   econstructor; split.
   eapply plus_right. eexact A. apply T.step_skip_call. auto. eauto. traceEq.
   econstructor; eauto.
-  apply cheat. (* fdiscriminate *)
+  fdiscriminate.
   
 (* assign *)  
 + intros T1 MSTATE. inv MSTATE. fsimpl in TR. monadInv TR.
@@ -1500,7 +1520,7 @@ all: intros until tge; intros TRANSL A B.
   apply plus_one. fconstructor; eauto.
   econstructor; eauto. fsimpl; reflexivity.
   eapply match_callstack_set_temp; eauto.
-  apply cheat. (* fdiscriminate *)
+  fdiscriminate.
   
 (* seq *)  
 + intros T1 MSTATE. inv MSTATE. fsimpl in TR. monadInv TR.
@@ -1519,7 +1539,7 @@ all: intros until tge; intros TRANSL A B.
   apply plus_one. eapply T.step_return_0. eauto.
   econstructor; eauto. eapply match_call_cont; eauto.
   simpl; auto.
-  apply cheat. (* fdiscriminate *)
+  fdiscriminate.
   
 (* return some *)  
 + intros T1 MSTATE. inv MSTATE. fsimpl in TR. monadInv TR. left.
@@ -1528,14 +1548,14 @@ all: intros until tge; intros TRANSL A B.
   econstructor; split.
   apply plus_one. eapply T.step_return_1. eauto. eauto.
   econstructor; eauto. eapply match_call_cont; eauto.
-  apply cheat. (* fdiscriminate *)
+  fdiscriminate.
   
 (* label *)  
 + intros T1 MSTATE. inv MSTATE. fsimpl in TR. monadInv TR.
   left; econstructor; split.
   apply plus_one. fconstructor.
   econstructor; eauto.
-  apply cheat. (* fdiscriminate *)
+  fdiscriminate.
   
 (* goto *)
 + intros T1 MSTATE; inv MSTATE. fsimpl in TR; monadInv TR.
@@ -1544,7 +1564,7 @@ all: intros until tge; intros TRANSL A B.
   left; econstructor; split.
   apply plus_one. apply T.step_goto. eexact A.
   econstructor; eauto.
-  apply cheat. (* fdiscriminate *)
+  fdiscriminate.
   
 (* ifthenelse *)  
 + intros T1 MSTATE; inv MSTATE. fsimpl in TR; monadInv TR.
@@ -1552,7 +1572,7 @@ all: intros until tge; intros TRANSL A B.
   left; exists (T.State tfn (if b then x0 else x1) tk sp0 te tm); split.
   apply plus_one. eapply T.step_ifthenelse; eauto. eapply bool_of_val_inject; eauto.
   econstructor; eauto. destruct b; auto.
-  apply cheat. (* fdiscriminate *)
+  fdiscriminate.
 
 (* internal function *)  
 + intros T1 MSTATE; inv MSTATE. fsimpl in TR; monadInv TR. generalize EQ; clear EQ; unfold transl_function.
@@ -1571,7 +1591,7 @@ all: intros until tge; intros TRANSL A B.
   left; econstructor; split.
   apply plus_one. fconstructor; simpl; eauto using Val.has_argtype_list_inject.
   econstructor. eexact TRBODY. eauto. eexact MINJ2. eexact MCS2.
-  inv MK; fsimpl in ISCC; contradiction || econstructor; eauto.   
+  inv MK; fsimpl in ISCC; contradiction || econstructor; eauto.
 Qed. FEnd transl_step_correct.
 
 FLemma match_globalenvs_init:
@@ -1626,20 +1646,6 @@ FEnd Cminorgen.
 
 FEnd Base.
 
-(* moved to base *)
-(*Trait Comp_Float extends Base.
-
-Family Cminorgen.
-
-FRecursion transl_constant.
-Case Ofloatconst n := (T.Ofloatconst n).
-Case Osingleconst n := (T.Osingleconst n).
-FEnd transl_constant.
-
-FEnd Cminorgen.
-
-FEnd Comp_Float. *)                 
-
 Trait Comp_Loops extends Base.
 
 Family Cminorgen extends Cfamtransl.
@@ -1684,26 +1690,54 @@ FRecursion seq_left_depth.
 Case _ := O.
 FEnd seq_left_depth.
 
-FInduction match_call_cont.
-FProof.
-+ apply cheat.
-+ apply cheat.
-Qed. FEnd match_call_cont. 
-
 FInduction transl_find_label.
 FProof.
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
+all: intros; fsimpl in H; try (monadInv H); simpl; do 2 fsimpl; auto.
+(* loop *)
++ unfold transl_stmtSloop in H0. monadInv H0. fsimpl.
+  apply H with xenv. auto. econstructor; eauto. fsimpl. rewrite EQ; auto.
+(* block *)  
++ unfold transl_stmtSblock in H0. monadInv H0. fsimpl.
+  apply H with (true :: xenv). auto. (* constructor; auto.*) apply cheat. (* cont stuff *)
 Qed. FEnd transl_find_label.
   
 FInduction transl_step_correct.
 FProof.
+all: intros until tge; intros TRANSL A B.
+(* skip block *)
 + apply cheat.
+  
+(* loop *)  
++ intros T1 MSTATE. inv MSTATE. fsimpl in TR. monadInv TR. 
+  left; econstructor; split.
+  apply plus_one. fconstructor.
+  econstructor; eauto.
+  econstructor; eauto. fsimpl. rewrite EQ; auto.
+  fdiscriminate.
+  
+(* block *)  
++ intros T1 MSTATE. inv MSTATE. fsimpl in TR. monadInv TR.
+  left; econstructor; split.
+  apply plus_one. fconstructor.
+  econstructor; eauto.
+  (* cont: econstructor; eauto.*) apply cheat.
+  fdiscriminate.
+  
+(* exit seq *)  
++ intros T1 MSTATE. inv MSTATE. fsimpl in TR. monadInv TR. left.
+  dependent induction MK.
+  econstructor; split.
+  apply plus_one. constructor.
+  econstructor; eauto. simpl. auto.
+  exploit IHMK; eauto. intros [T2 [A B]].
+  exists T2; split; auto. eapply plus_left. constructor. apply plus_star; eauto. traceEq.
+  exploit IHMK; eauto. intros [T2 [A B]].
+  exists T2; split; auto. eapply plus_left.
+  simpl. constructor. apply plus_star; eauto. traceEq.
+  
+(* exit block 0 *)  
 + apply cheat.
-+ apply cheat.
-+ apply cheat.
-+ apply cheat.
+(* exit block n+1 *)  
 + apply cheat.
 Qed. FEnd transl_step_correct.
 
@@ -1933,8 +1967,7 @@ Family Comp extends
   Comp_Loops,
   Comp_Heap, 
   Comp_Field, 
-  Comp_Call,
-  (* Comp_Float,*)
+  Comp_Call,  
   Comp_Builtin. 
 
 Family Cminorgen.
