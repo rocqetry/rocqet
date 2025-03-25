@@ -3645,7 +3645,7 @@ FEnd Comp_Call.
 
 Trait Comp_Switch extends Comp_Loops. FEnd Comp_Switch.
 
-Family Comp extends
+(*Family Comp extends
   Comp_Heap,
   Base,
   Comp_Switch,
@@ -3659,4 +3659,4 @@ Final Family S := Linear.
 Final Family T := Mach.
 FEnd Stacking.
 
-FEnd Comp.
+FEnd Comp.*)

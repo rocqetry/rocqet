@@ -5541,7 +5541,7 @@ FEnd Comp_Call.
 
 Trait Comp_Switch extends Comp_Loops. FEnd Comp_Switch.
 
-Family Comp extends
+(*Family Comp extends
   Comp_Heap,
   Base,
   Comp_Switch,
@@ -5554,4 +5554,4 @@ Family Asmgen.
 Final Family S := Mach.
 FEnd Asmgen.
 
-FEnd Comp.
+FEnd Comp.*)

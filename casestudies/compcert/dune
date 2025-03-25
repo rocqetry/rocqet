@@ -55,6 +55,16 @@
    lib/Op
    lib/BoolEqual
 
+   ;SimplExpr
+   ;LTL
+   ;LfamBase
+   ;Linear
+   ;Linearize
+
+   ;Asmgen
+   ;Stacking
+   ;RTLgen
+
    ;CfamBase
    ;Csharpminor
    ;Cminor
@@ -69,5 +79,9 @@
    ;Linearize
    
    ;Cfamtransl
+
+   ;Cshmgen
+   ;RTLgen
+   SimplExpr
   ))
 

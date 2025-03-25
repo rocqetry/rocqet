@@ -1058,7 +1058,7 @@ Inherit LTL.
 
 FDefinition g := LTL.Lstore.*)
 
-Family Comp extends
+(*Family Comp extends
    Base, Comp_Builtin, Comp_Loops, Comp_Field,
   Comp_Heap, Comp_Switch, Comp_Call.
 
@@ -1077,6 +1077,6 @@ Final Family S := LTL.
 Final Family T := Linear.
 FEnd Linearize.
 
-FEnd Comp.
+FEnd Comp.*)
 
 
