@@ -310,6 +310,71 @@ let compile_recursive_definition_signature ~(names : Names.Id.t list)
   in
   return_module
 
+let compile_finduction_implementation
+      ~(recursor_names: Names.Id.t list)
+      ~(inductive_paths: Libnames.qualid list)
+      ~(suffix: RecKind.t)
+      ~(goals: (Names.Id.t * Names.Id.t list) list) =
+  let prefix =
+    let inductive_path = List.hd inductive_paths in
+    match inductive_path |> Naming.path_to_list |> List.rev with
+    | [] | [ _ ] -> None
+    | _ :: path -> Some (path |> List.rev |> Naming.list_to_path)
+  in
+  (* We want to define handlers here *)
+  (* Everything has to be in the right order for this to work *)
+  let _ =
+    goals
+    |> List.iter (fun (goal_name, handler_names) ->
+           let open Constrexpr_ops in
+           let implemented_handlers =
+             Termutils.extract_handlers_from_inductive_proof handler_names
+               (mkIdentC goal_name) suffix
+           in
+           implemented_handlers
+           |> List.iter (fun (constructor_name, handler) ->
+             let name =
+               Naming.handler_name ~recursors:recursor_names ~case:constructor_name
+             in
+             B.run @@ B.define_term ~name handler
+         ))
+  in
+  let handlers =
+    goals
+    |> List.concat_map (fun (_, l) -> l)
+    |> List.map (fun case ->
+           Naming.handler_name ~recursors:recursor_names ~case
+             |> Libnames.qualid_of_ident
+             |> Constrexpr_ops.mkRefC)
+  in 
+  let computation =
+    let motives =
+      recursor_names
+      |> List.map (fun recursor_name ->
+             recursor_name |> Naming.motive_of |> Libnames.qualid_of_ident
+             |> Constrexpr_ops.mkRefC)
+    in    
+    let open B in
+    let inductives = inductive_paths |> List.map Naming.extract_path_base in
+    let* _ =
+      List.combine recursor_names inductives
+      |> List.map (fun (name, inductive) ->
+             let recursor =
+               Naming.mutual_principle_name ~inductive ~inductives
+                 ~kind:(RecKind.to_string suffix)
+             in
+             let recursor_path = Naming.qualid_point prefix recursor in
+             let body =
+               Constrexpr_ops.mkAppC
+                 (Constrexpr_ops.mkRefC recursor_path, motives @ handlers)
+             in
+             define_term ~name body)
+      |> flatmap
+    in
+    return ()
+  in
+  computation
+
 (* Return the compiled module and the generated computational behaviour *)
 let compile_recursive_definition_implementation
     ~(recursor_names : Names.Id.t list) ~handlers
@@ -709,13 +774,11 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         ( fields,
           ( _,
             TheoremDefinition
-              { inductive_paths; handlers; names; suffix; handlers_table; _ } )
+              { inductive_paths; names; suffix; goals; _ } )
         ) ->
         let open B in
-        let* _ = compile_fields fields ctx in
-        let handlers = handlers |> List.concat_map snd in
-        compile_recursive_definition_implementation ~recursor_names:names
-          ~inductive_paths ~suffix ~handlers ~handlers_table
+        let* _ = compile_fields fields ctx in        
+        compile_finduction_implementation ~recursor_names:names ~inductive_paths ~suffix ~goals
     | Snoc (fields, (_, ComputationalAxiom { name; axiom; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in

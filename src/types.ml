@@ -360,12 +360,10 @@ module rec LinkageElem : sig
     | TheoremDefinition of {
         names : Names.Id.t list;
         suffix : RecKind.t;
-        inductive_paths : Libnames.qualid list;
-        handlers : (Names.Id.t * Names.Id.t list) list;
+        goals : (Names.Id.t * Names.Id.t list) list; (* Goal Name -> Handler names, in order *)
+        inductive_paths : Libnames.qualid list;        
         compiled_context : CompiledModuleType.t;
-        compiled_signature : CompiledModuleType.t;
-        (* handler name -> defined name in family *)
-        handlers_table : (Names.Id.t * Names.Id.t) list;
+        compiled_signature : CompiledModuleType.t;        
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     (* Axiom about FInduction or FRecursion *)
@@ -476,11 +474,10 @@ end = struct
     | TheoremDefinition of {
         names : Names.Id.t list;
         suffix : RecKind.t;
-        inductive_paths : Libnames.qualid list;
-        handlers : (Names.Id.t * Names.Id.t list) list;
+        goals : (Names.Id.t * Names.Id.t list) list; (* Goal Name -> Handler names, in order *)
+        inductive_paths : Libnames.qualid list;        
         compiled_context : CompiledModuleType.t;
-        compiled_signature : CompiledModuleType.t;
-        handlers_table : (Names.Id.t * Names.Id.t) list;
+        compiled_signature : CompiledModuleType.t;        
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | RecursiveAxiom of {
