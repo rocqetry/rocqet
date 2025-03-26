@@ -156,7 +156,7 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t)
           behaviour_table;
         }
   | TheoremDefinition derived, TheoremDefinition base ->
-      let goals = base.goals @ derived.goals in
+      let goals = remove_duplicates (base.goals @ derived.goals) in
       let names = remove_duplicates (base.names @ derived.names) in
       (*let handlers_table =
         remove_duplicates (base.handlers_table @ derived.handlers_table)
