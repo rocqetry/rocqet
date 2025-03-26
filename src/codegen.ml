@@ -323,21 +323,22 @@ let compile_finduction_implementation
   in
   (* We want to define handlers here *)
   (* Everything has to be in the right order for this to work *)
-  let _ =
+  let handlers_computation =
     goals
-    |> List.iter (fun (goal_name, handler_names) ->
+    |> List.concat_map (fun (goal_name, handler_names) ->
            let open Constrexpr_ops in
            let implemented_handlers =
              Termutils.extract_handlers_from_inductive_proof handler_names
                (mkIdentC goal_name) suffix
            in
            implemented_handlers
-           |> List.iter (fun (constructor_name, handler) ->
+           |> List.map (fun (constructor_name, handler) ->
              let name =
                Naming.handler_name ~recursors:recursor_names ~case:constructor_name
              in
-             B.run @@ B.define_term ~name handler
+             B.define_term ~name handler
          ))
+    |> B.flatmap
   in
   let handlers =
     goals
@@ -357,6 +358,7 @@ let compile_finduction_implementation
     let open B in
     let inductives = inductive_paths |> List.map Naming.extract_path_base in
     let* _ =
+      let* () = handlers_computation in
       List.combine recursor_names inductives
       |> List.map (fun (name, inductive) ->
              let recursor =
@@ -756,6 +758,8 @@ type synth_ctx = {
 
 let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
   let Linkage.{ name; fields; definition; _ } = linkage in
+  fields |> Bwd.to_list |> List.iter (fun (name, _) -> Printf.printf "Linakge Elem: %s\n" (Names.Id.to_string name));
+  
   let rec compile_fields fields (ctx : CompiledModule.t list) =
     match fields with
     | Bwd.Emp -> B.return ()
