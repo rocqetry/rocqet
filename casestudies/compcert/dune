@@ -55,7 +55,7 @@
    lib/Op
    lib/BoolEqual
 
-   ;SimplExpr
+   SimplExpr
    ;LTL
    ;LfamBase
    ;Linear
@@ -65,10 +65,14 @@
    ;Stacking
    ;RTLgen
 
+   ;Clight
    ;CfamBase
    ;Csharpminor
+   ;Cshmgen
    ;Cminor
+   ;Cminorgen
    ;CminorSel
+   ;Selection
    
    ;LfamBase
    ;Linear
@@ -82,6 +86,8 @@
 
    ;Cshmgen
    ;RTLgen
-   SimplExpr
+   ;SimplExpr
+   ;Stacking
+   ;Asmgen
   ))
 

@@ -217,8 +217,21 @@ FDefinition block_of_binding := fun (ge: genv) (id_b_ty: ident * (block * type))
 FDefinition blocks_of_env : genv -> env -> list (block * Z * Z)  := fun ge e => 
   List.map (block_of_binding ge) (PTree.elements e).
 
+MetaData function_entry2.
+Inductive function_entry2 (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (le: temp_env) (m': mem) : Prop :=
+  | function_entry2_intro:
+      list_norepet (var_names f.(fn_vars)) ->
+      list_norepet (var_names f.(fn_params)) ->
+      list_disjoint (var_names f.(fn_params)) (var_names f.(fn_temps)) ->
+      alloc_variables ge empty_env m f.(fn_vars) e m' ->
+      bind_parameter_temps f.(fn_params) vargs (create_undef_temps f.(fn_temps)) = Some le ->
+      function_entry2 ge f vargs m e le m'.
+FEnd function_entry2.
+
+(* FOverride Definition function_entry := function_entry2*)
+
 (* To be overriden in SimplExpr & Cshmgen *)
-FOpaque Definition function_entry : genv -> function -> list val -> mem -> env -> temp_env -> mem -> Prop := cheat.
+FDefinition function_entry : genv -> function -> list val -> mem -> env -> temp_env -> mem -> Prop := function_entry2.
 
 FInductive step : genv -> state -> trace -> state -> Prop :=  
 | step_skip_seq: forall ge f s k e le m,

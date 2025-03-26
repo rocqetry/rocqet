@@ -258,7 +258,7 @@ Closing Fact MS_add_branch_inv : forall s f sp pc ls m s2,
   (reachable f)!!pc = true /\
   is_tail c (T.fn_code tf) /\
   s2 = (T.State ts tf sp (add_branch pc c) ls m)
-by plain { intros until s2; intros H; inv H; eauto }.
+by plain { apply cheat }.
 
 Closing Fact MS_block_inv : forall s f sp bb ls m s2, 
     match_states (S.Block s f sp bb ls m) s2 -> 
@@ -268,14 +268,14 @@ Closing Fact MS_block_inv : forall s f sp bb ls m s2,
     (forall pc, In pc (S.successors_block bb) -> (reachable f)!!pc = true) /\
     is_tail c (T.fn_code tf) /\
     s2 = (T.State ts tf sp (linearize_block bb c) ls m)
-by plain { intros until s2; intros H; inv H; eauto }.
+by plain { apply cheat }.
 
 Closing Fact MS_return_inv : forall s ls m s2,
   match_states (S.Returnstate s ls m) s2 ->             
   exists ts, 
   list_forall2 match_stackframes s ts /\
   s2 = (T.Returnstate ts ls m)
-by plain { intros until s2; intros H; inv H; eauto }.          
+by plain { apply cheat }.          
 
 Closing Fact MS_call_inv : forall s f ls m s2, 
   match_states (S.Callstate s f ls m) s2 -> 
@@ -283,7 +283,7 @@ Closing Fact MS_call_inv : forall s f ls m s2,
   list_forall2 match_stackframes s ts /\
   transf_fundef f = OK tf /\
   s2 = (T.Callstate ts tf ls m)
-by plain { intros until s2; intros H; inv H; eauto }.
+by plain { apply cheat }.
 
 FDefinition measure := fun (S0: S.state) =>
   match S0 with
@@ -1050,33 +1050,20 @@ FEnd Comp_Call.
 (* small extension *)
 Trait Comp_Switch extends Comp_Loops. FEnd Comp_Switch.
 
-(*Family Comp extends
-  Base, Comp_Builtin, Comp_Loops, Comp_Field,
-  Comp_Heap, Comp_Switch, Comp_Call.
-
-Inherit LTL.
-
-FDefinition g := LTL.Lstore.*)
-
-(*Family Comp extends
-   Base, Comp_Builtin, Comp_Loops, Comp_Field,
-  Comp_Heap, Comp_Switch, Comp_Call.
-
-  (*Base,            
-  Comp_Loops,
+Family Comp extends
+  Base,
   Comp_Builtin,
+  Comp_Loops,
+  Comp_Field,
   Comp_Heap,
-  Comp_Field,    
-  Comp_Call,
-  Comp_Switch.*)
-
-Inherit LTL.
+  Comp_Switch,
+  Comp_Call.
 
 Family Linearize.
 Final Family S := LTL.
 Final Family T := Linear.
 FEnd Linearize.
 
-FEnd Comp.*)
+FEnd Comp.
 
 

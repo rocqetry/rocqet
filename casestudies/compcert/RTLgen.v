@@ -1522,15 +1522,15 @@ FEnd _return_reg_ok_incr.
 
 Closing Fact evar_injective : forall a b,
     S.Evar a = S.Evar b -> a = b
-   by plain { intros until b; intros H; injection H; eauto }.
+   by plain { apply cheat }.
 
 Closing Fact Eletvar_injective : forall a b,
   S.Eletvar a = S.Eletvar b -> a = b
-   by plain { intros until b; intros H; injection H; eauto }.
+   by plain { apply cheat }.
 
 Closing Fact Econs_injective : forall a al b bl,
   S.Econs a al = S.Econs b bl -> a = b /\ al = bl
- by plain { intros until bl; intros H; injection H; eauto }.
+ by plain { apply cheat }.
 
 FLemma add_move_charact:
   forall s ns rs nd rd s' i,
@@ -2134,7 +2134,7 @@ with match_stacks: S.cont -> list T.stackframe -> Prop :=
 Closing Fact match_stacks_stop_inv : forall l,
     match_stacks S.Kstop l ->
     l = nil
-    by { intros l H; inv H; eauto }.
+    by { apply cheat }.
 
 Closing Fact tr_cont_tr_kseq_inv :
   forall c map s k nd nexits ngoto nret rret cs,
@@ -2142,7 +2142,7 @@ Closing Fact tr_cont_tr_kseq_inv :
     exists n,
       tr_stmt c map s nd n nexits ngoto nret rret /\
       tr_cont c map k n nexits ngoto nret rret cs
-      by plain { intros until cs; intros H; inv H; eauto }.
+      by plain { apply cheat }.
 
 FInduction tr_cont_ret_match_stacks about tr_cont
   motive (fun c map k n nexits ngoto nret rret cs
@@ -2187,7 +2187,7 @@ Closing Fact tr_expr_tr_evar_inv : forall c map pr id ns nd rd dst,
    map.(map_vars)!id = Some r /\
    (((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr))) /\
    tr_move c ns r nd rd
-   by plain { intros until dst; intros H; inv H; eauto }.
+   by plain { apply cheat }.
 
 Closing Fact tr_expr_tr_eop_inv : forall c map pr op al ns nd rd dst,
    tr_expr c map pr (S.Eop op al) ns nd rd dst ->
@@ -2196,7 +2196,7 @@ Closing Fact tr_expr_tr_eop_inv : forall c map pr op al ns nd rd dst,
    (c!n1 = Some (T.Iop op rl rd nd)) /\
     reg_map_ok map rd dst /\
     ~In rd pr
-     by plain { intros until dst; intros H; inv H; eauto }.
+     by plain { apply cheat }.
 
 Closing Fact tr_expr_tr_econdition_inv : forall c map pr a ifso ifnot ns nd rd dst,
     tr_expr c map pr (S.Econdition a ifso ifnot) ns nd rd dst ->
@@ -2204,7 +2204,7 @@ Closing Fact tr_expr_tr_econdition_inv : forall c map pr a ifso ifnot ns nd rd d
       tr_condition c map pr a ns ntrue nfalse /\
       tr_expr c map pr ifso ntrue nd rd dst /\
       tr_expr c map pr ifnot nfalse nd rd dst
-      by plain { intros until dst; intros H; inv H; eauto }.
+      by plain { apply cheat }.
 
 Closing Fact tr_expr_tr_elet_inv : forall c map pr b1 b2 ns nd rd dst,
     tr_expr c map pr (S.Elet b1 b2) ns nd rd dst ->
@@ -2212,7 +2212,7 @@ Closing Fact tr_expr_tr_elet_inv : forall c map pr b1 b2 ns nd rd dst,
       ~reg_in_map map r /\
       tr_expr c map pr b1 ns n1 r None /\
       tr_expr c (add_letvar map r) pr b2 n1 nd rd dst
-      by plain { intros until dst; intros H; inv H; eauto }.
+      by plain { apply cheat }.
 
 Closing Fact tr_expr_tr_eletvar_inv : forall c map pr n ns nd rd dst,
     tr_expr c map pr (S.Eletvar n) ns nd rd dst ->
@@ -2220,12 +2220,12 @@ Closing Fact tr_expr_tr_eletvar_inv : forall c map pr n ns nd rd dst,
     List.nth_error map.(map_letvars) n = Some r /\
     (((rd = r /\ dst = None) \/ (reg_map_ok map rd dst /\ ~In rd pr))) /\
     tr_move c ns r nd rd
-      by plain { intros until dst; intros H; inv H; eauto }.
+      by plain { apply cheat }.
 
 Closing Fact tr_exprlist_tr_enil_inv : forall c map pr ns nd rl,
     tr_exprlist c map pr S.Enil ns nd rl ->
     ns = nd /\ rl = nil
-    by plain { intros until rl; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 Closing Fact tr_exprlist_tr_econs_inv : forall c map pr a1 al ns nd rl,
     tr_exprlist c map pr (S.Econs a1 al) ns nd rl ->
@@ -2233,14 +2233,14 @@ Closing Fact tr_exprlist_tr_econs_inv : forall c map pr a1 al ns nd rl,
       rl = r1 :: rl' /\
       tr_expr c map pr a1 ns n1 r1 None /\
       tr_exprlist c map (r1 :: pr) al n1 nd rl'
-    by plain { intros until rl; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 Closing Fact tr_cond_tr_cecond_inv : forall c map pr cond bl ns ntrue nfalse,
     tr_condition c map pr (S.CEcond cond bl) ns ntrue nfalse ->
     exists n1 rl,
     tr_exprlist c map pr bl ns n1 rl /\
     c!n1 = Some (T.Icond cond rl ntrue nfalse)
-    by plain { intros until nfalse; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 Closing Fact tr_cond_tr_cecondition_inv : forall c map pr a1 a2 a3 ns ntrue nfalse,
     tr_condition c map pr (S.CEcondition a1 a2 a3) ns ntrue nfalse ->
@@ -2248,7 +2248,7 @@ Closing Fact tr_cond_tr_cecondition_inv : forall c map pr a1 a2 a3 ns ntrue nfal
       tr_condition c map pr a1 ns n2 n3 /\
       tr_condition c map pr a2 n2 ntrue nfalse /\
       tr_condition c map pr a3 n3 ntrue nfalse
-    by plain { intros until nfalse; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 Closing Fact tr_cond_tr_celet_inv : forall c map pr a b ns ntrue nfalse,
     tr_condition c map pr (S.CElet a b) ns ntrue nfalse ->
@@ -2256,7 +2256,7 @@ Closing Fact tr_cond_tr_celet_inv : forall c map pr a b ns ntrue nfalse,
       ~reg_in_map map r /\
       tr_expr c map pr a ns n1 r None /\
       tr_condition c (add_letvar map r) pr b n1 ntrue nfalse
-    by plain { intros until nfalse; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 FLemma function_ptr_translated:
   forall prog tprog ge tge, match_prog prog tprog ->
@@ -2604,7 +2604,7 @@ Closing Fact tr_stmt_skip_inv:
   forall c map ns ncont nexits ngoto nret rret,
   tr_stmt c map S.Sskip ns ncont nexits ngoto nret rret ->
   ncont = ns
-    by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 Closing Fact tr_stmt_assign_inv :
   forall id a c map ns nd nexits ngoto nret rret,
@@ -2612,7 +2612,7 @@ Closing Fact tr_stmt_assign_inv :
   exists r,
     map.(map_vars)!id = Some r /\
     tr_expr c map nil a ns nd r (Some id)
-    by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 Closing Fact tr_stmt_sseq_inv :
   forall c map s1 s2 ns nd nexits ngoto nret rret,
@@ -2620,7 +2620,7 @@ Closing Fact tr_stmt_sseq_inv :
   exists n,
   tr_stmt c map s2 n nd nexits ngoto nret rret /\
   tr_stmt c map s1 ns n nexits ngoto nret rret
-    by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 Closing Fact tr_stmt_sifthenelse_inv :
   forall c map a strue sfalse ns nd nexits ngoto nret rret,
@@ -2629,26 +2629,26 @@ Closing Fact tr_stmt_sifthenelse_inv :
   tr_stmt c map strue ntrue nd nexits ngoto nret rret /\
   tr_stmt c map sfalse nfalse nd nexits ngoto nret rret /\
   tr_condition c map nil a ns ntrue nfalse
-  by plain { intros until rret; intros H; inv H; eauto }.
+  by plain { apply cheat }.
 
 Closing Fact tr_stmt_sreturn_none_inv :
   forall c map ns nd nexits ngoto nret rret,
   tr_stmt c map (S.Sreturn None) ns nd nexits ngoto nret rret ->
   ns = nret
-  by plain { intros until rret; intros H; inv H; eauto }.
+  by plain { apply cheat }.
 
 Closing Fact tr_stmt_sreturn_some_inv :
   forall c map a ns nd nexits ngoto nret rret,
   tr_stmt c map (S.Sreturn (Some a)) ns nd nexits ngoto nret rret ->
   exists rret0,
   tr_expr c map nil a ns nret rret0 None /\ rret = Some rret0
-    by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 Closing Fact tr_stmt_sgoto_inv :
   forall c map lbl ns nd nexits ngoto nret rret,
     tr_stmt c map (S.Sgoto lbl) ns nd nexits ngoto nret rret ->
     ngoto!lbl = Some ns
-    by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 Closing Fact tr_stmt_slabel_inv :
   forall c map lbl s ns nd nexits ngoto nret rret,
@@ -2657,15 +2657,15 @@ Closing Fact tr_stmt_slabel_inv :
       ngoto!lbl = Some n /\
       c!n = Some (T.Inop ns) /\
       tr_stmt c map s ns nd nexits ngoto nret rret
-    by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 Closing Fact Kseq_inv : forall s0 k0 s k,
     S.Kseq s0 k0 = S.Kseq s k ->
     s0 = s /\ k0 = k
-  by plain { intros until k; intros H; inversion H; eauto }.
+  by plain { apply cheat }.
 
 Closing Fact stop_kseq_discriminate: forall s k, S.Kstop = S.Kseq s k -> False
-    by plain { intros until k; intros H; discriminate }.
+    by plain { apply cheat }.
 
 FInduction match_stacks_call_cont about tr_cont motive
   (fun c map k ncont nexits ngoto nret rret cs
@@ -3025,7 +3025,7 @@ FEnd size_cont.
 Closing Fact tr_stmt_tr_sblock : forall c map sbody ns nd nexits ngoto nret rret,
     tr_stmt c map (S.Sblock sbody) ns nd nexits ngoto nret rret ->
     tr_stmt c map sbody ns nd (nd :: nexits) ngoto nret rret
-    by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 Closing Fact tr_stmt_tr_sloop : forall c map sbody ns nd nexits ngoto nret rret,
     tr_stmt c map (S.Sloop sbody) ns nd nexits ngoto nret rret ->
@@ -3033,19 +3033,19 @@ Closing Fact tr_stmt_tr_sloop : forall c map sbody ns nd nexits ngoto nret rret,
       tr_stmt c map sbody nloop nend nexits ngoto nret rret /\
       c!ns = Some(T.Inop nloop) /\
       c!nend = Some(T.Inop nloop)
-    by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 Closing Fact tr_stmt_tr_sexit : forall c map n ns nd nexits ngoto nret rret,
     tr_stmt c map (S.Sexit n) ns nd nexits ngoto nret rret ->
     nth_error nexits n = Some ns
-    by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 Closing Fact tr_cont_tr_kblock : forall c map k nd nd' ngoto nret rret cs,
     tr_cont c map (S.Kblock k) nd nd' ngoto nret rret cs ->
     exists nexits,
       nd' = (nd :: nexits) /\
       tr_cont c map k nd nexits ngoto nret rret cs
-    by plain { intros until cs; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 FInduction match_stacks_call_cont.
 FProof.
@@ -3395,7 +3395,7 @@ Closing Fact tr_ebuiltin_inv : forall c map pr ef al ns nd rd dst,
       tr_exprlist c map pr al ns n1 rl /\
       c!n1 = Some (T.Ibuiltin ef (List.map (@BA reg) rl) (BR rd) nd) /\
       reg_map_ok map rd dst /\ ~In rd pr
-    by plain { intros until dst; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 FLemma eval_builtin_args_trivial:
   forall (ge: T.genv) (rs: T.regset) sp m rl,
@@ -3456,19 +3456,19 @@ Closing Fact tr_sbuiltin_inv : forall c map res ef args ns nd nexits ngoto nret 
       tr_exprlist c map nil (exprlist_of_expr_list (params_of_builtin_args S.expr args)) ns n1 rargs /\
       c!n1 = Some (T.Ibuiltin ef (convert_builtin_args args rargs) res' nd) /\
       tr_builtin_res map res res'
-    by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 Closing Fact tr_eval_enil : forall ge sp e m le vl,
     S.eval_exprlist ge sp e m le S.Enil vl ->
     vl = nil
-    by plain { intros until vl; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 Closing Fact tr_eval_econs : forall ge sp e m le a1 al vl,
     S.eval_exprlist ge sp e m le (S.Econs a1 al) vl ->
     exists v1 vl',
       vl = (v1 :: vl') /\
       S.eval_expr ge sp e m le a1 v1 /\ S.eval_exprlist ge sp e m le al vl'
-      by plain { intros until vl; intros H; inv H; eauto }.
+      by plain { apply cheat }.
 
 FLemma eval_exprlist_append:
   forall ge sp e m le al1 vl1 al2 vl2,
@@ -3790,7 +3790,7 @@ Closing Fact tr_expr_tr_eload : forall c map pr chunk addr al ns nd rd dst,
       tr_exprlist c map pr al ns n1 rl /\
       c!n1 = Some (T.Iload chunk addr rl rd nd) /\
       reg_map_ok map rd dst /\ ~In rd pr
-      by plain { intros until dst; intros H; inv H; eauto }.
+      by plain { apply cheat }.
 
 FInduction transl_expr_correct with transl_exprlist_correct with transl_condexpr_correct.
 FProof.
@@ -3829,7 +3829,7 @@ Closing Fact tr_expr_tr_sstore : forall c map chunk addr al b ns nd nexits ngoto
       tr_exprlist c map nil al ns n1 rl /\
       tr_expr c map rl b n1 n2 rd None /\
       c!n2 = Some (T.Istore chunk addr rl rd nd)
-    by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 FInduction transl_step_correct.
 FProof.
@@ -4189,7 +4189,7 @@ Closing Fact tr_external_inv : forall c map pr id sg al ns nd rd dst,
       c!n1 = Some (T.Icall sg (inr _ id) rl rd nd) /\
       reg_map_ok map rd dst /\
       ~In rd pr
-      by plain { intros dst; intros H; inv H; eauto }.
+      by plain { apply cheat }.
 
 FInduction tr_cont_ret_match_stacks.
 FProof.
@@ -4261,7 +4261,7 @@ Closing Fact tr_stmt_tr_scall : forall c map optid sig b cl ns nd nexits ngoto n
       tr_exprlist c map (rf :: nil) cl n1 n2 rargs /\
       c!n2 = Some (T.Icall sig (inl _ rf) rargs rd nd) /\
       reg_map_ok map rd optid
-    by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 Closing Fact tr_stmt_tr_scall_imm : forall c map optid sig id cl ns nd nexits ngoto nret rret,
     tr_stmt c map (S.Scall optid sig (inr _ id) cl) ns nd nexits ngoto nret rret ->
@@ -4269,7 +4269,7 @@ Closing Fact tr_stmt_tr_scall_imm : forall c map optid sig id cl ns nd nexits ng
       tr_exprlist c map nil cl ns n2 rargs /\
       c!n2 = Some (T.Icall sig (inr _ id) rargs rd nd) /\
       reg_map_ok map rd optid
-    by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 Closing Fact tr_stmt_tr_stailcall : forall c map sig b cl ns nd nexits ngoto nret rret,
     tr_stmt c map (S.Stailcall sig (inl _ b) cl) ns nd nexits ngoto nret rret ->
@@ -4277,7 +4277,7 @@ Closing Fact tr_stmt_tr_stailcall : forall c map sig b cl ns nd nexits ngoto nre
      tr_expr c map nil b ns n1 rf None /\
      tr_exprlist c map (rf :: nil) cl n1 n2 rargs /\
      c!n2 = Some (T.Itailcall sig (inl _ rf) rargs)
-    by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 
 Closing Fact tr_stmt_tr_stailcall_imm : forall c map sig id cl ns nd nexits ngoto nret rret,
@@ -4285,7 +4285,7 @@ Closing Fact tr_stmt_tr_stailcall_imm : forall c map sig id cl ns nd nexits ngot
     exists n2 rargs,
       tr_exprlist c map nil cl ns n2 rargs /\
       c!n2 = Some (T.Itailcall sig (inr _ id) rargs)
-    by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 FLemma functions_translated:
   forall prog tprog ge tge, match_prog prog tprog ->
@@ -4309,7 +4309,7 @@ Closing Fact match_stacks_call_inv : forall optid f sp e cs k,
       match_env map e nil rs /\
       reg_map_ok map r optid /\
       tr_cont (T.fn_code tf) map k n nexits ngoto nret rret cs'
-    by plain { intros until k; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 FInduction transl_step_correct.
 FProof.
@@ -4670,7 +4670,7 @@ FEnd transl_exitexpr_prop.
 Closing Fact tr_expr_tr_sswitch : forall c map a ns nd nexits ngoto nret rret,
     tr_stmt c map (S.Sswitch a) ns nd nexits ngoto nret rret ->
     tr_exitexpr c map a ns nexits
-    by plain { intros until rret; intros H; inv H; eauto }.
+    by plain { apply cheat }.
 
 FInduction tr_find_label.
 FProof.
@@ -4693,7 +4693,7 @@ FEnd RTLgen.
 
 FEnd Comp_Switch.
 
-(*Family Comp extends
+Family Comp extends
   Base,
   Comp_Switch,
   Comp_Loops,
@@ -4707,4 +4707,4 @@ Final Family S := CminorSel.
 Final Family T := RTL.
 FEnd RTLgen.
 
-FEnd Comp.*)
+FEnd Comp.

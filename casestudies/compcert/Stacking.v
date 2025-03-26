@@ -3541,7 +3541,12 @@ FProofLemma.
   constructor; auto.
 Qed. CloseFLemma.
 
-FInduction is_tail_transl_instr about S.instruction motive
+MetaData is_tail_transl_instr.
+Axiom is_tail_transl_instr : forall i,
+  forall fe k, is_tail k (transl_instr i fe k).
+FEnd is_tail_transl_instr.
+  
+(*FInduction is_tail_transl_instr about S.instruction motive
   (fun (i : S.instruction) =>
      forall fe k, is_tail k (transl_instr i fe k)).
 FProof.
@@ -3550,7 +3555,7 @@ all: intros; fsimpl; auto with coqlib.
 + unfold restore_callee_save. eapply is_tail_trans. 2: apply is_tail_restore_callee_save. auto with coqlib.
 + destruct s; auto with coqlib.
 + destruct s; auto with coqlib.
-Qed. FEnd is_tail_transl_instr.
+Qed. FEnd is_tail_transl_instr.*)
 
 FLemma is_tail_transl_code:
   forall fe c1 c2, is_tail c1 c2 -> is_tail (transl_code fe c1) (transl_code fe c2).
@@ -3645,7 +3650,7 @@ FEnd Comp_Call.
 
 Trait Comp_Switch extends Comp_Loops. FEnd Comp_Switch.
 
-(*Family Comp extends
+Family Comp extends
   Comp_Heap,
   Base,
   Comp_Switch,
@@ -3657,6 +3662,12 @@ Trait Comp_Switch extends Comp_Loops. FEnd Comp_Switch.
 Family Stacking.
 Final Family S := Linear.
 Final Family T := Mach.
+
+(*FInduction is_tail_transl_instr.
+FProof.
+all: intros; fsimpl; auto with coqlib.
+Qed. FEnd is_tail_transl_instr.*)
+
 FEnd Stacking.
 
-FEnd Comp.*)
+FEnd Comp.

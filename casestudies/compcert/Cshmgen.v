@@ -15,13 +15,13 @@ Open Scope asm.
 Require Import Clight.
 Require Import Csharpminor.
 
-
+Require Import CfamBase.
 Trait Base.
 
 Family Cshmgen.
 Family S extends Clight.
 
-Inherit find_label.
+(*Inherit find_label.
 
 MetaData function_entry2.
 Inductive function_entry2 (ge: genv) (f: function) (vargs: list val) (m: mem) (e: env) (le: temp_env) (m': mem) : Prop :=
@@ -33,7 +33,7 @@ Inductive function_entry2 (ge: genv) (f: function) (vargs: list val) (m: mem) (e
       bind_parameter_temps f.(fn_params) vargs (create_undef_temps f.(fn_temps)) = Some le ->
       function_entry2 ge f vargs m e le m'.
 FEnd function_entry2.
-FOverride Definition function_entry := function_entry2.
+FOverride Definition function_entry := function_entry2.*)
 FEnd S.
 Family T extends Csharpminor. FEnd T.
 
@@ -2521,18 +2521,18 @@ FEnd Cshmgen.
 
 FEnd Comp_Switch.
 
-(*Family Comp extends 
+Family Comp extends 
   Base,
-  Comp_Switch,
   Comp_Loops,
+  Comp_Builtin,
   Comp_Heap, 
   Comp_Field, 
-  Comp_Call,  
-  Comp_Builtin. 
+  Comp_Call,
+  Comp_Switch.
 
 Family Cshmgen.
 Final Family S := Clight.
 Final Family T := Csharpminor.
 FEnd Cshmgen.
 
-FEnd Comp.*)
+FEnd Comp.

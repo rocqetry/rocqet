@@ -27,15 +27,14 @@ From Rocqet Require Import Op.
 Require Import CfamBase.
 Require Import Csharpminor.
 Require Import Cminor.
-Require Import Cfamtransl.
+(*Require Import Cfamtransl.*)
 
 From Rocqet Require Import Errors.
 Local Open Scope error_monad_scope.
 
 Trait Base.
 
-Family Cminorgen extends Cfamtransl.
-
+Family Cminorgen.
 Family S extends Csharpminor. FEnd S.
 Family T extends Cminor. FEnd T.
 
@@ -49,9 +48,10 @@ Case Osingleconst n := (T.Osingleconst n).
 Case Olongconst n := (T.Olongconst n).
 FEnd transl_constant.
 
-FOverride Definition earg := compilenv.
+FDefinition earg := compilenv.
 
-FRecursion transl_expr.
+FRecursion transl_expr about S.expr motive (fun (_ : S.expr) => earg -> res T.expr) by _rect.
+Case Evar id := (fun _ => OK (T.Evar id)).
 Case Econst c := (fun earg => OK (T.Econst (transl_constant c))).
 Case Eunop op e1 := 
   (fun arg => do te1 <- transl_expr e1 arg; OK (T.Eunop op te1)).
@@ -62,9 +62,32 @@ Case Ebinop op e1 e2 :=
      OK (T.Ebinop op te1 te2)).
 FEnd transl_expr.
 
-FOverride Definition sarg := exit_env.
+FDefinition sarg := exit_env.
 
-FRecursion transl_stmt.
+FRecursion transl_stmt about S.stmt motive (fun (_ : S.stmt) => earg -> sarg -> res T.stmt) by _rect.
+Case Sskip := (fun _ _ => OK (T.Sskip)).
+Case Sassign id e :=
+  (fun earg _ =>
+     do te <- transl_expr e earg;
+     OK (T.Sassign id te)).
+Case Sseq s1 s2 :=
+ (fun earg sarg =>
+    do ts1 <- transl_stmt s1 earg sarg; 
+    do ts2 <- transl_stmt s2 earg sarg; 
+    OK (T.Sseq ts1 ts2)).
+Case Sreturn expr :=
+  (fun earg _ =>
+     match expr with
+     | None => OK (T.Sreturn None)
+     | Some expr =>
+          do te <- transl_expr expr earg;
+          OK (T.Sreturn (Some te))
+     end).
+Case Slabel lbl s :=
+  (fun earg sarg =>                          
+     do ts <- transl_stmt s earg sarg;
+     OK (T.Slabel lbl ts)).
+Case Sgoto lbl := (fun earg sarg => OK (T.Sgoto lbl)).
 Case Sifthenelse e s1 s2 :=
  (fun earg sarg => 
     do te <- transl_expr e earg;
@@ -103,13 +126,17 @@ fun (cenv: compilenv) (stacksize: Z) (f: S.function) =>
         stacksize
         tbody).
 
-FOverride Definition transl_function := fun f =>
+FDefinition transl_function := fun f =>
   let (cenv, stacksize) := build_compilenv f in
   if zle stacksize Ptrofs.max_unsigned
   then transl_funbody cenv stacksize f
   else Error(msg "Cminorgen: too many local variables, stack size exceeded").
 
-Inherit transl_program.
+FDefinition transl_fundef : S.fundef -> res T.fundef := fun f =>
+   transf_partial_fundef transl_function f.
+
+FDefinition transl_program : S.program -> res T.program := fun p =>
+  transform_partial_program transl_fundef p.
 
 (* Correctness *)
 
@@ -1626,23 +1653,9 @@ FEnd Cminorgen.
 
 FEnd Base.
 
-(* moved to base *)
-(*Trait Comp_Float extends Base.
-
-Family Cminorgen.
-
-FRecursion transl_constant.
-Case Ofloatconst n := (T.Ofloatconst n).
-Case Osingleconst n := (T.Osingleconst n).
-FEnd transl_constant.
-
-FEnd Cminorgen.
-
-FEnd Comp_Float. *)                 
-
 Trait Comp_Loops extends Base.
 
-Family Cminorgen extends Cfamtransl.
+Family Cminorgen.
 Family S extends Csharpminor. FEnd S.
 Family T extends Cminor. FEnd T.
 
@@ -1684,11 +1697,11 @@ FRecursion seq_left_depth.
 Case _ := O.
 FEnd seq_left_depth.
 
-FInduction match_call_cont.
+(*FInduction match_call_cont.
 FProof.
 + apply cheat.
 + apply cheat.
-Qed. FEnd match_call_cont. 
+Qed. FEnd match_call_cont. *)
 
 FInduction transl_find_label.
 FProof.
@@ -1713,7 +1726,7 @@ FEnd Comp_Loops.
 
 Trait Comp_Builtin extends Base.
 
-Family Cminorgen extends Cfamtransl.
+Family Cminorgen.
 Family S extends Csharpminor. FEnd S.
 Family T extends Cminor. FEnd T.
 
@@ -1758,9 +1771,9 @@ FEnd Cminorgen.
 
 FEnd Comp_Builtin.
 
-Trait Comp_Heap extends Base.
+Trait Comp_Heap extends Base, Comp_Builtin.
 
-Family Cminorgen extends Cfamtransl.
+Family Cminorgen.
 Family S extends Csharpminor. FEnd S.
 Family T extends Cminor. FEnd T.
 
@@ -1818,7 +1831,7 @@ FEnd Comp_Field.
 
 Trait Comp_Call extends Base, Comp_Builtin.
 
-Family Cminorgen extends Cfamtransl.
+Family Cminorgen.
 Family S extends Csharpminor. FEnd S.
 Family T extends Cminor. FEnd T.
 
@@ -1845,10 +1858,10 @@ FRecursion seq_left_depth.
 Case _ := O.
 FEnd seq_left_depth.
 
-FInduction match_call_cont.
+(*FInduction match_call_cont.
 FProof.
 + apply cheat.
-Qed. FEnd match_call_cont. 
+Qed. FEnd match_call_cont. *)
 
 FInduction transl_find_label.
 FProof.
@@ -1867,9 +1880,9 @@ FEnd Cminorgen.
 FEnd Comp_Call.
 
 From Rocqet Require Import Switch.
-Trait Comp_Switch extends Comp_Loops.
+Trait Comp_Switch extends Base, Comp_Loops.
 
-Family Cminorgen extends Cfamtransl.
+Family Cminorgen.
 Family S extends Csharpminor. FEnd S.
 Family T extends Cminor. FEnd T.
 
@@ -1933,8 +1946,7 @@ Family Comp extends
   Comp_Loops,
   Comp_Heap, 
   Comp_Field, 
-  Comp_Call,
-  (* Comp_Float,*)
+  Comp_Call,  
   Comp_Builtin. 
 
 Family Cminorgen.

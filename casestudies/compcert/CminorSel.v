@@ -28,13 +28,14 @@ Local Open Scope string_scope.
 Local Open Scope list_scope.
 Open Scope asm.
 
-Require Import CfamBase.
+(* Require Import CfamBase.*)
 
 Trait Base.
 
-Family CminorSel extends Cfam.
+Family CminorSel. 
 
 FInductive expr : Type :=
+| Evar : ident -> expr (* reading a temporary variable *)  
 | Econdition : condexpr -> expr -> expr -> expr
 | Eop : operation -> exprlist -> expr
 | Elet : expr -> expr -> expr
@@ -46,8 +47,16 @@ with condexpr : Type :=
 | CEcond : condition -> exprlist -> condexpr
 | CEcondition : condexpr -> condexpr -> condexpr -> condexpr
 | CElet: expr -> condexpr -> condexpr.
-       
-FInductive stmt : Type := Sifthenelse: condexpr -> stmt -> stmt -> stmt.
+
+FDefinition label := ident.
+FInductive stmt : Type :=
+| Sskip: stmt
+| Sassign : ident -> expr -> stmt
+| Sseq: stmt -> stmt -> stmt                    
+| Sreturn: option expr -> stmt
+| Slabel: label -> stmt -> stmt
+| Sgoto: label -> stmt  
+| Sifthenelse: condexpr -> stmt -> stmt -> stmt.
 
 MetaData fn binds fn_sig, fn_params, fn_vars, fn_stackspace, fn_body.
 Record fn : Type := mkfunction {
@@ -59,19 +68,115 @@ Record fn : Type := mkfunction {
 }.
 FEnd fn.
 
-FOverride Definition function := fn.
-FOverride Definition function_body := fn_body.
-FOverride Definition function_locals := fn_vars.
-FOverride Definition function_params := fn_params.
-FOverride Definition function_sig := fn_sig.
+FDefinition function := fn.
+FDefinition function_body := fn_body.
+FDefinition function_locals := fn_vars.
+FDefinition function_params := fn_params.
+FDefinition function_sig := fn_sig.
+
+FDefinition fundef := AST.fundef function.
+FDefinition program := AST.program fundef unit.
+
+FDefinition funsig := fun (fd: fundef) => 
+  match fd with
+  | AST.Internal f => function_sig f
+  | AST.External ef => ef_sig ef
+  end.
+
+FDefinition genv := Genv.t fundef unit.
 
 (* stack pointer *)
 (* Vptr sp Ptrofs.zero *)
-FOverride Definition fenv := block.   
-FOverride Definition free_fenv := fun m sp f => Mem.free m sp 0 (fn_stackspace f).          
-FOverride Definition alloc_fenv := fun sp m f sp' m' => Mem.alloc m 0 (fn_stackspace f) = (m', sp').
+FDefinition fenv := block.
+FOpaque Definition empty_fenv : fenv := cheat.
+
+FDefinition env := PTree.t val.            
+FDefinition empty_env : env := PTree.empty val.
+       
+MetaData set_params.
+Fixpoint set_params (vl: list val) (il: list ident) {struct il} : env :=
+ match il, vl with
+ | i1 :: is, v1 :: vs => PTree.set i1 v1 (set_params vs is)
+ | i1 :: is, nil => PTree.set i1 Vundef (set_params nil is)
+ | _, _ => PTree.empty val
+ end.
+FEnd set_params.
+
+MetaData set_locals.
+Fixpoint set_locals (il: list ident) (e: env) {struct il} : env :=
+  match il with
+  | nil => e
+  | i1 :: is => PTree.set i1 Vundef (set_locals is e)
+  end.
+FEnd set_locals.
+       
+FDefinition init_env : function -> list val -> env := fun f vargs => 
+  set_locals (function_locals f) (set_params vargs (function_params f)).            
+       
+MetaData create_undef_temps.
+Fixpoint create_undef_temps (temps: list ident) : env :=
+ match temps with
+ | nil => PTree.empty val
+ | id :: temps' => PTree.set id Vundef (create_undef_temps temps')
+end.
+FEnd create_undef_temps.
+
+MetaData bind_parameters.
+Fixpoint bind_parameters (formals: list ident) (args: list val)
+             (le: env) : option env :=
+ match formals, args with
+ | nil, nil => Some le
+ | id :: xl, v :: vl => bind_parameters xl vl (PTree.set id v le)
+ | _, _ => None
+ end.
+FEnd bind_parameters.
+
+FDefinition free_fenv : mem -> fenv -> function -> option mem := fun m sp f => Mem.free m sp 0 (fn_stackspace f).
+FDefinition alloc_fenv : fenv -> mem -> function -> fenv -> mem -> Prop := fun sp m f sp' m' => Mem.alloc m 0 (fn_stackspace f) = (m', sp').
+
+FInductive cont: Type :=
+| Kstop: cont
+| Kseq: stmt -> cont -> cont.
+                   
+MetaData state binds State, Callstate, Returnstate.
+Inductive state: Type :=
+  | State:(* Execution within a function *)
+      forall (f: function)(* currently executing function *)
+             (s: stmt)(* statement under consideration *)
+             (k:  cont)(* its continuation -- what to do next *)
+             (sp: fenv) (* current "function" environment: i.e stackspace, ... *)
+             (e: env)(* current local environment *)
+             (m: mem),(* current memory state *)
+      state
+  | Callstate:(* Invocation of a function *)
+      forall (f: fundef)(* function to invoke *)
+             (args: list val)(* arguments provided by caller *)
+             (k: cont)(* what to do next *)
+             (m: mem),(* memory state *)
+      state
+  | Returnstate:(* Return from a function *)
+      forall (v: val)(* Return value *)
+             (k: cont)(* what to do next *)
+             (m: mem),(* memory state *)
+      state.
+FEnd state.
+            
+FRecursion call_cont about cont motive (fun (_ : cont) => cont) by _rect.
+Case Kstop := Kstop.
+Case Kseq s c := (call_cont c).             
+FEnd call_cont.
+               
+FRecursion is_call_cont about cont motive (fun (_ : cont) => Prop) by _rect.
+Case Kstop := True.                   
+Case Kseq s c := False.
+FEnd is_call_cont.              
+
+FDefinition letenv := list val.
 
 FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
+| eval_Evar: forall ge lenv e le m id v,
+    PTree.get id le = Some v ->
+    eval_expr ge e le m lenv (Evar id) v  
 | eval_Eop: forall ge sp e m le op al vl v,
     eval_exprlist ge sp e m le al vl ->
     eval_operation ge (Vptr sp Ptrofs.zero) op vl m = Some v ->
@@ -107,16 +212,56 @@ with eval_condexpr: genv -> fenv -> env -> mem -> letenv -> condexpr -> bool -> 
     eval_condexpr ge sp e m (v1 :: le) b v2 ->
     eval_condexpr ge sp e m le (CElet a b) v2.
 
-FRecursion find_label.
+FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect.
+Case Sseq s1 s2 := 
+  (fun lbl k => 
+    match find_label s1 lbl (Kseq s2 k) with
+    | Some sk => Some sk
+    | None => find_label s2 lbl k
+    end).
+Case Slabel lbl' s' :=  
+  (fun lbl k =>  if ident_eq lbl lbl' then Some(s', k) else find_label s' lbl k).
 Case Sifthenelse c s1 s2 :=
   (fun lbl k =>
     match find_label s1 lbl k with
     | Some sk => Some sk
     | None => find_label s2 lbl k
     end).
+Case _ := (fun lbl k => None).
 FEnd find_label.
 
 FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_skip_seq: forall ge f s k e le m,
+    step ge (State f Sskip (Kseq s k) e le m)
+      E0 (State f s k e le m)              
+| step_skip_call: forall ge f k e le m m',
+    is_call_cont k ->                       
+    free_fenv m e f = Some m' ->
+    step ge (State f Sskip k e le m)
+      E0 (Returnstate Vundef k m')
+| step_assign: forall lenv ge f id a k e le m v,
+    eval_expr ge e le m lenv a v ->
+    step ge (State f (Sassign id a) k e le m)
+      E0 (State f Sskip k e (PTree.set id v le) m)
+| step_seq: forall ge f s1 s2 k e le m,
+    step ge (State f (Sseq s1 s2) k e le m)
+      E0 (State f s1 (Kseq s2 k) e le m)              
+| step_return_0: forall ge f k e le m m',                       
+    free_fenv m e f = Some m' ->
+    step ge (State f (Sreturn None) k e le m)
+      E0 (Returnstate Vundef (call_cont k) m')    
+| step_return_1: forall lenv ge f a k e le m v m',
+    eval_expr ge e le m lenv a v ->
+    free_fenv m e f = Some m' ->
+    step ge (State f (Sreturn (Some a)) k e le m)
+      E0 (Returnstate v (call_cont k) m')
+| step_label: forall ge f lbl s k e le m,
+      step ge (State f (Slabel lbl s) k e le m)
+        E0 (State f s k e le m)
+| step_goto: forall ge f lbl k e le m s' k',
+      find_label (function_body f) lbl (call_cont k) = Some(s', k') ->
+      step ge (State f (Sgoto lbl) k e le m)
+        E0 (State f s' k' e le m)  
 | step_ifthenelse: forall ge f c s1 s2 k sp e m b,
    eval_condexpr ge sp e m nil c b ->
    step ge (State f (Sifthenelse c s1 s2) k sp e m)
@@ -127,19 +272,82 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
       set_locals (self__CminorSel.fn_vars f) (set_params vargs (self__CminorSel.fn_params f)) = e ->
       step ge (Callstate (AST.Internal f) vargs k m)
         E0 (State f (self__CminorSel.fn_body f) k sp e m').
+
+
+MetaData initial_state.
+Inductive initial_state (p: program): state -> Prop :=
+| initial_state_intro: forall b f m0,
+    let ge := Genv.globalenv p in
+    Genv.init_mem p = Some m0 ->
+    Genv.find_symbol ge p.(AST.prog_main) = Some b ->
+    Genv.find_funct_ptr ge b = Some f ->
+    funsig f = signature_main ->               
+    initial_state p (Callstate f nil Kstop m0).
+FEnd initial_state.
+            
+MetaData final_state.
+Inductive final_state: state -> int -> Prop :=
+| final_state_intro: forall r m,
+   final_state (Returnstate (Vint r) Kstop m) r.
+FEnd final_state.
+
 FEnd CminorSel.
 
 FEnd Base.
 
 Trait Comp_Loops extends Base.
 
-Family CminorSel extends Cfam. FEnd CminorSel.
+Family CminorSel.
+FInductive stmt : Type :=
+| Sloop: stmt -> stmt
+| Sblock: stmt -> stmt
+| Sexit: nat -> stmt.
+
+FInductive cont: Type :=
+| Kblock: cont -> cont.  
+
+FRecursion call_cont.
+Case Kblock k := (call_cont k).
+FEnd call_cont.
+               
+FRecursion is_call_cont.
+Case _ := False.
+FEnd is_call_cont.
+
+FRecursion find_label.
+Case Sloop s1 :=
+   (fun lbl k => find_label s1 lbl (Kseq (Sloop s1) k)).
+Case Sblock s1 := 
+  (fun lbl k => find_label s1 lbl (Kblock k)).
+Case _ := (fun lbl k => None).
+FEnd find_label.
+
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_skip_block: forall ge f k sp e m,
+      step ge (State f Sskip (Kblock k) sp e m)
+        E0 (State f Sskip k sp e m)  
+| step_loop: forall ge f s k sp e m,
+      step ge (State f (Sloop s) k sp e m)
+        E0 (State f s (Kseq (Sloop s) k) sp e m)
+| step_block: forall ge f s k e le m,
+      step ge (State f (Sblock s) k e le m)
+        E0 (State f s (Kblock k) e le m)
+| step_exit_seq: forall ge f n s k e le m,
+      step ge (State f (Sexit n) (Kseq s k) e le m)
+        E0 (State f (Sexit n) k e le m)
+| step_exit_block_0: forall ge f k e le m,
+      step ge (State f (Sexit O) (Kblock k) e le m)
+        E0 (State f Sskip k e le m)
+| step_exit_block_S: forall ge f n k e le m,
+      step ge (State f (Sexit (S n)) (Kblock k) e le m)
+        E0 (State f (Sexit n) k e le m).
+FEnd CminorSel.
 
 FEnd Comp_Loops.
 
 Trait Comp_Switch extends Base, Comp_Loops.
 
-Family CminorSel extends Cfam.
+Family CminorSel.
 
 Inherit expr.
 
@@ -190,7 +398,7 @@ FEnd Comp_Switch.
 
 Trait Comp_Builtin extends Base.
 
-Family CminorSel extends Cfam.
+Family CminorSel.
 FInductive expr : Type :=
 | Ebuiltin : external_function -> exprlist -> expr.
 
@@ -257,19 +465,42 @@ FEnd Comp_Builtin.
 
 Trait Comp_External extends Base.
 
-Family CminorSel extends Cfam. FEnd CminorSel.
+Family CminorSel.
+FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_external_function: forall ge ef vargs k m t vres m',
+   external_call ef (Genv.to_senv ge) vargs m t vres m' ->
+   step ge (Callstate (AST.External ef) vargs k m)
+      t (Returnstate vres k m').
+FEnd CminorSel.
 
 FEnd Comp_External.
 
 Trait Comp_Call extends Base, Comp_Builtin, Comp_External.
 
-Family CminorSel extends Cfam.
+Family CminorSel.
 FInductive expr : Type :=
 | Eexternal : ident -> signature -> exprlist -> expr.
 
 FInductive stmt : Type :=
 | Scall : option ident -> signature -> expr + ident -> exprlist -> stmt
-| Stailcall: signature -> expr + ident -> exprlist -> stmt.
+  | Stailcall: signature -> expr + ident -> exprlist -> stmt.
+
+FInductive cont: Type :=
+  | Kcall: option ident -> function -> env -> fenv -> cont -> cont.
+
+FRecursion call_cont.
+Case Kcall a b c d e := (Kcall a b c d e).
+FEnd call_cont.
+               
+FRecursion is_call_cont.
+Case Kcall a b c d e := True.
+FEnd is_call_cont.
+
+FDefinition set_optvar := fun (optid: option ident) (v: val) (e: env) =>
+  match optid with
+  | None => e
+  | Some id => PTree.set id v e
+  end.
 
 FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
 | eval_Eexternal: forall ge sp e m le id sg al b ef vl v,
@@ -295,6 +526,9 @@ Inductive eval_expr_or_symbol: genv -> fenv -> env -> mem -> letenv -> expr + id
 FEnd eval_expr_or_symbol.
 
 FInductive step : genv -> state -> trace -> state -> Prop :=
+| step_return: forall ge v optid f sp e k m,
+      step ge (Returnstate v (Kcall optid f e sp k) m)
+        E0 (State f Sskip k sp (set_optvar optid v e) m)  
 | step_call: forall ge f optid sig a bl k sp e m vf vargs fd,
    eval_expr_or_symbol ge sp e m nil a vf ->
    eval_exprlist ge sp e m nil bl vargs ->
@@ -316,7 +550,7 @@ FEnd Comp_Call.
 
 Trait Comp_Heap extends Base, Comp_Builtin.
 
-Family CminorSel extends Cfam.
+Family CminorSel.
 FInductive expr : Type :=
 | Eload : memory_chunk -> addressing -> exprlist -> expr.
 
@@ -349,7 +583,7 @@ FEnd Comp_Heap.
 
 Trait Comp_Field extends Base, Comp_Heap.
 
-Family CminorSel extends Cfam.
+Family CminorSel.
 FEnd CminorSel.
 
 FEnd Comp_Field.
