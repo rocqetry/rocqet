@@ -334,6 +334,13 @@ Closing Fact match_cont_seq_inv : forall cunit s k tk,
       match_cont cunit k k'
 by plain { intros until tk; intros H; inv H; eauto }.
 
+
+Closing Fact match_call_cont_stop_inv : forall tk,
+    match_call_cont S.Kstop tk ->
+    tk = T.Kstop
+by plain { intros until tk; intros H; inv H; eauto }.       
+           
+
 MetaData match_states.
 Inductive match_states (cunit: S.program) (prog: S.program): S.state -> T.state -> Prop :=
   | match_state: forall f f' s k s' k' sp e m e' m'
@@ -445,6 +452,25 @@ all: intros until k'; simpl; fsimpl; intros MC SE; fsimpl in SE; try (monadInv S
   intuition. apply H0; auto.
 Qed. FEnd find_label_commut.
 
+
+FLemma function_ptr_translated:
+  forall prog tprog ge tge, match_prog prog tprog ->
+  Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
+  forall (b: block) (f: S.fundef),
+  Genv.find_funct_ptr ge b = Some f ->
+  exists cu tf, Genv.find_funct_ptr tge b = Some tf /\ match_fundef cu f tf /\ linkorder cu prog.
+FProofLemma.
+intros until tge; intros TRANSL A B. subst.
+apply (Genv.find_funct_ptr_match TRANSL).
+Qed. CloseFLemma.
+
+FLemma sig_function_translated:
+  forall cu f tf, match_fundef cu f tf -> T.funsig tf = S.funsig f.
+FProofLemma.
+intros. unfold match_fundef in H.
+(*destruct H as (hf & P & Q).*) destruct f; monadInv H; auto. monadInv EQ; auto.
+Qed. CloseFLemma.
+
 Require Import Rocqet.LibTactics.
 
 FInduction transl_step_correct about S.step motive
@@ -506,7 +532,8 @@ all: intros until cunit; intros LINK TRANSL A B; intros T1 ME; inv ME; fsimpl in
   assert (Val.bool_of_val v' b). inv B. auto. inv b0.
   left; exists (T.State f' (if b then x else x0) k' sp e' m'); split.
   apply plus_one; fconstructor; eauto. eapply eval_condexpr_of_expr; eauto.
-  assert (G: lenv = nil) by (apply cheat). (* We know lenv = nil from CompCert, our transl_expr_correct theorem statement needs to be adjusted *)
+  (* We know lenv = nil from CompCert, our transl_expr_correct theorem statement needs to be adjusted *)
+  assert (G: lenv = nil) by (apply cheat).
   subst. assumption.
   constructor; eauto. destruct b; eauto.
   (* internal function *)
@@ -520,22 +547,34 @@ all: intros until cunit; intros LINK TRANSL A B; intros T1 ME; inv ME; fsimpl in
   apply set_locals_lessdef. apply set_params_lessdef; auto.
 Qed. FEnd transl_step_correct.
 
+FLemma sel_initial_states:
+  forall prog tprog ge tge cunit (LINK: linkorder cunit prog) (TRANSL: match_prog prog tprog),
+  Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
+  forall S', S.initial_state prog S' ->
+  exists R, T.initial_state tprog R /\ match_states cunit prog S' R.
+FProofLemma.
+destruct 5. subst ge0. rewrite -> H in H3. 
+  exploit function_ptr_translated; eauto. intros (cu & f' & A & B & C).  
+  econstructor; split.  
+  econstructor.
+  eapply (Genv.init_mem_match TRANSL); eauto. 
+  rewrite (match_program_main TRANSL). (*fold tge.*) rewrite (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSL eq_refl eq_refl).  
+  eauto. rewrite <- H0 in A.
+  eexact A.
+  rewrite <- H4. eapply sig_function_translated; eauto.
+  econstructor; eauto. fconstructor. apply Mem.extends_refl.
+Qed. CloseFLemma.
+
+FLemma sel_final_states:
+  forall cunit prog S' R r,
+  match_states cunit prog S' R -> S.final_state S' r -> T.final_state R r.
+FProofLemma.
+  intros. inv H0. inv H. apply match_call_cont_stop_inv in MC; subst. (*inv MC.*) inv LD. constructor.
+Qed. CloseFLemma.
+
 FEnd Selection.
 
 FEnd Base.
-
-(* moved to base *)
-(*
-Trait Comp_Float extends Base.
-
-Family Selection.
-(* Select operator from RISV-V operation *)
-FRecursion sel_constant.
-Case Ofloatconst f := (T.Eop (Ofloatconst f) T.Enil).
-Case Osingleconst f := (T.Eop (Osingleconst f) T.Enil).
-FEnd Selection.
-
-FEnd Comp_Float. *)
 
 Trait Comp_Loops extends Base.
 
@@ -562,7 +601,7 @@ Closing Fact match_cont_block_inv :
   forall cunit k k', match_cont cunit (S.Kblock k) k' ->
    exists k'',
      (k' = T.Kblock k'') /\ match_cont cunit k k''
-by plain { apply cheat }.
+by plain { intros until k'; intros H; inv H; eauto }.
 
 FInduction call_cont_commut with call_cont_commut'.
 FProof.
@@ -578,13 +617,12 @@ FInduction find_label_commut.
 FProof.
 all: intros until k'; simpl; fsimpl; intros MC SE; fsimpl in SE; try (monadInv SE); simpl; fsimpl; auto.
 (* loop *)
-+ apply H.
-  (* apply match_cont_seq; auto.*) apply cheat. 
-  simpl; rewrite EQ; auto. (* auto.*) apply cheat.
++ do 4 fsimpl. eapply H. apply match_cont_seq; auto. 
+  fsimpl; rewrite EQ; auto. auto. 
   
 (* block *)  
-+ apply H. fconstructor; auto. apply cheat.
-  rewrite EQ. apply cheat.
++ do 4 fsimpl. apply H. eapply match_cont_block; auto. 
+  rewrite EQ. auto. 
 (* exit *)  
 + fsimpl. exact I.
 Qed. FEnd find_label_commut. 
@@ -594,28 +632,26 @@ FProof.
 all: intros until cunit; intros LINK TRANSL A B; intros T1 ME; inv ME; fsimpl in TS; try (monadInv TS).
 (* skip block *)
 + apply match_cont_block_inv in MC; unpack MC; subst.
-  left; econstructor; split. apply plus_one; fconstructor. apply cheat. apply cheat. (* something wrong with the semantics probably *)
-  eauto using match_states_skip. apply cheat.
+  left; econstructor; split. apply plus_one; apply T.step_skip_block.   
+  eauto using match_states_skip. 
 
 (* Sloop *)  
 + left; econstructor; split. apply plus_one; fconstructor. econstructor; eauto.
   apply match_cont_seq; auto. fsimpl; rewrite EQ; auto.
 
 (* Sblock *)  
-+ left; econstructor; split. apply plus_one; fconstructor. econstructor; eauto. fconstructor; auto.
-  apply cheat. (* wrong semantics *)
++ left; econstructor; split. apply plus_one; apply T.step_block. econstructor; eauto. eapply match_cont_block; auto.
 
 (* Sexit seq *)
 + apply match_cont_seq_inv in MC; unpack MC; subst. left; econstructor; split. apply plus_one; fconstructor.
-  eapply match_state; eauto. fsimpl. reflexivity.  
+  eapply match_state; eauto. fsimpl; reflexivity.  
   
 (** Sexit0 block *)
 + apply match_cont_block_inv in MC; unpack MC; subst. left; econstructor; split. apply plus_one; fconstructor. eauto using match_states_skip.
 
 + (* SexitS block *)
   apply match_cont_block_inv in MC; unpack MC; subst. left; econstructor; split. apply plus_one; fconstructor.
-  eapply match_state; eauto. fsimpl; reflexivity.
-  Unshelve. apply cheat. (* from something above *)
+  eapply match_state; eauto. fsimpl; reflexivity.  
 Qed. FEnd transl_step_correct.
 
 FEnd Selection.
