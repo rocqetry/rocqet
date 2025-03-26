@@ -314,7 +314,8 @@ let compile_finduction_implementation
       ~(recursor_names: Names.Id.t list)
       ~(inductive_paths: Libnames.qualid list)
       ~(suffix: RecKind.t)
-      ~(goals: (Names.Id.t * Names.Id.t list) list) =
+      ~(goals: (Names.Id.t * Names.Id.t list) list)
+      ~handlers =
   let prefix =
     let inductive_path = List.hd inductive_paths in
     match inductive_path |> Naming.path_to_list |> List.rev with
@@ -323,7 +324,7 @@ let compile_finduction_implementation
   in
   (* We want to define handlers here *)
   (* Everything has to be in the right order for this to work *)
-  let handlers_computation =
+  let define_handlers =
     goals
     |> List.concat_map (fun (goal_name, handler_names) ->
            let open Constrexpr_ops in
@@ -341,13 +342,27 @@ let compile_finduction_implementation
     |> B.flatmap
   in
   let handlers =
+      (* We expect that "inherit element" in inheritance.ml put the
+         handlers in the right order.
+         Thus, if there is ever a compilation failure about type errors
+         due to handler order,
+         inheritance.ml is not doing its job properly. *)
+    handlers
+    |> List.concat_map snd 
+    |> List.map (fun case ->
+         let handler =
+            Naming.handler_name ~recursors:recursor_names ~case
+         in
+         handler |> Libnames.qualid_of_ident |> Constrexpr_ops.mkRefC)
+  in
+  (*let handlers =
     goals
     |> List.concat_map (fun (_, l) -> l)
     |> List.map (fun case ->
            Naming.handler_name ~recursors:recursor_names ~case
              |> Libnames.qualid_of_ident
              |> Constrexpr_ops.mkRefC)
-  in 
+  in*) 
   let computation =
     let motives =
       recursor_names
@@ -358,7 +373,7 @@ let compile_finduction_implementation
     let open B in
     let inductives = inductive_paths |> List.map Naming.extract_path_base in
     let* _ =
-      let* () = handlers_computation in
+      let* () = define_handlers in
       List.combine recursor_names inductives
       |> List.map (fun (name, inductive) ->
              let recursor =
@@ -757,8 +772,7 @@ type synth_ctx = {
 }
 
 let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
-  let Linkage.{ name; fields; definition; _ } = linkage in  
-  
+  let Linkage.{ name; fields; definition; _ } = linkage in
   let rec compile_fields fields (ctx : CompiledModule.t list) =
     match fields with
     | Bwd.Emp -> B.return ()
@@ -777,11 +791,11 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         ( fields,
           ( _,
             TheoremDefinition
-              { inductive_paths; names; suffix; goals; _ } )
+              { inductive_paths; names; suffix; handlers; goals; _ } )
         ) ->
         let open B in
         let* _ = compile_fields fields ctx in        
-        compile_finduction_implementation ~recursor_names:names ~inductive_paths ~suffix ~goals
+        compile_finduction_implementation ~recursor_names:names ~inductive_paths ~suffix ~goals ~handlers
     | Snoc (fields, (_, ComputationalAxiom { name; axiom; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in

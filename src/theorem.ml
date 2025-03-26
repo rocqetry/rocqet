@@ -332,13 +332,7 @@ let close_theorem () =
   Context.add_field ~name:goal_name ~elem:goal_elem;  
   let current_goal = (goal_name, implementing_handler_names) in
   let goals = inherited_goals @ [current_goal] in
-  (*let open Constrexpr_ops in*)
-  (*let implemented_handlers =
-    Termutils.extract_handlers_from_inductive_proof implementing_handler_names
-      (mkIdentC goal_name) suffix
-  in
   let inductive_names = inductive_paths |> List.map Naming.extract_path_base in
-  (* We want the names to be in the right order *)
   let handlers =
     inductive_names
     |> List.map (fun inductive_name ->
@@ -348,6 +342,12 @@ let close_theorem () =
            in
            (inductive_name, handlers))
   in
+  (*let open Constrexpr_ops in*)
+  (*let implemented_handlers =
+    Termutils.extract_handlers_from_inductive_proof implementing_handler_names
+      (mkIdentC goal_name) suffix
+  in  
+  (* We want the names to be in the right order *)  
   let implemented_handlers =
     List.map (fun (name, expr) -> (name, expr)) implemented_handlers
   in
@@ -381,6 +381,7 @@ let close_theorem () =
         inductive_paths;
         suffix;
         goals;
+        handlers;
         default_ctx_params;
       }
   in
