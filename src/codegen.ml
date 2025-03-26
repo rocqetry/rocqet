@@ -354,15 +354,7 @@ let compile_finduction_implementation
             Naming.handler_name ~recursors:recursor_names ~case
          in
          handler |> Libnames.qualid_of_ident |> Constrexpr_ops.mkRefC)
-  in
-  (*let handlers =
-    goals
-    |> List.concat_map (fun (_, l) -> l)
-    |> List.map (fun case ->
-           Naming.handler_name ~recursors:recursor_names ~case
-             |> Libnames.qualid_of_ident
-             |> Constrexpr_ops.mkRefC)
-  in*) 
+  in  
   let computation =
     let motives =
       recursor_names

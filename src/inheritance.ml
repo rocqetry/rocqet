@@ -157,10 +157,7 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t)
         }
   | TheoremDefinition derived, TheoremDefinition base ->
       let goals = remove_duplicates (base.goals @ derived.goals) in
-      let names = remove_duplicates (base.names @ derived.names) in
-      (*let handlers_table =
-        remove_duplicates (base.handlers_table @ derived.handlers_table)
-      in*)
+      let names = remove_duplicates (base.names @ derived.names) in      
       let handlers = combine_mapping base.handlers derived.handlers in
       let inductive_paths =
         remove_duplicates_qualid (base.inductive_paths @ derived.inductive_paths)

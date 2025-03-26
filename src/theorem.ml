@@ -159,11 +159,9 @@ let open_theorem ~(args : Frec_arg.t list) =
     |> List.concat_map (fun inductive_name ->
            inductive |> VernacInductive.create_inductive_constructor_map
            |> Names.Id.Map.find inductive_name)
-  in
-  (*let implementing_handler_names = handler_names in*)
+  in  
   let inherited_handlers = goals |> List.concat_map snd in 
-  let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
-  (*let inherited_handlers = inherited_handlers |> List.concat_map snd in*)
+  let inside x l = List.exists (fun k -> Names.Id.equal k x) l in  
   let implementing_handler_names =
     handler_names |> List.filter (fun x -> not (inside x inherited_handlers))
   in
@@ -341,30 +339,7 @@ let close_theorem () =
              |> Names.Id.Map.find inductive_name
            in
            (inductive_name, handlers))
-  in
-  (*let open Constrexpr_ops in*)
-  (*let implemented_handlers =
-    Termutils.extract_handlers_from_inductive_proof implementing_handler_names
-      (mkIdentC goal_name) suffix
   in  
-  (* We want the names to be in the right order *)  
-  let implemented_handlers =
-    List.map (fun (name, expr) -> (name, expr)) implemented_handlers
-  in
-  (* Add the handlers as fields *)
-  Context.with_pinned_context (fun () ->
-      implemented_handlers
-      |> List.iter (fun (constructor_name, handler) ->
-             let name =
-               Naming.handler_name ~recursors:names ~case:constructor_name
-             in
-             Definition.add_definition ~name handler));
-  let handlers_table =
-    implementing_handler_names
-    |> List.map (fun handler ->
-           (handler, Naming.handler_name ~recursors:names ~case:handler))
-  in
-  let handlers_table = inherited_handlers_table @ handlers_table in*)
   let context = Context.get () in
   let compiled_context, parameters =
     Codegen.compile_linkage_context
