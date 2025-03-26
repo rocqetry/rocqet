@@ -757,8 +757,7 @@ type synth_ctx = {
 }
 
 let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
-  let Linkage.{ name; fields; definition; _ } = linkage in
-  fields |> Bwd.to_list |> List.iter (fun (name, _) -> Printf.printf "Linakge Elem: %s\n" (Names.Id.to_string name));
+  let Linkage.{ name; fields; definition; _ } = linkage in  
   
   let rec compile_fields fields (ctx : CompiledModule.t list) =
     match fields with
