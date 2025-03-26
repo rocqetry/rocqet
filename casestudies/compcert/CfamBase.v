@@ -448,7 +448,7 @@ FEnd Cfam.
 
 FEnd Comp_Builtin.
 
-Trait Comp_External extends Base.
+Trait Comp_External extends Base, Comp_Builtin.
 
 Family Cfam.
 FInductive step : genv -> state -> trace -> state -> Prop :=

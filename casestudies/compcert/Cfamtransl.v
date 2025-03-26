@@ -116,7 +116,7 @@ Trait Cfamtransl. FEnd Cfamtransl.
 
 FEnd Comp_Builtin.
 
-Trait Comp_External extends Base.
+Trait Comp_External extends Base, Comp_Builtin.
 
 Trait Cfamtransl. FEnd Cfamtransl.
 
