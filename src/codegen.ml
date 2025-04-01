@@ -207,7 +207,6 @@ let compile_theorem_definition_signature ~(names : Names.Id.t list)
                names
                |> List.map (fun name ->
                       let open Constrexpr_ops in
-                      (* let motiveT = Naming.motive_of name |> mkIdentC in*)
                       let motive = Naming.motive_of name in
                       let motiveT =
                         let self =

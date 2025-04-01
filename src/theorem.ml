@@ -326,7 +326,7 @@ let close_theorem () =
     LinkageElem.FieldDefinition
       { compiled_context; compiled_impl; default_ctx_params }
   in
-  (* Add the goal as a field *)
+  (* Add the solved goal as a field *)
   Context.add_field ~name:goal_name ~elem:goal_elem;  
   let current_goal = (goal_name, implementing_handler_names) in
   let goals = inherited_goals @ [current_goal] in

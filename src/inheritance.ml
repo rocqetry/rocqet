@@ -140,12 +140,7 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t)
         remove_duplicates (base.behaviour_table @ derived.behaviour_table)
       in
       let names = remove_duplicates (base.names @ derived.names) in
-      let handlers = combine_mapping base.handlers derived.handlers in
-      let _ =
-        handlers |> List.concat_map snd
-        |> List.iter (fun n ->
-               Printf.printf "Handler: %s\n" (Names.Id.to_string n))
-      in
+      let handlers = combine_mapping base.handlers derived.handlers in      
       RecursorDefinition
         {
           derived with
