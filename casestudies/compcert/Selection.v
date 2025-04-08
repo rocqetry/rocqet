@@ -1106,37 +1106,11 @@ FEnd Selection.
 
 FEnd Comp_Builtin.
 
-Trait Comp_External extends Base, Comp_Builtin.
+(* Trait Comp_External extends Base, Comp_Builtin.
 
 Family Selection extends Cfamtransl.
 Family S extends Cminor. FEnd S.
 Family T extends CminorSel. FEnd T.
-
-FInductive match_states : S.program -> S.program -> S.state -> T.state -> Prop :=
-| match_builtin_1: forall cunit prog hf ef args optid f sp e k m al f' e' k' m' env
-      (LINK: linkorder cunit prog)
-      (* (HF: helper_functions_declared cunit hf) *)
-      (* (TF: sel_function (prog_defmap cunit) hf f = OK f') *)
-      (* (TYF: type_function f = OK env) *)
-      (MC: match_cont cunit hf env k k')
-      (EA: S.eval_exprlist ge sp e m al args)
-      (LDE: env_lessdef e e')
-      (ME: Mem.extends m m'),
-    match_states
-      (S.Callstate (External ef) args (S.Kcall optid f sp e k) m)
-      (T.State f' (sel_builtin optid ef al) k' sp e' m')
-| match_builtin_2: forall cunit hf v v' optid f sp e k m f' e' m' k' env
-      (LINK: linkorder cunit prog)
-      (* (HF: helper_functions_declared cunit hf) *)
-      (* (TF: sel_function (prog_defmap cunit) hf f = OK f') *)
-      (* (TYF: type_function f = OK env) *)
-      (MC: match_cont cunit hf env k k')
-      (LDV: Val.lessdef v v')
-      (LDE: env_lessdef (set_optvar optid v e) e')
-      (ME: Mem.extends m m'),
-    match_states
-      (S.Returnstate v (S.Kcall optid f sp e k) m)
-      (T.State f' Sskip k' sp e' m').
 
 FInduction transl_step_correct.
 FProof.
@@ -1152,7 +1126,7 @@ Qed. FEnd transl_step_correct.
 
 FEnd Selection.
 
-FEnd Comp_External.
+FEnd Comp_External. *)
 
 Trait Comp_Call extends Base, Comp_Builtin, Comp_External.
 
@@ -1241,6 +1215,46 @@ Closing Fact match_cont_call_inv : forall id f e sp k tk,
     transl_function f = OK f' /\ match_cont cunit k k' /\ env_lessdef e e'
   by plain { intros * H; inv H; eauto 10 }.
 
+FInductive match_states : S.program -> S.program -> S.state -> T.state -> Prop :=
+| match_builtin_1: forall cunit prog ge le ef args optid f sp e k m al f' e' k' m'
+      (LINK: linkorder cunit prog)
+      (* (HF: helper_functions_declared cunit hf) *)
+      (* (TF: sel_function (prog_defmap cunit) hf f = OK f') *)
+      (* (TYF: type_function f = OK env) *)
+      (MC: match_cont cunit k k')
+      (EA: S.eval_exprlist ge sp e m le al args)
+      (LDE: env_lessdef e e')
+      (ME: Mem.extends m m'),
+    forall x, sel_builtin optid ef al = OK x ->
+    match_states cunit prog
+      (S.Callstate (AST.External ef) args (S.Kcall optid f e sp k) m)
+      (T.State f' x k' sp e' m')
+| match_builtin_2: forall cunit prog v v' optid f sp e k m f' e' m' k'
+      (LINK: linkorder cunit prog)
+      (* (HF: helper_functions_declared cunit hf) *)
+      (* (TF: sel_function (prog_defmap cunit) hf f = OK f') *)
+      (* (TYF: type_function f = OK env) *)
+      (MC: match_cont cunit k k')
+      (LDV: Val.lessdef v v')
+      (LDE: env_lessdef (S.set_optvar optid v e) e')
+      (ME: Mem.extends m m'),
+    match_states cunit prog
+      (S.Returnstate v (S.Kcall optid f e sp k) m)
+      (T.State f' T.Sskip k' sp e' m').
+
+Closing Fact MS_callstate_external_inv :
+  forall cunit prog ef args k m TS,
+  match_states cunit prog (S.Callstate (AST.External ef) args k m) TS ->
+  (exists f' args' k' m',
+    TS = T.Callstate f' args' k' m'
+    /\ linkorder cunit prog /\ match_fundef cunit (AST.External ef) f'
+    /\ match_call_cont k k' /\ Val.lessdef_list args args' /\ Mem.extends m m')
+  \/ (exists ge le f e sp k0 optid x f' k' e' m' al,
+    k = S.Kcall optid f e sp k0 /\ sel_builtin optid ef al = OK x
+    /\ TS = T.State f' x k' sp e' m' /\ linkorder cunit prog /\ match_cont cunit k0 k'
+    /\ S.eval_exprlist ge sp e m le al args /\ env_lessdef e e' /\ Mem.extends m m')
+  by plain { intros * H; inv H; [ left; repeat eexists; eauto | right; repeat eexists; eauto ] }.
+
 FInduction call_cont_commut with call_cont_commut'.
 FProof.
 all: intros; do 2 fsimpl; auto; fconstructor.
@@ -1326,7 +1340,17 @@ Qed. CloseFLemma.
 
 FInduction transl_step_correct.
 FProof.
-all: intros until cunit; intros LINK TRANSL A B; intros T1 ME; inv ME; fsimpl in TS; try (monadInv TS).
+all: intros until cunit; intros LINK TRANSL A B; intros T1 ME.
+(* inv ME; fsimpl in TS; try (monadInv TS). *)
+(* external *)
++ apply MS_callstate_external_inv in ME as [ME|ME]; unpack ME; subst. (* HERE *)
+  (* destruct TF as (hf & HF & TF).*) unfold match_fundef in TF.
+  monadInv TF.
+  exploit external_call_mem_extends; eauto.
+  intros [vres' [m2 [A [B [C D]]]]].
+  left; econstructor; split.
+  apply plus_one; fconstructor. eapply external_call_symbols_preserved; eauto. eapply senv_preserved; eauto.
+  econstructor; eauto.
 (* return *)
 + apply match_cont_call_inv in MC; unpack MC; subst. (* inv MC.*)
   left; econstructor; split.
