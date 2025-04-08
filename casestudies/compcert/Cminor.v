@@ -99,11 +99,11 @@ FInductive eval_expr :  genv -> fenv -> env -> mem -> letenv -> expr -> val -> P
       eval_binop op v1 v2 m = Some v ->
       eval_expr ge e le m lenv (Ebinop op a1 a2) v.
 
-Closing Fact eval_expr_const :
+Closing Fact eval_expr_const_inv :
   forall ge e le m lenv cst v,
     eval_expr ge e le m lenv (Econst cst) v ->
     eval_constant cst ge e = Some v
-  by {intros * H; inv H; auto}.
+  by plain {intros * H; inv H; auto}.
 
 FRecursion find_label.
 Case Sifthenelse a s1 s2 :=
@@ -242,12 +242,12 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
       step ge (State f (Scall optid sig a bl) k sp e m)
         E0 (Callstate fd vargs (Kcall optid f e sp k) m)
 | step_tailcall: forall ge lenv f sig a bl k e sp m m' vf vargs fd,
-      eval_expr ge (Vptr sp Ptrofs.zero) e m lenv a vf ->
-      eval_exprlist ge (Vptr sp Ptrofs.zero) e m lenv bl vargs ->
+      eval_expr ge sp e m lenv a vf ->
+      eval_exprlist ge sp e m lenv bl vargs ->
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
       Mem.free m sp 0 (self__Cminor.fn_stackspace f) = Some m' ->
-      step ge (State f (Stailcall sig a bl) k (Vptr sp Ptrofs.zero) e m)
+      step ge (State f (Stailcall sig a bl) k sp e m)
         E0 (Callstate fd vargs (call_cont k) m').
 FEnd Cminor.
 
