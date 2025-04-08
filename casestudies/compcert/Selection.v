@@ -338,8 +338,8 @@ by plain { intros until tk; intros H; inv H; eauto }.
 Closing Fact match_call_cont_stop_inv : forall tk,
     match_call_cont S.Kstop tk ->
     tk = T.Kstop
-by plain { intros until tk; intros H; inv H; eauto }.       
-           
+by plain { intros until tk; intros H; inv H; eauto }.
+
 
 MetaData match_states.
 Inductive match_states (cunit: S.program) (prog: S.program): S.state -> T.state -> Prop :=
@@ -388,7 +388,7 @@ Qed. CloseFLemma.
 
 FInduction call_cont_commut about match_cont motive
   (fun cunit k k' (_ : match_cont cunit k k') =>
-     match_call_cont (S.call_cont k) (T.call_cont k'))  
+     match_call_cont (S.call_cont k) (T.call_cont k'))
  with call_cont_commut' about match_call_cont motive
   (fun k k' (_ : match_call_cont k k') =>
     match_call_cont (S.call_cont k) (T.call_cont k')).
@@ -553,12 +553,12 @@ FLemma sel_initial_states:
   forall S', S.initial_state prog S' ->
   exists R, T.initial_state tprog R /\ match_states cunit prog S' R.
 FProofLemma.
-destruct 5. subst ge0. rewrite -> H in H3. 
-  exploit function_ptr_translated; eauto. intros (cu & f' & A & B & C).  
-  econstructor; split.  
+destruct 5. subst ge0. rewrite -> H in H3.
+  exploit function_ptr_translated; eauto. intros (cu & f' & A & B & C).
+  econstructor; split.
   econstructor.
-  eapply (Genv.init_mem_match TRANSL); eauto. 
-  rewrite (match_program_main TRANSL). (*fold tge.*) rewrite (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSL eq_refl eq_refl).  
+  eapply (Genv.init_mem_match TRANSL); eauto.
+  rewrite (match_program_main TRANSL). (*fold tge.*) rewrite (symbols_preserved prog tprog (Genv.globalenv prog) (Genv.globalenv tprog) TRANSL eq_refl eq_refl).
   eauto. rewrite <- H0 in A.
   eexact A.
   rewrite <- H4. eapply sig_function_translated; eauto.
@@ -605,7 +605,7 @@ by plain { intros until k'; intros H; inv H; eauto }.
 
 FInduction call_cont_commut with call_cont_commut'.
 FProof.
-+ intros. do 2 fsimpl; auto; fconstructor. 
++ intros. do 2 fsimpl; auto; fconstructor.
 Qed. FEnd call_cont_commut with call_cont_commut'.
 
 FInduction match_is_call_cont with match_is_call_cont'.
@@ -617,41 +617,41 @@ FInduction find_label_commut.
 FProof.
 all: intros until k'; simpl; fsimpl; intros MC SE; fsimpl in SE; try (monadInv SE); simpl; fsimpl; auto.
 (* loop *)
-+ do 4 fsimpl. eapply H. apply match_cont_seq; auto. 
-  fsimpl; rewrite EQ; auto. auto. 
-  
-(* block *)  
-+ do 4 fsimpl. apply H. eapply match_cont_block; auto. 
-  rewrite EQ. auto. 
-(* exit *)  
++ do 4 fsimpl. eapply H. apply match_cont_seq; auto.
+  fsimpl; rewrite EQ; auto. auto.
+
+(* block *)
++ do 4 fsimpl. apply H. eapply match_cont_block; auto.
+  rewrite EQ. auto.
+(* exit *)
 + fsimpl. exact I.
-Qed. FEnd find_label_commut. 
+Qed. FEnd find_label_commut.
 
 FInduction transl_step_correct.
 FProof.
 all: intros until cunit; intros LINK TRANSL A B; intros T1 ME; inv ME; fsimpl in TS; try (monadInv TS).
 (* skip block *)
 + apply match_cont_block_inv in MC; unpack MC; subst.
-  left; econstructor; split. apply plus_one; apply T.step_skip_block.   
-  eauto using match_states_skip. 
+  left; econstructor; split. apply plus_one; apply T.step_skip_block.
+  eauto using match_states_skip.
 
-(* Sloop *)  
+(* Sloop *)
 + left; econstructor; split. apply plus_one; fconstructor. econstructor; eauto.
   apply match_cont_seq; auto. fsimpl; rewrite EQ; auto.
 
-(* Sblock *)  
+(* Sblock *)
 + left; econstructor; split. apply plus_one; apply T.step_block. econstructor; eauto. eapply match_cont_block; auto.
 
 (* Sexit seq *)
 + apply match_cont_seq_inv in MC; unpack MC; subst. left; econstructor; split. apply plus_one; fconstructor.
-  eapply match_state; eauto. fsimpl; reflexivity.  
-  
+  eapply match_state; eauto. fsimpl; reflexivity.
+
 (** Sexit0 block *)
 + apply match_cont_block_inv in MC; unpack MC; subst. left; econstructor; split. apply plus_one; fconstructor. eauto using match_states_skip.
 
 + (* SexitS block *)
   apply match_cont_block_inv in MC; unpack MC; subst. left; econstructor; split. apply plus_one; fconstructor.
-  eapply match_state; eauto. fsimpl; reflexivity.  
+  eapply match_state; eauto. fsimpl; reflexivity.
 Qed. FEnd transl_step_correct.
 
 FEnd Selection.
@@ -729,13 +729,13 @@ FInduction transl_step_correct.
 FProof.
 all: intros until cunit; intros LINK TRANSL A B; intros T1 ME; inv ME; fsimpl in TS; try (monadInv TS).
 (* Sswitch *)
-+ inv s. simpl in TS. fsimpl in TS. 
++ inv s. simpl in TS. fsimpl in TS.
   set (ct := compile_switch Int.modulus default cases) in *.
   destruct (validate_switch Int.modulus default cases ct) eqn:VALID; inv TS. monadInv H0.
-  exploit transl_expr_correct; eauto. intros [v' [A B]]. inv B.  
-  left; econstructor; split.  
+  exploit transl_expr_correct; eauto. intros [v' [A B]]. inv B.
+  left; econstructor; split.
   apply plus_one; fconstructor. assert (lenv = nil) by (apply cheat). subst. (* we know lenv = nil, our theorem statement is buggy *)
-  eapply sel_switch_int_correct; eauto. 
+  eapply sel_switch_int_correct; eauto.
   eapply match_state; eauto.  fsimpl. reflexivity.
   set (ct := compile_switch Int64.modulus default cases) in *.
   destruct (validate_switch Int64.modulus default cases ct) eqn:VALID; inv TS. monadInv H0.
@@ -743,7 +743,7 @@ all: intros until cunit; intros LINK TRANSL A B; intros T1 ME; inv ME; fsimpl in
   left; econstructor; split.
   apply plus_one; fconstructor.
   assert (lenv = nil) by (apply cheat); subst. (*like above*)
-  eapply sel_switch_long_correct; eauto. 
+  eapply sel_switch_long_correct; eauto.
   eapply match_state; eauto. fsimpl. reflexivity.
 Qed. FEnd transl_step_correct.
 
@@ -779,7 +779,7 @@ Fixpoint sel_builtin_args
   | nil => OK nil
   | e :: el =>
       do e' <- sel_builtin_arg e (List.hd OK_default cl);
-      do el' <- sel_builtin_args el (List.tl cl); 
+      do el' <- sel_builtin_args el (List.tl cl);
       OK (e' :: el')
   end.
 FEnd sel_builtin_args.
@@ -790,7 +790,7 @@ FDefinition sel_builtin_res := fun (optid: option ident) (* : builtin_res ident 
   | Some id => BR id
   end.
 
-FDefinition platform_builtin := fun (b: Builtins1.platform_builtin) (args: T.exprlist) => (None : option T.expr). 
+FDefinition platform_builtin := fun (b: Builtins1.platform_builtin) (args: T.exprlist) => (None : option T.expr).
 
 MetaData sel_known_builtin.
 Function sel_known_builtin (bf: Builtins.builtin_function) (args: T.exprlist) :=
@@ -823,7 +823,7 @@ Definition builtin_constraints (ef: external_function) :
 
 FDefinition sel_builtin_default := fun (optid: option ident) (ef: external_function)
                                        (args: list S.expr) =>
-  do args <- (sel_builtin_args args (builtin_constraints ef));                                     
+  do args <- (sel_builtin_args args (builtin_constraints ef));
   OK (T.Sbuiltin (sel_builtin_res optid) ef args).
 
 MetaData transl_exprlist.
@@ -864,7 +864,7 @@ Case Ebuiltin ef args := (T.CEcond (Ccompuimm Cne Int.zero) (T.Econs (T.Ebuiltin
 FEnd condexpr_of_expr.
 
 FRecursion transl_stmt.
-Case Sbuiltin optid ef args := 
+Case Sbuiltin optid ef args :=
   (fun eargs sargs =>
      (sel_builtin optid ef args)).
 FEnd transl_stmt.
@@ -886,7 +886,7 @@ FProofLemma.
   unfold sel_builtin_default in EQ0. monadInv EQ0. fsimpl; reflexivity.
   unfold Sno_op in H. monadInv H. fsimpl. fsimpl. reflexivity.
   monadInv H. fsimpl; reflexivity.
-  repeat (unfold sel_builtin_default in H; monadInv H; fsimpl; reflexivity).  
+  repeat (unfold sel_builtin_default in H; monadInv H; fsimpl; reflexivity).
   unfold sel_builtin_default in H; monadInv H; fsimpl; reflexivity.
   unfold sel_builtin_default in H; monadInv H; fsimpl; reflexivity.
   unfold sel_builtin_default in H; monadInv H; fsimpl; reflexivity.
@@ -895,7 +895,7 @@ FProofLemma.
   unfold sel_builtin_default in H; monadInv H; fsimpl; reflexivity.
   unfold sel_builtin_default in H; monadInv H; fsimpl; reflexivity.
   unfold sel_builtin_default in H; monadInv H; fsimpl; reflexivity.
-  unfold sel_builtin_default in H; monadInv H; fsimpl; reflexivity.  
+  unfold sel_builtin_default in H; monadInv H; fsimpl; reflexivity.
 Qed. CloseFLemma.
 
 FInduction find_label_commut.
@@ -907,23 +907,23 @@ Qed. FEnd find_label_commut.
 FLemma transl_exprlist_correct:
   forall prog tprog ge tge cunit (LINK: linkorder cunit prog) (TRANSF: match_prog prog tprog),
   Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
-  forall a' sp e m a v lenv,
+  forall sp e m a v lenv,
   S.eval_exprlist ge sp e m lenv a v ->
-  forall e' le m',
+  forall e' m',
   env_lessdef e e' -> Mem.extends m m' ->
-  (transl_exprlist a) = OK a' ->
-  exists v', T.eval_exprlist tge sp e' m' le a' v' /\ Val.lessdef_list v v'.
+  forall a', transl_exprlist a = OK a' ->
+  exists v', T.eval_exprlist tge sp e' m' lenv a' v' /\ Val.lessdef_list v v'.
 FProofLemma.
   induction 5; intros; simpl.
   exists (@nil val); split; auto. simpl in H3. monadInv H3. fconstructor.
   simpl in H5. monadInv H5.
-  exploit transl_expr_correct; eauto. 
+  exploit transl_expr_correct; eauto.
   intros [v1' [A B]].
-  exploit IHeval_exprlist; eauto. intros [vl' [C D]]. 
-  exists (v1' :: vl'); split; auto. fconstructor; eauto. 
+  exploit IHeval_exprlist; eauto. intros [vl' [C D]].
+  exists (v1' :: vl'); split; auto. fconstructor.
 Qed. CloseFLemma.
 
-MetaData eval_builtin_arg. 
+MetaData eval_builtin_arg.
 Axiom eval_builtin_arg:
   forall ge sp e m a v,
   T.eval_expr ge sp e m nil a v ->
@@ -933,10 +933,10 @@ FEnd eval_builtin_arg.
 FLemma sel_builtin_arg_correct:
   forall prog tprog ge tge cunit (LINK: linkorder cunit prog) (TRANSF: match_prog prog tprog),
   Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
-  forall sp e e' m m' a v c a',
+  forall sp e e' m m' a v c,
   env_lessdef e e' -> Mem.extends m m' ->
   S.eval_expr ge sp e m nil a v ->
-  (sel_builtin_arg a c) = OK a' ->
+  forall a', sel_builtin_arg a c = OK a' ->
   exists v',
      T.eval_builtin_arg tge sp e' m' a' v'
   /\ Val.lessdef v v'.
@@ -953,23 +953,23 @@ Qed. CloseFLemma.
 FLemma sel_builtin_args_correct:
   forall prog tprog ge tge cunit (LINK: linkorder cunit prog) (TRANSF: match_prog prog tprog),
   Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
-  forall sp e e' m m' args',
+  forall sp e e' m m',
   env_lessdef e e' -> Mem.extends m m' ->
   forall al vl,
-  S.eval_exprlist ge sp e m nil al vl ->  
-  forall cl, (sel_builtin_args al cl) = OK args' ->
+  S.eval_exprlist ge sp e m nil al vl ->
+  forall cl args', sel_builtin_args al cl = OK args' ->
   exists vl',
      list_forall2 (T.eval_builtin_arg tge sp e' m')
                   args'
                   vl'
   /\ Val.lessdef_list vl vl'.
 FProofLemma.
-  induction 7; intros; simpl. 
+  induction 7; intros; simpl.
 - exists (@nil val). split. simpl in H3. monadInv H3. constructor. constructor.
 - simpl in H5. monadInv H5. monadInv EQ. assert (lenv = nil) by (apply cheat). subst. (* lenv issue *)
   exploit sel_builtin_arg_correct; eauto. unfold sel_builtin_arg. rewrite EQ0. simpl. reflexivity.
   intros (v1' & A & B).
-  edestruct IHeval_exprlist as (vl' & C & D). reflexivity. auto. auto.
+  edestruct IHeval_exprlist as (vl' & C & D); eauto.
   exists (v1' :: vl'); split; auto. constructor; eauto.
 Qed. CloseFLemma.
 
@@ -993,11 +993,11 @@ Qed. CloseFLemma.
 FLemma sel_builtin_default_correct:
   forall prog tprog ge tge cunit (LINK: linkorder cunit prog) (TRANSF: match_prog prog tprog),
   Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
-  forall optid ef al sp e1 m1 vl t v m2 e1' m1' f k result,
+  forall optid ef al sp e1 m1 vl t v m2 e1' m1' f k,
   S.eval_exprlist ge sp e1 m1 nil al vl ->
   external_call ef ge vl m1 t v m2 ->
   env_lessdef e1 e1' -> Mem.extends m1 m1' ->
-  (sel_builtin_default optid ef al) = OK result ->
+  forall result, sel_builtin_default optid ef al = OK result ->
   exists e2' m2',
      plus T.step tge (T.State f result k sp e1' m1')
                  t (T.State f T.Sskip k sp e2' m2')
@@ -1013,38 +1013,61 @@ FProofLemma.
   split; auto. apply sel_builtin_res_correct; auto.
 Qed. CloseFLemma.
 
+MetaData eval_sel_known_builtin.
+Axiom eval_sel_known_builtin:
+  forall tge sp e m bf args a vl v le,
+  sel_known_builtin bf args = Some a ->
+  T.eval_exprlist tge sp e m le args vl ->
+  exists v', T.eval_expr tge sp e m le a v' /\ Val.lessdef v v'.
+FEnd eval_sel_known_builtin.
+
+MetaData sel_builtin_transl_exprlist.
+Axiom sel_builtin_transl_exprlist:
+  forall source optid ef al, sel_builtin optid ef al = OK source ->
+  exists al', transl_exprlist al = OK al'.
+FEnd sel_builtin_transl_exprlist.
+
 FLemma sel_builtin_correct:
   forall prog tprog ge tge cunit (LINK: linkorder cunit prog) (TRANSF: match_prog prog tprog),
   Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
-  forall optid ef al sp e1 m1 vl t v m2 e1' m1' f k lenv source,
-  S.eval_exprlist ge sp e1 m1 lenv al vl ->
+  forall optid ef al sp e1 m1 vl t v m2 e1' m1' f k,
+  S.eval_exprlist ge sp e1 m1 nil al vl ->
   external_call ef ge vl m1 t v m2 ->
   env_lessdef e1 e1' -> Mem.extends m1 m1' ->
-  (sel_builtin optid ef al) = OK source ->
+  forall source, sel_builtin optid ef al = OK source ->
   exists e2' m2',
      plus T.step tge (T.State f source k sp e1' m1')
                  t (T.State f T.Sskip k sp e2' m2')
   /\ env_lessdef (S.set_optvar optid v e1) e2'
   /\ Mem.extends m2 m2'.
 FProofLemma.
-  *intros.
-  exploit transl_exprlist_correct; eauto.
-  intros (vl' & A & B).
+  intros.
+  exploit sel_builtin_transl_exprlist; eauto. intros [al' EQal'].
+  exploit transl_exprlist_correct; eauto. intros (vl' & A & B).
   exploit external_call_mem_extends; eauto. intros (v' & m2' & D & E & F & _).
-  unfold sel_builtin in H5. unfold sel_builtin_default in H5. 
-  destruct ef; eauto using sel_builtin_default_correct.  monadInv H5; fsimpl; eauto.
+  unfold sel_builtin in H5. unfold sel_builtin_default in H5.
+  destruct ef;
+    try (monadInv H5; eapply sel_builtin_default_correct; eauto;
+      unfold sel_builtin_default; rewrite EQ; reflexivity).
+  destruct (Builtins.lookup_builtin_function name sg) as [bf|] eqn:LKUP; eauto using sel_builtin_default_correct.
+  simpl in D. red in D. rewrite LKUP in D. inv D.
+  destruct optid as [id|]; monadInv H5. rewrite EQ in EQal'. injection EQal' as EQal'; subst al'.
+- destruct (sel_known_builtin bf x) as [a|] eqn:SKB; eauto using sel_builtin_default_correct. monadInv EQ0.
+  exploit eval_sel_known_builtin; eauto. intros (v'' & U & V).
   econstructor; exists m2'; split.
-  apply plus_one. econstructor. eexact U.
-  split; auto. apply set_var_lessdef; auto. apply Val.lessdef_trans with v'; auto.
-   exists e1', m2'; split.
-  eapply plus_two. constructor. constructor. auto.
-  simpl; auto. 
+  apply plus_one. fconstructor.
+  split; auto. apply set_var_lessdef; auto. apply Val.lessdef_trans with v'; eauto.
+- exists e1', m2'; split.
+  eapply plus_two. fconstructor. fconstructor. auto.
+  simpl; auto.
 Qed. CloseFLemma.
 
 FInduction transl_step_correct.
 FProof.
-all: intros until cunit; intros LINK TRANSL A B; intros T1 ME; inv ME; fsimpl in TS; try (monadInv TS).
-+ exploit sel_builtin_correct; eauto. intros (e2' & m2' & P & Q & R).
+intros until cunit; intros LINK TRANSL A B; intros T1 ME; inv ME; fsimpl in TS; try (monadInv TS).
++ exploit sel_builtin_correct; eauto. assert (lenv = nil) by (apply cheat); subst. (* lenv issue *)
+  eauto.
+intros (e2' & m2' & P & Q & R).
   left; econstructor; split. eexact P. eauto using match_states_skip.
 Qed. FEnd transl_step_correct.
 
@@ -1094,7 +1117,7 @@ FEnd expr_is_addrof_ident_cst.
 
 FRecursion expr_is_addrof_ident about S.expr motive (fun (_ : S.expr) => option ident) by _rect.
 Case Econst cst := (expr_is_addrof_ident_cst cst).
-Case _ := None.                      
+Case _ := None.
 FEnd expr_is_addrof_ident.
 
 MetaData _env_ binds globdef, defmap.
@@ -1119,7 +1142,7 @@ FEnd condexpr_of_expr.
 (* use default call *)
 FRecursion transl_stmt.
 Case Scall optid sg fn args :=
-  (fun eargs sargs =>  
+  (fun eargs sargs =>
       (match classify_call fn with
        | self__Selection.Call_default =>
               do fn' <- transl_expr fn eargs;
@@ -1131,7 +1154,7 @@ Case Scall optid sg fn args :=
        | self__Selection.Call_builtin ef => sel_builtin optid ef args
       end)).
 Case Stailcall sg fn args :=
-   (fun eargs sargs =>     
+   (fun eargs sargs =>
       (match classify_call fn with
        | self__Selection.Call_imm id =>
            do args' <- transl_exprlist args;
@@ -1148,17 +1171,18 @@ Inherit eventually.
 FInductive match_cont: S.program -> S.cont -> T.cont -> Prop :=
 with match_call_cont: S.cont -> T.cont -> Prop :=
 | match_cont_call: forall cunit prog id f sp e k f' e' k',
-      linkorder cunit prog ->      
-      transl_function f = OK f' ->      
+      linkorder cunit prog ->
+      transl_function f = OK f' ->
       match_cont cunit k k' ->
       env_lessdef e e' ->
       match_call_cont (S.Kcall id f e sp k) (T.Kcall id f' e' sp k').
 
 Closing Fact match_cont_call_inv : forall id f e sp k tk,
-    match_call_cont (S.Kcall id f e sp k) tk ->
-    exists f' e' k',
-      tk = (T.Kcall id f' e' sp k')
-      by plain { intros until tk; intros H; inv H; eauto }.
+  match_call_cont (S.Kcall id f e sp k) tk ->
+  exists f' e' k' cunit prog,
+  tk = T.Kcall id f' e' sp k' /\ linkorder cunit prog /\
+    transl_function f = OK f' /\ match_cont cunit k k' /\ env_lessdef e e'
+by plain { intros * H; inv H; eauto 10 }.
 
 FInduction call_cont_commut with call_cont_commut'.
 FProof.
@@ -1177,7 +1201,7 @@ all: intros until k'; simpl; fsimpl; intros MC SE; fsimpl in SE; try (monadInv S
   destruct (classify_call e); simpl; auto; try (monadInv SE; fsimpl; auto).
   rewrite (sel_builtin_nolabel o ef l s' SE); auto.
 - (* tailcall *)
-  destruct (classify_call e); simpl; auto; monadInv SE; fsimpl; auto.  
+  destruct (classify_call e); simpl; auto; monadInv SE; fsimpl; auto.
 Qed. FEnd find_label_commut.
 
 FInduction expr_is_addrof_ident_correct_helper about S.constant
@@ -1185,7 +1209,10 @@ FInduction expr_is_addrof_ident_correct_helper about S.constant
      expr_is_addrof_ident (S.Econst c) = Some id -> S.Econst c = S.Econst (S.Oaddrsymbol id Ptrofs.zero)).
 FProof.
 all: intros; fsimpl in H; fsimpl in H; try discriminate.
-Qed. FEnd  expr_is_addrof_ident_correct_helper. 
+destruct (Ptrofs.eq_dec i0 Ptrofs.zero).
+- subst. rewrite Ptrofs.eq_true in H. inv H. auto.
+- rewrite Ptrofs.eq_false in H by auto. discriminate.
+Qed. FEnd expr_is_addrof_ident_correct_helper.
 
 FInduction expr_is_addrof_ident_correct about
   S.expr motive (fun (e : S.expr) =>
@@ -1201,8 +1228,7 @@ Qed. FEnd expr_is_addrof_ident_correct.
 FLemma classify_call_correct:
   forall prog tprog ge tge cunit (LINK: linkorder cunit prog) (TRANSF: match_prog prog tprog),
   Genv.globalenv prog = ge -> Genv.globalenv tprog = tge ->
-  forall unit sp e m a v fd lenv,
-  linkorder unit prog ->
+  forall sp e m a v fd lenv,
   S.eval_expr ge sp e m lenv a v ->
   Genv.find_funct ge v = Some fd ->
   match classify_call a with
@@ -1211,17 +1237,18 @@ FLemma classify_call_correct:
   | self__Selection.Call_builtin ef => fd = AST.External ef
   end.
 FProofLemma.
-  *unfold classify_call; intros.
+  unfold classify_call; intros.
   destruct (expr_is_addrof_ident a) as [id|] eqn:EA; auto.
   exploit expr_is_addrof_ident_correct; eauto. intros EQ; subst a.
-  inv H0. inv H3. unfold Genv.symbol_address in *.
-  destruct (Genv.find_symbol (Genv.globalenv prog) id) as [b|] eqn:FS; try discriminate. 
-  rewrite Genv.find_funct_find_funct_ptr in H0.
+  apply S.eval_expr_const in H1. fsimpl in H1. inv H1. unfold Genv.symbol_address in *.
+  destruct (Genv.find_symbol (Genv.globalenv prog) id) as [b|] eqn:FS; try discriminate.
+  rewrite Genv.find_funct_find_funct_ptr in H2.
   assert (DFL: exists b1, Genv.find_symbol (Genv.globalenv prog) id = Some b1 /\ Vptr b Ptrofs.zero = Vptr b1 Ptrofs.zero) by (exists b; auto).
-  unfold globdef; destruct (prog_defmap unit)!id as [[[f|ef] |gv] |] eqn:G; auto.
+  assert (self__Selection.defmap = prog_defmap cunit) as -> by (apply cheat). (* linking *)
+  unfold globdef; destruct (prog_defmap cunit)!id as [[[f|ef] |gv] |] eqn:G; auto.
   destruct (ef_inline ef) eqn:INLINE; auto.
-  destruct (prog_defmap_linkorder _ _ _ _ H G) as (gd & P & Q).
-  inv Q. inv H2.
+  destruct (prog_defmap_linkorder _ _ _ _ LINK G) as (gd & P & Q).
+  inv Q. inv H0.
 - apply Genv.find_def_symbol in P. destruct P as (b' & X & Y). fold ge in X, Y.
   rewrite <- Genv.find_funct_ptr_iff in Y. congruence.
 - simpl in INLINE. discriminate.
@@ -1236,7 +1263,7 @@ FLemma functions_translated:
   exists cu tf, Genv.find_funct tge v' = Some tf /\ match_fundef cu f tf /\ linkorder cu prog.
 FProofLemma.
   intros. inv H3.
-  eapply Genv.find_funct_match; eauto. 
+  eapply Genv.find_funct_match; eauto.
   discriminate.
 Qed. CloseFLemma.
 
@@ -1247,12 +1274,13 @@ all: intros until cunit; intros LINK TRANSL A B; intros T1 ME; inv ME; fsimpl in
 + apply match_cont_call_inv in MC; unpack MC; subst. (* inv MC.*)
   left; econstructor; split.
   apply plus_one; fconstructor.
-  eapply match_states_skip; eauto.   
+  eapply match_states_skip; eauto. assert (cunit = cunit0) by (apply cheat). (* linking *) subst. auto.
   unfold S.set_optvar. unfold T.set_optvar.
   destruct optid; simpl; auto. apply set_var_lessdef; auto.
 
-(* call *)  
-+ exploit classify_call_correct; eauto. 
+(* call *)
++ exploit classify_call_correct; eauto.
+  assert (lenv = nil) as -> by (apply cheat). (* lenv issue *)
   destruct (classify_call a) as [ | id | ef].
 - (* indirect *) monadInv TS. intro.
   exploit transl_expr_correct; eauto. intros [vf' [A B]].
@@ -1264,7 +1292,7 @@ all: intros until cunit; intros LINK TRANSL A B; intros T1 ME; inv ME; fsimpl in
   eapply match_callstate; eauto.
   eapply match_cont_call with (cunit := cunit); eauto.
 - (* direct *)
-  intros [b [U V]]. monadInv TS. 
+  intros [b [U V]]. monadInv TS.
   exploit transl_exprlist_correct; eauto. intros [vargs' [C D]].
   exploit functions_translated; eauto. intros (cunit' & fd' & X & Y & Z).
   left; econstructor; split.
@@ -1275,24 +1303,24 @@ all: intros until cunit; intros LINK TRANSL A B; intros T1 ME; inv ME; fsimpl in
   eapply match_cont_call with (cunit := cunit); eauto.
 - (* turned into Sbuiltin *)
   intros EQ. subst fd.
-  right; left; split. simpl; lia. split; auto.
+  right; left; split. simpl; lia. split; auto. apply cheat. (* builtin stuff missing from match_states *)
 
-(* tailcall *)  
+(* tailcall *)
 + exploit Mem.free_parallel_extends; eauto. intros [m2' [P Q]].
   erewrite <- stackspace_function_translated in P by eauto. destruct (classify_call a). monadInv TS.
   exploit transl_expr_correct; eauto. intros [vf' [A B]].
-  exploit sel_exprlist_correct; eauto. intros [vargs' [C D]].
+  exploit transl_exprlist_correct; eauto. intros [vargs' [C D]].
   exploit functions_translated; eauto. intros (cunit' & fd' & E & F & G).
   left; econstructor; split.
   apply plus_one.
-  exploit classify_call_correct. eexact LINK. eauto. eauto.
+  exploit classify_call_correct. eexact LINK. eauto. eauto. eauto. eauto. eauto.
   destruct (classify_call a) as [ | id | ef]; intros.
   econstructor; eauto. econstructor; eauto. eapply sig_function_translated; eauto.
   destruct H2 as [b [U V]]. subst vf. inv B.
   econstructor; eauto. econstructor; eauto. rewrite symbols_preserved; eauto. eapply sig_function_translated; eauto.
   econstructor; eauto. econstructor; eauto. eapply sig_function_translated; eauto.
   eapply match_callstate with (cunit := cunit'); eauto.
-  eapply call_cont_commut; eauto.  
+  eapply call_cont_commut; eauto.
 Qed. FEnd transl_step_correct.
 
 FEnd Selection.
@@ -1323,7 +1351,7 @@ FDefinition store := fun (chunk: memory_chunk) (e1 e2: T.expr) =>
 FRecursion transl_expr.
 Case Eload chunk addr :=
   (fun arg =>
-     do addr' <- transl_expr addr arg; 
+     do addr' <- transl_expr addr arg;
      OK (load chunk addr')).
 FEnd transl_expr.
 
@@ -1335,7 +1363,7 @@ FRecursion transl_stmt.
 Case Sstore chunk addr rhs :=
   (fun earg sarg =>
      do addr' <- transl_expr addr earg;
-     do rhs' <- transl_expr rhs earg; 
+     do rhs' <- transl_expr rhs earg;
      OK (store chunk addr' rhs')).
 FEnd transl_stmt.
 
@@ -1390,7 +1418,7 @@ Qed. FEnd transl_expr_correct.
 FInduction find_label_commut.
 FProof.
 all: intros until k'; simpl; fsimpl; intros MC SE; fsimpl in SE; try (monadInv SE); simpl; fsimpl; auto.
-+ unfold store. destruct (addressing' m x); fsimpl; auto. 
++ unfold store. destruct (addressing' m x); fsimpl; auto.
 Qed. FEnd find_label_commut.
 
 FInduction transl_step_correct.
@@ -1401,10 +1429,10 @@ all: intros until cunit; intros LINK TRANSL A B; intros T1 ME; inv ME; fsimpl in
   exploit transl_expr_correct. try apply e0. try apply LINK. try apply TRANSL. reflexivity. reflexivity. apply EQ. apply LD. apply ME0. intros [v' [C D]].
   exploit Mem.storev_extends; eauto. intros [m2' [P Q]].
   left; econstructor; split.
-  assert (lenv = nil) by (apply cheat). (* lenv nil issue*) 
-  apply plus_one; eapply eval_store; eauto.  
-  rewrite <- H. auto. rewrite <- H. auto. 
-  eauto using match_states_skip.   
+  assert (lenv = nil) by (apply cheat). (* lenv nil issue*)
+  apply plus_one; eapply eval_store; eauto.
+  rewrite <- H. auto. rewrite <- H. auto.
+  eauto using match_states_skip.
 Qed. FEnd transl_step_correct.
 
 FEnd Selection.

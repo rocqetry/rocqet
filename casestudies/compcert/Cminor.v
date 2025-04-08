@@ -4,7 +4,7 @@ From Rocqet Require Import Coqlib.
 From Rocqet Require Import Errors.
 From Rocqet Require Import Values.
 From Rocqet Require Import AST.
-From Rocqet Require Import Integers. 
+From Rocqet Require Import Integers.
 From Rocqet Require Import Floats.
 From Rocqet Require Import Memory.
 From Rocqet Require Import Globalenvs.
@@ -49,7 +49,7 @@ FInductive expr : Type :=
 
 FInductive stmt : Type :=
 | Sifthenelse: expr -> stmt -> stmt -> stmt.
-        
+
 MetaData fn.
    Record fn : Type := mkfunction {
       fn_sig: signature;
@@ -69,15 +69,15 @@ FOverride Definition function_sig := self__Cminor.fn_sig.
 (* stack pointer *)
 (* Vptr sp Ptrofs.zero *)
 FOverride Definition fenv := block.
-   
+
 FOverride Definition free_fenv := fun m sp f =>
   Mem.free m sp 0 f.(self__Cminor.fn_stackspace).
-          
-FOverride Definition alloc_fenv := fun sp m f sp' m' => 
+
+FOverride Definition alloc_fenv := fun sp m f sp' m' =>
    Mem.alloc m 0 f.(self__Cminor.fn_stackspace) = (m', sp).
 
 FRecursion eval_constant about constant motive (fun (_ : constant) => genv -> fenv -> option val) by _rect.
-Case Ointconst n := (fun ge sp => Some (Vint n)). 
+Case Ointconst n := (fun ge sp => Some (Vint n)).
 Case Ofloatconst n := (fun ge sp => Some (Vfloat n)).
 Case Osingleconst n := (fun ge sp => Some (Vsingle n)).
 Case Olongconst n := (fun ge sp => Some (Vlong n)).
@@ -97,11 +97,17 @@ FInductive eval_expr :  genv -> fenv -> env -> mem -> letenv -> expr -> val -> P
       eval_expr ge e le m lenv a1 v1 ->
       eval_expr ge e le m lenv a2 v2 ->
       eval_binop op v1 v2 m = Some v ->
-      eval_expr ge e le m lenv (Ebinop op a1 a2) v.              
+      eval_expr ge e le m lenv (Ebinop op a1 a2) v.
+
+Closing Fact eval_expr_const :
+  forall ge e le m lenv cst v,
+    eval_expr ge e le m lenv (Econst cst) v ->
+    eval_constant cst ge e = Some v
+  by {intros * H; inv H; auto}.
 
 FRecursion find_label.
-Case Sifthenelse a s1 s2 := 
-(fun lbl k => 
+Case Sifthenelse a s1 s2 :=
+(fun lbl k =>
    match find_label s1 lbl k with
    | Some sk => Some sk
    | None => find_label s2 lbl k
@@ -131,7 +137,7 @@ Family Cminor.
 
 FInductive constant : Type :=
 | Ofloatconst: float -> constant (* double-precision floating-point constant *)
-| Osingleconst: float32 -> constant. (* single-precision floating-point constant *)       
+| Osingleconst: float32 -> constant. (* single-precision floating-point constant *)
 
 FRecursion eval_constant.
 Case Ofloatconst n := (fun ge sp => Some (Vfloat n)).
@@ -166,7 +172,7 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
    eval_expr ge sp e m lenv a v ->
    switch_argument islong v n ->
    step ge (State f (Sswitch islong a cases default) k sp e m)
-     E0 (State f (Sexit (switch_target n default cases)) k sp e m).  
+     E0 (State f (Sexit (switch_target n default cases)) k sp e m).
 
 FEnd Cminor.
 
@@ -228,21 +234,21 @@ Case _ := (fun lbl k => None).
 FEnd find_label.
 
 FInductive step : genv -> state -> trace -> state -> Prop :=
-| step_call: forall ge lenv f optid sig a bl k e le m vf vargs fd,
-      eval_expr ge le e m lenv a vf ->
-      eval_exprlist ge le e m lenv bl vargs ->
+| step_call: forall ge lenv f optid sig a bl k e sp m vf vargs fd,
+      eval_expr ge sp e m lenv a vf ->
+      eval_exprlist ge sp e m lenv bl vargs ->
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
-      step ge (State f (Scall optid sig a bl) k le e m)
-        E0 (Callstate fd vargs (Kcall optid f e le k) m)
-| step_tailcall: forall ge lenv f optid sig a bl k e le m m' vf vargs fd,
-      eval_expr ge le e m lenv a vf ->
-      eval_exprlist ge le e m lenv bl vargs ->
+      step ge (State f (Scall optid sig a bl) k sp e m)
+        E0 (Callstate fd vargs (Kcall optid f e sp k) m)
+| step_tailcall: forall ge lenv f sig a bl k e sp m m' vf vargs fd,
+      eval_expr ge (Vptr sp Ptrofs.zero) e m lenv a vf ->
+      eval_exprlist ge (Vptr sp Ptrofs.zero) e m lenv bl vargs ->
       Genv.find_funct ge vf = Some fd ->
       funsig fd = sig ->
-      Mem.free m le 0 (self__Cminor.fn_stackspace f) = Some m' ->
-      step ge (State f (Scall optid sig a bl) k le e m)
-        E0 (Callstate fd vargs (call_cont k) m'). 
+      Mem.free m sp 0 (self__Cminor.fn_stackspace f) = Some m' ->
+      step ge (State f (Stailcall sig a bl) k (Vptr sp Ptrofs.zero) e m)
+        E0 (Callstate fd vargs (call_cont k) m').
 FEnd Cminor.
 
 FEnd Comp_Call.
@@ -253,7 +259,7 @@ Family Cminor extends Cfam.
 FInductive expr : Type :=
  | Eload : memory_chunk -> expr -> expr.
 
-FInductive stmt : Type :=                                                        
+FInductive stmt : Type :=
 | Sstore : memory_chunk -> expr -> expr -> stmt.
 
 FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
@@ -261,8 +267,8 @@ FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Pro
    eval_expr ge sp e m lenv addr vaddr ->
    Mem.loadv chunk m vaddr = Some v ->
    eval_expr ge sp e m lenv (Eload chunk addr) v.
-           
-FRecursion find_label.  
+
+FRecursion find_label.
 Case _ := (fun lbl k => None).
 FEnd find_label.
 
@@ -284,12 +290,12 @@ FEnd Cminor.
 
 FEnd Comp_Field.
 
-(*Family Comp extends 
+(*Family Comp extends
   Base,
   Comp_Switch,
   Comp_Loops,
-  Comp_Heap, 
-  Comp_Field, 
+  Comp_Heap,
+  Comp_Field,
   Comp_Call,
   Comp_External,
   Comp_Builtin.
