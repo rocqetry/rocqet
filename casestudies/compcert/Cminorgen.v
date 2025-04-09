@@ -524,7 +524,7 @@ Qed. CloseFLemma.
 FLemma match_callstack_match_globalenvs:
   forall ge f m tm cs bound tbound,
   match_callstack ge f m tm cs bound tbound ->
-  exists hi, match_globalenvs f hi.
+  exists hi, match_globalenvs ge f hi.
 FProofLemma.
   induction 1; eauto.
 Qed. CloseFLemma.
@@ -1458,7 +1458,7 @@ Closing Fact match_is_call_cont :
     star T.step tge (T.State tfn T.Sskip tk sp te tm)
                E0 (T.State tfn T.Sskip tk' sp te tm)
     /\ T.is_call_cont tk'
-    /\ match_cont k tk' cenv nil cs.
+    /\ match_cont k tk' cenv nil cs
 by plain { induction 1; simpl; intros; try contradiction; eauto }.
 
 Require Import Coq.Program.Equality.
