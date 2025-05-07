@@ -8,7 +8,7 @@ exception NestedCommand
 exception ClosingWrongScope
 
 let report ~error = raise error
-let fail ~info = failwith info
+let fail ~info = CErrors.user_err (Pp.str info)
 
 let failwith_stacktrace ~info =
   let backtrace =
