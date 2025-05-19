@@ -31,10 +31,20 @@ Open Scope asm.
 
 Trait Base.
 
-Family Cfam.
-
+Family CminorSel.
 FInductive expr : Type :=
-| Evar : ident -> expr. (* reading a temporary variable *)
+| Evar : ident -> expr  
+| Econdition : condexpr -> expr -> expr -> expr
+| Eop : operation -> exprlist -> expr
+| Elet : expr -> expr -> expr
+| Eletvar : nat -> expr
+with exprlist : Type :=
+| Enil: exprlist
+| Econs: expr -> exprlist -> exprlist
+with condexpr : Type :=
+| CEcond : condition -> exprlist -> condexpr
+| CEcondition : condexpr -> condexpr -> condexpr -> condexpr
+| CElet: expr -> condexpr -> condexpr.
 
 FDefinition label := ident.
 FInductive stmt : Type :=
@@ -43,14 +53,24 @@ FInductive stmt : Type :=
 | Sseq: stmt -> stmt -> stmt
 | Sreturn: option expr -> stmt
 | Slabel: label -> stmt -> stmt
-| Sgoto: label -> stmt.
+| Sgoto: label -> stmt 
+| Sifthenelse: condexpr -> stmt -> stmt -> stmt.
 
-(* Abstract functionality to be overriden *)
-FOpaque Definition function : Type := cheat.
-FOpaque Definition function_body : function -> stmt := cheat.
-FOpaque Definition function_locals : function -> list ident := cheat.
-FOpaque Definition function_params : function -> list ident := cheat.
-FOpaque Definition function_sig : function -> signature := cheat.
+MetaData fn binds fn_sig, fn_params, fn_vars, fn_stackspace, fn_body.
+Record fn : Type := mkfunction {
+   fn_sig: signature;
+   fn_params: list ident;
+   fn_vars: list ident;
+   fn_stackspace: Z;
+   fn_body: stmt
+}.
+FEnd fn.
+
+FDefinition function := fn.
+FDefinition function_body := fn_body.
+FDefinition function_locals := fn_vars.
+FDefinition function_params := fn_params.
+FDefinition function_sig := fn_sig.
 
 FDefinition fundef := AST.fundef function.
 FDefinition program := AST.program fundef unit.
@@ -63,9 +83,12 @@ FDefinition funsig := fun (fd: fundef) =>
 
 FDefinition genv := Genv.t fundef unit.
 
-(* Function env/stack space *)
-FOpaque Definition fenv : Type := cheat.
+
+(* stack pointer *)
+(* Vptr sp Ptrofs.zero *)
+FDefinition fenv := block.
 FOpaque Definition empty_fenv : fenv := cheat.
+
 
 FDefinition env := PTree.t val.
 FDefinition empty_env : env := PTree.empty val.
@@ -90,9 +113,8 @@ FEnd set_locals.
 FDefinition init_env : function -> list val -> env := fun f vargs =>
   set_locals (function_locals f) (set_params vargs (function_params f)).
 
-(* Semantics for allocation of variables and binding of parameters at function entry. *)
-FOpaque Definition free_fenv : mem -> fenv -> function -> option mem := cheat.
-FOpaque Definition alloc_fenv : fenv -> mem -> function -> fenv -> mem -> Prop := cheat.
+FDefinition free_fenv : mem -> fenv -> function -> option mem := fun m sp f => Mem.free m sp 0 (fn_stackspace f).
+FDefinition alloc_fenv : fenv -> mem -> function -> fenv -> mem -> Prop := fun sp m f sp' m' => Mem.alloc m 0 (fn_stackspace f) = (m', sp').
 
 MetaData create_undef_temps.
 Fixpoint create_undef_temps (temps: list ident) : env :=
@@ -157,10 +179,44 @@ FEnd is_call_cont.
 
 FDefinition letenv := list val.
 
-FInductive eval_expr :  genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
+FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
 | eval_Evar: forall ge lenv e le m id v,
     PTree.get id le = Some v ->
-    eval_expr ge e le m lenv (Evar id) v.
+    eval_expr ge e le m lenv (Evar id) v  
+| eval_Eop: forall ge sp e m le op al vl v,
+    eval_exprlist ge sp e m le al vl ->
+    eval_operation ge (Vptr sp Ptrofs.zero) op vl m = Some v ->
+    eval_expr ge sp e m le (Eop op al) v
+| eval_Econdition: forall ge sp e m le a b c va v,
+    eval_condexpr ge sp e m le a va ->
+    eval_expr ge sp e m le (if va then b else c) v ->
+    eval_expr ge sp e m le (Econdition a b c) v
+| eval_Elet: forall ge sp e m le a b v1 v2,
+    eval_expr ge sp e m le a v1 ->
+    eval_expr ge sp e m (v1 :: le) b v2 ->
+    eval_expr ge sp e m le (Elet a b) v2
+| eval_Eletvar: forall ge sp e m le n v,
+    nth_error le n = Some v ->
+    eval_expr ge sp e m le (Eletvar n) v
+with eval_exprlist: genv -> fenv -> env -> mem -> letenv -> exprlist -> list val -> Prop :=
+| eval_Enil: forall ge sp e m le,
+    eval_exprlist ge sp e m le Enil nil
+| eval_Econs: forall ge sp e m le a1 al v1 vl,
+    eval_expr ge sp e m le a1 v1 -> eval_exprlist ge sp e m le al vl ->
+    eval_exprlist ge sp e m le (Econs a1 al) (v1 :: vl)
+with eval_condexpr: genv -> fenv -> env -> mem -> letenv -> condexpr -> bool -> Prop :=
+| eval_CEcond: forall ge sp e m le cond al vl vb,
+    eval_exprlist ge sp e m le al vl ->
+    eval_condition cond vl m = Some vb ->
+    eval_condexpr ge sp e m le (CEcond cond al) vb
+| eval_CEcondition: forall ge sp e m le a b c va v,
+    eval_condexpr ge sp e m le a va ->
+    eval_condexpr ge sp e m le (if va then b else c) v ->
+    eval_condexpr ge sp e m le (CEcondition a b c) v
+| eval_CElet: forall ge sp e m le a b v1 v2,
+    eval_expr ge sp e m le a v1 ->
+    eval_condexpr ge sp e m (v1 :: le) b v2 ->
+    eval_condexpr ge sp e m le (CElet a b) v2.
 
 FRecursion find_label about stmt motive (fun (_ : stmt) => label -> cont -> option (stmt * cont)) by _rect.
 Case Sseq s1 s2 :=
@@ -170,6 +226,12 @@ Case Sseq s1 s2 :=
       | None => find_label s2 lbl k
       end).
 Case Slabel lbl' s' := (fun lbl k => if ident_eq lbl lbl' then Some(s', k) else find_label s' lbl k).
+Case Sifthenelse c s1 s2 :=
+  (fun lbl k =>
+    match find_label s1 lbl k with
+    | Some sk => Some sk
+    | None => find_label s2 lbl k
+    end).
 Case _ := (fun lbl k => None).
 FEnd find_label.
 
@@ -206,7 +268,11 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
     alloc_fenv empty_fenv m f sp m1 ->
     init_env f vargs = le ->
      step ge (Callstate (AST.Internal f) vargs k m)
-       E0 (State f (function_body f) k sp le m1).
+       E0 (State f (function_body f) k sp le m1)  
+| step_ifthenelse: forall ge f c s1 s2 k sp e m b,
+   eval_condexpr ge sp e m nil c b ->
+   step ge (State f (Sifthenelse c s1 s2) k sp e m)
+     E0 (State f (if b then s1 else s2) k sp e m).
 
 MetaData initial_state.
 Inductive initial_state (p: program): state -> Prop :=
@@ -215,106 +281,15 @@ Inductive initial_state (p: program): state -> Prop :=
     Genv.init_mem p = Some m0 ->
     Genv.find_symbol ge p.(AST.prog_main) = Some b ->
     Genv.find_funct_ptr ge b = Some f ->
-    self__Cfam.funsig f = signature_main ->
+    funsig f = signature_main ->
     initial_state p (Callstate f nil Kstop m0).
 FEnd initial_state.
 
 MetaData final_state.
-Inductive final_state: self__Cfam.state -> int -> Prop :=
+Inductive final_state: state -> int -> Prop :=
 | final_state_intro: forall r m,
    final_state (Returnstate (Vint r) Kstop m) r.
 FEnd final_state.
-
-FEnd Cfam.
-
-Family CminorSel extends Cfam.
-FInductive expr : Type :=
-| Econdition : condexpr -> expr -> expr -> expr
-| Eop : operation -> exprlist -> expr
-| Elet : expr -> expr -> expr
-| Eletvar : nat -> expr
-with exprlist : Type :=
-| Enil: exprlist
-| Econs: expr -> exprlist -> exprlist
-with condexpr : Type :=
-| CEcond : condition -> exprlist -> condexpr
-| CEcondition : condexpr -> condexpr -> condexpr -> condexpr
-| CElet: expr -> condexpr -> condexpr.
-
-FInductive stmt : Type := Sifthenelse: condexpr -> stmt -> stmt -> stmt.
-
-MetaData fn binds fn_sig, fn_params, fn_vars, fn_stackspace, fn_body.
-Record fn : Type := mkfunction {
-   fn_sig: signature;
-   fn_params: list ident;
-   fn_vars: list ident;
-   fn_stackspace: Z;
-   fn_body: stmt
-}.
-FEnd fn.
-
-FOverride Definition function := fn.
-FOverride Definition function_body := fn_body.
-FOverride Definition function_locals := fn_vars.
-FOverride Definition function_params := fn_params.
-FOverride Definition function_sig := fn_sig.
-
-(* stack pointer *)
-(* Vptr sp Ptrofs.zero *)
-FOverride Definition fenv := block.
-FOverride Definition free_fenv := fun m sp f => Mem.free m sp 0 (fn_stackspace f).
-FOverride Definition alloc_fenv := fun sp m f sp' m' => Mem.alloc m 0 (fn_stackspace f) = (m', sp').
-
-FInductive eval_expr: genv -> fenv -> env -> mem -> letenv -> expr -> val -> Prop :=
-| eval_Eop: forall ge sp e m le op al vl v,
-    eval_exprlist ge sp e m le al vl ->
-    eval_operation ge (Vptr sp Ptrofs.zero) op vl m = Some v ->
-    eval_expr ge sp e m le (Eop op al) v
-| eval_Econdition: forall ge sp e m le a b c va v,
-    eval_condexpr ge sp e m le a va ->
-    eval_expr ge sp e m le (if va then b else c) v ->
-    eval_expr ge sp e m le (Econdition a b c) v
-| eval_Elet: forall ge sp e m le a b v1 v2,
-    eval_expr ge sp e m le a v1 ->
-    eval_expr ge sp e m (v1 :: le) b v2 ->
-    eval_expr ge sp e m le (Elet a b) v2
-| eval_Eletvar: forall ge sp e m le n v,
-    nth_error le n = Some v ->
-    eval_expr ge sp e m le (Eletvar n) v
-with eval_exprlist: genv -> fenv -> env -> mem -> letenv -> exprlist -> list val -> Prop :=
-| eval_Enil: forall ge sp e m le,
-    eval_exprlist ge sp e m le Enil nil
-| eval_Econs: forall ge sp e m le a1 al v1 vl,
-    eval_expr ge sp e m le a1 v1 -> eval_exprlist ge sp e m le al vl ->
-    eval_exprlist ge sp e m le (Econs a1 al) (v1 :: vl)
-with eval_condexpr: genv -> fenv -> env -> mem -> letenv -> condexpr -> bool -> Prop :=
-| eval_CEcond: forall ge sp e m le cond al vl vb,
-    eval_exprlist ge sp e m le al vl ->
-    eval_condition cond vl m = Some vb ->
-    eval_condexpr ge sp e m le (CEcond cond al) vb
-| eval_CEcondition: forall ge sp e m le a b c va v,
-    eval_condexpr ge sp e m le a va ->
-    eval_condexpr ge sp e m le (if va then b else c) v ->
-    eval_condexpr ge sp e m le (CEcondition a b c) v
-| eval_CElet: forall ge sp e m le a b v1 v2,
-    eval_expr ge sp e m le a v1 ->
-    eval_condexpr ge sp e m (v1 :: le) b v2 ->
-    eval_condexpr ge sp e m le (CElet a b) v2.
-
-FRecursion find_label.
-Case Sifthenelse c s1 s2 :=
-  (fun lbl k =>
-    match find_label s1 lbl k with
-    | Some sk => Some sk
-    | None => find_label s2 lbl k
-    end).
-FEnd find_label.
-
-FInductive step : genv -> state -> trace -> state -> Prop :=
-| step_ifthenelse: forall ge f c s1 s2 k sp e m b,
-   eval_condexpr ge sp e m nil c b ->
-   step ge (State f (Sifthenelse c s1 s2) k sp e m)
-     E0 (State f (if b then s1 else s2) k sp e m).
 
 FEnd CminorSel.
 
@@ -4426,9 +4401,9 @@ FEnd RTLgen.
 FEnd Comp_Call.
 
 (* small extension *)
-Trait Comp_Switch extends Comp_Loops.
+Trait Comp_Switch extends Base, Comp_Loops.
 
-Trait CminorSel_Switch extends CminorSel.
+Family CminorSel.
 
 Inherit expr.
 
@@ -4441,7 +4416,7 @@ Inductive exitexpr : Type :=
 FEnd exitexpr.
 
 FInductive stmt : Type :=
-  | Sswitch: exitexpr -> stmt.
+| Sswitch: exitexpr -> stmt.
 
 Inherit eval_expr.
 
@@ -4473,12 +4448,9 @@ FInductive step : genv -> state -> trace -> state -> Prop :=
    step ge (State f (Sswitch a) k sp e m)
      E0 (State f (Sexit n) k sp e m).
 
-FEnd CminorSel_Switch.
-
-Family CminorSel extends CminorSel_Switch.
 FEnd CminorSel.
 
-Trait RTLgen_Switch extends RTLgen.
+Family RTLgen.
 
 Inherit labelmap.
 
@@ -4487,11 +4459,11 @@ From Rocqet Require Import RTLmonad.
 Inherit transl_exit.
 
 MetaData transl_jumptable.
-Fixpoint transl_jumptable (nexits: list self__RTLgen_Switch.T.node) (tbl: list nat) : self__RTLgen_Switch.mon (list self__RTLgen_Switch.T.node) :=
+Fixpoint transl_jumptable (nexits: list T.node) (tbl: list nat) : self__RTLgen.mon (list T.node) :=
   match tbl with
   | nil => ret nil
   | t1 :: tl =>
-      do n1 <- self__RTLgen_Switch.transl_exit nexits t1;
+      do n1 <- transl_exit nexits t1;
       do nl <- transl_jumptable nexits tl;
       ret (n1 :: nl)
   end.
@@ -4717,14 +4689,11 @@ all: intros until tge; intros TRANSL A B; intros R1 MSTATE; inv MSTATE.
   econstructor; eauto. fconstructor.
 Qed. FEnd transl_step_correct.
 
-FEnd RTLgen_Switch.
-
-Family RTLgen extends RTLgen_Switch.
 FEnd RTLgen.
 
 FEnd Comp_Switch.
 
-Family Comp extends
+(*Family Comp extends
   Base,
   Comp_Switch,
   Comp_Loops,
@@ -4738,6 +4707,4 @@ Final Family S := CminorSel.
 Final Family T := RTL.
 FEnd RTLgen.
 
-FEnd Comp.
-
-
+FEnd Comp.*)

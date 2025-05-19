@@ -9,6 +9,7 @@ module DB = Backend.Declare
 module Ctx = struct
   type t = {
     names : Names.Id.t list;
+    inherited_goals : (Names.Id.t * Names.Id.t list) list;
     implementing_handler_names : Names.Id.t list;
     inherited_handlers : Names.Id.t list;
     compiled_context : CompiledModuleType.t;
@@ -19,8 +20,7 @@ module Ctx = struct
     rec_principle_prefix : Libnames.qualid;
     inductive_paths : Libnames.qualid list;
     suffix : RecKind.t;
-    inductive : VernacInductive.t;
-    inherited_handlers_table : (Names.Id.t * Names.Id.t) list;
+    inductive : VernacInductive.t;    
     inherited_names : Names.Id.t list;
   }
 
@@ -134,11 +134,11 @@ let open_theorem ~(args : Frec_arg.t list) =
   let inherited_elem =
     Inheritance.lookup_field_in_base ~field:(List.hd names) ~context
   in
-  let inherited_names, inherited_handlers, inherited_handlers_table =
+  let inherited_names, goals =
     match inherited_elem with
-    | Some (TheoremDefinition { names; handlers; handlers_table; _ }) ->
-        (names, handlers, handlers_table)
-    | _ -> ([], [], [])
+    | Some (TheoremDefinition { names; goals; _ }) ->
+        (names, goals)
+    | _ -> ([], [])
   in
   Context.with_pinned_context (fun () ->
       List.iter2
@@ -159,10 +159,9 @@ let open_theorem ~(args : Frec_arg.t list) =
     |> List.concat_map (fun inductive_name ->
            inductive |> VernacInductive.create_inductive_constructor_map
            |> Names.Id.Map.find inductive_name)
-  in
-  (*let implementing_handler_names = handler_names in*)
-  let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
-  let inherited_handlers = inherited_handlers |> List.concat_map snd in
+  in  
+  let inherited_handlers = goals |> List.concat_map snd in 
+  let inside x l = List.exists (fun k -> Names.Id.equal k x) l in  
   let implementing_handler_names =
     handler_names |> List.filter (fun x -> not (inside x inherited_handlers))
   in
@@ -193,9 +192,9 @@ let open_theorem ~(args : Frec_arg.t list) =
         inductive_paths;
         parameters;
         suffix;
-        inductive;
-        inherited_handlers_table;
+        inductive;        
         inherited_names;
+        inherited_goals = goals;
       }
   in
   Ctx.update ctx;
@@ -210,13 +209,13 @@ let open_theorem_extension ~(names : Names.Id.t list) =
       context
   in
   let elem = Inheritance.lookup_field_in_base ~field:(List.hd names) ~context in
-  let inductive_paths, inherited_handlers, suffix, inherited_handlers_table =
+  let inductive_paths, suffix, goals =
     match elem with
     | None -> Errors.fail ~info:"There is no such FInduction in a base family"
     | Some
         (LinkageElem.TheoremDefinition
-          { inductive_paths; handlers; suffix; handlers_table; _ }) ->
-        (inductive_paths, handlers, suffix, handlers_table)
+          { inductive_paths; suffix; goals; _ }) ->
+        (inductive_paths, suffix, goals)
     | _ -> Errors.fail ~info:"Expected to inherit an FInduction"
   in
   let inductive, recursors, _ =
@@ -232,7 +231,7 @@ let open_theorem_extension ~(names : Names.Id.t list) =
            |> Names.Id.Map.find inductive_name)
   in
   let inside x l = List.exists (fun k -> Names.Id.equal k x) l in
-  let inherited_handlers = inherited_handlers |> List.concat_map snd in
+  let inherited_handlers = goals |> List.concat_map snd in
   let implementing_handler_names =
     handler_names |> List.filter (fun x -> not (inside x inherited_handlers))
   in
@@ -264,7 +263,7 @@ let open_theorem_extension ~(names : Names.Id.t list) =
         parameters;
         suffix;
         inductive;
-        inherited_handlers_table;
+        inherited_goals = goals;
         inherited_names = names;
       }
   in
@@ -308,7 +307,7 @@ let close_theorem () =
           suffix;
           rec_principle_prefix;
           inductive_paths;
-          inherited_handlers_table;
+          inherited_goals;
           inherited_names;
           _;
         } =
@@ -316,6 +315,7 @@ let close_theorem () =
   in
   rec_principle_prefix |> ignore;
   inherited_handlers |> ignore;
+  inductive |> ignore;
   let compiled_impl = DB.end_module () in
   let default_ctx_params =
     let context = Context.get () in
@@ -326,15 +326,11 @@ let close_theorem () =
     LinkageElem.FieldDefinition
       { compiled_context; compiled_impl; default_ctx_params }
   in
-  (* Add the goal as a field *)
-  Context.add_field ~name:goal_name ~elem:goal_elem;
-  let open Constrexpr_ops in
-  let implemented_handlers =
-    Termutils.extract_handlers_from_inductive_proof implementing_handler_names
-      (mkIdentC goal_name) suffix
-  in
+  (* Add the solved goal as a field *)
+  Context.add_field ~name:goal_name ~elem:goal_elem;  
+  let current_goal = (goal_name, implementing_handler_names) in
+  let goals = inherited_goals @ [current_goal] in
   let inductive_names = inductive_paths |> List.map Naming.extract_path_base in
-  (* We want the names to be in the right order *)
   let handlers =
     inductive_names
     |> List.map (fun inductive_name ->
@@ -343,24 +339,7 @@ let close_theorem () =
              |> Names.Id.Map.find inductive_name
            in
            (inductive_name, handlers))
-  in
-  let implemented_handlers =
-    List.map (fun (name, expr) -> (name, expr)) implemented_handlers
-  in
-  (* Add the handlers as fields *)
-  Context.with_pinned_context (fun () ->
-      implemented_handlers
-      |> List.iter (fun (constructor_name, handler) ->
-             let name =
-               Naming.handler_name ~recursors:names ~case:constructor_name
-             in
-             Definition.add_definition ~name handler));
-  let handlers_table =
-    implementing_handler_names
-    |> List.map (fun handler ->
-           (handler, Naming.handler_name ~recursors:names ~case:handler))
-  in
-  let handlers_table = inherited_handlers_table @ handlers_table in
+  in  
   let context = Context.get () in
   let compiled_context, parameters =
     Codegen.compile_linkage_context
@@ -373,11 +352,11 @@ let close_theorem () =
       {
         names;
         compiled_signature;
-        compiled_context;
-        handlers;
+        compiled_context;        
         inductive_paths;
         suffix;
-        handlers_table;
+        goals;
+        handlers;
         default_ctx_params;
       }
   in

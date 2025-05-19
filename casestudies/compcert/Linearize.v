@@ -1049,8 +1049,20 @@ FEnd Comp_Call.
 
 Trait Comp_Switch extends Comp_Loops. FEnd Comp_Switch.
 
-Family Comp extends
-  Base,
+(*Family Comp extends
+  Base, Comp_Builtin, Comp_Loops, Comp_Field,
+  Comp_Heap, Comp_Switch, Comp_Call.
+
+Inherit LTL.
+
+FDefinition g := LTL.Lstore.*)
+
+(*Family Comp extends
+   Base, Comp_Builtin, Comp_Loops, Comp_Field,
+  Comp_Heap, Comp_Switch, Comp_Call.
+
+  (*Base,            
+  Comp_Loops,
   Comp_Builtin,
   Comp_Loops,
   Comp_Field,
@@ -1063,6 +1075,6 @@ Final Family S := LTL.
 Final Family T := Linear.
 FEnd Linearize.
 
-FEnd Comp.
+FEnd Comp.*)
 
 

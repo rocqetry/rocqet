@@ -2522,7 +2522,7 @@ FEnd Cshmgen.
 
 FEnd Comp_Switch.
 
-Family Comp extends 
+(*Family Comp extends 
   Base,
   Comp_Switch,
   Comp_Loops,
@@ -2536,4 +2536,4 @@ Final Family S := Clight.
 Final Family T := Csharpminor.
 FEnd Cshmgen.
 
-FEnd Comp.
+FEnd Comp.*)

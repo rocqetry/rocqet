@@ -140,12 +140,7 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t)
         remove_duplicates (base.behaviour_table @ derived.behaviour_table)
       in
       let names = remove_duplicates (base.names @ derived.names) in
-      let handlers = combine_mapping base.handlers derived.handlers in
-      let _ =
-        handlers |> List.concat_map snd
-        |> List.iter (fun n ->
-               Printf.printf "Handler: %s\n" (Names.Id.to_string n))
-      in
+      let handlers = combine_mapping base.handlers derived.handlers in      
       RecursorDefinition
         {
           derived with
@@ -156,16 +151,14 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t)
           behaviour_table;
         }
   | TheoremDefinition derived, TheoremDefinition base ->
-      let names = remove_duplicates (base.names @ derived.names) in
-      let handlers_table =
-        remove_duplicates (base.handlers_table @ derived.handlers_table)
-      in
+      let goals = remove_duplicates (base.goals @ derived.goals) in
+      let names = remove_duplicates (base.names @ derived.names) in      
       let handlers = combine_mapping base.handlers derived.handlers in
       let inductive_paths =
         remove_duplicates_qualid (base.inductive_paths @ derived.inductive_paths)
       in
       TheoremDefinition
-        { derived with names; inductive_paths; handlers; handlers_table }
+        { derived with names; inductive_paths; goals; handlers }
   | MetaDataSection derived, MetaDataSection _ -> MetaDataSection derived
   | ClosingFact fact, ClosingFact _ -> ClosingFact fact
   | PartialRecursor derived, PartialRecursor _ -> PartialRecursor derived
@@ -618,15 +611,16 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
               let name = List.hd theorem.inductive_paths in
               Context.lookup_inductive_for_recursion ~name context
             in
-            let handlers = theorem.handlers |> List.concat_map snd in
-            let handlers =
+            (*let handlers = theorem.handlers |> List.concat_map snd in*)
+            let handlers = theorem.goals |> List.concat_map snd in 
+            let _ =
               Checks.check_exhaustive ~names:theorem.names ~inductive
                 ~inductive_paths:theorem.inductive_paths ~handlers
             in
             let compiled_context, _ =
               compile_context theorem.compiled_context
             in
-            (TheoremDefinition { theorem with handlers; compiled_context }, [])
+            (TheoremDefinition { theorem with goals = theorem.goals; compiled_context }, [])                        
       in
       let open Bwd.Infix in
       let fields = Snoc (linkage.fields, (name, element)) <@ fresh_elements in
