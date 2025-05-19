@@ -166,7 +166,9 @@ module VernacInductive = struct
         | ( Vernacexpr.Constructors base_constr,
             Vernacexpr.Constructors derived_constr ) ->
             Vernacexpr.Constructors
-              (remove_duplicates (fun (_, ((n: Names.lident), _)) -> n.v) (base_constr @ derived_constr))
+              (remove_duplicates
+                 (fun (_, ((n : Names.lident), _)) -> n.v)
+                 (base_constr @ derived_constr))
         | _, _ -> Errors.fail ~info:"Record types are not yet supported"
       in
       let child_ind = (a, b, c, childcstrs) in
@@ -411,8 +413,161 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
-end =
-  LinkageElem
+
+  type compiled_sig = {
+    default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+    compiled_context : CompiledModuleType.t;
+    compiled_signature : CompiledModuleType.t;
+  }
+
+  val to_compiled_sig : t -> compiled_sig
+end = struct
+  type t =
+    | InductiveDefinition of {
+        inductive : VernacInductive.t;
+        recursors : Recursors.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | InductiveAxiom of {
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | FamilyDefinition of {
+        linkage : Linkage.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | TraitDefinition of {
+        linkage : Linkage.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | FieldDefinition of {
+        compiled_context : CompiledModuleType.t;
+        compiled_impl : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | OpaqueFieldDefinition of {
+        type_name : Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | RecursorDefinition of {
+        names : Names.Id.t list;
+        handlers : (Names.Id.t * Names.Id.t list) list;
+        inductive_paths : Libnames.qualid list;
+        suffix : RecKind.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        arguments : Names.Id.t list;
+        prefix : Libnames.qualid;
+        handlers_table : (Names.Id.t * Names.Id.t) list;
+        behaviour_table : (Names.Id.t * Names.Id.t) list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | TheoremDefinition of {
+        names : Names.Id.t list;
+        suffix : RecKind.t;
+        inductive_paths : Libnames.qualid list;
+        handlers : (Names.Id.t * Names.Id.t list) list;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        handlers_table : (Names.Id.t * Names.Id.t) list;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | RecursiveAxiom of {
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | ComputationalAxiom of {
+        name : Names.Id.t;
+        axiom : Constrexpr.constr_expr;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | MetaDataSection of {
+        name : Names.Id.t;
+        bound_names : Names.Id.t list;
+        compiled_context : CompiledModuleType.t;
+        compiled_impl : CompiledModule.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | ClosingFact of {
+        type_name : Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        script : Ltac_plugin.Tacexpr.raw_tactic_expr;
+        plain : bool;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | PartialRecursor of {
+        name : Names.Id.t;
+        type_name : Names.Id.t;
+        inductive_path : Libnames.qualid;
+        handlers : Names.Id.t list;
+        defining_handlers : Names.Id.t list;
+        behaviour : (Names.Id.t * Names.Id.t) list;
+        prec_suffix : Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+
+  type compiled_sig = {
+    default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+    compiled_context : CompiledModuleType.t;
+    compiled_signature : CompiledModuleType.t;
+  }
+
+  let to_compiled_sig = function
+    | MetaDataSection
+        {
+          default_ctx_params;
+          compiled_context;
+          compiled_impl = compiled_signature;
+          _;
+        }
+    | ComputationalAxiom
+        { default_ctx_params; compiled_context; compiled_signature; _ }
+    | InductiveAxiom
+        { default_ctx_params; compiled_context; compiled_signature; _ }
+    | RecursiveAxiom
+        { default_ctx_params; compiled_context; compiled_signature; _ }
+    | TheoremDefinition
+        { default_ctx_params; compiled_context; compiled_signature; _ }
+    | OpaqueFieldDefinition
+        { default_ctx_params; compiled_context; compiled_signature; _ }
+    | FieldDefinition
+        {
+          default_ctx_params;
+          compiled_context;
+          compiled_impl = compiled_signature;
+          _;
+        }
+    | PartialRecursor
+        { default_ctx_params; compiled_context; compiled_signature; _ }
+    | InductiveDefinition
+        { default_ctx_params; compiled_context; compiled_signature; _ }
+    | ClosingFact
+        { default_ctx_params; compiled_context; compiled_signature; _ }
+    | FamilyDefinition
+        { default_ctx_params; compiled_context; compiled_signature; _ }
+    | RecursorDefinition
+        { default_ctx_params; compiled_context; compiled_signature; _ }
+    | TraitDefinition
+        { default_ctx_params; compiled_context; compiled_signature; _ } ->
+        { default_ctx_params; compiled_context; compiled_signature }
+end
 
 and Linkage : sig
   type t = {
@@ -437,6 +592,8 @@ and Linkage : sig
 
   val path_substitution_elem :
     LinkageElem.t -> source:Names.Id.t -> target:Names.Id.t -> LinkageElem.t
+
+  val fields_for_next_context : t -> LinkageElem.compiled_sig list
 end = struct
   type t = {
     context : (Names.Id.t * Constrexpr.module_ast) Bwd.t;
@@ -559,6 +716,21 @@ end = struct
     let f (name, elem) = (name, path_substitution_elem elem ~source ~target) in
     let fields = linkage.fields |> Bwd.map f in
     { linkage with fields }
+
+  let fields_for_next_context linkage =
+    let rec f acc = function
+      | Bwd.Emp -> acc
+      | Snoc (hd, (_, field)) -> (
+          let compiled_sig = LinkageElem.to_compiled_sig field in
+          match acc with
+          | { LinkageElem.compiled_context; _ } :: _
+            when not
+                 @@ Libnames.qualid_eq compiled_context
+                      compiled_sig.compiled_context ->
+              acc
+          | _ -> f (compiled_sig :: acc) hd)
+    in
+    f [] linkage.fields
 end
 
 (* A linkage we are currently constructing *)

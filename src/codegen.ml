@@ -97,18 +97,16 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
   in
   (* Filter principles not defined on this inductive *)
   let filter_mutual_principle suffixes =
-    if Termutils.is_prop_indexed_inductive ind_def
-    then [ RecKind.IndComplete ]
-    else     
-    suffixes
-    |> List.filter_map (fun suffix ->
-           RecursorStore.find_opt suffix !defined_recursors
-           |> Option.map (Fun.const suffix))
+    if Termutils.is_prop_indexed_inductive ind_def then [ RecKind.IndComplete ]
+    else
+      suffixes
+      |> List.filter_map (fun suffix ->
+             RecursorStore.find_opt suffix !defined_recursors
+             |> Option.map (Fun.const suffix))
   in
   let collect_mutual_recursor () : unit B.t =
-    if List.length type_names > 1 then 
-      (possible_mutual_suffixes
-      |> filter_mutual_principle
+    if List.length type_names > 1 then (
+      possible_mutual_suffixes |> filter_mutual_principle
       |> List.iter (fun suffix ->
              let one_type_name = List.hd type_names in
              let principle =
@@ -117,7 +115,9 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
              in
              let principle =
                Names.Id.of_string
-                 (Names.Id.to_string one_type_name ^ "_" ^ Names.Id.to_string principle)
+                 (Names.Id.to_string one_type_name
+                 ^ "_"
+                 ^ Names.Id.to_string principle)
              in
              let recursor_type =
                principle |> Constrexpr_ops.mkIdentC |> Termutils.checked_type_of
@@ -127,7 +127,7 @@ let compile_inductive_implementation ~(ind_def : VernacInductive.t)
              in
              defined_mutual_recursor :=
                RecursorStore.add suffix recursor_type !defined_mutual_recursor);
-       B.return ())
+      B.return ())
     else B.return ()
   in
   let compiled_impl =
@@ -495,7 +495,7 @@ let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
     | LinkageCtx.Nested (_, linkage) -> linkage
   in
   let Linkage.{ fields; _ } = linkage in
-  let module_name_ctx =
+  let module_name_ctx () =
     Naming.fresh_name
       ~prefix:(Nameops.add_suffix field_name "Ctx" |> Names.Id.to_string)
   in
@@ -505,7 +505,7 @@ let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
   | Bwd.Emp ->
       let signature_name =
         B.run
-        @@ B.define_moduletype ~module_name:module_name_ctx
+        @@ B.define_moduletype ~module_name:(module_name_ctx ())
              ~parameters:(Bwd.to_list linkage.context) ~body:(fun _arguments ->
                B.return ())
       in
@@ -525,81 +525,13 @@ let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
             LinkageCtx.Nested (upper, { linkage with fields })
       in
       compile_linkage_context ~field_name context
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          MetaDataSection
-            {
-              default_ctx_params;
-              compiled_context;
-              compiled_impl = compiled_signature;
-              _;
-            } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          ComputationalAxiom
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          InductiveAxiom
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          RecursiveAxiom
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          TheoremDefinition
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          OpaqueFieldDefinition
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          FieldDefinition
-            {
-              default_ctx_params;
-              compiled_context;
-              compiled_impl = compiled_signature;
-              _;
-            } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          PartialRecursor
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          InductiveDefinition
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          ClosingFact
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          FamilyDefinition
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-  | Bwd.Snoc
-      ( _,
-        ( _,
-          RecursorDefinition
-            { default_ctx_params; compiled_context; compiled_signature; _ } ) )
-    ->
+  | _ ->
+      let fields = Linkage.fields_for_next_context linkage in
+      let { LinkageElem.compiled_context; _ } = List.hd fields in
       let signature_name =
         B.(
           run
-          @@ define_moduletype ~module_name:module_name_ctx
+          @@ define_moduletype ~module_name:(module_name_ctx ())
                ~parameters:(Bwd.to_list linkage.context)
                ~body:(fun _arguments ->
                  let ctx =
@@ -609,17 +541,23 @@ let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
                      ~arguments:parameters
                  in
                  let* () = include_module ~module_expr:ctx in
-                 let parameters =
-                   normalize_parameters ~default_ctx_params ~parameters
-                 in
-                 let signature =
-                   Termutils.apply_module
-                     ~functor_expr:
-                       (Termutils.ident_to_module_expr compiled_signature)
-                     ~arguments:parameters
-                 in
-                 let* () = include_module ~module_expr:signature in
-                 return ()))
+                 fields
+                 |> List.map
+                      (fun
+                        LinkageElem.
+                          { default_ctx_params; compiled_signature; _ }
+                      ->
+                        let parameters =
+                          normalize_parameters ~default_ctx_params ~parameters
+                        in
+                        let signature =
+                          Termutils.apply_module
+                            ~functor_expr:
+                              (Termutils.ident_to_module_expr compiled_signature)
+                            ~arguments:parameters
+                        in
+                        include_module ~module_expr:signature)
+                 |> flatmap))
       in
       let signature =
         Termutils.apply_module
@@ -628,6 +566,10 @@ let rec compile_linkage_context ~field_name (context : LinkageCtx.t) :
       in
       ( signature_name,
         linkage.context @> [ (Naming.self_version linkage.name, signature) ] )
+
+let compile_linkage_context ~field_name context =
+  Env.Context.compute_or_pinned (fun () ->
+      compile_linkage_context ~field_name context)
 
 let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
     ~(module_name : Names.Id.t) ~(fields : (Names.Id.t * LinkageElem.t) Bwd.t) =
@@ -919,101 +861,17 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
 let compile_linkage = compile_linkage None
 
 let compile_linkage_signature linkage =
-  let Linkage.{ name; fields; context; _ } = linkage in
+  let Linkage.{ name; context; _ } = linkage in
   let helper = Naming.fresh_name ~prefix:"HelperSig" in
   let helper_module =
-    match fields with
-    | Bwd.Emp ->
+    match Linkage.fields_for_next_context linkage with
+    | [] ->
         B.(
           run
           @@ define_moduletype ~module_name:helper
                ~parameters:(Bwd.to_list context) ~body:(fun _ctx -> return ()))
-    | Snoc
-        ( _,
-          ( _,
-            LinkageElem.FamilyDefinition
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Snoc
-        ( _,
-          ( _,
-            LinkageElem.TraitDefinition
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Snoc
-        ( _,
-          ( _,
-            ComputationalAxiom
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Snoc
-        ( _,
-          ( _,
-            InductiveAxiom
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Snoc
-        ( _,
-          ( _,
-            RecursiveAxiom
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Snoc
-        ( _,
-          ( _,
-            MetaDataSection
-              {
-                default_ctx_params;
-                compiled_context;
-                compiled_impl = compiled_signature;
-                _;
-              } ) )
-    | Snoc
-        ( _,
-          ( _,
-            FieldDefinition
-              {
-                default_ctx_params;
-                compiled_context;
-                compiled_impl = compiled_signature;
-                _;
-              } ) )
-    | Bwd.Snoc
-        ( _,
-          ( _,
-            TheoremDefinition
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Bwd.Snoc
-        ( _,
-          ( _,
-            PartialRecursor
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Bwd.Snoc
-        ( _,
-          ( _,
-            ClosingFact
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Bwd.Snoc
-        ( _,
-          ( _,
-            OpaqueFieldDefinition
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Bwd.Snoc
-        ( _,
-          ( _,
-            InductiveDefinition
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        )
-    | Bwd.Snoc
-        ( _,
-          ( _,
-            RecursorDefinition
-              { default_ctx_params; compiled_context; compiled_signature; _ } )
-        ) ->
+    | fields ->
+        let { LinkageElem.compiled_context; _ } = List.hd fields in
         B.(
           run
           @@ define_moduletype ~module_name:helper
@@ -1024,18 +882,25 @@ let compile_linkage_signature linkage =
                        (Termutils.ident_to_module_expr compiled_context)
                      ~arguments:ctx
                  in
-                 let* _ = include_module ~module_expr:context_module_expr in
-                 let ctx =
-                   normalize_parameters ~default_ctx_params ~parameters:ctx
-                 in
-                 let signature_module_expr =
-                   Termutils.apply_module
-                     ~functor_expr:
-                       (Termutils.ident_to_module_expr compiled_signature)
-                     ~arguments:ctx
-                 in
-                 let* _ = include_module ~module_expr:signature_module_expr in
-                 return ()))
+                 let* () = include_module ~module_expr:context_module_expr in
+                 fields
+                 |> List.map
+                      (fun
+                        LinkageElem.
+                          { default_ctx_params; compiled_signature; _ }
+                      ->
+                        let ctx =
+                          normalize_parameters ~default_ctx_params
+                            ~parameters:ctx
+                        in
+                        let signature_module_expr =
+                          Termutils.apply_module
+                            ~functor_expr:
+                              (Termutils.ident_to_module_expr compiled_signature)
+                            ~arguments:ctx
+                        in
+                        include_module ~module_expr:signature_module_expr)
+                 |> flatmap))
   in
   let sig_final = Naming.fresh_name ~prefix:"Sig" in
   let include_signature =

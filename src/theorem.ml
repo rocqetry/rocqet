@@ -140,14 +140,13 @@ let open_theorem ~(args : Frec_arg.t list) =
         (names, handlers, handlers_table)
     | _ -> ([], [], [])
   in
-  let () =
-    List.iter2
-      (fun name motive ->
-        if not (List.mem name inherited_names) then
-          let motive_name = Naming.motive_of name in
-          Definition.add_definition ~name:motive_name motive)
-      names motives
-  in
+  Context.with_pinned_context (fun () ->
+      List.iter2
+        (fun name motive ->
+          if not (List.mem name inherited_names) then
+            let motive_name = Naming.motive_of name in
+            Definition.add_definition ~name:motive_name motive)
+        names motives);
   let context = Context.get () in
   let compiled_context, parameters =
     Codegen.compile_linkage_context
@@ -172,7 +171,7 @@ let open_theorem ~(args : Frec_arg.t list) =
     |> List.filter_map (fun (name, handler_type) ->
            if inside name implementing_handler_names then Some handler_type
            else None)
-  in  
+  in
   let goal = Termutils.calculate_inductive_proof_goal ~handler_types ~suffix in
   let rec_principle_prefix =
     let inductive_path = List.hd inductive_paths in
@@ -349,14 +348,13 @@ let close_theorem () =
     List.map (fun (name, expr) -> (name, expr)) implemented_handlers
   in
   (* Add the handlers as fields *)
-  let _ =
-    implemented_handlers
-    |> List.iter (fun (constructor_name, handler) ->
-           let name =
-             Naming.handler_name ~recursors:names ~case:constructor_name
-           in
-           Definition.add_definition ~name handler)
-  in
+  Context.with_pinned_context (fun () ->
+      implemented_handlers
+      |> List.iter (fun (constructor_name, handler) ->
+             let name =
+               Naming.handler_name ~recursors:names ~case:constructor_name
+             in
+             Definition.add_definition ~name handler));
   let handlers_table =
     implementing_handler_names
     |> List.map (fun handler ->
@@ -386,16 +384,19 @@ let close_theorem () =
   let name = List.hd names in
   Context.add_field ~name ~elem;
 
-  (* Add non-inherited names axioms *)
-  let defined_names =
-    names |> List.filter (fun n -> not (List.mem n inherited_names))
-  in
-  if not (List.is_empty defined_names) then
-    add_recursive_axiom ~names:defined_names;
+  let define_recursive_axioms () =
+    (* Add non-inherited names axioms *)
+    let defined_names =
+      names |> List.filter (fun n -> not (List.mem n inherited_names))
+    in
+    if not (List.is_empty defined_names) then
+      add_recursive_axiom ~names:defined_names;
 
-  (* Inherit axioms *)
-  inherited_names
-  |> List.iter (fun n ->
-         Inheritance.inherit_name ~name:(Naming.recursive_axiom_name n));
+    (* Inherit axioms *)
+    inherited_names
+    |> List.iter (fun n ->
+           Inheritance.inherit_name ~name:(Naming.recursive_axiom_name n))
+  in
+  Context.with_pinned_context define_recursive_axioms;
 
   Ctx.clear ()

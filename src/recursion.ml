@@ -64,6 +64,7 @@ let add_recursive_axiom ~names =
          Context.add_field ~name:axiom_name ~elem)
 
 let close_recursion () =
+  Context.unpin_context ();
   let Ctx.
         {
           names;
@@ -148,60 +149,63 @@ let close_recursion () =
   in
   Context.add_field ~name:(List.hd names) ~elem;
 
-  (* Add non-inherited names axioms *)
-  let defined_names =
-    names |> List.filter (fun n -> not (List.mem n inherited_names))
-  in
-  if not (List.is_empty defined_names) then
-    add_recursive_axiom ~names:defined_names;
-
-  (* Inherit axioms *)
-  inherited_names
-  |> List.iter (fun n ->
-         Inheritance.inherit_name ~name:(Naming.recursive_axiom_name n));
-
-  let recursor_names =
-    List.combine inductive_names names |> Names.Id.Map.of_list
-  in
-  let _ =
-    implementing_handlers
-    |> List.iter (fun constructor_name ->
-           let context = Context.get () in
-           let compiled_context, parameters =
-             Codegen.compile_linkage_context ~field_name:module_name context
-           in
-           let axiom_name, axiom, compiled_signature =
-             Codegen.compile_computational_axiom_signature ~ctx:parameters
-               ~constructor_name ~inductive ~inductive_paths ~recursor_names
-               ~prefix:(Some rec_principle_prefix)
-           in
-           let elem =
-             LinkageElem.ComputationalAxiom
-               {
-                 name = axiom_name;
-                 axiom;
-                 compiled_context;
-                 compiled_signature;
-                 default_ctx_params;
-               }
-           in
-           Context.add_field ~name:axiom_name ~elem)
-  in
-  (* inherited_handlers = handlers - implementing_handlers *)
-  let handlers = handlers |> List.concat_map snd in
-  let inherited_handlers =
-    let list_difference list1 list2 =
-      List.filter (fun x -> not (List.mem x list2)) list1
+  let define_recursive_axioms () =
+    (* Add non-inherited names axioms *)
+    let defined_names =
+      names |> List.filter (fun n -> not (List.mem n inherited_names))
     in
-    list_difference handlers implementing_handlers
+    if not (List.is_empty defined_names) then
+      add_recursive_axiom ~names:defined_names;
+
+    (* Inherit axioms *)
+    inherited_names
+    |> List.iter (fun n ->
+           Inheritance.inherit_name ~name:(Naming.recursive_axiom_name n))
   in
-  (* Force the inheritance of computational axioms *)
-  let _ =
+  let define_computational_axioms () =
+    let recursor_names =
+      List.combine inductive_names names |> Names.Id.Map.of_list
+    in
+    let _ =
+      implementing_handlers
+      |> List.iter (fun constructor_name ->
+             let context = Context.get () in
+             let compiled_context, parameters =
+               Codegen.compile_linkage_context ~field_name:module_name context
+             in
+             let axiom_name, axiom, compiled_signature =
+               Codegen.compile_computational_axiom_signature ~ctx:parameters
+                 ~constructor_name ~inductive ~inductive_paths ~recursor_names
+                 ~prefix:(Some rec_principle_prefix)
+             in
+             let elem =
+               LinkageElem.ComputationalAxiom
+                 {
+                   name = axiom_name;
+                   axiom;
+                   compiled_context;
+                   compiled_signature;
+                   default_ctx_params;
+                 }
+             in
+             Context.add_field ~name:axiom_name ~elem)
+    in
+    (* inherited_handlers = handlers - implementing_handlers *)
+    let handlers = handlers |> List.concat_map snd in
+    let inherited_handlers =
+      let list_difference list1 list2 =
+        List.filter (fun x -> not (List.mem x list2)) list1
+      in
+      list_difference handlers implementing_handlers
+    in
+    (* Force the inheritance of computational axioms *)
     inherited_handlers
     |> List.iter (fun constructor_name ->
            let name = List.assoc constructor_name inherited_behaviour_table in
            Inheritance.inherit_name ~name)
   in
+  Context.with_pinned_context define_recursive_axioms;
+  Context.with_pinned_context define_computational_axioms;
 
   Ctx.clear ()
 
@@ -251,14 +255,13 @@ let open_recursion ~(args : Frec_arg.t list) ~(suffix : RecKind.t)
         (names, handlers, handlers_table, behaviour_table)
     | _ -> ([], [], [], [])
   in
-  let () =
-    List.iter2
-      (fun name motive_expr ->
-        if not (List.mem name inherited_names) then
-          let motive_name = Naming.motive_of name in
-          Definition.add_definition ~name:motive_name motive_expr)
-      names motive_exprs
-  in
+  Context.with_pinned_context (fun () ->
+      List.iter2
+        (fun name motive_expr ->
+          if not (List.mem name inherited_names) then
+            let motive_name = Naming.motive_of name in
+            Definition.add_definition ~name:motive_name motive_expr)
+        names motive_exprs);
   let context = Context.get () in
   let handler_types =
     Termutils.handler_type_for_recursion ~names ~inductive_paths ~recursor
@@ -291,7 +294,8 @@ let open_recursion ~(args : Frec_arg.t list) ~(suffix : RecKind.t)
         inherited_names;
       }
   in
-  Ctx.update recursion_ctx
+  Ctx.update recursion_ctx;
+  Context.pin_context ()
 
 let open_recursion_extension ~names =
   names |> List.iter (fun name -> Inheritance.inherit_dependencies ~prefix:name);
@@ -363,7 +367,8 @@ let open_recursion_extension ~names =
         inherited_names = names;
       }
   in
-  Ctx.update recursion_ctx
+  Ctx.update recursion_ctx;
+  Context.pin_context ()
 
 let extend_argumets_with_inductive_case ~(inductive_names : Names.Id.t list)
     ~(recursors : Names.Id.t list) ~(constructor : Names.Id.t)

@@ -160,6 +160,46 @@ module Context = struct
     | None -> Errors.fail ~info:"There is no current context"
     | Some context -> context
 
+  type compiled_context =
+    Libnames.qualid * (Names.variable * Constrexpr.module_ast) list
+
+  let pinned_context =
+    Summary.ref ~name:"LinkageContextPin"
+      (None : compiled_context option option)
+
+  let pin_context () =
+    match !pinned_context with
+    | Some _ -> Errors.fail ~info:"Context is already pinned"
+    | None -> pinned_context := Some None
+
+  let unpin_context () =
+    match !pinned_context with
+    | None -> Errors.fail ~info:"Context is not pinned"
+    | Some _ -> pinned_context := None
+
+  let with_pinned_context f =
+    match !pinned_context with
+    | None ->
+        pin_context ();
+        Fun.protect ~finally:unpin_context f
+    | Some _ -> f ()
+
+  let with_unpinned_context f =
+    match !pinned_context with
+    | Some _ ->
+        unpin_context ();
+        Fun.protect ~finally:pin_context f
+    | None -> f ()
+
+  let compute_or_pinned f =
+    match !pinned_context with
+    | Some (Some p) -> p
+    | Some None ->
+        let res = f () in
+        pinned_context := Some (Some res);
+        res
+    | None -> f ()
+
   let local_lookup (context : LinkageCtx.t) (path : Libnames.qualid) =
     let path = Naming.path_to_list path in
     let name = List.hd path in
@@ -346,7 +386,9 @@ module Context = struct
         | x :: xs -> (
             (* We don't want to include the current family's base,
                as that is not a further bound linkage *)
-            match l.base with None -> x :: xs | Some _ -> xs))
+            match l.base with
+            | None -> x :: xs
+            | Some _ -> xs))
 
   let base_linkage context =
     match context with
