@@ -1007,9 +1007,7 @@ let compile_final_linkage_signature ~linkage ~(base : Libnames.qualid) =
            return ()))
 
 (* optimization for empty families with a single base *)
-let compile_same_linkage_signature ~linkage ~signature ~default_ctx_params =
-  default_ctx_params
-  |> List.iter (fun (n, _) -> Printf.printf "N: %s\n" (Names.Id.to_string n));
+let compile_same_linkage_signature ~linkage ~signature ~default_ctx_params =  
   let Linkage.{ name; context; _ } = linkage in
   let sig_final = Naming.fresh_name ~prefix:"Sig" in
   let include_signature =

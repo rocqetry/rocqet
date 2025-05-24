@@ -190,12 +190,7 @@ module VernacInductive = struct
     let combined = combine base derived in
     let combined_names =
       combined |> List.map (fun (e, _) -> inductive_expr_name e)
-    in
-    let _ =
-      combined_names
-      |> List.iter (fun n -> Printf.printf "Comb: %s\n" (Names.Id.to_string n))
-    in
-
+    in    
     let rest =
       derived
       |> List.filter (fun (r, _) ->
