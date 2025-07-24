@@ -585,10 +585,13 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
             (MetaDataSection { metadata with compiled_context }, [])
         | OpaqueFieldDefinition field ->
             let compiled_context, _ = compile_context field.compiled_context in
-            (OpaqueFieldDefinition { field with compiled_context }, [])
+            (OpaqueFieldDefinition { field with compiled_context }, [])        
         | ClosingFact fact ->
             let compiled_context, _ = compile_context fact.compiled_context in
             (ClosingFact { fact with compiled_context }, [])
+        | Marker m ->
+            let compiled_context, _ = compile_context m.compiled_context in
+            (Marker { m with compiled_context }, [])
         (* Exhaustiveness checks *)
         | RecursorDefinition recursive ->
             let inductive, _, _ =

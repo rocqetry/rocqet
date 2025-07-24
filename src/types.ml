@@ -455,6 +455,16 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
+    (* This is just a dummy linkage element to demarcate things --
+       it simplifies inheritance of grouped inductives.
+       Because of the compilied context, it can add to proof compilation time
+       *)
+    | Marker of {
+        name : Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
 
   type compiled_sig = {
     default_ctx_params : (Names.Id.t * CompiledModule.t) list;
@@ -572,6 +582,12 @@ end = struct
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
+    | Marker of {
+        name : Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;        
+    }
 
   type compiled_sig = {
     default_ctx_params : (Names.Id.t * CompiledModule.t) list;
@@ -614,7 +630,8 @@ end = struct
         { default_ctx_params; compiled_context; compiled_signature; _ }
     | RecursorDefinition
         { default_ctx_params; compiled_context; compiled_signature; _ }
-    | RecordDefinition { default_ctx_params; compiled_context; compiled_signature; _ } 
+    | RecordDefinition { default_ctx_params; compiled_context; compiled_signature; _ }
+    | Marker { default_ctx_params; compiled_context; compiled_signature; _ } 
     | TraitDefinition
         { default_ctx_params; compiled_context; compiled_signature; _ } ->
         { default_ctx_params; compiled_context; compiled_signature }
@@ -772,6 +789,9 @@ end = struct
     | TheoremDefinition definition ->
         let default_ctx_params = path_subst_ctx definition.default_ctx_params in
         TheoremDefinition { definition with default_ctx_params }
+    | Marker marker ->
+        let default_ctx_params = path_subst_ctx marker.default_ctx_params in
+        Marker { marker with default_ctx_params }
 
   and path_subtitution linkage ~source ~target =
     let f (name, elem) = (name, path_substitution_elem elem ~source ~target) in

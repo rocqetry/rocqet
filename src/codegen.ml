@@ -706,6 +706,7 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
         let open B in
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
+    | Snoc (fields, (_, Marker _)) -> compile_fields fields
     | Snoc (fields, (_, InductiveAxiom _)) -> compile_fields fields
     | Snoc (fields, (_, RecursiveAxiom _)) -> compile_fields fields
     | Snoc (fields, (_, InductiveDefinition { inductive; _ })) ->
@@ -841,7 +842,9 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
        let* _ = compile_fields fields ctx in
        rd |> ignore;
        Errors.fail ~info:"TODO"
-       
+
+    (* A marker has no implementation *)
+    | Snoc (fields, (_, Marker _)) -> compile_fields fields ctx
     (* An implementation will be provided by the inductive *)
     | Snoc (fields, (_, InductiveAxiom _)) -> compile_fields fields ctx
     (* Implementation provided by RecursiveDefinition *)

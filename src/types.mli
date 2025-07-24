@@ -201,6 +201,12 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
+    | Marker of {
+        name : Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
 
   type compiled_sig = {
     default_ctx_params : (Names.Id.t * CompiledModule.t) list;
