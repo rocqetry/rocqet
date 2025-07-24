@@ -620,7 +620,9 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
             let compiled_context, _ =
               compile_context theorem.compiled_context
             in
-            (TheoremDefinition { theorem with goals = theorem.goals; compiled_context }, [])                        
+            (TheoremDefinition { theorem with goals = theorem.goals; compiled_context }, [])
+        | RecordDefinition _rd ->           
+           Errors.fail ~info:"TODO"
       in
       let open Bwd.Infix in
       let fields = Snoc (linkage.fields, (name, element)) <@ fresh_elements in

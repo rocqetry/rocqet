@@ -664,6 +664,16 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
         names
         |> List.map (fun name -> B.define_term ~name (qualify name))
         |> flatmap
+
+    | Snoc (fields, (_, RecordDefinition { rd; _ } )) ->
+       let open B in
+       let* _ = compile_fields fields in
+       let names =
+         rd.name ::  List.map fst rd.fields
+       in 
+       names
+       |> List.map (fun name -> B.define_term ~name (qualify name))
+       |> flatmap
     | Snoc (fields, (_, ComputationalAxiom { name; _ })) ->
         let open B in
         let* _ = compile_fields fields in
@@ -824,6 +834,14 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
             in
             let _ = compile_linkage (Some synth_ctx) nested_linkage in
             return ())
+
+    | Snoc
+       (fields, (_, RecordDefinition { rd; _ })) ->
+       let open B in
+       let* _ = compile_fields fields ctx in
+       rd |> ignore;
+       Errors.fail ~info:"TODO"
+       
     (* An implementation will be provided by the inductive *)
     | Snoc (fields, (_, InductiveAxiom _)) -> compile_fields fields ctx
     (* Implementation provided by RecursiveDefinition *)

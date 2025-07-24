@@ -350,6 +350,14 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
+
+    | RecordDefinition of {
+        rd : RecordDecl.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    
     | FamilyDefinition of {
         linkage : Linkage.t;
         compiled_context : CompiledModuleType.t;
@@ -470,6 +478,14 @@ end = struct
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
+
+    | RecordDefinition of {
+        rd : RecordDecl.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+  
     | FamilyDefinition of {
         linkage : Linkage.t;
         compiled_context : CompiledModuleType.t;
@@ -598,6 +614,7 @@ end = struct
         { default_ctx_params; compiled_context; compiled_signature; _ }
     | RecursorDefinition
         { default_ctx_params; compiled_context; compiled_signature; _ }
+    | RecordDefinition { default_ctx_params; compiled_context; compiled_signature; _ } 
     | TraitDefinition
         { default_ctx_params; compiled_context; compiled_signature; _ } ->
         { default_ctx_params; compiled_context; compiled_signature }
@@ -736,6 +753,16 @@ end = struct
               VernacInductive.path_subtitution definition.inductive ~source
                 ~target;
           }
+    | RecordDefinition record ->
+       let default_ctx_params = path_subst_ctx record.default_ctx_params in
+       let RecordDecl.{ name; ty; fields } = record.rd in
+       let rd =
+         let subst = Naming.replace_qualid_root ~ source ~target in
+         let ty = subst ty in
+         let fields = fields |> List.map (fun (name, ty) -> (name, subst ty)) in
+         RecordDecl.{ name; ty; fields }
+       in 
+       RecordDefinition { record with rd; default_ctx_params } 
     | FieldDefinition field ->
         let default_ctx_params = path_subst_ctx field.default_ctx_params in
         FieldDefinition { field with default_ctx_params }
