@@ -39,6 +39,19 @@ FInductive tm : Type :=
 FEnd STLC.
 
 
-Family SystemF extends STLC.
+Family SystemF extends STLC. 
+FDefinition tvar := nat.
+
+FInductive ty: Set :=
+| ty_forall : tvar -> ty -> ty. (* ∀α.T *)
+
+(* tm_abs is extended with a type *)
+FRecord lambda_arg : Set := {
+    arg_ty : ty;
+}.
+
+FInductive tm : Type :=  
+| tm_tabs : tvar -> tm -> tm  (* Λα.t *)
+| tm_tapp : tm -> ty -> tm.   (* t [T] *)
 
 FEnd SystemF.
