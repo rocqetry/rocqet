@@ -96,6 +96,11 @@ val mk_lambda_with_type :
   Constrexpr.constr_expr ->
   Constrexpr.constr_expr
 
+val mk_arrow_ty :
+  args_type:Constrexpr.constr_expr list ->
+  ret_type:Constrexpr.constr_expr ->
+  Constrexpr.constr_expr
+
 (* fun (x : ...) -> forall (x : ...) *)
 val lambda_to_prod : Constrexpr.constr_expr -> Constrexpr.constr_expr
 val extract_functor_name : Constrexpr.module_ast -> CompiledModuleType.t

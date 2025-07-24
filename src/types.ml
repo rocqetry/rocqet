@@ -357,6 +357,17 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
+     (* e.g Axiom Build_lambda_arg_STLC : ident -> lambda_arg. *)
+    | RecordConstrAxiom of {        
+        name : Names.Id.t;
+        record_name : Names.Id.t; 
+        fields : Names.Id.t list; (* The fields implemented in this constructor *)
+        (* TODO: This RecordConstrAxiom also needs the default values
+           This can be computed during inheritance *)
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
     
     | FamilyDefinition of {
         linkage : Linkage.t;
@@ -495,6 +506,14 @@ end = struct
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
+    | RecordConstrAxiom of {        
+        name : Names.Id.t;
+        record_name : Names.Id.t; 
+        fields : Names.Id.t list;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      } 
   
     | FamilyDefinition of {
         linkage : Linkage.t;
