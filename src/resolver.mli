@@ -16,6 +16,9 @@ val resolve_constrexpr_list :
 val resolve_inductive :
   context:LinkageCtx.t -> inductive:VernacInductive.t -> VernacInductive.t
 
+val resolve_record :
+  context:LinkageCtx.t -> rd:RecordDecl.t -> RecordDecl.t
+
 (* The linkage will be resolved by construction, otherwise how did it
    get created? *)
 (* val resolve_linkage : context:LinkageCtx.t -> linkage:Linkage.t ->

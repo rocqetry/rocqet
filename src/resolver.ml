@@ -128,3 +128,10 @@ let resolve_inductive ~context ~inductive =
     (u, paramty, tyty, cstrty)
   in
   List.map (fun (a, b) -> (resolve_constructor a, b)) inductive
+
+
+let resolve_record ~context ~rd =
+  let RecordDecl.{ name; ty; fields } = rd in
+  let ty = resolve_constrexpr ~context ~expression:ty in
+  let fields = fields |> List.map (fun (name, expression) -> (name, resolve_constrexpr ~context ~expression)) in
+  RecordDecl.{ name; ty; fields }
