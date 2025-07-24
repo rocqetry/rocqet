@@ -34,6 +34,16 @@ module VernacInductive : sig
     constructor:Names.Id.t -> inductive:t -> Names.Id.t
 end
 
+module RecordDecl : sig
+  type t = {
+      name : Names.Id.t;
+      ty: Constrexpr.constr_expr;
+      fields : (Names.Id.t * Constrexpr.constr_expr) list
+  }
+  val parse : VernacInductive.t -> t
+ (* val extract_fields : t -> (Names.Id.t * Constrexpr.constr_expr) list*)
+end
+
 module CompiledModule : sig
   type t = Libnames.qualid
 end

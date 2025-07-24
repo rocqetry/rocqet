@@ -20,7 +20,7 @@ module VernacInductive = struct
     match cstrlist with
     | Vernacexpr.Constructors cstrlist ->
         ((ind_type_name.v, ind_type), List.map each_constr cstrlist)
-    | Vernacexpr.RecordDecl _ -> Errors.fail ~info:"Records not yet supported"
+    | Vernacexpr.RecordDecl _ -> Errors.fail ~info:"Use FRecords for extensible records"
 
   (* name -> name list *)
   (* inductive name -> constructors *)
@@ -100,7 +100,7 @@ module VernacInductive = struct
               ind_type,
               csts ),
             decl_notations )
-      | _ -> Errors.fail ~info:"Records not yet supported"
+      | _ -> Errors.fail ~info:"Use FRecords for extensible records"
     in
     (* Exporting the names *)
     let alias_all_name_term_type_decl =
@@ -217,6 +217,46 @@ module VernacInductive = struct
     match result with
     | None -> Errors.fail ~info:"constructor not bound in any inductive"
     | Some result -> result
+end
+
+module RecordDecl = struct 
+  type t = {
+      name : Names.Id.t;
+      ty: Constrexpr.constr_expr;
+      fields : (Names.Id.t * Constrexpr.constr_expr) list
+  }
+
+  let parse (inductive: VernacInductive.t) =
+    let inductive_expr = inductive |> List.hd |> fst in
+    let ( (_, (ind_type_name, _)),
+          _ind_params,
+          ind_type,
+          ind_body ) =
+      inductive_expr 
+    in
+    let name = ind_type_name.v in     
+    let ty =
+      match ind_type with
+      | None -> Errors.fail ~info:"You need to provide the type for an FRecord"
+      | Some ty -> ty         
+    in
+    let fields = 
+      match ind_body with
+      | Vernacexpr.Constructors _ -> Errors.fail ~info:"Use FInductive for extensible inductive types"
+      | Vernacexpr.RecordDecl (_, fields, _) ->       
+         fields
+         |> List.map (fun (decl, _) ->
+            match decl with
+            | Vernacexpr.AssumExpr (name, _binder, ty) ->
+               let field_name =
+                 match name.v with
+                 | Names.Name.Anonymous -> Errors.fail ~info:"Expected Name.Name in FRecord field name but got Name.Anonymous"
+                 | Names.Name.Name id -> id 
+               in
+               field_name, ty 
+            | DefExpr _ -> Errors.fail ~info:"Expected AssumeExpr in FRecord field binding but got DefExpr")
+    in
+    { name; ty; fields; }
 end
 
 (* Module naming *)

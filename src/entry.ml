@@ -144,3 +144,5 @@ let open_trait_with_base_list ~name ~bases =
 
 let final_family = Family.define_final_family
 let add_wildcard_handler = Recursion.add_wildcard_handler
+
+let add_record = Records.add_record
