@@ -367,7 +367,14 @@ module rec LinkageElem : sig
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
-      }
+     }
+  
+    (* e.g Axiom id : lambda_arg ->  ident. *)
+    (* | RecordField { ... } *)
+
+    (* e.g Axiom axiom_id : forall x, id (Build_lambda_arg_STLC x) = x. *)
+    (* Can we reuse `ComputationalAxiom` here? *)
+    (* | RecordConstrAxiom { ... } *)
     
     | FamilyDefinition of {
         linkage : Linkage.t;
