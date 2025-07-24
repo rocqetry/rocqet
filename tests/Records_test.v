@@ -49,6 +49,7 @@ FInductive ty: Set :=
 FRecord lambda_arg : Set := {
     arg_ty : ty;
 }.
+FDefault lambda_arg arg_ty = ty_unit.
 
 FInductive tm : Type :=  
 | tm_tabs : tvar -> tm -> tm  (* Λα.t *)
