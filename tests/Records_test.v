@@ -2,6 +2,13 @@ Require Import Rocqet.Loader.
 
 Definition ident := nat.
 
+Record lambda_arg : Set := {
+    id : ident;
+  }.
+
+Definition x := {| id := 0 |}.
+Definition y := Build_lambda_arg 0.
+
 Family STLC.
 FInductive ty: Set :=
   | ty_unit : ty
@@ -10,6 +17,18 @@ FInductive ty: Set :=
 FRecord lambda_arg : Set := {
     id : ident;
 }.
+
+MetaData _id_comp.
+Axiom id : lambda_arg ->  ident.
+FEnd _id_comp.
+
+MetaData lambda_arg_constr_STLC.
+Axiom Build_lambda_arg_STLC : ident -> lambda_arg.
+FEnd lambda_arg_constr_STLC.
+
+MetaData lambda_arg_eq_STLC.
+Axiom axiom_id : forall x, id (Build_lambda_arg_STLC x) = x.
+FEnd lambda_arg_eq_STLC.
 
 FInductive tm : Type :=
   | tm_var : ident -> tm    
@@ -21,7 +40,5 @@ FEnd STLC.
 
 
 Family SystemF extends STLC.
-
-
 
 FEnd SystemF.
