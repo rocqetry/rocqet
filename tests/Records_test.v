@@ -18,7 +18,7 @@ FRecord lambda_arg : Set := {
     id : ident;
 }.
 
-MetaData _id_comp.
+(*MetaData _id_comp.
 Axiom id : lambda_arg ->  ident.
 FEnd _id_comp.
 
@@ -28,7 +28,7 @@ FEnd lambda_arg_constr_STLC.
 
 MetaData lambda_arg_eq_STLC.
 Axiom axiom_id : forall x, id (Build_lambda_arg_STLC x) = x.
-FEnd lambda_arg_eq_STLC.
+FEnd lambda_arg_eq_STLC.*)
 
 FInductive tm : Type :=
   | tm_var : ident -> tm    
@@ -48,8 +48,18 @@ FInductive ty: Set :=
 (* tm_abs is extended with a type *)
 FRecord lambda_arg : Set := {
     arg_ty : ty;
-}.
+  }.
 FDefault lambda_arg arg_ty := ty_unit.
+
+MetaData lambda_arg_constr_SystemF.
+Axiom Build_lambda_arg_SystemF : ident -> ty -> lambda_arg.
+FEnd lambda_arg_constr_SystemF.
+
+MetaData lambda_arg_eq_STLC.
+Axiom axiom_id0 : forall i t, arg_ty (Build_lambda_arg_SystemF i t) = t.
+Axiom axiom_id1 : forall i, (Build_lambda_arg_STLC i) = (Build_lambda_arg_SystemF i ty_unit).
+FEnd lambda_arg_eq_STLC.*)
+
 
 FInductive tm : Type :=  
 | tm_tabs : tvar -> tm -> tm  (* Λα.t *)
