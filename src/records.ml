@@ -24,6 +24,7 @@ let add_record rd =
 
   
   (* The record constructor *)
+  let context = Context.get () in
   let family_name = Context.family_name context in
   let constructor_name = Naming.record_constructor ~record_name:name ~family_name in
   let args_type = fields |> List.map snd in
@@ -31,8 +32,11 @@ let add_record rd =
     let expression = Constrexpr_ops.mkIdentC name in
     Resolver.resolve_constrexpr ~context ~expression
   in 
-  let constructor_type = Termutils.mk_arrow_ty ~args_type ~ret_type in 
-  let context = Context.get () in
+  let constructor_type =
+    Termutils.mk_arrow_ty ~args_type ~ret_type
+  in
+  (* Resolve it *)
+  let constructor_type = Resolver.resolve_constrexpr ~context ~expression:constructor_type in   
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:name context
   in
