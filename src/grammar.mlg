@@ -99,7 +99,7 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "FRecord" mutind_defs(record_definition) ] -> {
     let rd = Types.RecordDecl.parse record_definition in
-    Entry.add_record rd
+    Entry.add_record rd record_definition
   }
 
 (* | [ "Trait" ident(name) "extends" ident(base) ] -> { Entry.open_trait_with_base ~name ~base }*)

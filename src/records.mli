@@ -1,3 +1,3 @@
 open Types
 
-val add_record : RecordDecl.t -> unit
+val add_record : RecordDecl.t -> VernacInductive.t -> unit

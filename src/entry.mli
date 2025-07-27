@@ -88,4 +88,4 @@ val open_trait : name:Names.Id.t -> unit
 val final_family : name:Names.Id.t -> value:Libnames.qualid -> unit
 val add_wildcard_handler : handler:Constrexpr.constr_expr -> unit
 
-val add_record : RecordDecl.t -> unit
+val add_record : RecordDecl.t -> VernacInductive.t -> unit

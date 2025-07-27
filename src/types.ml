@@ -234,7 +234,7 @@ module RecordDecl = struct
           ind_body ) =
       inductive_expr 
     in
-    let name = ind_type_name.v in     
+    let name = ind_type_name.v in
     let ty =
       match ind_type with
       | None -> Errors.fail ~info:"You need to provide the type for an FRecord"
@@ -353,6 +353,7 @@ module rec LinkageElem : sig
 
     | RecordDefinition of {
         rd : RecordDecl.t;
+        original : VernacInductive.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
@@ -510,6 +511,7 @@ end = struct
 
     | RecordDefinition of {
         rd : RecordDecl.t;
+        original : VernacInductive.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;

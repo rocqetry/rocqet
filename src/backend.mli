@@ -11,7 +11,9 @@ module Vernac : sig
   val flatmap : 'a t list -> unit t
   val run : 'a t -> 'a
   val end_proof : Names.Id.t -> unit t
+  
   val define_inductive : VernacInductive.t -> unit t
+  val define_record : VernacInductive.t -> unit t
 
   val define_inductive_scheme :
     (Names.Id.t * Names.Id.t * Sorts.family) list -> unit t

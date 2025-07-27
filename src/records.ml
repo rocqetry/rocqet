@@ -1,7 +1,7 @@
 open Types
 open Env 
 
-let add_record rd =
+let add_record rd original_inductive =
   let context = Context.get () in
   let rd = Resolver.resolve_record ~context ~rd in
   let RecordDecl.{ name; ty; fields } = rd in  
@@ -19,7 +19,16 @@ let add_record rd =
   let compiled_signature =
     Codegen.compile_inductive_axiom ~name ~ty ~ctx:parameters
   in
-  let elem = LinkageElem.RecordDefinition { rd; compiled_context; compiled_signature; default_ctx_params } in  
+  let elem =
+    LinkageElem.RecordDefinition
+      {
+        rd;
+        compiled_context;
+        compiled_signature;
+        default_ctx_params;
+        original = original_inductive;
+      }
+  in  
   Context.add_field ~name ~elem;
 
   

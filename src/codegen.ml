@@ -838,11 +838,10 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
 
     (* Record stuff *)
     | Snoc
-       (fields, (_, RecordDefinition { rd; _ })) ->
+       (fields, (_, RecordDefinition { original; _ })) ->
        let open B in
        let* _ = compile_fields fields ctx in
-       rd |> ignore;
-       Errors.fail ~info:"TODO"    
+       B.define_record original
     | Snoc (_fields, (_, RecordConstrAxiom _)) -> Errors.fail ~info:"TODO"
 
     (* A marker has no implementation *)
