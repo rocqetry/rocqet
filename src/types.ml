@@ -631,6 +631,8 @@ end = struct
         }
     | ComputationalAxiom
         { default_ctx_params; compiled_context; compiled_signature; _ }
+    | RecordConstrAxiom
+        { default_ctx_params; compiled_context; compiled_signature; _ }
     | InductiveAxiom
         { default_ctx_params; compiled_context; compiled_signature; _ }
     | RecursiveAxiom
@@ -734,6 +736,9 @@ end = struct
     | OpaqueFieldDefinition definition ->
         let default_ctx_params = path_subst_ctx definition.default_ctx_params in
         OpaqueFieldDefinition { definition with default_ctx_params }
+    | RecordConstrAxiom r ->
+        let default_ctx_params = path_subst_ctx r.default_ctx_params in
+        RecordConstrAxiom { r with default_ctx_params }
     | ComputationalAxiom comp ->
         let axiom = Naming.replace_qualid_root ~source ~target comp.axiom in
         let default_ctx_params = path_subst_ctx comp.default_ctx_params in

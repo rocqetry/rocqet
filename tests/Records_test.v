@@ -16,7 +16,9 @@ FInductive ty: Set :=
 
 FRecord lambda_arg : Set := {
     id : ident;
-}.
+  }.
+
+FDefinition x : lambda_arg := Build_lambda_arg_STLC 10.
 
 (*MetaData _id_comp.
 Axiom id : lambda_arg ->  ident.

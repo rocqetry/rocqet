@@ -10,6 +10,8 @@ let add_record rd =
     context |> Context.family_linkage |> function
     | { default_ctx_params; _ } -> default_ctx_params
   in
+
+  (* The record type *)
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:name context
   in
@@ -19,8 +21,9 @@ let add_record rd =
   in
   let elem = LinkageElem.RecordDefinition { rd; compiled_context; compiled_signature; default_ctx_params } in  
   Context.add_field ~name ~elem;
-  (* record constructor *)
+
   
+  (* The record constructor *)
   let family_name = Context.family_name context in
   let constructor_name = Naming.record_constructor ~record_name:name ~family_name in
   let args_type = fields |> List.map snd in
@@ -33,6 +36,20 @@ let add_record rd =
   let compiled_context, parameters =
     Codegen.compile_linkage_context ~field_name:name context
   in
-  ()
+  let compiled_signature =
+    Codegen.compile_inductive_axiom ~name:constructor_name ~ty:constructor_type ~ctx:parameters
+  in
+  let elem =
+    LinkageElem.RecordConstrAxiom {
+        name = constructor_name;
+        record_name = name;
+        fields = fields |> List.map fst;
+        compiled_context;
+        compiled_signature;
+        default_ctx_params
+    }
+  in
+  
+  Context.add_field ~name:constructor_name ~elem
   
 

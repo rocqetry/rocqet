@@ -23,7 +23,8 @@ let fresh_name ~prefix =
 
 let record_constructor ~record_name ~family_name =  
   let prefix = Printf.sprintf "Build_%s_%s" (Names.Id.to_string record_name) (Names.Id.to_string family_name) in
-  fresh_name ~prefix
+  (* fresh_name ~prefix *)
+  prefix |> Names.Id.of_string
 
 (* Magic constants embedded in these functions *)
 let motive_of name = Nameops.add_prefix "__motiveT" name

@@ -592,6 +592,8 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
         | Marker m ->
             let compiled_context, _ = compile_context m.compiled_context in
             (Marker { m with compiled_context }, [])
+        | RecordConstrAxiom _ ->           
+           Errors.fail ~info:"TODO: what happens when we inherit a record constructor?"
         (* Exhaustiveness checks *)
         | RecursorDefinition recursive ->
             let inductive, _, _ =
