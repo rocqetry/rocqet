@@ -20,13 +20,11 @@ FRecord lambda_arg : Set := {
 
 FDefinition x : lambda_arg := Build_lambda_arg_STLC 10.
 
+FDefinition y : ident := id (Build_lambda_arg_STLC 10).
+
 (*MetaData _id_comp.
 Axiom id : lambda_arg ->  ident.
 FEnd _id_comp.
-
-MetaData lambda_arg_constr_STLC.
-Axiom Build_lambda_arg_STLC : ident -> lambda_arg.
-FEnd lambda_arg_constr_STLC.
 
 MetaData lambda_arg_eq_STLC.
 Axiom axiom_id : forall x, id (Build_lambda_arg_STLC x) = x.

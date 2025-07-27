@@ -23,17 +23,17 @@ let add_record rd =
   Context.add_field ~name ~elem;
 
   
-  (* The record constructor *)
+  (* The *introduction* form *)
   let context = Context.get () in
   let family_name = Context.family_name context in
   let constructor_name = Naming.record_constructor ~record_name:name ~family_name in
   let args_type = fields |> List.map snd in
-  let ret_type =
+  let record_type =
     let expression = Constrexpr_ops.mkIdentC name in
     Resolver.resolve_constrexpr ~context ~expression
   in 
   let constructor_type =
-    Termutils.mk_arrow_ty ~args_type ~ret_type
+    Termutils.mk_arrow_ty ~args_type ~ret_type:record_type
   in
   (* Resolve it *)
   let constructor_type = Resolver.resolve_constrexpr ~context ~expression:constructor_type in   
@@ -54,6 +54,23 @@ let add_record rd =
     }
   in
   
-  Context.add_field ~name:constructor_name ~elem
+  Context.add_field ~name:constructor_name ~elem;
+
+  (* The *elimination* forms *)     
+  fields
+  |> List.map (fun (field_name, field_type) ->
+         field_name, Termutils.mk_arrow_ty ~args_type:[record_type] ~ret_type:field_type)
+  |> List.iter (fun (n, t) ->
+         let context = Context.get () in
+         let compiled_context, parameters =
+           Codegen.compile_linkage_context ~field_name:n context
+         in
+         let compiled_signature =
+           Codegen.compile_inductive_axiom ~name:n ~ty:t ~ctx:parameters
+         in
+         let elem = LinkageElem.InductiveAxiom { compiled_context; compiled_signature; default_ctx_params } in
+         Context.add_field ~name:n ~elem
+       )
+  
   
 

@@ -370,6 +370,7 @@ module rec LinkageElem : sig
      }
   
     (* e.g Axiom id : lambda_arg ->  ident. *)
+    (* We will reuse InductiveAxiom *)
     (* | RecordField { ... } *)
 
     (* e.g Axiom axiom_id : forall x, id (Build_lambda_arg_STLC x) = x. *)
