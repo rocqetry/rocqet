@@ -7,6 +7,28 @@ open Bwd
 let lookup_field_in_base ~field ~context =
   Context.base_linkage_elem context ~field |> Option.map snd
 
+(*
+On Linkage Concatenation and Provenance
+  
+One of the most important components of this file is Linkage Concatenation. Linkage
+Contatenation is a technique that *allows* us to modularly compose linkages as the
+name might hint at. Without taking a closer look, this technique might seem
+striaghtforward to implement. However, there are a few considerations one has to
+take into account for this to work correctly. One of such consideration is
+about how to answer the question: what should be done about duplicate linkage
+elements when contatenating two linkages?
+A simple, and perhaps practical, solution to this problem is to 
+arbitrarily pick one of the duplicate linkage elements and drop the other.
+This is not totally correct, but it is not also wrong; that is, some times
+picking arbitrarily gives us the correct semantics, but other times, we
+get the wrong semantics. We usually want the former when
+the duplication arises from linkage elements or sub-element (e.g inductive
+constructors) that have *equal* provenance; this is, this linkage element
+can be traced to *one* family, and it is present in two (or more) families
+because it has been passed down via an inheritance ancestry. If this is not
+the case, it should be an error.
+*)
+
 let rec linkage_concatenate ~(derived : Linkage.t) ~(base : Linkage.t) =
   let rec find_and_remove name fields =
     match fields with
