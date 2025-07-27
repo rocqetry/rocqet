@@ -21,9 +21,13 @@ let fresh_name ~prefix =
   let time_stamp = string_of_int @@ unique_id () in
   Names.Id.of_string (prefix ^ "回" ^ current_module ^ "_" ^ time_stamp)
 
-let record_constructor ~record_name ~family_name =  
+let rocqet_record_constructor ~record_name ~family_name =  
   let prefix = Printf.sprintf "Build_%s_%s" (Names.Id.to_string record_name) (Names.Id.to_string family_name) in
   (* fresh_name ~prefix *)
+  prefix |> Names.Id.of_string
+
+let rocq_record_constructor ~record_name =
+  let prefix = Printf.sprintf "Build_%s" (Names.Id.to_string record_name) in
   prefix |> Names.Id.of_string
 
 (* Magic constants embedded in these functions *)

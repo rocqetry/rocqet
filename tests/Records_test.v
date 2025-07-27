@@ -2,6 +2,8 @@ Require Import Rocqet.Loader.
 
 Definition ident := nat.
 
+(* Record lambda_arg : Set := Build_lambda_arg { id : ident }.*)
+
 (*Record lambda_arg : Set := {
     id : ident;
   }.
@@ -21,6 +23,8 @@ FRecord lambda_arg : Set := {
 FDefinition x : lambda_arg := Build_lambda_arg_STLC 10.
 
 FDefinition y : ident := id (Build_lambda_arg_STLC 10).
+
+FEnd STLC.
 
 (*MetaData _id_comp.
 Axiom id : lambda_arg ->  ident.

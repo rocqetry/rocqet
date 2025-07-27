@@ -35,7 +35,7 @@ let add_record rd original_inductive =
   (* The *introduction* form *)
   let context = Context.get () in
   let family_name = Context.family_name context in
-  let constructor_name = Naming.record_constructor ~record_name:name ~family_name in
+  let constructor_name = Naming.rocqet_record_constructor ~record_name:name ~family_name in
   let args_type = fields |> List.map snd in
   let record_type =
     let expression = Constrexpr_ops.mkIdentC name in

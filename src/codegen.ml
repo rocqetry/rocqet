@@ -842,7 +842,12 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
        let open B in
        let* _ = compile_fields fields ctx in
        B.define_record original
-    | Snoc (_fields, (_, RecordConstrAxiom _)) -> Errors.fail ~info:"TODO"
+
+    | Snoc (fields, (_, RecordConstrAxiom { name; record_name; _ })) ->
+       let open B in
+       let* _ = compile_fields fields ctx in
+       let body = Constrexpr_ops.mkIdentC (Naming.rocq_record_constructor ~record_name) in 
+       B.define_term ~name body  
 
     (* A marker has no implementation *)
     | Snoc (fields, (_, Marker _)) -> compile_fields fields ctx
