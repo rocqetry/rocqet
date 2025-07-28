@@ -97,10 +97,16 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "FInductive" mutind_defs(inductive_definition) ] -> { Entry.finductive inductive_definition }
 
+| [ "FRecord" mutind_defs(record_definition)
+      "with"
+      "default"
+      ident(name) ":=" llconstr_ip(body_expr) ] ->
+   { Errors.fail ~info:"TODO: "}
 | [ "FRecord" mutind_defs(record_definition) ] -> {
     let rd = Types.RecordDecl.parse record_definition in
     Entry.add_record rd record_definition
   }
+
 
 (* | [ "Trait" ident(name) "extends" ident(base) ] -> { Entry.open_trait_with_base ~name ~base }*)
 
