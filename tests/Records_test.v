@@ -16,9 +16,7 @@ FInductive ty: Set :=
   | ty_unit : ty
   | ty_arrow : ty -> ty -> ty.
 
-FRecord lambda_arg : Set := {
-    id : ident;
-  }.
+FRecord lambda_arg : Set := { id : ident }.
 
 FDefinition x : lambda_arg := Build_lambda_arg_STLC 10.
 

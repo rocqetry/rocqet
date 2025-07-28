@@ -20,7 +20,7 @@ module VernacInductive = struct
     match cstrlist with
     | Vernacexpr.Constructors cstrlist ->
         ((ind_type_name.v, ind_type), List.map each_constr cstrlist)
-    | Vernacexpr.RecordDecl _ -> Errors.fail ~info:"Use FRecords for extensible records"
+    | Vernacexpr.RecordDecl _ -> ((ind_type_name.v, ind_type), [])
 
   (* name -> name list *)
   (* inductive name -> constructors *)
@@ -60,6 +60,7 @@ module VernacInductive = struct
     inductive |> extract_all_names |> List.map fst
 
   (* Create a "definition mapping" *)
+  (* Works for both Inductive and Record *)
   let definition_mapping ind_def =
     let all_names_with_type =
       let type_decls, constr_decls =
@@ -100,7 +101,13 @@ module VernacInductive = struct
               ind_type,
               csts ),
             decl_notations )
-      | _ -> Errors.fail ~info:"Use FRecords for extensible records"
+      (* Rename only the record type name *)
+      | Vernacexpr.RecordDecl _ ->
+         ( ( (coercion_flag, (ind_type_name, cumul_univ_decl)),
+              ind_params,
+              ind_type,
+              csts ),
+            decl_notations )
     in
     (* Exporting the names *)
     let alias_all_name_term_type_decl =

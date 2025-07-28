@@ -838,14 +838,18 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
 
     (* Record stuff *)
     | Snoc
-       (fields, (_, RecordDefinition { original; _ })) ->
+       (fields, (_, RecordDefinition { rd; original; _ })) ->
        let open B in
        let* _ = compile_fields fields ctx in
-       B.define_record original
+       let __internal_original, _ = VernacInductive.definition_mapping original in
+       let* _ = B.define_record __internal_original in
+       let body = Constrexpr_ops.mkIdentC (Naming.internal_name rd.name) in 
+       B.define_term ~name:rd.name body       
 
     | Snoc (fields, (_, RecordConstrAxiom { name; record_name; _ })) ->
        let open B in
        let* _ = compile_fields fields ctx in
+       let record_name = Naming.internal_name record_name in
        let body = Constrexpr_ops.mkIdentC (Naming.rocq_record_constructor ~record_name) in 
        B.define_term ~name body  
 
