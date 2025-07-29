@@ -176,7 +176,13 @@ module VernacInductive = struct
               (remove_duplicates
                  (fun (_, ((n : Names.lident), _)) -> n.v)
                  (base_constr @ derived_constr))
-        | _, _ -> Errors.fail ~info:"Record types are not yet supported"
+        | ( Vernacexpr.RecordDecl (_base_sort, base_fields, _base_modifier),
+            Vernacexpr.RecordDecl (derived_sort, derived_fields, derived_modifier) ) ->
+            (* TODO: We are assuming there are not duplicates here -- a bold assumption *)
+            (* We will modify this when doing linkage concatenation *)
+            let combined_fields = base_fields @ derived_fields in
+            Vernacexpr.RecordDecl (derived_sort, combined_fields, derived_modifier)
+        | _, _ -> Errors.fail ~info:"Mismatched inductive and record types in concatenation"
       in
       let child_ind = (a, b, c, childcstrs) in
       (child_ind, [])
