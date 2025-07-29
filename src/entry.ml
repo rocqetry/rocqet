@@ -145,4 +145,10 @@ let open_trait_with_base_list ~name ~bases =
 let final_family = Family.define_final_family
 let add_wildcard_handler = Recursion.add_wildcard_handler
 
-let add_record = Records.add_record
+let add_record ~inductive =
+  let rd = Types.RecordDecl.parse inductive in
+  Records.add_record rd inductive
+
+let extend_record ~inductive ~defaults =
+  let rd = Types.RecordDecl.parse inductive in
+  Records.extend_record ~rd ~inductive ~defaults

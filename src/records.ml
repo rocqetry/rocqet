@@ -87,7 +87,7 @@ let add_record rd inductive =
     
 let extend_record
       ~(rd: RecordDecl.t)
-      ~(original_inductive: VernacInductive.t)
+      ~(inductive: VernacInductive.t)
       ~(defaults: (Names.Id.t * Constrexpr.constr_expr) list) =
 
   (* 1. Lookup the name in the base context *)
@@ -105,7 +105,7 @@ let extend_record
   in  
   
   (* 3. Concatenate VernacInductive.t relative to record definition *)
-  let new_inductive = VernacInductive.concatenate ~base:base_inductive ~derived:original_inductive in
+  let new_inductive = VernacInductive.concatenate ~base:base_inductive ~derived:inductive in
   
   (* 4. Concatenate the RecordDecl.t *)
   let new_rd = RecordDecl.{ base_rd with fields = base_rd.fields @ fields } in
