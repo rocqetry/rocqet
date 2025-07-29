@@ -85,6 +85,25 @@ let extend_record
       ~(rd: RecordDecl.t)
       ~(original_inductive: VernacInductive.t)
       ~(defaults: (Names.Id.t * Constrexpr.constr_expr) list) =
-  rd |> ignore ; 
-  original_inductive |> ignore ;
-  defaults |> ignore
+
+
+  (* 1. Lookup the name in the base context *)
+  let context = Context.get () in
+  let RecordDecl.{ name; _ } = rd in
+  let base_elem = Inheritance.lookup_field_in_base ~field:name ~context in
+  
+  (* 2. Ensure the linkage element we extract is a RecordDefinition *)
+  let base_rd, base_original_inductive = 
+    match base_elem with
+    | None -> Errors.fail ~info:"No base record definition found to extend"
+    | Some (LinkageElem.RecordDefinition br) -> (br.rd, br.original)
+    | Some _ -> Errors.fail ~info:"Base element is not a RecordDefinition"
+  in
+  
+  (* Concatenate VernacInductive.t relative to record definition *)
+  (* Concatenate the RecordDecl.t *)
+  (* Keep track of default values *)
+
+  (* What does this mean for the implementation of this record? *)
+
+  ()
