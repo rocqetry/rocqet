@@ -92,8 +92,9 @@ let extend_record
 
   (* 1. Lookup the name in the base context *)
   let context = Context.get () in
-  let rd = Resolver.resolve_record ~context ~rd in 
+  let rd = Resolver.resolve_record ~context ~rd in  
   let RecordDecl.{ name; fields; _ } = rd in
+  Inheritance.inherit_dependencies ~prefix:name;
   let base_elem = Inheritance.lookup_field_in_base ~field:name ~context in
   
   (* 2. Ensure the linkage element we extract is a RecordDefinition *)
