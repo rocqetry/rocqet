@@ -62,6 +62,9 @@ FRecord lambda_arg : Set := { arg_ty : ty } default arg_ty := ty_unit.
 
 FDefinition j := Build_lambda_arg_SystemF 10 ty_unit.
 
+FEnd SystemF.
+
+(*
 MetaData lambda_arg_constr_SystemF.
 Axiom Build_lambda_arg_SystemF : ident -> ty -> lambda_arg.
 FEnd lambda_arg_constr_SystemF.
@@ -89,3 +92,4 @@ Family SystemFOmega extends SystemF.
 FRecord B : Set := { } default arg_ty := ty_unit, argn := 10.
 
 FEnd SystemFOmega.
+*)

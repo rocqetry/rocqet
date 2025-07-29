@@ -836,7 +836,7 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
             let _ = compile_linkage (Some synth_ctx) nested_linkage in
             return ())
 
-    (* Record stuff *)
+    (* Record definition *)
     | Snoc
        (fields, (_, RecordDefinition { rd; original; _ })) ->
        let open B in
@@ -846,11 +846,24 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
        let body = Constrexpr_ops.mkIdentC (Naming.internal_name rd.name) in 
        B.define_term ~name:rd.name body       
 
-    | Snoc (fields, (_, RecordConstrAxiom { name; record_name; _ })) ->
+    (* Record constructors *)
+    | Snoc (fields, (_, RecordConstrAxiom { name; record_name; defaults; fields = record_fields; _ })) ->
+       (* The default values go after the arguments *)
        let open B in
        let* _ = compile_fields fields ctx in
-       let record_name = Naming.internal_name record_name in
-       let body = Constrexpr_ops.mkIdentC (Naming.rocq_record_constructor ~record_name) in 
+       let record_name = Naming.internal_name record_name in       
+       let parameters =
+         record_fields
+         |> List.map Names.Id.to_string
+         |> List.map (fun prefix -> Naming.fresh_name ~prefix)
+       in
+       let arguments = List.map Constrexpr_ops.mkIdentC parameters @ List.map Constrexpr_ops.mkRefC defaults in
+       let body =
+         let open Constrexpr_ops in 
+         mkAppC (mkIdentC (Naming.rocq_record_constructor ~record_name), arguments)
+       in
+       let body = Termutils.mk_lambda parameters body in 
+       (* Def X a b c = Y a b c <default-a> <default-b> <default-c> *)
        B.define_term ~name body  
 
     (* A marker has no implementation *)

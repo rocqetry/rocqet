@@ -58,6 +58,7 @@ let add_record_with_defaults ~rd ~inductive ~defaults =
         name = constructor_name;
         record_name = name;
         fields = fields |> List.map fst;
+        defaults = [];
         compiled_context;
         compiled_signature;
         default_ctx_params

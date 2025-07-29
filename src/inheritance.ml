@@ -190,7 +190,7 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t)
       in
       TraitDefinition { derived with linkage }
 
-  | RecordDefinition _, RecordDefinition _ -> Errors.fail ~info:"TODO"
+  | RecordDefinition _, RecordDefinition _ -> Errors.fail ~info:"TODO: how do we do record linkage concatenation?"
 
   (* TODO: remove this wildcard pattern *)
   | _, _ ->
@@ -618,8 +618,38 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
         | Marker m ->
             let compiled_context, _ = compile_context m.compiled_context in
             (Marker { m with compiled_context }, [])
-        | RecordConstrAxiom _ ->           
-           Errors.fail ~info:"TODO: what happens when we inherit a record constructor?"
+
+        | RecordDefinition rd ->           
+           let compiled_context, _ = compile_context rd.compiled_context in
+           (RecordDefinition { rd with compiled_context }, [])
+        | RecordConstrAxiom axiom ->
+           (* 1. Fetch the record definition
+              hopefully the record definition will have: 
+              (a) The fields required by this constructor axiom 
+              (b) The names of default values we want *)
+           let record_name = Libnames.qualid_of_ident axiom.record_name in 
+           let elem =
+             match Context.lookup_linkage_elem context record_name with
+             | None -> Errors.fail ~info:(Printf.sprintf "inherit_one: Record definition not found: %s" (Names.Id.to_string axiom.record_name))
+             | Some (elem, _) -> elem
+           in
+           let defaults =
+             match elem with
+             | LinkageElem.RecordDefinition { defaults; _ } ->
+                (* Only the names that does *not* already exist in our defaults list *)
+                defaults 
+                |> List.map snd 
+                |> List.filter (fun x -> not (List.exists ((=) x) axiom.defaults))
+             | _ -> Errors.fail ~info:(Printf.sprintf "inherit_one: Expected RecordDefinition but found different element type for: %s" (Names.Id.to_string axiom.record_name))
+           in
+           let compiled_context, _ =
+              compile_context axiom.compiled_context
+           in
+           (* Is it always the case that axiom.defaults and defaults don't overlap?
+              Given our previous filtering? *)   
+           let defaults = axiom.defaults @ defaults in
+           (RecordConstrAxiom { axiom with compiled_context; defaults; }, [])
+        
         (* Exhaustiveness checks *)
         | RecursorDefinition recursive ->
             let inductive, _, _ =
@@ -651,9 +681,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
             let compiled_context, _ =
               compile_context theorem.compiled_context
             in
-            (TheoremDefinition { theorem with goals = theorem.goals; compiled_context }, [])
-        | RecordDefinition _rd ->           
-           Errors.fail ~info:"TODO"
+            (TheoremDefinition { theorem with goals = theorem.goals; compiled_context }, [])        
       in
       let open Bwd.Infix in
       let fields = Snoc (linkage.fields, (name, element)) <@ fresh_elements in
