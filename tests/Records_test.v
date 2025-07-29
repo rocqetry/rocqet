@@ -2,13 +2,14 @@ Require Import Rocqet.Loader.
 
 Definition ident := nat.
 
-(* Record lambda_arg : Set := Build_lambda_arg { id : ident }.*)
+Record lambda_arg : Set := Build_lambda_arg { id : ident }.
+Definition x := {| id := 0 |}.
 
 (*Record lambda_arg : Set := {
     id : ident;
   }.
 
-Definition x := {| id := 0 |}.
+
 Definition y := Build_lambda_arg 0.*)
 
 Family STLC.
@@ -19,6 +20,7 @@ FInductive ty: Set :=
 
 FRecord lambda_arg : Set := { id : ident }.
 
+FDefinition i := {| x := 10 |}.
 FDefinition x : lambda_arg := Build_lambda_arg_STLC 10.
 FDefinition y : ident := id (Build_lambda_arg_STLC 10).
 

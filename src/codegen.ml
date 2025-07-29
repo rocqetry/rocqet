@@ -862,7 +862,7 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
          let open Constrexpr_ops in 
          mkAppC (mkIdentC (Naming.rocq_record_constructor ~record_name), arguments)
        in
-       let body = Termutils.mk_lambda parameters body in 
+       let body = Termutils.mk_lambda parameters body in
        (* Def X a b c = Y a b c <default-a> <default-b> <default-c> *)
        B.define_term ~name body  
 

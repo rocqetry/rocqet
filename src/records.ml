@@ -128,4 +128,3 @@ let extend_record
   in
   
   add_record_with_defaults ~rd:new_rd ~inductive:new_inductive ~defaults
-  

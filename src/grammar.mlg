@@ -46,15 +46,16 @@ DECLARE PLUGIN "rocqet.plugin"
 }
 
 GRAMMAR EXTEND Gram
-GLOBAL: mutind_defs llconstr_ip gallina_ext list1ident reference_ip;
+GLOBAL: mutind_defs llconstr_ip gallina_ext list1ident reference_ip ;
   list1ident :
     [[ listid = LIST1 ident -> { listid }]];  
   mutind_defs :
     [[ indl = LIST1 inductive_or_record_definition SEP "with" -> { indl } ]];
   llconstr_ip :
-    [[ c = lconstr -> { (* attach_self_prefix *) c } ]];
+    [[ c = lconstr -> { c } ]];
   reference_ip :
-    [[ r = reference -> { (* attach_self_prefix_qualid*) r } ]];
+    [[ r = reference -> { r } ]];    
+  
   gallina_ext : TOP
     [[  ]];
 END
