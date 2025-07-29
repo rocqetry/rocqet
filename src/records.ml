@@ -1,7 +1,7 @@
 open Types
 open Env
 
-let add_record rd original_inductive =
+let add_record_with_defaults ~rd ~inductive ~defaults =
   let context = Context.get () in
   let rd = Resolver.resolve_record ~context ~rd in
   let RecordDecl.{ name; ty; fields } = rd in  
@@ -23,10 +23,11 @@ let add_record rd original_inductive =
     LinkageElem.RecordDefinition
       {
         rd;
+        original = inductive;
+        defaults;
         compiled_context;
         compiled_signature;
-        default_ctx_params;
-        original = original_inductive;
+        default_ctx_params;        
       }
   in  
   Context.add_field ~name ~elem;
@@ -80,30 +81,49 @@ let add_record rd original_inductive =
          let elem = LinkageElem.InductiveAxiom { compiled_context; compiled_signature; default_ctx_params } in
          Context.add_field ~name:n ~elem
        )
+
+let add_record rd inductive =
+  add_record_with_defaults ~rd ~inductive ~defaults:[]
     
 let extend_record
       ~(rd: RecordDecl.t)
       ~(original_inductive: VernacInductive.t)
       ~(defaults: (Names.Id.t * Constrexpr.constr_expr) list) =
 
-
   (* 1. Lookup the name in the base context *)
   let context = Context.get () in
-  let RecordDecl.{ name; _ } = rd in
+  let rd = Resolver.resolve_record ~context ~rd in 
+  let RecordDecl.{ name; fields; _ } = rd in
   let base_elem = Inheritance.lookup_field_in_base ~field:name ~context in
   
   (* 2. Ensure the linkage element we extract is a RecordDefinition *)
-  let base_rd, base_original_inductive = 
+  let base_rd, base_inductive = 
     match base_elem with
     | None -> Errors.fail ~info:"No base record definition found to extend"
     | Some (LinkageElem.RecordDefinition br) -> (br.rd, br.original)
     | Some _ -> Errors.fail ~info:"Base element is not a RecordDefinition"
+  in  
+  
+  (* 3. Concatenate VernacInductive.t relative to record definition *)
+  let new_inductive = VernacInductive.concatenate ~base:base_inductive ~derived:original_inductive in
+  
+  (* 4. Concatenate the RecordDecl.t *)
+  let new_rd = RecordDecl.{ base_rd with fields = base_rd.fields @ fields } in
+    
+  (* 5.  Keep track of default values *)
+  let defaults =
+    defaults
+    |> List.map (fun (name, value) ->
+        let internal_name_ident = Naming.fresh_name ~prefix:(Names.Id.to_string name) in           
+        let internal_name = Libnames.qualid_of_ident internal_name_ident in
+        let body_type =
+          match List.assoc_opt name rd.fields with
+          | None -> Errors.fail ~info:(Printf.sprintf "unbound field: %s" (Names.Id.to_string name))
+          | Some ty -> ty 
+        in           
+        Definition.add_definition ~name:internal_name_ident ~body_type value ;            
+        (name, internal_name))
   in
   
-  (* Concatenate VernacInductive.t relative to record definition *)
-  (* Concatenate the RecordDecl.t *)
-  (* Keep track of default values *)
-
-  (* What does this mean for the implementation of this record? *)
-
-  ()
+  add_record_with_defaults ~rd:new_rd ~inductive:new_inductive ~defaults
+  

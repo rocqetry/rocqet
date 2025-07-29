@@ -367,6 +367,13 @@ module rec LinkageElem : sig
     | RecordDefinition of {
         rd : RecordDecl.t;
         original : VernacInductive.t;
+        (* The field names which have default values *)
+        (* This means these fields were not in the original record *)
+        (* i.e, they were added into this linkage via record extension *)
+        (* This is a mapping from the name of the field
+           to the *actual* definition binding name of the
+           default value *)
+        defaults : (Names.Id.t * Libnames.qualid) list;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
@@ -525,6 +532,7 @@ end = struct
     | RecordDefinition of {
         rd : RecordDecl.t;
         original : VernacInductive.t;
+        defaults : (Names.Id.t * Libnames.qualid) list;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;

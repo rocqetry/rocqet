@@ -112,6 +112,7 @@ module rec LinkageElem : sig
     | RecordDefinition of {
         rd : RecordDecl.t;
         original : VernacInductive.t;
+        defaults : (Names.Id.t * Libnames.qualid) list;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
