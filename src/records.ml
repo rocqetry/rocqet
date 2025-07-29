@@ -1,5 +1,5 @@
 open Types
-open Env 
+open Env
 
 let add_record rd original_inductive =
   let context = Context.get () in
@@ -80,6 +80,11 @@ let add_record rd original_inductive =
          let elem = LinkageElem.InductiveAxiom { compiled_context; compiled_signature; default_ctx_params } in
          Context.add_field ~name:n ~elem
        )
-  
-  
-
+    
+let extend_record
+      ~(rd: RecordDecl.t)
+      ~(original_inductive: VernacInductive.t)
+      ~(defaults: (Names.Id.t * Constrexpr.constr_expr) list) =
+  rd |> ignore ; 
+  original_inductive |> ignore ;
+  defaults |> ignore

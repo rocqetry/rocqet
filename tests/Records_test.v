@@ -20,13 +20,14 @@ FInductive ty: Set :=
 FRecord lambda_arg : Set := { id : ident }.
 
 FDefinition x : lambda_arg := Build_lambda_arg_STLC 10.
-
 FDefinition y : ident := id (Build_lambda_arg_STLC 10).
 
+(*
 FLemma easy_lemma : id (Build_lambda_arg_STLC 10) = 10.
 FProofLemma.
 fsimpl.
 Qed. CloseFLemma.
+*)
 
 
 (*
@@ -52,7 +53,9 @@ FInductive ty: Set :=
 | ty_forall : tvar -> ty -> ty. (* ∀α.T *)
 
 (* tm_abs is extended with a type *)
-FRecord lambda_arg : Set := { arg_ty : ty } with default arg_ty := ty_unit.
+FRecord A : Set := { }.
+FRecord B : Set := { } default arg_ty := ty_unit | argn := 10.
+FRecord lambda_arg : Set := { arg_ty : ty } default arg_ty := ty_unit.
 
 
 MetaData lambda_arg_constr_SystemF.

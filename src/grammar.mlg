@@ -87,6 +87,15 @@ VERNAC ARGUMENT EXTEND argument_flist
   | [ argument(arg) "->" argument_flist(rest) ] -> { arg :: rest }
 END
 
+ARGUMENT EXTEND record_default
+  | [ ident(n) ":=" llconstr_ip(e) ] -> { (n, e) }
+END
+
+ARGUMENT EXTEND record_default_list
+  | [ record_default(arg) "," record_default_list(rest) ] -> { arg :: rest }
+  | [ record_default(d) ] -> { [ d ] }  
+END
+
 VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "Family" ident(derived) "extends"
     reference_list_sep(arguments, ",") ] -> { Entry.family_extends_list ~derived ~bases:arguments }
@@ -97,16 +106,12 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "FInductive" mutind_defs(inductive_definition) ] -> { Entry.finductive inductive_definition }
 
-| [ "FRecord" mutind_defs(record_definition)
-      "with"
-      "default"
-      ident(name) ":=" llconstr_ip(body_expr) ] ->
-   { Errors.fail ~info:"TODO: "}
+| [ "FRecord" mutind_defs(record_definition) "default" record_default_list(defaults) ] -> { () }
+
 | [ "FRecord" mutind_defs(record_definition) ] -> {
     let rd = Types.RecordDecl.parse record_definition in
     Entry.add_record rd record_definition
   }
-
 
 (* | [ "Trait" ident(name) "extends" ident(base) ] -> { Entry.open_trait_with_base ~name ~base }*)
 

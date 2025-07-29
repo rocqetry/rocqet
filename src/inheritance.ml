@@ -189,6 +189,10 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t)
         linkage_concatenate ~derived:derived.linkage ~base:base.linkage
       in
       TraitDefinition { derived with linkage }
+
+  | RecordDefinition _, RecordDefinition _ -> Errors.fail ~info:"TODO"
+
+  (* TODO: remove this wildcard pattern *)
   | _, _ ->
       let info =
         Printf.sprintf
