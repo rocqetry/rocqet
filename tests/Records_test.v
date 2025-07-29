@@ -56,6 +56,8 @@ FInductive ty: Set :=
 FRecord A : Set := { }.
 FRecord B : Set := { } default arg_ty := ty_unit, argn := 10.
 FRecord lambda_arg : Set := { arg_ty : ty } default arg_ty := ty_unit.
+(* How do we implement the inherited constructors? *)
+(* Ding! Ding! Ding! With default values! *)
 
 
 MetaData lambda_arg_constr_SystemF.
@@ -79,3 +81,7 @@ FInductive tm : Type :=
 | tm_tapp : tm -> ty -> tm.   (* t [T] *)
 
 FEnd SystemF.
+
+Family SystemFOmega extends SystemF.
+
+FEnd SystemFOmega.
