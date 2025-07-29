@@ -54,7 +54,7 @@ FInductive ty: Set :=
 
 (* tm_abs is extended with a type *)
 FRecord A : Set := { }.
-FRecord B : Set := { } default arg_ty := ty_unit | argn := 10.
+FRecord B : Set := { } default arg_ty := ty_unit, argn := 10.
 FRecord lambda_arg : Set := { arg_ty : ty } default arg_ty := ty_unit.
 
 

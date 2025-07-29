@@ -91,8 +91,8 @@ ARGUMENT EXTEND record_default
   | [ ident(n) ":=" llconstr_ip(e) ] -> { (n, e) }
 END
 
-ARGUMENT EXTEND record_default_list
-  | [ record_default(arg) "," record_default_list(rest) ] -> { arg :: rest }
+ARGUMENT EXTEND record_defaults
+  | [ record_default(arg) "," record_defaults(rest) ] -> { arg :: rest }
   | [ record_default(d) ] -> { [ d ] }  
 END
 
@@ -106,7 +106,7 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 
 | [ "FInductive" mutind_defs(inductive_definition) ] -> { Entry.finductive inductive_definition }
 
-| [ "FRecord" mutind_defs(record_definition) "default" record_default_list(defaults) ] -> { () }
+| [ "FRecord" mutind_defs(record_definition) "default" record_defaults(defaults) ] -> { () }
 
 | [ "FRecord" mutind_defs(record_definition) ] -> {
     let rd = Types.RecordDecl.parse record_definition in
