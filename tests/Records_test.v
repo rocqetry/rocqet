@@ -1,16 +1,21 @@
 Require Import Rocqet.Loader.
 
+
 Definition ident := nat.
 
-(*Record lambda_arg : Set := Build_lambda_arg { id : ident }.
-Definition x := {| id := 0 |}.*)
+(*
 
-(*Record lambda_arg : Set := {
-    id : ident;
-  }.
+We also want to support records nested inside families.
+Module R.
+Record lambda_arg : Set := Build_lambda_arg { id : ident }.
+Definition x := {| id := 0 |}.
+End R.
 
+Definition lmo := {| R.id := 10 |}.
 
-Definition y := Build_lambda_arg 0.*)
+*)
+
+(*Definition y := Build_lambda_arg 0.*)
 
 Family STLC.
 
@@ -19,6 +24,9 @@ FInductive ty: Set :=
 | ty_arrow : ty -> ty -> ty.
 
 FRecord lambda_arg : Set := { id : ident }.
+FRecord mt : Set := { }.
+
+FDefinition io : mt := {| |}.
 
 FDefinition x : lambda_arg := {| id := 10 |}. 
 FDefinition y : ident := id {| id := 10 |}.
