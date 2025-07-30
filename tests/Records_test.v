@@ -36,6 +36,7 @@ FDefinition io : mt := {| |}.
 
 FDefinition x : lambda_arg := {| id := 10 |}. 
 FDefinition y : ident := id {| id := 10 |}.
+FDefinition llo := y.(id).
 
 (*
 FLemma easy_lemma : id (Build_lambda_arg_STLC 10) = 10.
