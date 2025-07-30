@@ -132,19 +132,27 @@ let extend_record
 
 let resolve_record_constr (expr : Constrexpr.constr_expr) =
   let context = Context.get () in
-  let expr_no_loc = expr.v in
-  (* TODO: This should be a fold to ensure we deeply resolve it *)
-  match expr_no_loc with
-  | Constrexpr.CRecord fields ->
-     let args = List.map (fun (n, _) -> Naming.extract_path_base n) fields in
-     let exprs = List.map snd fields in 
-     let record_constructor =
-       match Context.lookup_fields ~names:args ~context with
-       | None ->
-          (* We can either error out or just return the expression, untouched, back to Rocq *)
-          Errors.fail ~info:"Cannot find a suitable constructor for record literal"
-       | Some n -> n 
-     in
-     let open Constrexpr_ops in
-     mkAppC (mkIdentC record_constructor, exprs)
-  | _ -> expr
+  
+  let resolve_one_level () (expr: Constrexpr.constr_expr) =
+    let expr_no_loc = expr.v in
+    match expr_no_loc with
+    | Constrexpr.CRecord fields ->
+        let args = List.map (fun (n, _) -> Naming.extract_path_base n) fields in
+        let exprs = List.map snd fields in 
+        let record_constructor =
+          match Context.lookup_fields ~names:args ~context with
+          | None ->
+             (* We can either error out or just return the expression, untouched, back to Rocq *)
+             Errors.fail ~info:"Cannot find a suitable constructor for record literal"
+          | Some n -> n 
+        in
+        let open Constrexpr_ops in
+        mkAppC (mkIdentC record_constructor, exprs)
+    | _ -> expr
+  in
+  let expr = resolve_one_level () expr in  
+  Constrexpr_ops.map_constr_expr_with_binders
+    (fun _ _ -> ())
+    resolve_one_level
+    ()
+    expr

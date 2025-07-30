@@ -20,9 +20,8 @@ FInductive ty: Set :=
 
 FRecord lambda_arg : Set := { id : ident }.
 
-(* FDefinition i := {| x := 10 |}.*)
 FDefinition x : lambda_arg := {| id := 10 |}. 
-(* FDefinition y : ident := id {| id := 10 |}.*)
+FDefinition y : ident := id {| id := 10 |}.
 
 (*
 FLemma easy_lemma : id (Build_lambda_arg_STLC 10) = 10.
@@ -60,8 +59,7 @@ FRecord A : Set := { }.
 FRecord lambda_arg : Set := { arg_ty : ty } default arg_ty := ty_unit.
 
 FDefinition kl : lambda_arg := {| id := 10; arg_ty := ty_unit; |}.
-
-FDefinition j := Build_lambda_arg_SystemF 10 ty_unit.
+FDefinition j : ty := arg_ty {| id := 10; arg_ty := ty_unit; |}.
 
 FEnd SystemF.
 
