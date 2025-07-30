@@ -17,6 +17,12 @@ Definition lmo := {| R.id := 10 |}.
 
 (*Definition y := Build_lambda_arg 0.*)
 
+(*
+We also want to support record projection
+Record lambda_arg : Set := Build_lambda_arg { id : ident }.
+Definition x := {| id := 0 |}.
+Definition y := x.(id).*)
+
 Family STLC.
 
 FInductive ty: Set :=
