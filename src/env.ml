@@ -113,7 +113,7 @@ module Linkages = struct
   let lookup name =
     match lookup_internal name with
     | None -> lookup_external name
-    | Some l -> Some l
+    | Some l -> Some l  
 end
 
 (* TODO: Give this a better name *)
@@ -419,4 +419,22 @@ module Context = struct
              if found ~bound_names then Some (inh, linkage, elem) else None)
     in
     context |> further_bound_linkage |> List.filter_map lookup
+
+  let lookup_fields ~(names : Names.Id.t list) ~context : Names.Id.t option =    
+    let linkage = family_linkage context in
+    let Linkage.{ fields; _ } = linkage in
+    
+    let rec find_matching_constructor fields =
+      match fields with
+      | Bwd.Emp -> None
+      | Bwd.Snoc (rest, (name, LinkageElem.RecordConstrAxiom { fields = constructor_fields; _ })) ->
+          if List.length constructor_fields = List.length names &&
+             List.for_all2 Names.Id.equal constructor_fields names then
+            Some name
+          else
+            find_matching_constructor rest
+      | Bwd.Snoc (rest, _) -> find_matching_constructor rest
+    in
+    
+    find_matching_constructor fields
 end

@@ -7,3 +7,5 @@ val extend_record :
   inductive:VernacInductive.t ->
   defaults:(Names.Id.t * Constrexpr.constr_expr) list ->
   unit
+
+val resolve_record_constr : Constrexpr.constr_expr -> Constrexpr.constr_expr

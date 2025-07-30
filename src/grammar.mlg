@@ -52,7 +52,7 @@ GLOBAL: mutind_defs llconstr_ip gallina_ext list1ident reference_ip ;
   mutind_defs :
     [[ indl = LIST1 inductive_or_record_definition SEP "with" -> { indl } ]];
   llconstr_ip :
-    [[ c = lconstr -> { c } ]];
+    [[ c = lconstr -> { Records.resolve_record_constr c } ]];
   reference_ip :
     [[ r = reference -> { r } ]];    
   
@@ -181,7 +181,7 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
    { Entry.closing_fact ~name ~ty ~script ~plain:true }
 
 | [ "FHint" reference_ip(inductive) ident(left) ident(right) ] -> 
-  { failwith "" }
+  { Errors.fail ~info:"FHint: not yet implemented" }
 
 (*| [ "Prect" reference_ip(inductive_path) ] -> { 
     Partial_recursor.add ~inductive_path

@@ -2,8 +2,8 @@ Require Import Rocqet.Loader.
 
 Definition ident := nat.
 
-Record lambda_arg : Set := Build_lambda_arg { id : ident }.
-Definition x := {| id := 0 |}.
+(*Record lambda_arg : Set := Build_lambda_arg { id : ident }.
+Definition x := {| id := 0 |}.*)
 
 (*Record lambda_arg : Set := {
     id : ident;
@@ -20,9 +20,9 @@ FInductive ty: Set :=
 
 FRecord lambda_arg : Set := { id : ident }.
 
-FDefinition i := {| x := 10 |}.
-FDefinition x : lambda_arg := Build_lambda_arg_STLC 10.
-FDefinition y : ident := id (Build_lambda_arg_STLC 10).
+(* FDefinition i := {| x := 10 |}.*)
+FDefinition x : lambda_arg := {| id := 10 |}. 
+(* FDefinition y : ident := id {| id := 10 |}.*)
 
 (*
 FLemma easy_lemma : id (Build_lambda_arg_STLC 10) = 10.
@@ -59,8 +59,7 @@ FRecord A : Set := { }.
 
 FRecord lambda_arg : Set := { arg_ty : ty } default arg_ty := ty_unit.
 
-(* How do we implement the inherited constructors? *)
-(* Ding! Ding! Ding! With default values! *)
+FDefinition kl : lambda_arg := {| id := 10; arg_ty := ty_unit; |}.
 
 FDefinition j := Build_lambda_arg_SystemF 10 ty_unit.
 
