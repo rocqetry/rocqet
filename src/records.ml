@@ -143,17 +143,25 @@ let resolve_record_constr (expr : Constrexpr.constr_expr) =
        mkAppC (mkRefC field_qualid, [record_expr])
     | Constrexpr.CProj _ -> Errors.fail ~info:"Unable to interpret the projection expression"
     | Constrexpr.CRecord fields ->
-        let args = List.map (fun (n, _) -> Naming.extract_path_base n) fields in
-        let exprs = List.map snd fields in 
-        let record_constructor =
-          match Context.lookup_fields ~names:args ~context with
-          | None ->
-             (* We can either error out or just return the expression, untouched, back to Rocq *)
-             Errors.fail ~info:"Cannot find a suitable constructor for record literal"
-          | Some n -> n 
-        in
-        let open Constrexpr_ops in
-        mkAppC (mkIdentC record_constructor, exprs)
+       let prefix =
+         match fields with
+         | [] -> None
+         | (prefix, _) :: _ ->
+            let p = prefix |> Naming.path_to_list |> List.rev |> List.tl |> List.rev in
+            if List.is_empty p then None else Some (Naming.list_to_path p)
+       in
+       let args = List.map (fun (n, _) -> Naming.extract_path_base n) fields in        
+       let exprs = List.map snd fields in 
+       let record_constructor =
+         match Context.lookup_fields ~prefix ~names:args ~context with
+         | None ->
+            (* We can either error out or just return the expression, untouched, back to Rocq *)
+            Errors.fail ~info:"Cannot find a suitable constructor for record literal"
+         | Some n -> n 
+       in
+       let record_constructor = Naming.qualid_point prefix record_constructor in
+       let open Constrexpr_ops in
+       mkAppC (mkRefC record_constructor, exprs)
     | _ -> expr
   in
   let expr = resolve_one_level () expr in  

@@ -420,8 +420,15 @@ module Context = struct
     in
     context |> further_bound_linkage |> List.filter_map lookup
 
-  let lookup_fields ~(names : Names.Id.t list) ~context : Names.Id.t option =    
-    let linkage = family_linkage context in
+  let lookup_fields ~(prefix: Libnames.qualid option) ~(names : Names.Id.t list) ~context : Names.Id.t option =    
+    let linkage =
+      match prefix with
+      | None -> family_linkage context
+      | Some prefix ->
+         match lookup_linkage_elem context prefix with         
+         | Some (LinkageElem.FamilyDefinition {linkage; _}, _) -> linkage
+         | _ -> family_linkage context
+    in
     let Linkage.{ fields; _ } = linkage in
     
     let rec find_matching_constructor fields =

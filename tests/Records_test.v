@@ -50,7 +50,7 @@ FRecord lambda_arg : Set := { arg_ty : ty } default arg_ty := ty_unit.
 FEnd S.
 
 (* FDefinition i := Source.Build_lambda_arg_S 10 Source.ty_unit.*)
-(* FDefinition j := {| Source.id := 10; Source.arg_ty := Source.ty_unit |}.*)
+FDefinition j := {| S.id := 10; S.arg_ty := S.ty_unit |}.
 
 FEnd Ext.
 
