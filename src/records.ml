@@ -131,16 +131,16 @@ let extend_record
   
   add_record_with_defaults ~rd:new_rd ~inductive:new_inductive ~defaults
 
-
 let resolve_record_constr (expr : Constrexpr.constr_expr) =
   let context = Context.get () in
   
-  let resolve_one_level () (expr: Constrexpr.constr_expr) =
-    let expr_no_loc = expr.v in
-    match expr_no_loc with
+  let rec transform_expr (expr: Constrexpr.constr_expr) =
+    let loc = expr.CAst.loc in
+    let open Constrexpr in
+    match expr.CAst.v with
     | Constrexpr.CProj (false, (field_qualid, None), [], record_expr) ->
        let open Constrexpr_ops in
-       mkAppC (mkRefC field_qualid, [record_expr])
+       mkAppC (mkRefC field_qualid, [transform_expr record_expr])
     | Constrexpr.CProj _ -> Errors.fail ~info:"Unable to interpret the projection expression"
     | Constrexpr.CRecord fields ->
        let prefix =
@@ -151,7 +151,7 @@ let resolve_record_constr (expr : Constrexpr.constr_expr) =
             if List.is_empty p then None else Some (Naming.list_to_path p)
        in
        let args = List.map (fun (n, _) -> Naming.extract_path_base n) fields in        
-       let exprs = List.map snd fields in 
+       let exprs = List.map (fun (_, e) -> transform_expr e) fields in 
        let record_constructor =
          match Context.lookup_fields ~prefix ~names:args ~context with
          | None ->
@@ -162,11 +162,51 @@ let resolve_record_constr (expr : Constrexpr.constr_expr) =
        let record_constructor = Naming.qualid_point prefix record_constructor in
        let open Constrexpr_ops in
        mkAppC (mkRefC record_constructor, exprs)
-    | _ -> expr
+    (* Leaf nodes - no recursion needed *)
+    | CHole _ | CGenarg _ | CGenargGlob _ | CEvar _ | CPatVar _ | CSort _ | CPrim _ | CRef _ -> 
+       expr
+    | CApp (f, args) ->
+       CAst.make ?loc (CApp (transform_expr f, List.map (fun (e, expl) -> (transform_expr e, expl)) args))
+    | CAppExpl (f, args) ->
+       CAst.make ?loc (CAppExpl (f, List.map transform_expr args))
+    | CProdN (bl, e) ->
+       CAst.make ?loc (CProdN (bl, transform_expr e))
+    | CLambdaN (bl, e) ->
+       CAst.make ?loc (CLambdaN (bl, transform_expr e))
+    | CLetIn (name, e1, ty, e2) ->
+       CAst.make ?loc (CLetIn (name, transform_expr e1, Option.map transform_expr ty, transform_expr e2))
+    | CCases (style, rtn, cases, branches) ->
+       let rtn' = Option.map transform_expr rtn in
+       let cases' = List.map (fun (e, name, pat) -> (transform_expr e, name, pat)) cases in
+       CAst.make ?loc (CCases (style, rtn', cases', branches))
+    | CLetTuple (names, rtn, e1, e2) ->
+       CAst.make ?loc (CLetTuple (names, (fst rtn, Option.map transform_expr (snd rtn)), transform_expr e1, transform_expr e2))
+    | CIf (c, rtn, e1, e2) ->
+       CAst.make ?loc (CIf (transform_expr c, (fst rtn, Option.map transform_expr (snd rtn)), transform_expr e1, transform_expr e2))
+    | CFix (id, fixes) ->
+       let fixes' = List.map (fun (id, order, bl, ty, body) -> 
+         (id, order, bl, transform_expr ty, transform_expr body)) fixes in
+       CAst.make ?loc (CFix (id, fixes'))
+    | CCoFix (id, cofixes) ->
+       let cofixes' = List.map (fun (id, bl, ty, body) -> 
+         (id, bl, transform_expr ty, transform_expr body)) cofixes in
+       CAst.make ?loc (CCoFix (id, cofixes'))
+    | CCast (e0, cty, e1) ->       
+       CAst.make ?loc (CCast (transform_expr e0, cty, transform_expr e1))
+    
+    | CGeneralization (kind, e) ->
+       CAst.make ?loc (CGeneralization (kind, transform_expr e))
+    | CDelimiters (scope, b, e) ->
+       CAst.make ?loc (CDelimiters (scope, b, transform_expr e))
+    | CNotation (scope_opt, notation, (constrs, constr_lists, binders, binder_lists)) ->
+       let constrs' = List.map transform_expr constrs in
+       let constr_lists' = List.map (List.map transform_expr) constr_lists in       
+       CAst.make ?loc (CNotation (scope_opt, notation, (constrs', constr_lists', binders, binder_lists)))       
+    | CArray (u, tys, def, ty) ->
+       let tys' = Array.map transform_expr tys in
+       let def' = transform_expr def in
+       let ty' = transform_expr ty in
+       CAst.make ?loc (CArray (u, tys', def', ty'))
   in
-  let expr = resolve_one_level () expr in  
-  Constrexpr_ops.map_constr_expr_with_binders
-    (fun _ _ -> ())
-    resolve_one_level
-    ()
-    expr
+  transform_expr expr
+    

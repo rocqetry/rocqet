@@ -49,8 +49,8 @@ Family S.
 FRecord lambda_arg : Set := { arg_ty : ty } default arg_ty := ty_unit.
 FEnd S.
 
-(* FDefinition i := Source.Build_lambda_arg_S 10 Source.ty_unit.*)
-FDefinition j := {| S.id := 10; S.arg_ty := S.ty_unit |}.
+FDefinition j : S.lambda_arg := {| S.id := 10; S.arg_ty := S.ty_unit |}.
+FDefinition k : ident := j.(S.id).
 
 FEnd Ext.
 
@@ -67,16 +67,17 @@ FRecord mt : Set := { }.
 
 FDefinition io : mt := {| |}.
 
-FDefinition x : lambda_arg := {| id := 10 |}. 
+FDefinition x : lambda_arg := {| id := 10 |}.
 FDefinition y : ident := id {| id := 10 |}.
+
 FDefinition llo := x.(id).
 
-(*
-FLemma easy_lemma : id (Build_lambda_arg_STLC 10) = 10.
+FDefinition hh := {| id := 10 |} = {| id := 10 |}.
+FDefinition qq := {| id := 10 |}.(id) = {| id := 10 |}.(id).
+(*FLemma easy_lemma : {| id := 10 |}.(id) = id {| id := 10 |}.
 FProofLemma.
 fsimpl.
-Qed. CloseFLemma.
-*)
+Qed. CloseFLemma.*)
 
 
 (*
