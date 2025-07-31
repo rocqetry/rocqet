@@ -850,17 +850,18 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
     | Snoc (fields, (_, RecordConstrAxiom { name; record_name; defaults; fields = record_fields; _ })) ->
        (* The default values go after the arguments *)
        let open B in
-       let* _ = compile_fields fields ctx in
-       let record_name = Naming.internal_name record_name in
+       let* _ = compile_fields fields ctx in       
        let parameters =
          record_fields
          |> List.map Names.Id.to_string
          |> List.map (fun prefix -> Naming.fresh_name ~prefix)
        in
-       let arguments = List.map Constrexpr_ops.mkIdentC parameters @ List.map Constrexpr_ops.mkRefC defaults in
-       let body =
-         let open Constrexpr_ops in
+       let open Constrexpr_ops in
+       let arguments = List.map mkIdentC parameters @ List.map mkRefC defaults in
+       let body =         
          let main_record_constr =
+           (* Record name is prefixed with `__internal_` because of "definition mapping" *)
+           let record_name = Naming.internal_name record_name in
            Naming.rocq_record_constructor ~record_name          
          in 
          mkAppC (mkIdentC main_record_constr, arguments)
