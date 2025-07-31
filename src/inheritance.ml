@@ -647,7 +647,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
            in
            (* Is it always the case that axiom.defaults and defaults don't overlap?
               Given our previous filtering? *)   
-           let defaults = axiom.defaults @ defaults in
+           let defaults = axiom.defaults @ defaults in           
            (RecordConstrAxiom { axiom with compiled_context; defaults; }, [])
         
         (* Exhaustiveness checks *)

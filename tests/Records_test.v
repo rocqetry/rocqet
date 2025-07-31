@@ -23,6 +23,39 @@ Record lambda_arg : Set := Build_lambda_arg { id : ident }.
 Definition x := {| id := 0 |}.
 Definition y := x.(id).*)
 
+Family Base.
+
+Family S.
+
+FInductive ty: Set :=
+| ty_unit : ty
+| ty_arrow : ty -> ty -> ty.
+
+FRecord lambda_arg : Set := { id : ident }.
+
+FInductive tm : Type :=
+| tm_var : ident -> tm    
+| tm_abs : lambda_arg -> tm -> tm
+| tm_app : tm -> tm -> tm
+| tm_unit: tm.
+
+FEnd S.
+
+FEnd Base.
+
+Family Ext extends Base.
+
+Family S.
+FRecord lambda_arg : Set := { arg_ty : ty } default arg_ty := ty_unit.
+FEnd S.
+
+(* FDefinition i := Source.Build_lambda_arg_S 10 Source.ty_unit.*)
+(* FDefinition j := {| Source.id := 10; Source.arg_ty := Source.ty_unit |}.*)
+
+FEnd Ext.
+
+(* Print CompilerExt.Source.*)
+
 Family STLC.
 
 FInductive ty: Set :=
@@ -69,8 +102,6 @@ FInductive ty: Set :=
 | ty_forall : tvar -> ty -> ty. (* ∀α.T *)
 
 (* tm_abs is extended with a type *)
-FRecord A : Set := { }.
-
 FRecord lambda_arg : Set := { arg_ty : ty } default arg_ty := ty_unit.
 
 FDefinition kl : lambda_arg := {| id := 10; arg_ty := ty_unit; |}.

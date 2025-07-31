@@ -113,6 +113,7 @@ module rec LinkageElem : sig
         rd : RecordDecl.t;
         original : VernacInductive.t;
         defaults : (Names.Id.t * Libnames.qualid) list;
+        constructor_name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
@@ -122,6 +123,7 @@ module rec LinkageElem : sig
         record_name : Names.Id.t; 
         fields : Names.Id.t list;
         defaults : Libnames.qualid list;
+        main_constr_name : Names.Id.t option;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;

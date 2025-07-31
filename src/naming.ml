@@ -23,8 +23,8 @@ let fresh_name ~prefix =
 
 let rocqet_record_constructor ~record_name ~family_name =  
   let prefix = Printf.sprintf "Build_%s_%s" (Names.Id.to_string record_name) (Names.Id.to_string family_name) in
-  (* fresh_name ~prefix *)
-  prefix |> Names.Id.of_string
+  fresh_name ~prefix
+  (* prefix |> Names.Id.of_string*)
 
 let rocq_record_constructor ~record_name =
   let prefix = Printf.sprintf "Build_%s" (Names.Id.to_string record_name) in

@@ -19,12 +19,15 @@ let add_record_with_defaults ~rd ~inductive ~defaults =
   let compiled_signature =
     Codegen.compile_inductive_axiom ~name ~ty ~ctx:parameters
   in
+  let family_name = Context.family_name context in
+  let constructor_name = Naming.rocqet_record_constructor ~record_name:name ~family_name in
   let elem =
     LinkageElem.RecordDefinition
       {
         rd;
         original = inductive;
         defaults;
+        constructor_name;
         compiled_context;
         compiled_signature;
         default_ctx_params;        
@@ -34,9 +37,7 @@ let add_record_with_defaults ~rd ~inductive ~defaults =
 
   
   (* The *introduction* form *)
-  let context = Context.get () in
-  let family_name = Context.family_name context in
-  let constructor_name = Naming.rocqet_record_constructor ~record_name:name ~family_name in
+  let context = Context.get () in  
   let args_type = fields |> List.map snd in
   let record_type =
     let expression = Constrexpr_ops.mkIdentC name in
@@ -59,6 +60,7 @@ let add_record_with_defaults ~rd ~inductive ~defaults =
         record_name = name;
         fields = fields |> List.map fst;
         defaults = [];
+        main_constr_name = None;
         compiled_context;
         compiled_signature;
         default_ctx_params

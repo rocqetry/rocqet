@@ -374,6 +374,7 @@ module rec LinkageElem : sig
            to the *actual* definition binding name of the
            default value *)
         defaults : (Names.Id.t * Libnames.qualid) list;
+        constructor_name : Names.Id.t; (* The *main* constructor for this record type *)
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
@@ -381,9 +382,12 @@ module rec LinkageElem : sig
      (* e.g Axiom Build_lambda_arg_STLC : ident -> lambda_arg. *)
     | RecordConstrAxiom of {        
         name : Names.Id.t;
-        record_name : Names.Id.t;
+        record_name : Names.Id.t; (* The name of the record we want to construct *)
         fields : Names.Id.t list; (* The fields implemented in this constructor *)
         defaults : Libnames.qualid list;  (* The default value names given above *)
+        (* The record constructor that takes in all the arguments. If this record hasn't been extended,
+           then it is None *)
+        main_constr_name : Names.Id.t option; 
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
@@ -532,6 +536,7 @@ end = struct
         rd : RecordDecl.t;
         original : VernacInductive.t;
         defaults : (Names.Id.t * Libnames.qualid) list;
+        constructor_name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
@@ -541,6 +546,7 @@ end = struct
         record_name : Names.Id.t; 
         fields : Names.Id.t list;
         defaults : Libnames.qualid list;
+        main_constr_name : Names.Id.t option;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;

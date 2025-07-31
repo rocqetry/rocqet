@@ -851,7 +851,7 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
        (* The default values go after the arguments *)
        let open B in
        let* _ = compile_fields fields ctx in
-       let record_name = Naming.internal_name record_name in       
+       let record_name = Naming.internal_name record_name in
        let parameters =
          record_fields
          |> List.map Names.Id.to_string
@@ -859,8 +859,11 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
        in
        let arguments = List.map Constrexpr_ops.mkIdentC parameters @ List.map Constrexpr_ops.mkRefC defaults in
        let body =
-         let open Constrexpr_ops in 
-         mkAppC (mkIdentC (Naming.rocq_record_constructor ~record_name), arguments)
+         let open Constrexpr_ops in
+         let main_record_constr =
+           Naming.rocq_record_constructor ~record_name          
+         in 
+         mkAppC (mkIdentC main_record_constr, arguments)
        in
        let body = Termutils.mk_lambda parameters body in
        (* Def X a b c = Y a b c <default-a> <default-b> <default-c> *)
