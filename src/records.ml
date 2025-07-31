@@ -136,7 +136,9 @@ let resolve_record_constr (expr : Constrexpr.constr_expr) =
   let resolve_one_level () (expr: Constrexpr.constr_expr) =
     let expr_no_loc = expr.v in
     match expr_no_loc with
-    | Constrexpr.CProj (false, (_field_qualid, None), [], _record_expr) -> Errors.fail ~info:"We know how to interpret"
+    | Constrexpr.CProj (false, (field_qualid, None), [], record_expr) ->
+       let open Constrexpr_ops in
+       mkAppC (mkRefC field_qualid, [record_expr])
     | Constrexpr.CProj _ -> Errors.fail ~info:"Unable to interpret the projection expression"
     | Constrexpr.CRecord fields ->
         let args = List.map (fun (n, _) -> Naming.extract_path_base n) fields in
