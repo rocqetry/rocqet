@@ -674,7 +674,7 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
        names
        |> List.map (fun name -> B.define_term ~name (qualify name))
        |> flatmap
-    | Snoc (fields, (_, ComputationalAxiom { name; _ })) ->
+    | Snoc (fields, (_, (RecordComputationalAxiom { name; _} | ComputationalAxiom { name; _ }))) ->
         let open B in
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
@@ -803,6 +803,10 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         let* _ = compile_fields fields ctx in
         compile_computational_axiom_implementation ~axiom_name:name
           ~axiom_expr:axiom
+
+    (* Can we reuse bare computational axioms? *)
+    | Snoc (_fields, (_, RecordComputationalAxiom _)) -> Errors.fail ~info:"TODO: fixed point of a RecordComputationalAxiom"
+
     | Snoc (fields, (name, ClosingFact { type_name; script; plain; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in

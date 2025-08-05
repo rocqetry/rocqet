@@ -649,6 +649,8 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
               Given our previous filtering? *)   
            let defaults = axiom.defaults @ defaults in           
            (RecordConstrAxiom { axiom with compiled_context; defaults; }, [])
+
+        | RecordComputationalAxiom _comp -> Errors.fail ~info:"TODO: inheriting a RecordComputationalAxiom"
         
         (* Exhaustiveness checks *)
         | RecursorDefinition recursive ->

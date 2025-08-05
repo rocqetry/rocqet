@@ -397,9 +397,14 @@ module rec LinkageElem : sig
     (* We will reuse InductiveAxiom *)
     (* | RecordField { ... } *)
 
-    (* e.g Axiom axiom_id : forall x, id (Build_lambda_arg_STLC x) = x. *)
-    (* Can we reuse `ComputationalAxiom` here? *)
-    (* | RecordConstrAxiom { ... } *)
+    (* e.g Axiom axiom_id : forall x, id (Build_lambda_arg_STLC x) = x. *)    
+    | RecordComputationalAxiom of {
+        name : Names.Id.t;
+        axiom : Constrexpr.constr_expr;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
     
     | FamilyDefinition of {
         linkage : Linkage.t;
@@ -550,6 +555,14 @@ end = struct
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+
+    | RecordComputationalAxiom of {
+        name : Names.Id.t;
+        axiom : Constrexpr.constr_expr;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       } 
   
     | FamilyDefinition of {
@@ -659,6 +672,8 @@ end = struct
           compiled_impl = compiled_signature;
           _;
         }
+    | RecordComputationalAxiom
+        { default_ctx_params; compiled_context; compiled_signature; _ }
     | ComputationalAxiom
         { default_ctx_params; compiled_context; compiled_signature; _ }
     | RecordConstrAxiom
@@ -773,6 +788,10 @@ end = struct
         let axiom = Naming.replace_qualid_root ~source ~target comp.axiom in
         let default_ctx_params = path_subst_ctx comp.default_ctx_params in
         ComputationalAxiom { comp with axiom; default_ctx_params }
+    | RecordComputationalAxiom comp ->
+        let axiom = Naming.replace_qualid_root ~source ~target comp.axiom in
+        let default_ctx_params = path_subst_ctx comp.default_ctx_params in
+        RecordComputationalAxiom { comp with axiom; default_ctx_params }
     | FamilyDefinition family ->
         let context = family.linkage.context |> Bwd.map g in
         let linkage =
