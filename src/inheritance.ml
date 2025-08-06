@@ -601,7 +601,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
            let record_name = comp.record_name in
            let lhs_constructor_name = comp.constructor_name in
            let lhs_fields = comp.fields in
-           let record_name = Libnames.qualid_of_ident comp.record_name in
+           let record_name = Libnames.qualid_of_ident record_name in
            let elem =
              match Context.lookup_linkage_elem context record_name with
              | None -> Errors.fail ~info:(Printf.sprintf "inherit_one: Record definition not found: %s" (Names.Id.to_string comp.record_name))
@@ -610,10 +610,52 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
            let rhs_defaults, rhs_constructor_name, rhs_fields =
              match elem with
              | LinkageElem.RecordDefinition { rd; defaults; constructor_name;  _ } ->                
-                List.map snd defaults, constructor_name, List.map fst rd.fields
+                defaults, constructor_name, List.map fst rd.fields
              | _ -> Errors.fail ~info:(Printf.sprintf "inherit_one: Expected RecordDefinition but found different element type for: %s" (Names.Id.to_string comp.record_name))
            in
-           let new_axioms = [] in
+           let new_axiom_expr =
+             let open Constrexpr_ops in
+             let field_name_to_argument =
+               lhs_fields
+               |> List.map (fun name -> (name, Naming.fresh_name ~prefix:(Names.Id.to_string name)))
+             in  
+             let lhs_arguments = field_name_to_argument |> List.map snd |> List.map mkIdentC in                          
+             let lhs_args_for_rhs = 
+               rhs_fields
+               |> List.map (fun rhs_field ->
+                  match List.assoc_opt rhs_field field_name_to_argument with
+                  | Some arg -> mkIdentC arg 
+                  | None ->                    
+                     match List.assoc_opt rhs_field rhs_defaults with
+                     | Some default_value -> mkRefC default_value
+                     | None -> Errors.fail ~info:("inherit_one -- No default value found for field: " ^ Names.Id.to_string rhs_field))
+             in
+             
+             let lhs_constructor = mkAppC (mkIdentC lhs_constructor_name, lhs_arguments) in
+             let rhs_constructor = mkAppC (mkIdentC rhs_constructor_name, lhs_args_for_rhs) in
+             let eq_cstr = mkIdentC @@ Names.Id.of_string "eq" in
+             let eq_cstr_applied = mkAppC (eq_cstr, [ lhs_constructor; rhs_constructor ]) in  
+             Termutils.lambda_to_prod @@
+               Termutils.mk_lambda (List.map snd field_name_to_argument) eq_cstr_applied
+           in           
+           let axiom = Resolver.resolve_constrexpr ~context ~expression:new_axiom_expr in
+           let axiom_name = Naming.fresh_name ~prefix:"RecordConstructorEq" in
+           let compiled_context, new_parameters =
+             compile_context comp.compiled_context
+           in
+           let compiled_signature =
+             Codegen.compile_inductive_axiom ~name:axiom_name ~ty:axiom ~ctx:new_parameters
+           in
+           let new_axiom_elem =
+             LinkageElem.ComputationalAxiom {
+               name = axiom_name;
+               axiom;                                             
+               compiled_context;
+               compiled_signature;
+               default_ctx_params;
+             }
+           in
+           let new_axioms = [new_axiom_elem] in
            let compiled_context, _ = compile_context comp.compiled_context in
            (RecordComputationalAxiom { comp with compiled_context }, new_axioms)
        
