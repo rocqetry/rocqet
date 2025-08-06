@@ -105,8 +105,28 @@ let add_record_with_defaults ~rd ~inductive ~defaults =
            Codegen.compile_inductive_axiom ~name:n ~ty:t ~ctx:parameters
          in
          let elem = LinkageElem.InductiveAxiom { compiled_context; compiled_signature; default_ctx_params } in
-         Context.add_field ~name:n ~elem
+         Context.add_field ~name:n ~elem);
+
+  (* The computational behvaiour *)
+  let field_names = fields |> List.map fst in
+  fields
+  |> List.iter (fun (field_name, _) ->
+         let context = Context.get () in
+         let expression = construct_one_field_comp_axiom ~field_name ~constructor_name ~field_names in
+         let axiom = Resolver.resolve_constrexpr ~context ~expression in
+         let name = Naming.fresh_name ~prefix:"RecordCompAxiom" in
+         let compiled_context, parameters =
+           Codegen.compile_linkage_context ~field_name:name context
+         in
+         let compiled_signature =
+           Codegen.compile_inductive_axiom ~name ~ty:axiom ~ctx:parameters
+         in
+         let elem = LinkageElem.RecordComputationalAxiom { name; axiom; compiled_context; compiled_signature; default_ctx_params } in
+         Context.add_field ~name ~elem
        )
+    
+
+
 
 let add_record rd inductive =
   add_record_with_defaults ~rd ~inductive ~defaults:[]
