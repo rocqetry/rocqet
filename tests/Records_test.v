@@ -41,7 +41,15 @@ FInductive tm : Type :=
 
 FEnd S.
 
+FLemma easy_lemma : {| S.id := 10 |}.(S.id) = 10.
+FProofLemma.
+intros. rewrite S.RecordCompAxiom回Records_test_19; reflexivity.
+Qed. CloseFLemma.
+
 FEnd Base.
+
+Print Base.S.
+(* RecordCompAxiom回Records_test_19 *)
 
 Family Ext extends Base.
 
@@ -82,7 +90,7 @@ Qed. CloseFLemma.*)
 
 (*
 MetaData lambda_arg_eq_STLC.
-Axiom axiom_id : forall x, id (Build_lambda_arg_STLC x) = x.
+Axiom id_lambda_arg_eq : forall x, id (Build_lambda_arg_STLC x) = x.
 FEnd lambda_arg_eq_STLC.
 *)
 
