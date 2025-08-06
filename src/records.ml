@@ -1,6 +1,29 @@
 open Types
 open Env
 
+(* Axiom axiom_id : forall x, id (Build_lambda_arg_STLC x) = x *)
+let construct_one_field_comp_axiom
+      ~(field_name: Names.Id.t)
+      ~(constructor_name: Names.Id.t)
+      ~(field_names: Names.Id.t list) =
+  let open Constrexpr_ops in
+  let field_name_to_argument =
+    field_names
+    |> List.map (fun name -> (name, Naming.fresh_name ~prefix:(Names.Id.to_string name)))
+  in  
+  let arguments = field_name_to_argument |> List.map snd |> List.map mkIdentC in
+  (* x *)
+  let right_hand_side = field_name_to_argument |> List.assoc field_name |> mkIdentC in
+  (* id (Build_lambda_arg_STLC x) *)
+  let left_hand_side =    
+    let constructor_applied = mkAppC (mkIdentC constructor_name, arguments) in
+    mkAppC (mkIdentC field_name, [constructor_applied])
+  in
+  let eq_cstr = mkIdentC @@ Names.Id.of_string "eq" in
+  let eq_cstr_applied = mkAppC (eq_cstr, [ left_hand_side; right_hand_side ]) in  
+  Termutils.lambda_to_prod @@
+    Termutils.mk_lambda (List.map snd field_name_to_argument) eq_cstr_applied 
+
 let add_record_with_defaults ~rd ~inductive ~defaults =
   let context = Context.get () in
   let rd = Resolver.resolve_record ~context ~rd in
