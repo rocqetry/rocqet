@@ -107,7 +107,7 @@ let add_record_with_defaults ~rd ~inductive ~defaults =
          let elem = LinkageElem.InductiveAxiom { compiled_context; compiled_signature; default_ctx_params } in
          Context.add_field ~name:n ~elem);
 
-  (* The computational behvaiour *)
+  (* The *computational behaviour* *)
   let field_names = fields |> List.map fst in
   fields
   |> List.iter (fun (field_name, _) ->

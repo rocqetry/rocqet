@@ -798,14 +798,11 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         let open B in
         let* _ = compile_fields fields ctx in        
         compile_finduction_implementation ~recursor_names:names ~inductive_paths ~suffix ~goals ~handlers
-    | Snoc (fields, (_, ComputationalAxiom { name; axiom; _ })) ->
+    | Snoc (fields, (_, (RecordComputationalAxiom { name; axiom; _ } | ComputationalAxiom { name; axiom; _ }))) ->
         let open B in
         let* _ = compile_fields fields ctx in
         compile_computational_axiom_implementation ~axiom_name:name
-          ~axiom_expr:axiom
-
-    (* Can we reuse bare computational axioms? *)
-    | Snoc (_fields, (_, RecordComputationalAxiom _)) -> Errors.fail ~info:"TODO: fixed point of a RecordComputationalAxiom"
+          ~axiom_expr:axiom       
 
     | Snoc (fields, (name, ClosingFact { type_name; script; plain; _ })) ->
         let open B in
