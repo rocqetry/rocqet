@@ -27,7 +27,8 @@ let construct_one_field_comp_axiom
 let add_record_with_defaults ~rd ~inductive ~defaults =
   let context = Context.get () in
   let rd = Resolver.resolve_record ~context ~rd in
-  let RecordDecl.{ name; ty; fields } = rd in  
+  let RecordDecl.{ name; ty; fields } = rd in
+  let record_name = name in 
   Inheritance.inherit_dependencies ~prefix:name;    
   let default_ctx_params =
     context |> Context.family_linkage |> function
@@ -121,9 +122,19 @@ let add_record_with_defaults ~rd ~inductive ~defaults =
          let compiled_signature =
            Codegen.compile_inductive_axiom ~name ~ty:axiom ~ctx:parameters
          in
-         let elem = LinkageElem.RecordComputationalAxiom { name; axiom; compiled_context; compiled_signature; default_ctx_params } in
-         Context.add_field ~name ~elem
-       )
+         let elem =
+           LinkageElem.RecordComputationalAxiom {
+               name;
+               axiom;               
+               record_name;
+               constructor_name;
+               fields = field_names;
+               compiled_context;
+               compiled_signature;
+               default_ctx_params
+             }
+         in
+         Context.add_field ~name ~elem)
     
 
 
@@ -172,7 +183,7 @@ let extend_record
         (name, internal_name))
   in
   
-  add_record_with_defaults ~rd:new_rd ~inductive:new_inductive ~defaults
+  add_record_with_defaults ~rd:new_rd ~inductive:new_inductive ~defaults 
 
 let resolve_record_constr (expr : Constrexpr.constr_expr) =
   let context = Context.get () in

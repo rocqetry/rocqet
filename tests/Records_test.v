@@ -41,6 +41,7 @@ FInductive tm : Type :=
 
 FEnd S.
 
+
 FLemma easy_lemma : {| S.id := 10 |}.(S.id) = 10.
 FProofLemma.
 intros. rewrite S.RecordCompAxiom回Records_test_19; reflexivity.
@@ -50,6 +51,8 @@ FEnd Base.
 
 Print Base.S.
 (* RecordCompAxiom回Records_test_19 *)
+(* RecordCompAxiom回RocqetTestsRecords_test_19 *)
+
 
 Family Ext extends Base.
 

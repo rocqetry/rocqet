@@ -130,6 +130,9 @@ module rec LinkageElem : sig
       }
     | RecordComputationalAxiom of {
         name : Names.Id.t;
+        record_name : Names.Id.t;
+        constructor_name: Names.Id.t;
+        fields: Names.Id.t list;
         axiom : Constrexpr.constr_expr;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;

@@ -592,9 +592,31 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
         | TraitDefinition trait ->
             let compiled_context, _ = compile_context trait.compiled_context in
             (TraitDefinition { trait with compiled_context }, [])
+
         | ComputationalAxiom comp ->
             let compiled_context, _ = compile_context comp.compiled_context in
             (ComputationalAxiom { comp with compiled_context }, [])
+
+        | RecordComputationalAxiom comp ->
+           let record_name = comp.record_name in
+           let lhs_constructor_name = comp.constructor_name in
+           let lhs_fields = comp.fields in
+           let record_name = Libnames.qualid_of_ident comp.record_name in
+           let elem =
+             match Context.lookup_linkage_elem context record_name with
+             | None -> Errors.fail ~info:(Printf.sprintf "inherit_one: Record definition not found: %s" (Names.Id.to_string comp.record_name))
+             | Some (elem, _) -> elem
+           in
+           let rhs_defaults, rhs_constructor_name, rhs_fields =
+             match elem with
+             | LinkageElem.RecordDefinition { rd; defaults; constructor_name;  _ } ->                
+                List.map snd defaults, constructor_name, List.map fst rd.fields
+             | _ -> Errors.fail ~info:(Printf.sprintf "inherit_one: Expected RecordDefinition but found different element type for: %s" (Names.Id.to_string comp.record_name))
+           in
+           let new_axioms = [] in
+           let compiled_context, _ = compile_context comp.compiled_context in
+           (RecordComputationalAxiom { comp with compiled_context }, new_axioms)
+       
         | InductiveAxiom axiom ->
             let compiled_context, _ = compile_context axiom.compiled_context in
             (InductiveAxiom { axiom with compiled_context }, [])
@@ -648,9 +670,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
            (* Is it always the case that axiom.defaults and defaults don't overlap?
               Given our previous filtering? *)   
            let defaults = axiom.defaults @ defaults in           
-           (RecordConstrAxiom { axiom with compiled_context; defaults; }, [])
-
-        | RecordComputationalAxiom _comp -> Errors.fail ~info:"TODO: inheriting a RecordComputationalAxiom"
+           (RecordConstrAxiom { axiom with compiled_context; defaults; }, [])        
         
         (* Exhaustiveness checks *)
         | RecursorDefinition recursive ->

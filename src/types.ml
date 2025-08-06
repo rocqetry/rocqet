@@ -399,7 +399,10 @@ module rec LinkageElem : sig
 
     (* e.g Axiom axiom_id : forall x, id (Build_lambda_arg_STLC x) = x. *)    
     | RecordComputationalAxiom of {
-        name : Names.Id.t;
+        name : Names.Id.t;        
+        record_name : Names.Id.t;        
+        constructor_name: Names.Id.t; (* The constructor_name involved with this computation behaviour *)
+        fields: Names.Id.t list; (* The field name this paticular constructor takes in *)
         axiom : Constrexpr.constr_expr;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
@@ -559,6 +562,9 @@ end = struct
 
     | RecordComputationalAxiom of {
         name : Names.Id.t;
+        record_name : Names.Id.t;
+        constructor_name: Names.Id.t;
+        fields: Names.Id.t list;
         axiom : Constrexpr.constr_expr;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
