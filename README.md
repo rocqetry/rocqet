@@ -2,9 +2,8 @@
 
 ## Overview
 
-Rocqet equips [Rocq](https://coq.inria.fr/) with *nested family polymorphism* to 
-enable scalable, extensible mechanized proofs. The design, implementation, and applications 
-of Rocqet are described in the following paper:
+Rocqet equips [Rocq](https://coq.inria.fr/) with *nested family polymorphism*.
+The design, implementation, and applications of Rocqet are described in the following paper:
 
 > Oghenevwogaga Ebresafe, Ian Zhao, Ende Jin, Arthur Bright, Charles Jian, Yizhou Zhang.  
 > [Certified Compilers à la Carte](https://dl.acm.org/doi/10.1145/3729261).  
