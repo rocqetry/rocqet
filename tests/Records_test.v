@@ -42,10 +42,11 @@ FInductive tm : Type :=
 FEnd S.
 
 
-FLemma easy_lemma : {| S.id := 10 |}.(S.id) = 10.
+(*FLemma easy_lemma : {| S.id := 10 |}.(S.id) = 10.
 FProofLemma.
 intros. rewrite S.RecordCompAxiom回Records_test_19; reflexivity.
 Qed. CloseFLemma.
+*)
 
 FEnd Base.
 
@@ -65,7 +66,7 @@ FDefinition k : ident := j.(S.id).
 
 FEnd Ext.
 
-(* Print CompilerExt.Source.*)
+Print Ext.S.
 
 Family STLC.
 

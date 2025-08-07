@@ -641,11 +641,16 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
            let axiom = Resolver.resolve_constrexpr ~context ~expression:new_axiom_expr in
            let axiom_name = Naming.fresh_name ~prefix:"RecordConstructorEq" in
            let compiled_context, new_parameters =
-             compile_context comp.compiled_context
-           in
+              Context.with_unpinned_context (fun () ->
+                  compile_context comp.compiled_context)
+            in
            let compiled_signature =
              Codegen.compile_inductive_axiom ~name:axiom_name ~ty:axiom ~ctx:new_parameters
            in
+           let default_ctx_params =
+              context |> Context.family_linkage |> function
+              | { default_ctx_params; _ } -> default_ctx_params
+            in
            let new_axiom_elem =
              LinkageElem.ComputationalAxiom {
                name = axiom_name;
@@ -655,7 +660,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
                default_ctx_params;
              }
            in
-           let new_axioms = [new_axiom_elem] in
+           let new_axioms = [(axiom_name, new_axiom_elem)] in
            let compiled_context, _ = compile_context comp.compiled_context in
            (RecordComputationalAxiom { comp with compiled_context }, new_axioms)
        
