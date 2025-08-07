@@ -94,6 +94,12 @@ module PluginCmdScope : sig
   }
 end
 
+module RecordCompAxiomKind : sig  
+  type t =
+    | RecordConstrEq 
+    | RecordFieldComp of { record_name: Names.Id.t; constructor_name: Names.Id.t; fields: Names.Id.t list; }
+end
+
 module rec LinkageElem : sig
   type t =
     | InductiveDefinition of {
@@ -130,9 +136,7 @@ module rec LinkageElem : sig
       }
     | RecordComputationalAxiom of {
         name : Names.Id.t;
-        record_name : Names.Id.t;
-        constructor_name: Names.Id.t;
-        fields: Names.Id.t list;
+        kind: RecordCompAxiomKind.t;        
         axiom : Constrexpr.constr_expr;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;

@@ -122,13 +122,12 @@ let add_record_with_defaults ~rd ~inductive ~defaults =
          let compiled_signature =
            Codegen.compile_inductive_axiom ~name ~ty:axiom ~ctx:parameters
          in
+         let kind = RecordCompAxiomKind.RecordFieldComp { record_name; constructor_name; fields = field_names; } in
          let elem =
            LinkageElem.RecordComputationalAxiom {
                name;
                axiom;               
-               record_name;
-               constructor_name;
-               fields = field_names;
+               kind;               
                compiled_context;
                compiled_signature;
                default_ctx_params

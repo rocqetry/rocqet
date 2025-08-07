@@ -340,6 +340,20 @@ module Recursors = struct
   type t = Recursor.t RecursorStore.t
 end
 
+
+module RecordCompAxiomKind = struct
+  (* There are kinds of record compuational axiom *)
+  (* 1. Record constructor equality -- e.g Axiom X : forall i, (Build_lambda_arg_STLC i) = (Build_lambda_arg_SystemF i ty_unit). *)
+  (* 2. Record field computation -- e.g Axiom Y : forall i t, arg_ty (Build_lambda_arg_SystemF i t) = t. *)
+  type t =
+    | RecordConstrEq 
+    | RecordFieldComp of {
+        record_name: Names.Id.t;
+        constructor_name: Names.Id.t;
+        fields: Names.Id.t list; (* The field name this paticular constructor takes in *)
+      }
+end 
+
 (* Linkages *)
 
 (** A [LinkageElem] represents all information there is to know about afield
@@ -399,10 +413,8 @@ module rec LinkageElem : sig
 
     (* e.g Axiom axiom_id : forall x, id (Build_lambda_arg_STLC x) = x. *)    
     | RecordComputationalAxiom of {
-        name : Names.Id.t;        
-        record_name : Names.Id.t;        
-        constructor_name: Names.Id.t; (* The constructor_name involved with this computation behaviour *)
-        fields: Names.Id.t list; (* The field name this paticular constructor takes in *)
+        name: Names.Id.t;        
+        kind: RecordCompAxiomKind.t;                
         axiom : Constrexpr.constr_expr;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
@@ -562,9 +574,7 @@ end = struct
 
     | RecordComputationalAxiom of {
         name : Names.Id.t;
-        record_name : Names.Id.t;
-        constructor_name: Names.Id.t;
-        fields: Names.Id.t list;
+        kind: RecordCompAxiomKind.t;        
         axiom : Constrexpr.constr_expr;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;

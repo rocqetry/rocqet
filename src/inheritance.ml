@@ -597,21 +597,24 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
             let compiled_context, _ = compile_context comp.compiled_context in
             (ComputationalAxiom { comp with compiled_context }, [])
 
-        | RecordComputationalAxiom comp ->
-           let record_name = comp.record_name in
-           let lhs_constructor_name = comp.constructor_name in
-           let lhs_fields = comp.fields in
-           let record_name = Libnames.qualid_of_ident record_name in
+        | RecordComputationalAxiom ({ kind = RecordCompAxiomKind.RecordConstrEq; _ } as comp) ->
+           let compiled_context, _ = compile_context comp.compiled_context in
+           (RecordComputationalAxiom { comp with compiled_context }, [])
+
+        | RecordComputationalAxiom ({ kind = RecordCompAxiomKind.RecordFieldComp { record_name; constructor_name; fields }; _ } as comp) ->
+           let lhs_constructor_name = constructor_name in
+           let lhs_fields = fields in
+           let record_name_qualid = Libnames.qualid_of_ident record_name in
            let elem =
-             match Context.lookup_linkage_elem context record_name with
-             | None -> Errors.fail ~info:(Printf.sprintf "inherit_one: Record definition not found: %s" (Names.Id.to_string comp.record_name))
+             match Context.lookup_linkage_elem context record_name_qualid with
+             | None -> Errors.fail ~info:(Printf.sprintf "inherit_one: Record definition not found: %s" (Names.Id.to_string record_name))
              | Some (elem, _) -> elem
            in
            let rhs_defaults, rhs_constructor_name, rhs_fields =
              match elem with
              | LinkageElem.RecordDefinition { rd; defaults; constructor_name;  _ } ->                
                 defaults, constructor_name, List.map fst rd.fields
-             | _ -> Errors.fail ~info:(Printf.sprintf "inherit_one: Expected RecordDefinition but found different element type for: %s" (Names.Id.to_string comp.record_name))
+             | _ -> Errors.fail ~info:(Printf.sprintf "inherit_one: Expected RecordDefinition but found different element type for: %s" (Names.Id.to_string record_name))
            in
            let new_axiom_expr =
              let open Constrexpr_ops in
@@ -651,13 +654,14 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
               context |> Context.family_linkage |> function
               | { default_ctx_params; _ } -> default_ctx_params
             in
-           let new_axiom_elem =
-             LinkageElem.ComputationalAxiom {
-               name = axiom_name;
-               axiom;                                             
-               compiled_context;
-               compiled_signature;
-               default_ctx_params;
+           let new_axiom_elem =             
+             LinkageElem.RecordComputationalAxiom {
+              name = axiom_name;
+              kind = RecordCompAxiomKind.RecordConstrEq;
+              axiom;                                             
+              compiled_context;
+              compiled_signature;
+              default_ctx_params;
              }
            in
            let new_axioms = [(axiom_name, new_axiom_elem)] in
