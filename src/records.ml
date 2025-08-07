@@ -214,10 +214,7 @@ let resolve_record_constr (expr : Constrexpr.constr_expr) =
        in
        let record_constructor = Naming.qualid_point prefix record_constructor in
        let open Constrexpr_ops in
-       mkAppC (mkRefC record_constructor, exprs)
-    (* Leaf nodes - no recursion needed *)
-    | CHole _ | CGenarg _ | CGenargGlob _ | CEvar _ | CPatVar _ | CSort _ | CPrim _ | CRef _ -> 
-       expr
+       mkAppC (mkRefC record_constructor, exprs)        
     | CApp (f, args) ->
        CAst.make ?loc (CApp (transform_expr f, List.map (fun (e, expl) -> (transform_expr e, expl)) args))
     | CAppExpl (f, args) ->
@@ -260,6 +257,10 @@ let resolve_record_constr (expr : Constrexpr.constr_expr) =
        let def' = transform_expr def in
        let ty' = transform_expr ty in
        CAst.make ?loc (CArray (u, tys', def', ty'))
+
+    (* Base cases *)
+    | CHole _ | CGenarg _ | CGenargGlob _
+    | CEvar _ | CPatVar _ | CSort _ | CPrim _ | CRef _ -> expr
   in
   transform_expr expr
     
