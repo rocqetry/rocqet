@@ -42,11 +42,10 @@ FInductive tm : Type :=
 FEnd S.
 
 
-(*FLemma easy_lemma : {| S.id := 10 |}.(S.id) = 10.
+FLemma easy_lemma : {| S.id := 10 |}.(S.id) = 10.
 FProofLemma.
-intros. rewrite S.RecordCompAxiom回Records_test_19; reflexivity.
+intros. fsimpl. reflexivity.
 Qed. CloseFLemma.
-*)
 
 FEnd Base.
 
@@ -106,7 +105,6 @@ FInductive tm : Type :=
 
 FEnd STLC.
 
-
 Family SystemF extends STLC.
 
 FDefinition tvar := nat.
@@ -135,7 +133,7 @@ FEnd lambda_arg_constr_SystemF.
      FRecursion/FInduction *)
 MetaData lambda_arg_eq_STLC.
 Axiom axiom_id0 : forall i t, arg_ty (Build_lambda_arg_SystemF i t) = t.
-Axiom axiom_id1 : forall i, (Build_lambda_arg_STLC i) = (Build_lambda_arg_SystemF i ty_unit).
+Axiom axiom_id1 : forall i, (Build_lambda_arg_STLC i) = (Build_lambda_arg_SystemF i ty_unit).a
 FEnd lambda_arg_eq_STLC.
 
 
