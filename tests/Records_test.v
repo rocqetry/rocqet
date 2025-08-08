@@ -44,7 +44,7 @@ FEnd S.
 
 FLemma easy_lemma : {| S.id := 10 |}.(S.id) = 10 -> True.
 FProofLemma.
-intros. fsimpl in H. fsimpl. reflexivity.
+intros. fsimpl in H; reflexivity.
 Qed. CloseFLemma.
 
 FEnd Base.
