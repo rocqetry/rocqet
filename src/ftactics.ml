@@ -158,7 +158,7 @@ let fsimpl () =
       let unfolds = generate_unfolds "__funfold" case_definitions in
 
       let names =
-        computational_axioms
+        computational_axioms @ computational_axioms
         |> List.map Pretty.pretty_qualid
         |> String.concat "\n"
       in
@@ -197,15 +197,17 @@ let fsimpl_star () =
       let handlers = extract_handlers_names all_names in
 
       let computational_axioms = handlers_to_computational_axiom handlers in
+      let context = Env.Context.get () in
+      let record_computational_axioms = extract_record_computational_axioms context in
 
       let case_definitions = handlers_to_case_definitions handlers in
 
-      let rewrites = generate_rewrites computational_axioms in
+      let rewrites = generate_rewrites (computational_axioms @ record_computational_axioms) in
 
       let unfolds = generate_unfolds "__funfold_star" case_definitions in
 
       let names =
-        computational_axioms
+        computational_axioms @ record_computational_axioms
         |> List.map Pretty.pretty_qualid
         |> String.concat "\n"
       in
@@ -247,6 +249,8 @@ let fsimpl_in h =
       let handlers = extract_handlers_names hyps_names in
 
       let computational_axioms = handlers_to_computational_axiom handlers in
+      let context = Env.Context.get () in
+      let record_computational_axioms = extract_record_computational_axioms context in
 
       let case_definitions = handlers_to_case_definitions handlers in
 
@@ -269,7 +273,7 @@ let fsimpl_in h =
           Tacinterp.interp tactic
         in
         let all_rewrite_tactics =
-          List.map each_rewrite_tactic computational_axioms
+          List.map each_rewrite_tactic (computational_axioms @ record_computational_axioms)
         in
         let union_rewrites =
           List.fold_right
@@ -309,7 +313,7 @@ let fsimpl_in h =
       in
 
       let names =
-        computational_axioms
+        computational_axioms @ record_computational_axioms
         |> List.map Pretty.pretty_qualid
         |> String.concat "\n"
       in

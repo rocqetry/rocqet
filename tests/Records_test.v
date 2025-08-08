@@ -42,9 +42,9 @@ FInductive tm : Type :=
 FEnd S.
 
 
-FLemma easy_lemma : {| S.id := 10 |}.(S.id) = 10.
+FLemma easy_lemma : {| S.id := 10 |}.(S.id) = 10 -> True.
 FProofLemma.
-intros. fsimpl. reflexivity.
+intros. fsimpl in H. fsimpl. reflexivity.
 Qed. CloseFLemma.
 
 FEnd Base.
