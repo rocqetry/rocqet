@@ -420,16 +420,25 @@ module Context = struct
     in
     context |> further_bound_linkage |> List.filter_map lookup
 
-  let lookup_fields ~(prefix: Libnames.qualid option) ~(names : Names.Id.t list) ~context : Names.Id.t option =    
+  let lookup_fields ~(prefix: Libnames.qualid option) ~(names : Names.Id.t list) ~context : Names.Id.t option =
+    let rec reachable_fields = function
+        | LinkageCtx.Toplevel linkage -> linkage.fields
+        | LinkageCtx.Nested (parent_ctx, linkage) ->            
+            let parent_fields = reachable_fields parent_ctx in
+            let current_fields = linkage.fields in
+            parent_fields <@ Bwd.to_list current_fields
+    in
     let linkage =
       match prefix with
-      | None -> family_linkage context
+      | None -> family_linkage context (* This is duplication *)
       | Some prefix ->
          match lookup_linkage_elem context prefix with         
          | Some (LinkageElem.FamilyDefinition {linkage; _}, _) -> linkage
-         | _ -> family_linkage context
+         | _ -> family_linkage context (* Also duplication *)
     in
-    let Linkage.{ fields; _ } = linkage in
+    let Linkage.{ fields = more_fields; _ } = linkage in
+    let fields = reachable_fields context in
+    let fields = fields <@ Bwd.to_list more_fields in 
     
     let rec find_matching_constructor fields =
       match fields with
