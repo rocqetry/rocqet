@@ -664,7 +664,7 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
         names
         |> List.map (fun name -> B.define_term ~name (qualify name))
         |> flatmap
-
+    
     | Snoc (fields, (_, RecordDefinition { rd; _ } )) ->
        let open B in
        let* _ = compile_fields fields in
@@ -673,8 +673,8 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
        in 
        names
        |> List.map (fun name -> B.define_term ~name (qualify name))
-       |> flatmap
-    | Snoc (fields, (_, (RecordComputationalAxiom { name; _} | ComputationalAxiom { name; _ }))) ->
+       |> flatmap    
+    | Snoc (fields, (_, (RecordConstrAxiom { name; _ } | RecordComputationalAxiom { name; _} | ComputationalAxiom { name; _ }))) ->
         let open B in
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
@@ -706,8 +706,7 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
         let open B in
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
-    | Snoc (fields, (_, Marker _)) | Snoc (fields, (_, InductiveAxiom _))
-    | Snoc (fields, (_, RecordConstrAxiom _))
+    | Snoc (fields, (_, Marker _)) | Snoc (fields, (_, InductiveAxiom _))    
     | Snoc (fields, (_, RecursiveAxiom _)) -> compile_fields fields
     | Snoc (fields, (_, InductiveDefinition { inductive; _ })) ->
         let open B in
