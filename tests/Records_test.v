@@ -41,7 +41,6 @@ FInductive tm : Type :=
 
 FEnd S.
 
-
 FLemma easy_lemma : {| S.id := 10 |}.(S.id) = 10 -> True.
 FProofLemma.
 intros. fsimpl in H; reflexivity.
@@ -58,6 +57,16 @@ Family Ext extends Base.
 
 Family S.
 FRecord lambda_arg : Set := { arg_ty : ty } default arg_ty := ty_unit.
+
+
+Family inner0.
+Family inner1.
+
+FDefinition vv : lambda_arg := {| id := 10; arg_ty := ty_unit |}.
+
+FEnd inner1.
+FEnd inner0.
+
 FEnd S.
 
 FDefinition j : S.lambda_arg := {| S.id := 10; S.arg_ty := S.ty_unit |}.
