@@ -69,6 +69,16 @@ FEnd inner0.
 
 FEnd S.
 
+Family inner2.
+
+Family inner4.
+
+FDefinition gg : S.lambda_arg := {| S.id := 10; S.arg_ty := S.ty_unit |}.
+
+FEnd inner4.
+
+FEnd inner2.
+  
 FDefinition j : S.lambda_arg := {| S.id := 10; S.arg_ty := S.ty_unit |}.
 FDefinition k : ident := j.(S.id).
 
