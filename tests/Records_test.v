@@ -64,6 +64,11 @@ Family inner1.
 
 FDefinition vv : lambda_arg := {| id := 10; arg_ty := ty_unit |}.
 
+FLemma easy_lemma : {| id := 10; arg_ty := ty_unit |}.(id) = 10 -> True.
+FProofLemma.
+intros. fsimpl in H; reflexivity.
+Qed. CloseFLemma.
+
 FEnd inner1.
 FEnd inner0.
 
