@@ -87,3 +87,10 @@ val open_trait_with_base_list : name:Names.Id.t -> bases:Names.Id.t list -> unit
 val open_trait : name:Names.Id.t -> unit
 val final_family : name:Names.Id.t -> value:Libnames.qualid -> unit
 val add_wildcard_handler : handler:Constrexpr.constr_expr -> unit
+
+val add_record : inductive:VernacInductive.t -> unit
+
+val extend_record :
+  inductive:VernacInductive.t ->
+  defaults:(Names.Id.t * Constrexpr.constr_expr) list ->
+  unit

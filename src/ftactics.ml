@@ -1,5 +1,37 @@
 (* Custom tactics for family polymorphism *)
 open Types
+open Bwd
+
+(* We want to accumulate RecordComputationalAxiom in the current family *)
+(* if we have Family we want to recursively check inside for RecordComputationalAxiom and append
+   the appropriate path prefix *)
+let extract_record_computational_axioms (ctx : LinkageCtx.t) : Libnames.qualid list =
+  let rec extract_from_linkage (linkage : Linkage.t) prefix_path =
+    linkage.fields
+    |> Bwd.to_list
+    |> List.fold_left (fun acc (name, elem) ->
+        let qualified_name = 
+          match prefix_path with
+          | [] -> Libnames.qualid_of_ident name
+          | _ -> Naming.qualid_point (Some (Naming.list_to_path prefix_path)) name
+        in
+        match elem with
+        | LinkageElem.RecordComputationalAxiom _ ->
+            qualified_name :: acc
+        | LinkageElem.FamilyDefinition { linkage = nested_linkage; _ } ->
+            let nested_axioms = extract_from_linkage nested_linkage (prefix_path @ [name]) in
+            nested_axioms @ acc
+        | _ -> acc
+      ) []
+  in
+  let rec extract_from_ctx = function
+    | LinkageCtx.Toplevel linkage -> extract_from_linkage linkage []
+    | LinkageCtx.Nested (parent_ctx, linkage) ->
+        let parent_axioms = extract_from_ctx parent_ctx in
+        let current_axioms = extract_from_linkage linkage [] in
+        parent_axioms @ current_axioms
+  in
+  extract_from_ctx ctx
 
 (* selfnames -> (function, handler list) *)
 let extract_handlers_names names =
@@ -116,15 +148,17 @@ let fsimpl () =
       let handlers = extract_handlers_names goal_names in
 
       let computational_axioms = handlers_to_computational_axiom handlers in
+      let context = Env.Context.get () in
+      let record_computational_axioms = extract_record_computational_axioms context in
 
       let case_definitions = handlers_to_case_definitions handlers in
 
-      let rewrites = generate_rewrites computational_axioms in
+      let rewrites = generate_rewrites (computational_axioms @ record_computational_axioms) in
 
       let unfolds = generate_unfolds "__funfold" case_definitions in
 
       let names =
-        computational_axioms
+        computational_axioms @ computational_axioms
         |> List.map Pretty.pretty_qualid
         |> String.concat "\n"
       in
@@ -163,15 +197,17 @@ let fsimpl_star () =
       let handlers = extract_handlers_names all_names in
 
       let computational_axioms = handlers_to_computational_axiom handlers in
+      let context = Env.Context.get () in
+      let record_computational_axioms = extract_record_computational_axioms context in
 
       let case_definitions = handlers_to_case_definitions handlers in
 
-      let rewrites = generate_rewrites computational_axioms in
+      let rewrites = generate_rewrites (computational_axioms @ record_computational_axioms) in
 
       let unfolds = generate_unfolds "__funfold_star" case_definitions in
 
       let names =
-        computational_axioms
+        computational_axioms @ record_computational_axioms
         |> List.map Pretty.pretty_qualid
         |> String.concat "\n"
       in
@@ -213,6 +249,8 @@ let fsimpl_in h =
       let handlers = extract_handlers_names hyps_names in
 
       let computational_axioms = handlers_to_computational_axiom handlers in
+      let context = Env.Context.get () in
+      let record_computational_axioms = extract_record_computational_axioms context in
 
       let case_definitions = handlers_to_case_definitions handlers in
 
@@ -235,7 +273,7 @@ let fsimpl_in h =
           Tacinterp.interp tactic
         in
         let all_rewrite_tactics =
-          List.map each_rewrite_tactic computational_axioms
+          List.map each_rewrite_tactic (computational_axioms @ record_computational_axioms)
         in
         let union_rewrites =
           List.fold_right
@@ -275,7 +313,7 @@ let fsimpl_in h =
       in
 
       let names =
-        computational_axioms
+        computational_axioms @ record_computational_axioms
         |> List.map Pretty.pretty_qualid
         |> String.concat "\n"
       in

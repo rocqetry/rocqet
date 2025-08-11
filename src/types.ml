@@ -20,7 +20,7 @@ module VernacInductive = struct
     match cstrlist with
     | Vernacexpr.Constructors cstrlist ->
         ((ind_type_name.v, ind_type), List.map each_constr cstrlist)
-    | Vernacexpr.RecordDecl _ -> Errors.fail ~info:"Records not yet supported"
+    | Vernacexpr.RecordDecl _ -> ((ind_type_name.v, ind_type), [])
 
   (* name -> name list *)
   (* inductive name -> constructors *)
@@ -60,6 +60,7 @@ module VernacInductive = struct
     inductive |> extract_all_names |> List.map fst
 
   (* Create a "definition mapping" *)
+  (* Works for both Inductive and Record *)
   let definition_mapping ind_def =
     let all_names_with_type =
       let type_decls, constr_decls =
@@ -100,7 +101,13 @@ module VernacInductive = struct
               ind_type,
               csts ),
             decl_notations )
-      | _ -> Errors.fail ~info:"Records not yet supported"
+      (* Rename only the record type name *)
+      | Vernacexpr.RecordDecl _ ->
+         ( ( (coercion_flag, (ind_type_name, cumul_univ_decl)),
+              ind_params,
+              ind_type,
+              csts ),
+            decl_notations )
     in
     (* Exporting the names *)
     let alias_all_name_term_type_decl =
@@ -169,7 +176,13 @@ module VernacInductive = struct
               (remove_duplicates
                  (fun (_, ((n : Names.lident), _)) -> n.v)
                  (base_constr @ derived_constr))
-        | _, _ -> Errors.fail ~info:"Record types are not yet supported"
+        | ( Vernacexpr.RecordDecl (_base_sort, base_fields, _base_modifier),
+            Vernacexpr.RecordDecl (derived_sort, derived_fields, derived_modifier) ) ->
+            (* TODO: We are assuming there are not duplicates here -- a bold assumption *)
+            (* We will modify this when doing linkage concatenation *)
+            let combined_fields = base_fields @ derived_fields in
+            Vernacexpr.RecordDecl (derived_sort, combined_fields, derived_modifier)
+        | _, _ -> Errors.fail ~info:"Mismatched inductive and record types in concatenation"
       in
       let child_ind = (a, b, c, childcstrs) in
       (child_ind, [])
@@ -217,6 +230,46 @@ module VernacInductive = struct
     match result with
     | None -> Errors.fail ~info:"constructor not bound in any inductive"
     | Some result -> result
+end
+
+module RecordDecl = struct 
+  type t = {
+      name : Names.Id.t;
+      ty: Constrexpr.constr_expr;
+      fields : (Names.Id.t * Constrexpr.constr_expr) list
+  }
+
+  let parse (inductive: VernacInductive.t) =
+    let inductive_expr = inductive |> List.hd |> fst in
+    let ( (_, (ind_type_name, _)),
+          _ind_params,
+          ind_type,
+          ind_body ) =
+      inductive_expr 
+    in
+    let name = ind_type_name.v in
+    let ty =
+      match ind_type with
+      | None -> Errors.fail ~info:"You need to provide the type for an FRecord"
+      | Some ty -> ty         
+    in
+    let fields = 
+      match ind_body with
+      | Vernacexpr.Constructors _ -> Errors.fail ~info:"Use FInductive for extensible inductive types"
+      | Vernacexpr.RecordDecl (_, fields, _) ->       
+         fields
+         |> List.map (fun (decl, _) ->
+            match decl with
+            | Vernacexpr.AssumExpr (name, _binder, ty) ->
+               let field_name =
+                 match name.v with
+                 | Names.Name.Anonymous -> Errors.fail ~info:"Expected Name.Name in FRecord field name but got Name.Anonymous"
+                 | Names.Name.Name id -> id 
+               in
+               field_name, ty 
+            | DefExpr _ -> Errors.fail ~info:"Expected AssumeExpr in FRecord field binding but got DefExpr")
+    in
+    { name; ty; fields; }
 end
 
 (* Module naming *)
@@ -287,6 +340,20 @@ module Recursors = struct
   type t = Recursor.t RecursorStore.t
 end
 
+
+module RecordCompAxiomKind = struct
+  (* There are kinds of record compuational axiom *)
+  (* 1. Record constructor equality -- e.g Axiom X : forall i, (Build_lambda_arg_STLC i) = (Build_lambda_arg_SystemF i ty_unit). *)
+  (* 2. Record field computation -- e.g Axiom Y : forall i t, arg_ty (Build_lambda_arg_SystemF i t) = t. *)
+  type t =
+    | RecordConstrEq 
+    | RecordFieldComp of {
+        record_name: Names.Id.t;
+        constructor_name: Names.Id.t;
+        fields: Names.Id.t list; (* The field name this paticular constructor takes in *)
+      }
+end 
+
 (* Linkages *)
 
 (** A [LinkageElem] represents all information there is to know about afield
@@ -310,6 +377,50 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
+
+    | RecordDefinition of {
+        rd : RecordDecl.t;
+        original : VernacInductive.t;
+        (* The field names which have default values *)
+        (* This means these fields were not in the original record *)
+        (* i.e, they were added into this linkage via record extension *)
+        (* This is a mapping from the name of the field
+           to the *actual* definition binding name of the
+           default value *)
+        defaults : (Names.Id.t * Libnames.qualid) list;
+        constructor_name : Names.Id.t; (* The *main* constructor for this record type *)
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+     (* e.g Axiom Build_lambda_arg_STLC : ident -> lambda_arg. *)
+    | RecordConstrAxiom of {        
+        name : Names.Id.t;
+        record_name : Names.Id.t; (* The name of the record we want to construct *)
+        fields : Names.Id.t list; (* The fields implemented in this constructor *)
+        defaults : Libnames.qualid list;  (* The default value names given above *)
+        (* The record constructor that takes in all the arguments. If this record hasn't been extended,
+           then it is None *)
+        main_constr_name : Names.Id.t option; 
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+     }
+  
+    (* e.g Axiom id : lambda_arg ->  ident. *)
+    (* We will reuse InductiveAxiom *)
+    (* | RecordField { ... } *)
+
+    (* e.g Axiom axiom_id : forall x, id (Build_lambda_arg_STLC x) = x. *)    
+    | RecordComputationalAxiom of {
+        name: Names.Id.t;        
+        kind: RecordCompAxiomKind.t;                
+        axiom : Constrexpr.constr_expr;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    
     | FamilyDefinition of {
         linkage : Linkage.t;
         compiled_context : CompiledModuleType.t;
@@ -407,6 +518,16 @@ module rec LinkageElem : sig
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
+    (* This is just a dummy linkage element to demarcate things --
+       it simplifies inheritance of grouped inductives.
+       Because of the compilied context, it can add to proof compilation time
+       *)
+    | Marker of {
+        name : Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
 
   type compiled_sig = {
     default_ctx_params : (Names.Id.t * CompiledModule.t) list;
@@ -430,6 +551,36 @@ end = struct
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
+
+    | RecordDefinition of {
+        rd : RecordDecl.t;
+        original : VernacInductive.t;
+        defaults : (Names.Id.t * Libnames.qualid) list;
+        constructor_name : Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | RecordConstrAxiom of {        
+        name : Names.Id.t;
+        record_name : Names.Id.t; 
+        fields : Names.Id.t list;
+        defaults : Libnames.qualid list;
+        main_constr_name : Names.Id.t option;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+
+    | RecordComputationalAxiom of {
+        name : Names.Id.t;
+        kind: RecordCompAxiomKind.t;        
+        axiom : Constrexpr.constr_expr;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      } 
+  
     | FamilyDefinition of {
         linkage : Linkage.t;
         compiled_context : CompiledModuleType.t;
@@ -516,6 +667,12 @@ end = struct
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
+    | Marker of {
+        name : Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;        
+    }
 
   type compiled_sig = {
     default_ctx_params : (Names.Id.t * CompiledModule.t) list;
@@ -531,7 +688,11 @@ end = struct
           compiled_impl = compiled_signature;
           _;
         }
+    | RecordComputationalAxiom
+        { default_ctx_params; compiled_context; compiled_signature; _ }
     | ComputationalAxiom
+        { default_ctx_params; compiled_context; compiled_signature; _ }
+    | RecordConstrAxiom
         { default_ctx_params; compiled_context; compiled_signature; _ }
     | InductiveAxiom
         { default_ctx_params; compiled_context; compiled_signature; _ }
@@ -558,6 +719,8 @@ end = struct
         { default_ctx_params; compiled_context; compiled_signature; _ }
     | RecursorDefinition
         { default_ctx_params; compiled_context; compiled_signature; _ }
+    | RecordDefinition { default_ctx_params; compiled_context; compiled_signature; _ }
+    | Marker { default_ctx_params; compiled_context; compiled_signature; _ } 
     | TraitDefinition
         { default_ctx_params; compiled_context; compiled_signature; _ } ->
         { default_ctx_params; compiled_context; compiled_signature }
@@ -634,10 +797,17 @@ end = struct
     | OpaqueFieldDefinition definition ->
         let default_ctx_params = path_subst_ctx definition.default_ctx_params in
         OpaqueFieldDefinition { definition with default_ctx_params }
+    | RecordConstrAxiom r ->
+        let default_ctx_params = path_subst_ctx r.default_ctx_params in
+        RecordConstrAxiom { r with default_ctx_params }
     | ComputationalAxiom comp ->
         let axiom = Naming.replace_qualid_root ~source ~target comp.axiom in
         let default_ctx_params = path_subst_ctx comp.default_ctx_params in
         ComputationalAxiom { comp with axiom; default_ctx_params }
+    | RecordComputationalAxiom comp ->
+        let axiom = Naming.replace_qualid_root ~source ~target comp.axiom in
+        let default_ctx_params = path_subst_ctx comp.default_ctx_params in
+        RecordComputationalAxiom { comp with axiom; default_ctx_params }
     | FamilyDefinition family ->
         let context = family.linkage.context |> Bwd.map g in
         let linkage =
@@ -696,6 +866,16 @@ end = struct
               VernacInductive.path_subtitution definition.inductive ~source
                 ~target;
           }
+    | RecordDefinition record ->
+       let default_ctx_params = path_subst_ctx record.default_ctx_params in
+       let RecordDecl.{ name; ty; fields } = record.rd in
+       let rd =
+         let subst = Naming.replace_qualid_root ~ source ~target in
+         let ty = subst ty in
+         let fields = fields |> List.map (fun (name, ty) -> (name, subst ty)) in
+         RecordDecl.{ name; ty; fields }
+       in 
+       RecordDefinition { record with rd; default_ctx_params } 
     | FieldDefinition field ->
         let default_ctx_params = path_subst_ctx field.default_ctx_params in
         FieldDefinition { field with default_ctx_params }
@@ -705,6 +885,9 @@ end = struct
     | TheoremDefinition definition ->
         let default_ctx_params = path_subst_ctx definition.default_ctx_params in
         TheoremDefinition { definition with default_ctx_params }
+    | Marker marker ->
+        let default_ctx_params = path_subst_ctx marker.default_ctx_params in
+        Marker { marker with default_ctx_params }
 
   and path_subtitution linkage ~source ~target =
     let f (name, elem) = (name, path_substitution_elem elem ~source ~target) in

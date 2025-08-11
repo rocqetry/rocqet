@@ -82,6 +82,11 @@ module Vernac = struct
     let open Vernacexpr in
     vernac_ (VernacSynPure (VernacInductive (Inductive_kw, ind_def)))
 
+  (* The VernacInductive.t associated with this record *)
+  let define_record (rd: VernacInductive.t) : unit t =
+    let open Vernacexpr in
+    vernac_ (VernacSynPure (VernacInductive (Record, rd)))
+  
   let define_inductive_scheme
       (specs : (Names.Id.t * Names.Id.t * Sorts.family) list) : unit t =
     let open Vernacexpr in
@@ -317,7 +322,7 @@ module Vernac = struct
     let proof, _ = Declare.Proof.by interppfs proof in
     (*let opaque = Vernacexpr.Opaque in*)
     let _ = Declare.Proof.save_regular ~proof ~opaque ~idopt:None in
-    return ()
+    return ()  
 end
 
 (** "Declare Backend": Code generation backend by mutating the internal state of Coq's "contexts" *)

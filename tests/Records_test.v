@@ -1,0 +1,175 @@
+Require Import Rocqet.Loader.
+
+
+Definition ident := nat.
+
+(*
+
+We also want to support records nested inside families.
+Module R.
+Record lambda_arg : Set := Build_lambda_arg { id : ident }.
+Definition x := {| id := 0 |}.
+End R.
+
+Definition lmo := {| R.id := 10 |}.
+
+*)
+
+(*Definition y := Build_lambda_arg 0.*)
+
+(*
+We also want to support record projection
+Record lambda_arg : Set := Build_lambda_arg { id : ident }.
+Definition x := {| id := 0 |}.
+Definition y := x.(id).*)
+
+Family Base.
+
+Family S.
+
+FInductive ty: Set :=
+| ty_unit : ty
+| ty_arrow : ty -> ty -> ty.
+
+FRecord lambda_arg : Set := { id : ident }.
+
+FInductive tm : Type :=
+| tm_var : ident -> tm    
+| tm_abs : lambda_arg -> tm -> tm
+| tm_app : tm -> tm -> tm
+| tm_unit: tm.
+
+FEnd S.
+
+FLemma easy_lemma : {| S.id := 10 |}.(S.id) = 10 -> True.
+FProofLemma.
+intros. fsimpl in H; reflexivity.
+Qed. CloseFLemma.
+
+FEnd Base.
+
+Print Base.S.
+(* RecordCompAxiom回Records_test_19 *)
+(* RecordCompAxiom回RocqetTestsRecords_test_19 *)
+
+
+Family Ext extends Base.
+
+Family S.
+FRecord lambda_arg : Set := { arg_ty : ty } default arg_ty := ty_unit.
+
+
+Family inner0.
+Family inner1.
+
+FDefinition vv : lambda_arg := {| id := 10; arg_ty := ty_unit |}.
+
+FLemma easy_lemma : {| id := 10; arg_ty := ty_unit |}.(id) = 10 -> True.
+FProofLemma.
+intros. fsimpl in H; reflexivity.
+Qed. CloseFLemma.
+
+FEnd inner1.
+FEnd inner0.
+
+FEnd S.
+
+Family inner2.
+
+Family inner4.
+
+FDefinition gg : S.lambda_arg := {| S.id := 10; S.arg_ty := S.ty_unit |}.
+
+FEnd inner4.
+
+FEnd inner2.
+  
+FDefinition j : S.lambda_arg := {| S.id := 10; S.arg_ty := S.ty_unit |}.
+FDefinition k : ident := j.(S.id).
+
+FEnd Ext.
+
+Print Ext.S.
+
+Family STLC.
+
+FInductive ty: Set :=
+| ty_unit : ty
+| ty_arrow : ty -> ty -> ty.
+
+FRecord lambda_arg : Set := { id : ident }.
+FRecord mt : Set := { }.
+
+FDefinition io : mt := {| |}.
+
+FDefinition x : lambda_arg := {| id := 10 |}.
+FDefinition y : ident := id {| id := 10 |}.
+
+FDefinition llo := x.(id).
+
+FDefinition hh := {| id := 10 |} = {| id := 10 |}.
+FDefinition qq := {| id := 10 |}.(id) = {| id := 10 |}.(id).
+(*FLemma easy_lemma : {| id := 10 |}.(id) = id {| id := 10 |}.
+FProofLemma.
+fsimpl.
+Qed. CloseFLemma.*)
+
+
+(*
+MetaData lambda_arg_eq_STLC.
+Axiom id_lambda_arg_eq : forall x, id (Build_lambda_arg_STLC x) = x.
+FEnd lambda_arg_eq_STLC.
+*)
+
+FInductive tm : Type :=
+| tm_var : ident -> tm    
+| tm_abs : lambda_arg -> tm -> tm
+| tm_app : tm -> tm -> tm
+| tm_unit: tm.
+
+FEnd STLC.
+
+Family SystemF extends STLC.
+
+FDefinition tvar := nat.
+
+FInductive ty: Set :=
+| ty_forall : tvar -> ty -> ty. (* ∀α.T *)
+
+(* tm_abs is extended with a type *)
+FRecord lambda_arg : Set := { arg_ty : ty } default arg_ty := ty_unit.
+
+FDefinition kl : lambda_arg := {| id := 10; arg_ty := ty_unit; |}.
+FDefinition j : ty := arg_ty {| id := 10; arg_ty := ty_unit; |}.
+
+FEnd SystemF.
+
+(*
+MetaData lambda_arg_constr_SystemF.
+Axiom Build_lambda_arg_SystemF : ident -> ty -> lambda_arg.
+FEnd lambda_arg_constr_SystemF.
+
+(* Is it possible to modularly compose two records? We need a way to supply the
+   default value. A couple of options:
+   - Allow field to have default values regardless of whether we're extending
+     a field or not
+   - Allow to supply the default value like a proof obligation -- similar to
+     FRecursion/FInduction *)
+MetaData lambda_arg_eq_STLC.
+Axiom axiom_id0 : forall i t, arg_ty (Build_lambda_arg_SystemF i t) = t.
+Axiom axiom_id1 : forall i, (Build_lambda_arg_STLC i) = (Build_lambda_arg_SystemF i ty_unit).a
+FEnd lambda_arg_eq_STLC.
+
+
+FInductive tm : Type :=  
+| tm_tabs : tvar -> tm -> tm  (* Λα.t *)
+| tm_tapp : tm -> ty -> tm.   (* t [T] *)
+
+FEnd SystemF.
+
+Family SystemFOmega extends SystemF.
+
+FRecord B : Set := { } default arg_ty := ty_unit, argn := 10.
+
+FEnd SystemFOmega.
+*)

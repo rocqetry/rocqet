@@ -463,6 +463,20 @@ let rec lambda_to_prod (trm : Constrexpr.constr_expr) =
       Constrexpr_ops.mkProdCN binder (lambda_to_prod body)
   | _ -> trm
 
+let mk_arrow_ty ~args_type ~ret_type =
+  let f (ty : Constrexpr.constr_expr) =
+    Constrexpr.CLocalAssum
+      ( [ CAst.make @@ Names.Name.Anonymous ],
+        Constrexpr.Default Glob_term.Explicit,
+        ty )
+  in
+  let arguments = List.map f args_type in
+  lambda_to_prod @@
+    List.fold_right
+      (fun arg body -> Constrexpr_ops.mkLambdaCN [ arg ] body)
+      arguments ret_type
+      
+
 (** Given a module application [F (A) (B) (C)] return [F] *)
 let rec extract_functor_name (name : Constrexpr.module_ast) =
   match name.v with

@@ -46,15 +46,16 @@ DECLARE PLUGIN "rocqet.plugin"
 }
 
 GRAMMAR EXTEND Gram
-GLOBAL: mutind_defs llconstr_ip gallina_ext list1ident reference_ip;
+GLOBAL: mutind_defs llconstr_ip gallina_ext list1ident reference_ip ;
   list1ident :
     [[ listid = LIST1 ident -> { listid }]];  
   mutind_defs :
     [[ indl = LIST1 inductive_or_record_definition SEP "with" -> { indl } ]];
   llconstr_ip :
-    [[ c = lconstr -> { (* attach_self_prefix *) c } ]];
+    [[ c = lconstr -> { Records.resolve_record_constr c } ]];
   reference_ip :
-    [[ r = reference -> { (* attach_self_prefix_qualid*) r } ]];
+    [[ r = reference -> { r } ]];    
+  
   gallina_ext : TOP
     [[  ]];
 END
@@ -87,6 +88,15 @@ VERNAC ARGUMENT EXTEND argument_flist
   | [ argument(arg) "->" argument_flist(rest) ] -> { arg :: rest }
 END
 
+ARGUMENT EXTEND record_default
+  | [ ident(n) ":=" llconstr_ip(e) ] -> { (n, e) }
+END
+
+ARGUMENT EXTEND record_defaults
+  | [ record_default(arg) "," record_defaults(rest) ] -> { arg :: rest }
+  | [ record_default(d) ] -> { [ d ] }  
+END
+
 VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "Family" ident(derived) "extends"
     reference_list_sep(arguments, ",") ] -> { Entry.family_extends_list ~derived ~bases:arguments }
@@ -96,6 +106,11 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
 | [ "Final" "Family" ident(name) ":=" reference_ip(definition) ] -> { Entry.final_family ~name ~value:definition }
 
 | [ "FInductive" mutind_defs(inductive_definition) ] -> { Entry.finductive inductive_definition }
+
+(* Record extension *)
+| [ "FRecord" mutind_defs(inductive) "default" record_defaults(defaults) ] -> { Entry.extend_record ~inductive ~defaults }
+(* Record definition *)
+| [ "FRecord" mutind_defs(inductive) ] -> { Entry.add_record ~inductive }
 
 (* | [ "Trait" ident(name) "extends" ident(base) ] -> { Entry.open_trait_with_base ~name ~base }*)
 
@@ -166,7 +181,7 @@ VERNAC COMMAND EXTEND FamilyPolyExtension CLASSIFIED AS SIDEFF
    { Entry.closing_fact ~name ~ty ~script ~plain:true }
 
 | [ "FHint" reference_ip(inductive) ident(left) ident(right) ] -> 
-  { failwith "" }
+  { Errors.fail ~info:"FHint: not yet implemented" }
 
 (*| [ "Prect" reference_ip(inductive_path) ] -> { 
     Partial_recursor.add ~inductive_path

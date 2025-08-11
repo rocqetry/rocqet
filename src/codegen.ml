@@ -664,7 +664,17 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
         names
         |> List.map (fun name -> B.define_term ~name (qualify name))
         |> flatmap
-    | Snoc (fields, (_, ComputationalAxiom { name; _ })) ->
+    
+    | Snoc (fields, (_, RecordDefinition { rd; _ } )) ->
+       let open B in
+       let* _ = compile_fields fields in
+       let names =
+         rd.name ::  List.map fst rd.fields
+       in 
+       names
+       |> List.map (fun name -> B.define_term ~name (qualify name))
+       |> flatmap    
+    | Snoc (fields, (_, (RecordConstrAxiom { name; _ } | RecordComputationalAxiom { name; _} | ComputationalAxiom { name; _ }))) ->
         let open B in
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
@@ -696,7 +706,7 @@ let synthesize_context ~(context : (Names.Id.t * Constrexpr.module_ast) Bwd.t)
         let open B in
         let* _ = compile_fields fields in
         B.define_term ~name (qualify name)
-    | Snoc (fields, (_, InductiveAxiom _)) -> compile_fields fields
+    | Snoc (fields, (_, Marker _)) | Snoc (fields, (_, InductiveAxiom _))    
     | Snoc (fields, (_, RecursiveAxiom _)) -> compile_fields fields
     | Snoc (fields, (_, InductiveDefinition { inductive; _ })) ->
         let open B in
@@ -787,11 +797,12 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
         let open B in
         let* _ = compile_fields fields ctx in        
         compile_finduction_implementation ~recursor_names:names ~inductive_paths ~suffix ~goals ~handlers
-    | Snoc (fields, (_, ComputationalAxiom { name; axiom; _ })) ->
+    | Snoc (fields, (_, (RecordComputationalAxiom { name; axiom; _ } | ComputationalAxiom { name; axiom; _ }))) ->
         let open B in
         let* _ = compile_fields fields ctx in
         compile_computational_axiom_implementation ~axiom_name:name
-          ~axiom_expr:axiom
+          ~axiom_expr:axiom       
+
     | Snoc (fields, (name, ClosingFact { type_name; script; plain; _ })) ->
         let open B in
         let* _ = compile_fields fields ctx in
@@ -824,6 +835,43 @@ let rec compile_linkage (synth_ctx : synth_ctx option) (linkage : Linkage.t) =
             in
             let _ = compile_linkage (Some synth_ctx) nested_linkage in
             return ())
+
+    (* Record definition *)
+    | Snoc
+       (fields, (_, RecordDefinition { rd; original; _ })) ->
+       let open B in
+       let* _ = compile_fields fields ctx in
+       let __internal_original, _ = VernacInductive.definition_mapping original in
+       let* _ = B.define_record __internal_original in
+       let body = Constrexpr_ops.mkIdentC (Naming.internal_name rd.name) in 
+       B.define_term ~name:rd.name body       
+
+    (* Record constructors *)
+    | Snoc (fields, (_, RecordConstrAxiom { name; record_name; defaults; fields = record_fields; _ })) ->
+       (* The default values go after the arguments *)
+       let open B in
+       let* _ = compile_fields fields ctx in       
+       let parameters =
+         record_fields
+         |> List.map Names.Id.to_string
+         |> List.map (fun prefix -> Naming.fresh_name ~prefix)
+       in
+       let open Constrexpr_ops in
+       let arguments = List.map mkIdentC parameters @ List.map mkRefC defaults in
+       let body =         
+         let main_record_constr =
+           (* Record name is prefixed with `__internal_` because of "definition mapping" *)
+           let record_name = Naming.internal_name record_name in
+           Naming.rocq_record_constructor ~record_name          
+         in 
+         mkAppC (mkIdentC main_record_constr, arguments)
+       in
+       let body = Termutils.mk_lambda parameters body in
+       (* Def X a b c = Y a b c <default-a> <default-b> <default-c> *)
+       B.define_term ~name body  
+
+    (* A marker has no implementation *)
+    | Snoc (fields, (_, Marker _)) -> compile_fields fields ctx
     (* An implementation will be provided by the inductive *)
     | Snoc (fields, (_, InductiveAxiom _)) -> compile_fields fields ctx
     (* Implementation provided by RecursiveDefinition *)

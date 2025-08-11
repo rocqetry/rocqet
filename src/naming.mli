@@ -4,6 +4,8 @@ val recursor_type : inductive:Names.Id.t -> string -> Names.Id.t
 val handler_type : Names.Id.t -> suffix:string -> Names.Id.t
 val inductive_axiom_name : Names.Id.t -> Names.Id.t
 val recursive_axiom_name : Names.Id.t -> Names.Id.t
+val rocqet_record_constructor : record_name:Names.Id.t -> family_name:Names.Id.t -> Names.Id.t
+val rocq_record_constructor : record_name:Names.Id.t ->  Names.Id.t
 
 val recursion_handler_type :
   function_name:Names.Id.t -> case_name:Names.Id.t -> Names.Id.t

@@ -7,6 +7,28 @@ open Bwd
 let lookup_field_in_base ~field ~context =
   Context.base_linkage_elem context ~field |> Option.map snd
 
+(*
+On Linkage Concatenation and Provenance
+  
+One of the most important components of this file is Linkage Concatenation. Linkage
+Contatenation is a technique that *allows* us to modularly compose linkages as the
+name might hint at. Without taking a closer look, this technique might seem
+striaghtforward to implement. However, there are a few considerations one has to
+take into account for this to work correctly. One of such consideration is
+about how to answer the question: what should be done about duplicate linkage
+elements when contatenating two linkages?
+A simple, and perhaps practical, solution to this problem is to 
+arbitrarily pick one of the duplicate linkage elements and drop the other.
+This is not totally correct, but it is not also wrong; that is, some times
+picking arbitrarily gives us the correct semantics, but other times, we
+get the wrong semantics. We usually want the former when
+the duplication arises from linkage elements or sub-element (e.g inductive
+constructors) that have *equal* provenance; this is, this linkage element
+can be traced to *one* family, and it is present in two (or more) families
+because it has been passed down via an inheritance ancestry. If this is not
+the case, it should be an error.
+*)
+
 let rec linkage_concatenate ~(derived : Linkage.t) ~(base : Linkage.t) =
   let rec find_and_remove name fields =
     match fields with
@@ -167,6 +189,10 @@ and linkage_elem_concatenate ~name ~(derived : LinkageElem.t)
         linkage_concatenate ~derived:derived.linkage ~base:base.linkage
       in
       TraitDefinition { derived with linkage }
+
+  | RecordDefinition _, RecordDefinition _ -> Errors.fail ~info:"TODO: how do we do record linkage concatenation?"
+
+  (* TODO: remove this wildcard pattern *)
   | _, _ ->
       let info =
         Printf.sprintf
@@ -566,9 +592,82 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
         | TraitDefinition trait ->
             let compiled_context, _ = compile_context trait.compiled_context in
             (TraitDefinition { trait with compiled_context }, [])
+
         | ComputationalAxiom comp ->
             let compiled_context, _ = compile_context comp.compiled_context in
             (ComputationalAxiom { comp with compiled_context }, [])
+
+        | RecordComputationalAxiom ({ kind = RecordCompAxiomKind.RecordConstrEq; _ } as comp) ->
+           let compiled_context, _ = compile_context comp.compiled_context in
+           (RecordComputationalAxiom { comp with compiled_context }, [])
+
+        | RecordComputationalAxiom ({ kind = RecordCompAxiomKind.RecordFieldComp { record_name; constructor_name; fields }; _ } as comp) ->
+           let lhs_constructor_name = constructor_name in
+           let lhs_fields = fields in
+           let record_name_qualid = Libnames.qualid_of_ident record_name in
+           let elem =
+             match Context.lookup_linkage_elem context record_name_qualid with
+             | None -> Errors.fail ~info:(Printf.sprintf "inherit_one: Record definition not found: %s" (Names.Id.to_string record_name))
+             | Some (elem, _) -> elem
+           in
+           let rhs_defaults, rhs_constructor_name, rhs_fields =
+             match elem with
+             | LinkageElem.RecordDefinition { rd; defaults; constructor_name;  _ } ->                
+                defaults, constructor_name, List.map fst rd.fields
+             | _ -> Errors.fail ~info:(Printf.sprintf "inherit_one: Expected RecordDefinition but found different element type for: %s" (Names.Id.to_string record_name))
+           in
+           let new_axiom_expr =
+             let open Constrexpr_ops in
+             let field_name_to_argument =
+               lhs_fields
+               |> List.map (fun name -> (name, Naming.fresh_name ~prefix:(Names.Id.to_string name)))
+             in  
+             let lhs_arguments = field_name_to_argument |> List.map snd |> List.map mkIdentC in                          
+             let lhs_args_for_rhs = 
+               rhs_fields
+               |> List.map (fun rhs_field ->
+                  match List.assoc_opt rhs_field field_name_to_argument with
+                  | Some arg -> mkIdentC arg 
+                  | None ->                    
+                     match List.assoc_opt rhs_field rhs_defaults with
+                     | Some default_value -> mkRefC default_value
+                     | None -> Errors.fail ~info:("inherit_one -- No default value found for field: " ^ Names.Id.to_string rhs_field))
+             in
+             
+             let lhs_constructor = mkAppC (mkIdentC lhs_constructor_name, lhs_arguments) in
+             let rhs_constructor = mkAppC (mkIdentC rhs_constructor_name, lhs_args_for_rhs) in
+             let eq_cstr = mkIdentC @@ Names.Id.of_string "eq" in
+             let eq_cstr_applied = mkAppC (eq_cstr, [ lhs_constructor; rhs_constructor ]) in  
+             Termutils.lambda_to_prod @@
+               Termutils.mk_lambda (List.map snd field_name_to_argument) eq_cstr_applied
+           in           
+           let axiom = Resolver.resolve_constrexpr ~context ~expression:new_axiom_expr in
+           let axiom_name = Naming.fresh_name ~prefix:"RecordConstructorEq" in
+           let compiled_context, new_parameters =
+              Context.with_unpinned_context (fun () ->
+                  compile_context comp.compiled_context)
+            in
+           let compiled_signature =
+             Codegen.compile_inductive_axiom ~name:axiom_name ~ty:axiom ~ctx:new_parameters
+           in
+           let default_ctx_params =
+              context |> Context.family_linkage |> function
+              | { default_ctx_params; _ } -> default_ctx_params
+            in
+           let new_axiom_elem =             
+             LinkageElem.RecordComputationalAxiom {
+              name = axiom_name;
+              kind = RecordCompAxiomKind.RecordConstrEq;
+              axiom;                                             
+              compiled_context;
+              compiled_signature;
+              default_ctx_params;
+             }
+           in
+           let new_axioms = [(axiom_name, new_axiom_elem)] in
+           let compiled_context, _ = compile_context comp.compiled_context in
+           (RecordComputationalAxiom { comp with compiled_context }, new_axioms)
+       
         | InductiveAxiom axiom ->
             let compiled_context, _ = compile_context axiom.compiled_context in
             (InductiveAxiom { axiom with compiled_context }, [])
@@ -585,10 +684,45 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
             (MetaDataSection { metadata with compiled_context }, [])
         | OpaqueFieldDefinition field ->
             let compiled_context, _ = compile_context field.compiled_context in
-            (OpaqueFieldDefinition { field with compiled_context }, [])
+            (OpaqueFieldDefinition { field with compiled_context }, [])        
         | ClosingFact fact ->
             let compiled_context, _ = compile_context fact.compiled_context in
             (ClosingFact { fact with compiled_context }, [])
+        | Marker m ->
+            let compiled_context, _ = compile_context m.compiled_context in
+            (Marker { m with compiled_context }, [])
+
+        | RecordDefinition rd ->           
+           let compiled_context, _ = compile_context rd.compiled_context in
+           (RecordDefinition { rd with compiled_context }, [])
+        | RecordConstrAxiom axiom ->
+           (* 1. Fetch the record definition
+              hopefully the record definition will have: 
+              (a) The fields required by this constructor axiom 
+              (b) The names of default values we want *)
+           let record_name = Libnames.qualid_of_ident axiom.record_name in 
+           let elem =
+             match Context.lookup_linkage_elem context record_name with
+             | None -> Errors.fail ~info:(Printf.sprintf "inherit_one: Record definition not found: %s" (Names.Id.to_string axiom.record_name))
+             | Some (elem, _) -> elem
+           in
+           let defaults =
+             match elem with
+             | LinkageElem.RecordDefinition { defaults; _ } ->
+                (* Only the names that does *not* already exist in our defaults list *)
+                defaults 
+                |> List.map snd 
+                |> List.filter (fun x -> not (List.exists ((=) x) axiom.defaults))
+             | _ -> Errors.fail ~info:(Printf.sprintf "inherit_one: Expected RecordDefinition but found different element type for: %s" (Names.Id.to_string axiom.record_name))
+           in
+           let compiled_context, _ =
+              compile_context axiom.compiled_context
+           in
+           (* Is it always the case that axiom.defaults and defaults don't overlap?
+              Given our previous filtering? *)   
+           let defaults = axiom.defaults @ defaults in           
+           (RecordConstrAxiom { axiom with compiled_context; defaults; }, [])        
+        
         (* Exhaustiveness checks *)
         | RecursorDefinition recursive ->
             let inductive, _, _ =
@@ -620,7 +754,7 @@ let rec inherit_one ~(name : Names.Id.t) ~(element : LinkageElem.t)
             let compiled_context, _ =
               compile_context theorem.compiled_context
             in
-            (TheoremDefinition { theorem with goals = theorem.goals; compiled_context }, [])                        
+            (TheoremDefinition { theorem with goals = theorem.goals; compiled_context }, [])        
       in
       let open Bwd.Infix in
       let fields = Snoc (linkage.fields, (name, element)) <@ fresh_elements in

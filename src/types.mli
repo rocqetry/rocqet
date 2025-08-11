@@ -34,6 +34,16 @@ module VernacInductive : sig
     constructor:Names.Id.t -> inductive:t -> Names.Id.t
 end
 
+module RecordDecl : sig
+  type t = {
+      name : Names.Id.t;
+      ty: Constrexpr.constr_expr;
+      fields : (Names.Id.t * Constrexpr.constr_expr) list
+  }
+  val parse : VernacInductive.t -> t
+ (* val extract_fields : t -> (Names.Id.t * Constrexpr.constr_expr) list*)
+end
+
 module CompiledModule : sig
   type t = Libnames.qualid
 end
@@ -84,6 +94,12 @@ module PluginCmdScope : sig
   }
 end
 
+module RecordCompAxiomKind : sig  
+  type t =
+    | RecordConstrEq 
+    | RecordFieldComp of { record_name: Names.Id.t; constructor_name: Names.Id.t; fields: Names.Id.t list; }
+end
+
 module rec LinkageElem : sig
   type t =
     | InductiveDefinition of {
@@ -95,6 +111,33 @@ module rec LinkageElem : sig
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
       }
     | InductiveAxiom of {
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | RecordDefinition of {
+        rd : RecordDecl.t;
+        original : VernacInductive.t;
+        defaults : (Names.Id.t * Libnames.qualid) list;
+        constructor_name : Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | RecordConstrAxiom of {        
+        name : Names.Id.t;
+        record_name : Names.Id.t; 
+        fields : Names.Id.t list;
+        defaults : Libnames.qualid list;
+        main_constr_name : Names.Id.t option;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | RecordComputationalAxiom of {
+        name : Names.Id.t;
+        kind: RecordCompAxiomKind.t;        
+        axiom : Constrexpr.constr_expr;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;
@@ -181,6 +224,12 @@ module rec LinkageElem : sig
         defining_handlers : Names.Id.t list;
         behaviour : (Names.Id.t * Names.Id.t) list;
         prec_suffix : Names.Id.t;
+        compiled_context : CompiledModuleType.t;
+        compiled_signature : CompiledModuleType.t;
+        default_ctx_params : (Names.Id.t * CompiledModule.t) list;
+      }
+    | Marker of {
+        name : Names.Id.t;
         compiled_context : CompiledModuleType.t;
         compiled_signature : CompiledModuleType.t;
         default_ctx_params : (Names.Id.t * CompiledModule.t) list;

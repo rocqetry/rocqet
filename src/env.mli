@@ -58,6 +58,8 @@ module Context : sig
     LinkageCtx.t ->
     field:Names.Id.t ->
     ((Names.Id.t * Names.Id.t) * Linkage.t * LinkageElem.t) list
+  
+  val lookup_fields : prefix:Libnames.qualid option -> names:Names.Id.t list -> context:LinkageCtx.t -> Names.Id.t option
 
   val replace : linkage:Linkage.t -> unit
   val destructive_update : LinkageCtx.t option -> unit
