@@ -93,50 +93,54 @@ let add_record_with_defaults ~rd ~inductive ~defaults =
   
   Context.add_field ~name:constructor_name ~elem;
 
-  (* The *elimination* forms *)     
-  fields
-  |> List.map (fun (field_name, field_type) ->
-         field_name, Termutils.mk_arrow_ty ~args_type:[record_type] ~ret_type:field_type)
-  |> List.iter (fun (n, t) ->
-         let context = Context.get () in
-         let compiled_context, parameters =
-           Codegen.compile_linkage_context ~field_name:n context
-         in
-         let compiled_signature =
-           Codegen.compile_inductive_axiom ~name:n ~ty:t ~ctx:parameters
-         in
-         let elem = LinkageElem.InductiveAxiom { compiled_context; compiled_signature; default_ctx_params } in
-         Context.add_field ~name:n ~elem);
+  (* The *elimination* forms *)
+  let define_elimination_forms () = 
+    fields
+    |> List.map (fun (field_name, field_type) ->
+           field_name, Termutils.mk_arrow_ty ~args_type:[record_type] ~ret_type:field_type)
+    |> List.iter (fun (n, t) ->
+           let context = Context.get () in
+           let compiled_context, parameters =
+             Codegen.compile_linkage_context ~field_name:n context
+           in
+           let compiled_signature =
+             Codegen.compile_inductive_axiom ~name:n ~ty:t ~ctx:parameters
+           in
+           let elem = LinkageElem.InductiveAxiom { compiled_context; compiled_signature; default_ctx_params } in
+           Context.add_field ~name:n ~elem)
+  in  
 
-  (* The *computational behaviour* *)
-  let field_names = fields |> List.map fst in
-  fields
-  |> List.iter (fun (field_name, _) ->
-         let context = Context.get () in
-         let expression = construct_one_field_comp_axiom ~field_name ~constructor_name ~field_names in
-         let axiom = Resolver.resolve_constrexpr ~context ~expression in
-         let name = Naming.fresh_name ~prefix:"RecordCompAxiom" in
-         let compiled_context, parameters =
-           Codegen.compile_linkage_context ~field_name:name context
-         in
-         let compiled_signature =
-           Codegen.compile_inductive_axiom ~name ~ty:axiom ~ctx:parameters
-         in
-         let kind = RecordCompAxiomKind.RecordFieldComp { record_name; constructor_name; fields = field_names; } in
-         let elem =
-           LinkageElem.RecordComputationalAxiom {
-               name;
-               axiom;               
-               kind;               
-               compiled_context;
-               compiled_signature;
-               default_ctx_params
-             }
-         in
-         Context.add_field ~name ~elem)
-    
-
-
+  (* The *computational behaviours* *)
+  let define_computational_behaviours () = 
+    let field_names = fields |> List.map fst in    
+    fields
+    |> List.iter (fun (field_name, _) ->
+           let context = Context.get () in
+           let expression = construct_one_field_comp_axiom ~field_name ~constructor_name ~field_names in
+           let axiom = Resolver.resolve_constrexpr ~context ~expression in
+           let name = Naming.fresh_name ~prefix:"RecordCompAxiom" in
+           let compiled_context, parameters =
+             Codegen.compile_linkage_context ~field_name:name context
+           in
+           let compiled_signature =
+             Codegen.compile_inductive_axiom ~name ~ty:axiom ~ctx:parameters
+           in
+           let kind = RecordCompAxiomKind.RecordFieldComp { record_name; constructor_name; fields = field_names; } in
+           let elem =
+             LinkageElem.RecordComputationalAxiom {
+                 name;
+                 axiom;               
+                 kind;               
+                 compiled_context;
+                 compiled_signature;
+                 default_ctx_params
+               }
+           in
+           Context.add_field ~name ~elem)
+  in
+  
+  Context.with_pinned_context define_elimination_forms;
+  Context.with_pinned_context define_computational_behaviours 
 
 let add_record rd inductive =
   add_record_with_defaults ~rd ~inductive ~defaults:[]
